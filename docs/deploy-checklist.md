@@ -190,7 +190,9 @@ Type=simple
 User=erfolgcrm
 WorkingDirectory=/home/erfolgcrm/erfolgcrm
 EnvironmentFile=/home/erfolgcrm/erfolgcrm/.env
-ExecStart=/home/erfolgcrm/.nvm/versions/node/v22.0.0/bin/node apps/api/dist/index.js
+# tsx, а не dist: workspace-пакеты (@erfolg/db, @erfolg/shared) экспортируют
+# TypeScript-источники, поэтому `node apps/api/dist/index.js` упадёт на их импорте.
+ExecStart=/home/erfolgcrm/.nvm/versions/node/v22.0.0/bin/node apps/api/node_modules/.bin/tsx apps/api/src/index.ts
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
@@ -218,6 +220,18 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/crm.erfolg-md.ru/privkey.pem;
 
   client_max_body_size 25M; # фото актов
+
+  # ── Защитные заголовки (аудит 2026-06-11) ─────────────────────────────
+  # HSTS: браузер ходит только по https (31536000 = год)
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  # Камера нужна PWA инженеров (фото актов, сканер штрихкодов)
+  add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
+  # CSP — заготовка. Включать ПОСЛЕ проверки в staging (Vite-бандл, pdfmake
+  # и web-push могут требовать корректировок):
+  # add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; worker-src 'self' blob:" always;
 
   location /api/ {
     proxy_pass http://127.0.0.1:3030;

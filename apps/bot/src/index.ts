@@ -1,3 +1,11 @@
+/**
+ * ⚠️ УСТАРЕВШАЯ ЗАГЛУШКА — НЕ настоящий Telegram-бот.
+ *
+ * Реальный бот живёт в apps/api/src/modules/telegram (webhook-режим,
+ * per-tenant токены) с этапа 7. Этот пакет исключён из `pnpm dev`
+ * (аудит 2026-06-11) и может быть удалён целиком по решению владельца:
+ *   Remove-Item -Recurse apps/bot
+ */
 import 'dotenv/config';
 import pino from 'pino';
 

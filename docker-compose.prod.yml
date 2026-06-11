@@ -51,8 +51,11 @@ services:
       - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - --maxmemory
       - 512mb
+      # noeviction обязателен: в этом Redis живут очереди BullMQ (письма,
+      # push) и сессии. allkeys-lru при нехватке памяти молча удалял бы
+      # задачи и разлогинивал сотрудников — требование разработчиков BullMQ.
       - --maxmemory-policy
-      - allkeys-lru
+      - noeviction
     volumes:
       - redis_data:/data
     healthcheck:
@@ -64,7 +67,7 @@ services:
       - '6379'
 
   api:
-    # Собирается из репозитория; см. apps/api/Dockerfile (создать при первом деплое).
+    # Собирается из репозитория; см. apps/api/Dockerfile.
     build:
       context: .
       dockerfile: apps/api/Dockerfile

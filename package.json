@@ -2,17 +2,16 @@
   "name": "erfolgcrm-v2",
   "version": "0.0.0",
   "private": true,
-  "description": "ErfolgCRM v2 — SaaS multi-tenant CRM для сервисных центров медтехники РФ",
+  "description": "ErfolgCRM v2 — внутренняя CRM сервисного центра медтехники ООО «Эрфольг»",
   "packageManager": "pnpm@10.30.0",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @erfolg/web --filter @erfolg/api --filter @erfolg/bot dev",
+    "dev": "pnpm --parallel --filter @erfolg/web --filter @erfolg/api dev",
     "dev:web": "pnpm --filter @erfolg/web dev",
     "dev:api": "pnpm --filter @erfolg/api dev",
-    "dev:bot": "pnpm --filter @erfolg/bot dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",

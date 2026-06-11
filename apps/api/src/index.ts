@@ -39,12 +39,21 @@ app.use(compression());
 // Сейчас все cookie читаются как unsigned (req.cookies) — подпись не проверяется.
 // Оставляем секрет в конструкторе на случай миграции на signed позже без переписывания.
 app.use(cookieParser(process.env.SESSION_SECRET));
+// CORS: боевые origin'ы задаются через CORS_ORIGINS (через запятую, например
+// "https://crm.erfolg-md.ru"). localhost разрешён только вне production —
+// в проде web и api живут на одном домене за nginx, и обычно CORS не нужен вовсе.
+const corsProd = process.env.NODE_ENV === 'production';
+const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
+      if (corsOrigins.includes(origin)) return cb(null, true);
       const allowed =
-        /^https?:\/\/([a-z0-9-]+\.)?(localhost|erfolgcrm\.ru)(:\d+)?$/.test(origin);
+        !corsProd && /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/.test(origin);
       cb(null, allowed);
     },
     credentials: true,
