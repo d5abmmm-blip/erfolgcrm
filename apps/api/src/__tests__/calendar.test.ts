@@ -21,7 +21,12 @@ import {
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import { listMonthEvents } from '../modules/calendar';
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  listMonthEvents,
+  updateCalendarEvent,
+} from '../modules/calendar';
 import { createTicket } from '../modules/tickets/repository';
 import { createContract } from '../modules/contracts/repository';
 import { createWarranty } from '../modules/warranties/repository';
@@ -132,6 +137,7 @@ afterAll(async () => {
       await tx.delete(contracts).where(like(contracts.contractNumber, `${TEST_PREFIX}%`));
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
       await tx.delete(assets).where(like(assets.model, `${TEST_PREFIX}%`));
+      await tx.execute(sql`DELETE FROM calendar_events WHERE title LIKE ${TEST_PREFIX + '%'}`);
     });
   }
 });
@@ -179,5 +185,62 @@ describe('calendar.month — события месяца', () => {
     // А из demo — виден.
     const demoEvents = await listMonthEvents(getDb(), demoId, TZ, 2031, 3);
     expect(demoEvents.some((e) => e.title.includes(`${TEST_PREFIX}DEMO-1`))).toBe(true);
+  });
+});
+
+describe('calendar — свои события (CRUD)', () => {
+  it('create → видно в месяце с временем и заметкой; update меняет; delete убирает', async () => {
+    const { id } = await createCalendarEvent(getDb(), erfolgId, null, {
+      title: `${TEST_PREFIX}Поставка запчастей`,
+      date: '2031-03-18',
+      time: '14:30',
+      notes: 'Привезут манжеты для тонометров',
+    });
+
+    let events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    const ev = events.find((e) => e.type === 'custom' && e.id === id);
+    expect(ev?.date).toBe('2031-03-18');
+    expect(ev?.time).toBe('14:30');
+    expect(ev?.title).toBe(`${TEST_PREFIX}Поставка запчастей`);
+    expect(ev?.notes).toContain('манжеты');
+
+    // update: перенос на другой день без времени.
+    const updated = await updateCalendarEvent(getDb(), erfolgId, id, {
+      title: `${TEST_PREFIX}Поставка (перенос)`,
+      date: '2031-03-19',
+      time: null,
+      notes: null,
+    });
+    expect(updated).toBe(true);
+    events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    const moved = events.find((e) => e.type === 'custom' && e.id === id);
+    expect(moved?.date).toBe('2031-03-19');
+    expect(moved?.time).toBeNull();
+
+    // delete (soft) — из месяца исчезает, повторный delete → false.
+    expect(await deleteCalendarEvent(getDb(), erfolgId, id)).toBe(true);
+    events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    expect(events.some((e) => e.type === 'custom' && e.id === id)).toBe(false);
+    expect(await deleteCalendarEvent(getDb(), erfolgId, id)).toBe(false);
+  });
+
+  it('cross-tenant: своё событие demo не видно из erfolg (RLS)', async () => {
+    const { id } = await createCalendarEvent(getDb(), demoId, null, {
+      title: `${TEST_PREFIX}demo-событие`,
+      date: '2031-03-12',
+      time: null,
+      notes: null,
+    });
+    const erfolgEvents = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    expect(erfolgEvents.some((e) => e.id === id)).toBe(false);
+    // Update из чужого tenant'а тоже не должен находить запись.
+    expect(
+      await updateCalendarEvent(getDb(), erfolgId, id, {
+        title: 'x',
+        date: '2031-03-12',
+        time: null,
+        notes: null,
+      }),
+    ).toBe(false);
   });
 });

@@ -1,3 +1,11 @@
 /** Публичный API модуля calendar. */
 export { calendarRouter } from './router';
-export { listMonthEvents, type CalendarEvent, type CalendarEventType } from './repository';
+export {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  listMonthEvents,
+  updateCalendarEvent,
+  type CalendarEvent,
+  type CalendarEventInput,
+  type CalendarEventType,
+} from './repository';

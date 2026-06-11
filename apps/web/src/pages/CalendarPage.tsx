@@ -6,13 +6,19 @@
  * в духе дизайн-языка «приборная панель»: голубой — работа, красный — дедлайн,
  * янтарный — ТО, оранжевый — договор, серый — гарантия.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'wouter';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
-type EventType = 'ticket' | 'ticket_deadline' | 'maintenance' | 'contract_end' | 'warranty_end';
+type EventType =
+  | 'ticket'
+  | 'ticket_deadline'
+  | 'maintenance'
+  | 'contract_end'
+  | 'warranty_end'
+  | 'custom';
 
 interface CalendarEvent {
   type: EventType;
@@ -22,7 +28,13 @@ interface CalendarEvent {
   title: string;
   subtitle: string | null;
   href: string;
+  notes: string | null;
 }
+
+type DialogState =
+  | { mode: 'create'; date: string }
+  | { mode: 'edit'; event: CalendarEvent }
+  | null;
 
 const TYPE_META: Record<
   EventType,
@@ -53,6 +65,11 @@ const TYPE_META: Record<
     dot: 'bg-muted-foreground/60',
     chip: 'bg-muted text-muted-foreground',
   },
+  custom: {
+    label: 'Своё событие',
+    dot: 'bg-success',
+    chip: 'bg-success/12 text-success',
+  },
 };
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -71,6 +88,7 @@ export function CalendarPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
   const [selected, setSelected] = useState<string | null>(todayStr());
+  const [dialog, setDialog] = useState<DialogState>(null);
 
   const eventsQ = trpc.calendar.month.useQuery({ year, month });
 
@@ -121,6 +139,14 @@ export function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setDialog({ mode: 'create', date: selected ?? todayStr() })}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 mr-1 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+          >
+            <Plus className="h-4 w-4" />
+            Событие
+          </button>
           <button
             type="button"
             onClick={() => shiftMonth(-1)}
@@ -271,35 +297,277 @@ export function CalendarPage() {
             <div className="text-muted-foreground p-4 text-sm">На этот день событий нет.</div>
           ) : (
             <div className="divide-y">
-              {selectedEvents.map((ev) => (
-                <Link
-                  key={`${ev.type}-${ev.id}`}
-                  href={ev.href}
-                  className="hover:bg-primary/[0.05] flex items-start gap-2.5 p-3 transition"
-                >
-                  <span
-                    className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', TYPE_META[ev.type].dot)}
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {ev.time && <span className="tabular-nums">{ev.time} · </span>}
-                      {ev.title}
-                    </span>
-                    {ev.subtitle && (
-                      <span className="text-muted-foreground block truncate text-xs">
-                        {ev.subtitle}
+              {selectedEvents.map((ev) => {
+                const inner = (
+                  <>
+                    <span
+                      className={cn(
+                        'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                        TYPE_META[ev.type].dot,
+                      )}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {ev.time && <span className="tabular-nums">{ev.time} · </span>}
+                        {ev.title}
                       </span>
-                    )}
-                    <span className="text-muted-foreground/70 block text-[11px]">
-                      {TYPE_META[ev.type].label}
+                      {ev.subtitle && (
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {ev.subtitle}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground/70 block text-[11px]">
+                        {TYPE_META[ev.type].label}
+                      </span>
                     </span>
-                  </span>
-                </Link>
-              ))}
+                  </>
+                );
+                // Свои события редактируются на месте, остальные ведут в карточку.
+                return ev.type === 'custom' ? (
+                  <button
+                    key={`${ev.type}-${ev.id}`}
+                    type="button"
+                    onClick={() => setDialog({ mode: 'edit', event: ev })}
+                    className="hover:bg-primary/[0.05] flex w-full items-start gap-2.5 p-3 text-left transition"
+                  >
+                    {inner}
+                    <Pencil className="text-muted-foreground/60 mt-1 h-3.5 w-3.5 shrink-0" />
+                  </button>
+                ) : (
+                  <Link
+                    key={`${ev.type}-${ev.id}`}
+                    href={ev.href}
+                    className="hover:bg-primary/[0.05] flex items-start gap-2.5 p-3 transition"
+                  >
+                    {inner}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </aside>
+      </div>
+
+      {dialog && <EventDialog initial={dialog} onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
+
+/* ───────────── Диалог своего события ───────────── */
+
+function EventDialog({
+  initial,
+  onClose,
+}: {
+  initial: NonNullable<DialogState>;
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const isEdit = initial.mode === 'edit';
+  const [title, setTitle] = useState(isEdit ? initial.event.title : '');
+  const [date, setDate] = useState(isEdit ? initial.event.date : initial.date);
+  const [time, setTime] = useState(isEdit ? (initial.event.time ?? '') : '');
+  const [notes, setNotes] = useState(isEdit ? (initial.event.notes ?? '') : '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  const done = async () => {
+    await utils.calendar.month.invalidate();
+    onClose();
+  };
+  const create = trpc.calendar.createEvent.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
+  const update = trpc.calendar.updateEvent.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
+  const remove = trpc.calendar.deleteEvent.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
+  const pending = create.isPending || update.isPending || remove.isPending;
+
+  useEffect(() => {
+    titleRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      // Focus trap — как в ConfirmDialog (WAI-ARIA).
+      if (e.key === 'Tab' && rootRef.current) {
+        const focusables = rootRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const submit = () => {
+    setError(null);
+    if (!title.trim()) {
+      setError('Укажите название события');
+      return;
+    }
+    const payload = {
+      title: title.trim(),
+      date,
+      time: time || null,
+      notes: notes.trim() || null,
+    };
+    if (isEdit) update.mutate({ id: initial.event.id, ...payload });
+    else create.mutate(payload);
+  };
+
+  const inputCls =
+    'bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40';
+
+  return (
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="event-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        aria-label="Закрыть диалог"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+      />
+      <div className="bg-card relative z-10 w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl">
+        <h3 id="event-dialog-title" className="flex items-center gap-2 text-base font-semibold">
+          <span className="bg-success/12 text-success grid h-7 w-7 place-items-center rounded-lg">
+            <CalendarDays className="h-4 w-4" />
+          </span>
+          {isEdit ? 'Изменить событие' : 'Новое событие'}
+        </h3>
+
+        <label className="block space-y-1">
+          <span className="text-muted-foreground text-xs font-medium">Название</span>
+          <input
+            ref={titleRef}
+            type="text"
+            value={title}
+            maxLength={200}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Например: поставка запчастей, встреча с клиникой"
+            className={inputCls}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block space-y-1">
+            <span className="text-muted-foreground text-xs font-medium">Дата</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputCls}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-muted-foreground text-xs font-medium">
+              Время <span className="opacity-60">(необязательно)</span>
+            </span>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className={inputCls}
+            />
+          </label>
+        </div>
+
+        <label className="block space-y-1">
+          <span className="text-muted-foreground text-xs font-medium">
+            Заметка <span className="opacity-60">(необязательно)</span>
+          </span>
+          <textarea
+            value={notes}
+            rows={3}
+            maxLength={2000}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Детали, адрес, телефон…"
+            className={inputCls}
+          />
+        </label>
+
+        {error && (
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2.5 text-xs">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {isEdit ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                remove.mutate({ id: initial.event.id });
+              }}
+              className={cn(
+                'rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50',
+                confirmDelete
+                  ? 'bg-destructive text-destructive-foreground border-destructive'
+                  : 'text-destructive border-destructive/30 hover:bg-destructive/10',
+              )}
+            >
+              {confirmDelete ? 'Точно удалить?' : 'Удалить'}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={pending}
+              className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={pending}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            >
+              {pending ? 'Сохраняю…' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

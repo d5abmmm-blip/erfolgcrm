@@ -48,6 +48,7 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0033_enable_rls_kp_versions.sql': 'ticket_kp_versions',
   '0034_enable_rls_trade_in.sql': 'trade_in_items',
   '0035_enable_rls_roadmap.sql': 'roadmap_goals',
+  '0039_enable_rls_calendar_events.sql': 'calendar_events',
 };
 
 async function main() {

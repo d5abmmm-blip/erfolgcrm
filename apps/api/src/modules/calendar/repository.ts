@@ -14,6 +14,7 @@
 import { and, eq, isNotNull, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import {
   assets,
+  calendarEvents,
   clients,
   contracts,
   maintenanceSchedules,
@@ -28,20 +29,23 @@ export type CalendarEventType =
   | 'ticket_deadline'
   | 'maintenance'
   | 'contract_end'
-  | 'warranty_end';
+  | 'warranty_end'
+  | 'custom';
 
 export interface CalendarEvent {
   type: CalendarEventType;
   /** День события в часовом поясе tenant'а, YYYY-MM-DD. */
   date: string;
-  /** Время HH:MM — только у запланированных заявок, у остальных null. */
+  /** Время HH:MM — у запланированных заявок и своих событий; иначе null. */
   time: string | null;
   /** id исходной сущности (для key на фронте). */
   id: string;
   title: string;
   subtitle: string | null;
-  /** Куда ведёт клик. */
+  /** Куда ведёт клик. Для custom — '/calendar' (редактируется на месте). */
   href: string;
+  /** Заметка — только у custom-событий (нужна для редактирования). */
+  notes: string | null;
 }
 
 const MAINTENANCE_KIND_LABEL: Record<string, string> = {
@@ -99,6 +103,7 @@ export async function listMonthEvents(
         title: r.ticketNumber,
         subtitle: r.clientName ?? null,
         href: `/tickets/${r.id}`,
+        notes: null,
       });
     }
 
@@ -128,6 +133,7 @@ export async function listMonthEvents(
         title: `Дедлайн ${r.ticketNumber}`,
         subtitle: r.clientName ?? null,
         href: `/tickets/${r.id}`,
+        notes: null,
       });
     }
 
@@ -156,6 +162,7 @@ export async function listMonthEvents(
         title: r.assetModel ?? 'Техника',
         subtitle: MAINTENANCE_KIND_LABEL[r.kind] ?? 'ТО',
         href: '/maintenance',
+        notes: null,
       });
     }
 
@@ -186,6 +193,7 @@ export async function listMonthEvents(
         title: `Договор № ${r.contractNumber}`,
         subtitle: r.clientName ? `истекает · ${r.clientName}` : 'истекает',
         href: `/contracts/${r.id}`,
+        notes: null,
       });
     }
 
@@ -215,6 +223,36 @@ export async function listMonthEvents(
         title: r.assetModel ?? 'Техника',
         subtitle: r.provider ? `гарантия истекает · ${r.provider}` : 'гарантия истекает',
         href: '/warranties',
+        notes: null,
+      });
+    }
+
+    // 6. Свои события менеджеров (встречи, поставки, напоминания).
+    const custom = await tx
+      .select({
+        id: calendarEvents.id,
+        title: calendarEvents.title,
+        date: sql<string>`to_char(${calendarEvents.eventDate}, 'YYYY-MM-DD')`,
+        time: sql<string | null>`to_char(${calendarEvents.eventTime}, 'HH24:MI')`,
+        notes: calendarEvents.notes,
+      })
+      .from(calendarEvents)
+      .where(
+        and(
+          isNull(calendarEvents.deletedAt),
+          sql`${calendarEvents.eventDate} >= ${monthStart}::date and ${calendarEvents.eventDate} < ${monthEnd}::date`,
+        ),
+      );
+    for (const r of custom) {
+      events.push({
+        type: 'custom',
+        date: r.date,
+        time: r.time,
+        id: r.id,
+        title: r.title,
+        subtitle: r.notes,
+        href: '/calendar',
+        notes: r.notes,
       });
     }
 
@@ -226,5 +264,77 @@ export async function listMonthEvents(
         a.type.localeCompare(b.type),
     );
     return events;
+  });
+}
+
+/* ───────────── CRUD своих событий ───────────── */
+
+export interface CalendarEventInput {
+  title: string;
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:MM или null — «весь день». */
+  time: string | null;
+  notes: string | null;
+}
+
+export async function createCalendarEvent(
+  db: Db,
+  tenantId: string,
+  userId: string | null,
+  input: CalendarEventInput,
+): Promise<{ id: string }> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .insert(calendarEvents)
+      .values({
+        tenantId,
+        title: input.title,
+        eventDate: input.date,
+        eventTime: input.time,
+        notes: input.notes,
+        createdByUserId: userId,
+      })
+      .returning({ id: calendarEvents.id });
+    const row = rows[0];
+    if (!row) throw new Error('createCalendarEvent: nothing returned');
+    return row;
+  });
+}
+
+export async function updateCalendarEvent(
+  db: Db,
+  tenantId: string,
+  id: string,
+  input: CalendarEventInput,
+): Promise<boolean> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .update(calendarEvents)
+      .set({
+        title: input.title,
+        eventDate: input.date,
+        eventTime: input.time,
+        notes: input.notes,
+      })
+      .where(and(eq(calendarEvents.id, id), isNull(calendarEvents.deletedAt)))
+      .returning({ id: calendarEvents.id });
+    return rows.length > 0;
+  });
+}
+
+export async function deleteCalendarEvent(
+  db: Db,
+  tenantId: string,
+  id: string,
+): Promise<boolean> {
+  // Soft delete — единый паттерн проекта (deleted_at).
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .update(calendarEvents)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(calendarEvents.id, id), isNull(calendarEvents.deletedAt)))
+      .returning({ id: calendarEvents.id });
+    return rows.length > 0;
   });
 }
