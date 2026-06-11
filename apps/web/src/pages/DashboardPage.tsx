@@ -57,6 +57,8 @@ function DirectorDashboard() {
   const metricsQ = trpc.dashboard.getMetrics.useQuery({ preset: period });
   const overdueQ = trpc.dashboard.listOverdueInvoices.useQuery({ limit: 5 });
   const slaQ = trpc.dashboard.listSlaAtRisk.useQuery({ limit: 5 });
+  // ЗП к выплате за выбранный период (та же логика расчёта, что на /payroll).
+  const payoutsQ = trpc.payroll.computePayouts.useQuery({ preset: period });
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -235,9 +237,21 @@ function DirectorDashboard() {
               href="/maintenance"
             />
             <MetricTile
-              title="ЗП к выплате"
-              value="—"
-              hint="откройте «Зарплата»"
+              title={`ЗП к выплате · ${PERIOD_LABEL[period].toLowerCase()}`}
+              value={
+                payoutsQ.data
+                  ? formatRubFromKopecks(payoutsQ.data.grandTotalKopecks)
+                  : payoutsQ.isLoading
+                    ? '…'
+                    : '—'
+              }
+              hint={
+                payoutsQ.data
+                  ? payoutsQ.data.rows.length > 0
+                    ? `по ${payoutsQ.data.rows.length} инженерам, детали в «Зарплате»`
+                    : 'нет закрытых нарядов за период'
+                  : 'откройте «Зарплата»'
+              }
               icon={Wallet}
               href="/payroll"
             />
