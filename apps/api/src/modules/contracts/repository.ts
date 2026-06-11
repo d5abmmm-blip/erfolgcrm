@@ -87,7 +87,7 @@ function rowToDto(
     status: row.status,
     validFrom: row.validFrom ?? null,
     validUntil: row.validUntil ?? null,
-    terms: (row.termsJson ?? {}) as ContractTerms,
+    terms: (row.termsJson ?? {}),
     signedPdfObjectKey: row.signedPdfObjectKey ?? null,
     notes: row.notes ?? null,
     createdAt: row.createdAt,

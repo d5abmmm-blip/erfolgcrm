@@ -22,6 +22,7 @@ import {
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
+import { pgErrorText } from '../lib/pg-error';
 import { createTicket } from '../modules/tickets/repository';
 import { appRouter } from '../trpc/router';
 import type { Context } from '../trpc/context';
@@ -360,7 +361,9 @@ describe('Stage 11: CHECK constraint tickets_schedule_consistency', () => {
           .set({ scheduledStartAt: start, scheduledEndAt: end })
           .where(eq(tickets.id, ticketId)),
       ),
-    ).rejects.toThrow(/tickets_schedule_consistency/i);
+    ).rejects.toSatisfy((e: unknown) =>
+      /tickets_schedule_consistency/i.test(pgErrorText(e)),
+    );
   });
 });
 

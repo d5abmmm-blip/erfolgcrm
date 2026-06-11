@@ -11,6 +11,7 @@ import { describe, it, expect, afterAll, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { assets, clients, getDb, warranties, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
+import { pgErrorCode } from '../lib/pg-error';
 import {
   archiveWarranty,
   createWarranty,
@@ -178,6 +179,6 @@ describe('warranties — инварианты БД', () => {
         endDate: dateStr(-1),
         provider: `${TEST_PREFIX}Bad`,
       }),
-    ).rejects.toMatchObject({ code: '23514' });
+    ).rejects.toSatisfy((e: unknown) => pgErrorCode(e) === '23514');
   });
 });

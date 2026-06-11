@@ -21,13 +21,12 @@ import {
   type UpdateContractPatch,
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
+import { pgErrorCode } from '../../lib/pg-error';
 import type { CmdCtx } from '../../trpc/helpers';
 
 function isUniqueViolation(err: unknown): boolean {
-  if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
-    return true;
-  }
-  return false;
+  // pgErrorCode разворачивает DrizzleQueryError (drizzle ≥0.44 кладёт оригинал в .cause)
+  return pgErrorCode(err) === '23505';
 }
 
 export async function listContractsQuery(

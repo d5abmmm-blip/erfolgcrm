@@ -8,6 +8,7 @@
  * Любые иные ошибки пробрасываются сразу — мы только страхуем от concurrency.
  */
 import { logger } from './logger';
+import { pgErrorCode } from './pg-error';
 
 export const RETRYABLE_PG_CODES: ReadonlySet<string> = new Set(['40001', '40P01']);
 
@@ -17,7 +18,7 @@ const JITTER_LOW = 0.8;
 const JITTER_HIGH = 1.2;
 
 function isRetryable(err: unknown): boolean {
-  const code = (err as { code?: string } | null)?.code;
+  const code = pgErrorCode(err);
   return typeof code === 'string' && RETRYABLE_PG_CODES.has(code);
 }
 
@@ -42,7 +43,7 @@ export async function withDbRetry<T>(
       if (attempt >= maxAttempts) break;
       const delay = backoffDelay(attempt);
       logger.warn(
-        { label, attempt, delay, code: (err as { code?: string }).code },
+        { label, attempt, delay, code: pgErrorCode(err) },
         'db-retry: retrying after PG concurrency error',
       );
       await new Promise((r) => setTimeout(r, delay));

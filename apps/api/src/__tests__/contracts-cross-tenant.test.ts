@@ -37,6 +37,7 @@ import { verifyReferenceBelongsToTenant } from '../modules/attachments/repositor
 import { createTicketCmd } from '../modules/tickets/service';
 import type { ResolvedTenant } from '../lib/tenant';
 import type { SessionData } from '../lib/session';
+import { pgErrorCode } from '../lib/pg-error';
 
 let erfolgId = '';
 let demoId = '';
@@ -300,7 +301,7 @@ describe('contracts cross-tenant изоляция', () => {
         contractNumber: `${TEST_PREFIX}DUP`,
         contractDate: '2026-02-15',
       }),
-    ).rejects.toMatchObject({ code: '23505' });
+    ).rejects.toSatisfy((e: unknown) => pgErrorCode(e) === '23505');
   });
 
   it('listActiveByClient: только active и валидные по дате', async () => {

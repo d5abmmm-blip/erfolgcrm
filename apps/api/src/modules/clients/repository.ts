@@ -77,7 +77,7 @@ export interface CreateClientInput {
   notes?: string | null;
 }
 
-export interface UpdateClientInput extends Partial<CreateClientInput> {}
+export type UpdateClientInput = Partial<CreateClientInput>;
 
 export interface CreateContactInput {
   clientId: string;
@@ -236,16 +236,16 @@ export async function getClient(
       treasuryAccount: c.treasuryAccount,
       eksAccount: c.eksAccount,
       personalAccount: c.personalAccount,
-      individualFullName: (c.individualFullName as unknown as string) ?? null,
-      individualPhone: (c.individualPhone as unknown as string) ?? null,
-      individualAddress: (c.individualAddress as unknown as string) ?? null,
+      individualFullName: (c.individualFullName as string) ?? null,
+      individualPhone: (c.individualPhone as string) ?? null,
+      individualAddress: (c.individualAddress as string) ?? null,
       notes: c.notes,
       defaultContactId: c.defaultContactId,
       status: c.status,
       contacts: contactRows.map((r) => ({
         id: r.id,
-        fullName: (r.fullName as unknown as string) ?? null,
-        phone: (r.phone as unknown as string) ?? null,
+        fullName: (r.fullName as string) ?? null,
+        phone: (r.phone as string) ?? null,
         email: r.email,
         position: r.position,
         isPrimary: r.isPrimary,

@@ -20,6 +20,7 @@ import {
   TicketTemplateNameConflictError,
   TicketTemplateNotFoundError,
 } from '../../lib/errors';
+import { pgErrorCode, pgErrorText } from '../../lib/pg-error';
 import type { RepairType, TicketPriority } from '@erfolg/shared';
 
 const NAME_UNIQUE_INDEX = 'ticket_templates_tenant_name_active_uniq';
@@ -78,10 +79,9 @@ function toDto(row: typeof ticketTemplates.$inferSelect): TicketTemplateDto {
 
 /** Маппит unique-violation от частичного индекса в доменную ошибку. */
 function rethrowUnique(err: unknown, name: string): never {
-  // postgres-js / pg драйвер кладёт код 23505 в .code; сообщение содержит имя индекса.
-  const msg = err instanceof Error ? err.message : String(err);
-  const code = (err as { code?: string }).code;
-  if (code === '23505' || msg.includes(NAME_UNIQUE_INDEX)) {
+  // Код 23505 и имя индекса достаём через pg-error helpers — drizzle ≥0.44
+  // оборачивает ошибку драйвера, оригинал лежит в .cause.
+  if (pgErrorCode(err) === '23505' || pgErrorText(err).includes(NAME_UNIQUE_INDEX)) {
     throw new TicketTemplateNameConflictError(name);
   }
   throw err;

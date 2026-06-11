@@ -355,7 +355,7 @@ export async function leadFunnelStats(db: Db, tenantId: string): Promise<FunnelS
       negotiation: { count: 0, value: 0 },
       won: { count: 0, value: 0 },
       lost: { count: 0, value: 0 },
-    } as Record<LeadStatus, { count: number; value: number }>;
+    };
 
     const lostReasons: Record<string, number> = {};
     let totalPotential = 0;

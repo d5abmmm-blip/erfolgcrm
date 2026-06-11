@@ -21,12 +21,12 @@ import {
   type WarrantyStats,
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
+import { pgErrorCode } from '../../lib/pg-error';
 import type { CmdCtx } from '../../trpc/helpers';
 
 function isCheckViolation(err: unknown): boolean {
-  return Boolean(
-    err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23514',
-  );
+  // pgErrorCode разворачивает DrizzleQueryError (drizzle ≥0.44 кладёт оригинал в .cause)
+  return pgErrorCode(err) === '23514';
 }
 
 export async function listWarrantiesQuery(

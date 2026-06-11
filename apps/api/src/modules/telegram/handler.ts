@@ -60,7 +60,7 @@ export async function handleUpdate(ctx: HandlerCtx, update: TgUpdate): Promise<v
   }
 
   // Если нет state — подсказываем команду.
-  let state = await loadConversation(ctx.tenant.id, chatId);
+  const state = await loadConversation(ctx.tenant.id, chatId);
   if (!state || state.step === 'IDLE' || state.step === 'DONE') {
     await sendMessage(ctx.botToken, {
       chat_id: chatId,
