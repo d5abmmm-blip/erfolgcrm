@@ -232,6 +232,13 @@
       "when": 1777900500000,
       "tag": "0036_drop_metrology",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1777900600000,
+      "tag": "0037_client_cabinet_deletion_requested",
+      "breakpoints": true
     }
   ]
 }
