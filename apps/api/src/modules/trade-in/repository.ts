@@ -8,7 +8,8 @@
  * с другим владельцем — перенос assets.owner_client_id + событие owner_change
  * в asset_events (event-sourcing-lite, как в остальном v2).
  */
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import { alias } from 'drizzle-orm/pg-core';
 import { assetEvents, assets, clients, tradeInItems, withTenantTx, type Db } from '@erfolg/db';
 import type { TradeInCondition, TradeInStatus } from '@erfolg/shared';
@@ -153,12 +154,12 @@ export async function listTradeIns(
       const q = `%${opts.search.trim()}%`;
       filters.push(
         or(
-          ilike(tradeInItems.name, q),
-          ilike(tradeInItems.manufacturer, q),
-          ilike(tradeInItems.model, q),
-          ilike(tradeInItems.serialNumber, q),
-          ilike(sellerClients.displayName, q),
-          ilike(buyerClients.displayName, q),
+          ruIlike(tradeInItems.name, q),
+          ruIlike(tradeInItems.manufacturer, q),
+          ruIlike(tradeInItems.model, q),
+          ruIlike(tradeInItems.serialNumber, q),
+          ruIlike(sellerClients.displayName, q),
+          ruIlike(buyerClients.displayName, q),
         ) as SQL,
       );
     }

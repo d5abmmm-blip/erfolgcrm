@@ -4,7 +4,8 @@
  * Бизнес-инвариант «при изменении lifecycleStatus/ownerClientId/location
  * автоматически появляется asset_event» реализован в service.ts (одна транзакция).
  */
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, or, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import {
   assetEvents,
   assets,
@@ -110,9 +111,9 @@ export async function listAssets(
     const q = `%${opts.search.trim()}%`;
     filters.push(
       or(
-        ilike(assets.model, q),
-        ilike(assets.serialNumber, q),
-        ilike(assets.inventoryNumber, q),
+        ruIlike(assets.model, q),
+        ruIlike(assets.serialNumber, q),
+        ruIlike(assets.inventoryNumber, q),
       ) as SQL,
     );
   }
@@ -228,9 +229,9 @@ export async function searchAssets(
       .innerJoin(clients, eq(assets.ownerClientId, clients.id))
       .where(
         or(
-          ilike(assets.model, query),
-          ilike(assets.serialNumber, query),
-          ilike(assets.inventoryNumber, query),
+          ruIlike(assets.model, query),
+          ruIlike(assets.serialNumber, query),
+          ruIlike(assets.inventoryNumber, query),
         ),
       )
       .orderBy(asc(assets.model))

@@ -15,7 +15,6 @@ import {
   desc,
   eq,
   gte,
-  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -39,6 +38,7 @@ import {
   type TicketEventPayload,
 } from '@erfolg/db';
 import { TicketNotFoundError } from '../../lib/errors';
+import { ruIlike } from '../../lib/ru-search';
 
 type Tx = PgTransaction<never, never, never>;
 import type {
@@ -194,10 +194,10 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
     const q = `%${opts.search.trim()}%`;
     filters.push(
       or(
-        ilike(tickets.ticketNumber, q),
-        ilike(tickets.symptom, q),
-        ilike(clients.displayName, q),
-        ilike(assets.model, q),
+        ruIlike(tickets.ticketNumber, q),
+        ruIlike(tickets.symptom, q),
+        ruIlike(clients.displayName, q),
+        ruIlike(assets.model, q),
       ) as SQL,
     );
   }
@@ -351,10 +351,10 @@ export async function searchTickets(
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .where(
         or(
-          ilike(tickets.ticketNumber, query),
-          ilike(clients.displayName, query),
-          ilike(assets.model, query),
-          ilike(assets.serialNumber, query),
+          ruIlike(tickets.ticketNumber, query),
+          ruIlike(clients.displayName, query),
+          ruIlike(assets.model, query),
+          ruIlike(assets.serialNumber, query),
         ),
       )
       .orderBy(desc(tickets.receivedAt))

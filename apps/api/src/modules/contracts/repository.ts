@@ -5,7 +5,8 @@
  *   create → update (status, valid_until, terms_json) → archive (soft delete).
  *   contract_number уникален среди живых записей (UNIQUE INDEX WHERE deleted_at IS NULL).
  */
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import {
   clients,
   contracts,
@@ -107,8 +108,8 @@ export async function listContracts(
       const q = `%${opts.search.trim()}%`;
       filters.push(
         or(
-          ilike(contracts.contractNumber, q),
-          ilike(clients.displayName, q),
+          ruIlike(contracts.contractNumber, q),
+          ruIlike(clients.displayName, q),
         ) as SQL,
       );
     }

@@ -11,7 +11,8 @@
  *   • Пустой/слишком короткий query → возвращаем пусто без удара по БД.
  *   • % и _ в pattern экранируем (иначе клиент может подставить wildcard).
  */
-import { asc, desc, eq, ilike, or } from 'drizzle-orm';
+import { asc, desc, eq, or } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import { alias } from 'drizzle-orm/pg-core';
 import {
   assets,
@@ -105,9 +106,9 @@ async function searchTicketsHits(
       .leftJoin(clients, eq(tickets.clientId, clients.id))
       .where(
         or(
-          ilike(tickets.ticketNumber, pattern),
-          ilike(tickets.symptom, pattern),
-          ilike(tickets.barcode, pattern),
+          ruIlike(tickets.ticketNumber, pattern),
+          ruIlike(tickets.symptom, pattern),
+          ruIlike(tickets.barcode, pattern),
         ),
       )
       .orderBy(desc(tickets.createdAt))
@@ -132,9 +133,9 @@ async function searchClientsHits(
       .from(clients)
       .where(
         or(
-          ilike(clients.displayName, pattern),
-          ilike(clients.inn, pattern),
-          ilike(clients.email, pattern),
+          ruIlike(clients.displayName, pattern),
+          ruIlike(clients.inn, pattern),
+          ruIlike(clients.email, pattern),
         ),
       )
       .orderBy(asc(clients.displayName))
@@ -160,9 +161,9 @@ async function searchAssetsHits(
       .leftJoin(ownerClient, eq(ownerClient.id, assets.ownerClientId))
       .where(
         or(
-          ilike(assets.model, pattern),
-          ilike(assets.serialNumber, pattern),
-          ilike(assets.inventoryNumber, pattern),
+          ruIlike(assets.model, pattern),
+          ruIlike(assets.serialNumber, pattern),
+          ruIlike(assets.inventoryNumber, pattern),
         ),
       )
       .orderBy(asc(assets.model))
@@ -188,7 +189,7 @@ async function searchInvoicesHits(
         status: invoices.status,
       })
       .from(invoices)
-      .where(ilike(invoices.invoiceNumber, pattern))
+      .where(ruIlike(invoices.invoiceNumber, pattern))
       .orderBy(desc(invoices.createdAt))
       .limit(LIMIT_PER_TYPE);
     return rows.map((r) => ({
@@ -213,7 +214,7 @@ async function searchContractsHits(
       })
       .from(contracts)
       .leftJoin(clients, eq(contracts.clientId, clients.id))
-      .where(ilike(contracts.contractNumber, pattern))
+      .where(ruIlike(contracts.contractNumber, pattern))
       .orderBy(desc(contracts.createdAt))
       .limit(LIMIT_PER_TYPE);
     return rows.map((r) => ({ ...r, clientName: r.clientName ?? null }));

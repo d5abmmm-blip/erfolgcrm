@@ -5,7 +5,8 @@
  * поэтому фильтр по статусу и stats всегда актуальны (в v1 хранимый статус протухал).
  * Клиент резолвится цепочкой warranties → assets.owner_client_id → clients.
  */
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import { assets, clients, warranties, withTenantTx, type Db } from '@erfolg/db';
 import type { WarrantyStatus, WarrantyType } from '@erfolg/shared';
 
@@ -155,11 +156,11 @@ export async function listWarranties(
       const q = `%${opts.search.trim()}%`;
       filters.push(
         or(
-          ilike(assets.model, q),
-          ilike(assets.serialNumber, q),
-          ilike(clients.displayName, q),
-          ilike(warranties.provider, q),
-          ilike(warranties.contractNumber, q),
+          ruIlike(assets.model, q),
+          ruIlike(assets.serialNumber, q),
+          ruIlike(clients.displayName, q),
+          ruIlike(warranties.provider, q),
+          ruIlike(warranties.contractNumber, q),
         ) as SQL,
       );
     }

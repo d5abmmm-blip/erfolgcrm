@@ -6,7 +6,8 @@
  *
  * Репозиторий НИКОГДА не возвращает сырые *_encrypted bytea — только decrypted DTO.
  */
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, or, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import {
   assets,
   clients,
@@ -115,7 +116,7 @@ export async function listClients(
   if (opts.search) {
     const q = `%${opts.search.trim()}%`;
     filters.push(
-      or(ilike(clients.displayName, q), ilike(clients.inn, q)) as SQL,
+      or(ruIlike(clients.displayName, q), ruIlike(clients.inn, q)) as SQL,
     );
   }
   const whereClause = filters.length ? and(...filters) : undefined;
@@ -275,7 +276,7 @@ export async function searchClients(
       .where(
         and(
           eq(clients.status, 'active'),
-          or(ilike(clients.displayName, query), ilike(clients.inn, query)),
+          or(ruIlike(clients.displayName, query), ruIlike(clients.inn, query)),
         ),
       )
       .orderBy(asc(clients.displayName))

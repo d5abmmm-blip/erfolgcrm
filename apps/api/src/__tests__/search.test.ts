@@ -19,6 +19,7 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { searchEverything } from '../modules/search';
+import { listClients } from '../modules/clients/repository';
 import { createTicket } from '../modules/tickets/repository';
 import {
   getOrCreateWorkOrder,
@@ -57,6 +58,7 @@ afterAll(async () => {
       await tx.delete(invoices).where(like(invoices.notes, `${TEST_PREFIX}%`));
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
       await tx.delete(assets).where(like(assets.model, `${TEST_PREFIX}%`));
+      await tx.delete(clients).where(like(clients.displayName, `${TEST_PREFIX}%`));
     });
   }
 });
@@ -158,6 +160,41 @@ describe('searchEverything', () => {
     // А из demo — видит сам себя.
     const own = await searchEverything(getDb(), demoId, tail);
     expect(own.tickets.some((t) => t.ticketNumber === demoTicketNumber)).toBe(true);
+  });
+
+  it('кириллица: «Гастроскоп» находится по запросу «гастроскоп» (другой регистр)', async () => {
+    // Регрессия аудита 2026-06-11: в C-locale базе обычный ILIKE не сворачивает
+    // регистр русских букв — лечится ruIlike (COLLATE "ru-x-icu"), см. lib/ru-search.ts.
+    const ts = Date.now();
+    const { ticketNumber } = await createTestTicketIn(
+      erfolgId,
+      primaryClientId,
+      `Гастроскоп-${ts}`,
+    );
+    const result = await searchEverything(getDb(), erfolgId, `гастроскоп-${ts}`);
+    expect(result.tickets.some((t) => t.ticketNumber === ticketNumber)).toBe(true);
+  });
+
+  it('кириллица: клиент «Клиника Улыбка» находится по «улыбка» и в списке, и в глобальном поиске', async () => {
+    const ts = Date.now();
+    const name = `${TEST_PREFIX}Клиника Улыбка ${ts}`;
+    const createdId = await withTenantTx(getDb(), erfolgId, async (tx) => {
+      const rows = await tx.execute<{ id: string }>(sql`
+        INSERT INTO clients (tenant_id, type, display_name)
+        VALUES (${erfolgId}::uuid, 'legal', ${name})
+        RETURNING id
+      `);
+      return (rows as unknown as Array<{ id: string }>)[0]?.id;
+    });
+    if (!createdId) throw new Error('insert client failed');
+
+    // Основной поиск менеджера в разделе «Клиенты»
+    const { items } = await listClients(getDb(), erfolgId, { search: `улыбка ${ts}` });
+    expect(items.some((c) => c.id === createdId)).toBe(true);
+
+    // И глобальный поиск
+    const global = await searchEverything(getDb(), erfolgId, `улыбка ${ts}`);
+    expect(global.clients.some((c) => c.id === createdId)).toBe(true);
   });
 
   it('query короче 2 символов → пустой результат', async () => {

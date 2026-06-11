@@ -7,8 +7,9 @@
  * estimatedValue хранится как numeric(14,2) (в БД — строка), в DTO отдаём числом.
  * Имя ответственного резолвится left join'ом на users.full_name.
  */
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { clients, leads, users, withTenantTx, type Db } from '@erfolg/db';
+import { ruIlike } from '../../lib/ru-search';
 import type { LeadLostReason, LeadSource, LeadStatus } from '@erfolg/shared';
 
 export interface LeadDto {
@@ -147,10 +148,10 @@ export async function listLeads(
       const q = `%${opts.search.trim()}%`;
       filters.push(
         or(
-          ilike(leads.name, q),
-          ilike(leads.contactPerson, q),
-          ilike(leads.phone, q),
-          ilike(leads.email, q),
+          ruIlike(leads.name, q),
+          ruIlike(leads.contactPerson, q),
+          ruIlike(leads.phone, q),
+          ruIlike(leads.email, q),
         ) as SQL,
       );
     }

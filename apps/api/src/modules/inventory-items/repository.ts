@@ -4,7 +4,8 @@
  * list возвращает агрегированный остаток (sum quantity_remaining по item_id).
  * Удаление item с активными movements запрещаем на уровне service (409).
  */
-import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import {
   inventoryItems,
   inventoryMovements,
@@ -75,7 +76,7 @@ export async function listItems(
     const conds = [];
     if (opts.search?.trim()) {
       const q = `%${opts.search.trim()}%`;
-      conds.push(or(ilike(inventoryItems.name, q), ilike(inventoryItems.sku, q)));
+      conds.push(or(ruIlike(inventoryItems.name, q), ruIlike(inventoryItems.sku, q)));
     }
     if (opts.category) conds.push(eq(inventoryItems.category, opts.category));
     const whereExpr = conds.length > 0 ? and(...conds) : undefined;
