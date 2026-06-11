@@ -13,6 +13,7 @@ import { useRef, useState } from 'react';
 import { Camera, Loader2, Trash2, Upload } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { ConfirmDialog } from './ui';
 
 type Kind =
   | 'ticket_photo'
@@ -57,13 +58,17 @@ export function PhotoUploader({
   const cameraRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
   const list = trpc.attachments.listByReference.useQuery({ referenceType, referenceId });
   const createUrl = trpc.attachments.createUploadUrl.useMutation();
   const confirm = trpc.attachments.confirmUpload.useMutation();
   const remove = trpc.attachments.delete.useMutation({
-    onSuccess: () => utils.attachments.listByReference.invalidate({ referenceType, referenceId }),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      return utils.attachments.listByReference.invalidate({ referenceType, referenceId });
+    },
   });
 
   const handleFiles = async (files: FileList | null) => {
@@ -183,7 +188,7 @@ export function PhotoUploader({
               canDelete={allowDelete}
               onDelete={() => {
                 if (confirm.isPending) return;
-                if (window.confirm('Удалить вложение?')) remove.mutate({ id: a.id });
+                setDeleteTarget(a.id);
               }}
             />
           ))}
@@ -201,6 +206,17 @@ export function PhotoUploader({
       {items.length === 0 && pending.length === 0 && !canUpload && (
         <div className="text-muted-foreground text-xs">Вложений пока нет.</div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Удалить вложение?"
+        description="Файл будет удалён без возможности восстановления."
+        variant="danger"
+        confirmText="Удалить"
+        loading={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate({ id: deleteTarget })}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

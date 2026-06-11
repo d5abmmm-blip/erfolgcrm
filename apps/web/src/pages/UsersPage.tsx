@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { ConfirmDialog } from '../components/ui';
 
 type Role = 'director' | 'dispatcher' | 'engineer';
 const ROLE_LABEL: Record<Role, string> = {
@@ -242,40 +243,64 @@ function IconButton({
 
 function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) {
   const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const m = trpc.users.setActive.useMutation({
-    onSuccess: () => utils.users.list.invalidate(),
+    onSuccess: () => {
+      setOpen(false);
+      return utils.users.list.invalidate();
+    },
+    onError: (e) => {
+      setOpen(false);
+      setError(e.message);
+    },
   });
   const isBlocking = user.isActive;
   return (
-    <button
-      type="button"
-      title={isBlocking ? 'Заблокировать' : 'Разблокировать'}
-      disabled={disabled || m.isPending}
-      onClick={() =>
-        m.mutate(
-          { userId: user.id, isActive: !user.isActive },
-          {
-            onError: (e) => {
-              alert(e.message);
-            },
-          },
-        )
-      }
-      className={cn(
-        'rounded-md p-1.5 transition disabled:opacity-40',
-        isBlocking
-          ? 'bg-secondary hover:bg-destructive/10 hover:text-destructive'
-          : 'bg-success/10 text-success hover:bg-success/20',
+    <>
+      <button
+        type="button"
+        title={isBlocking ? 'Заблокировать' : 'Разблокировать'}
+        disabled={disabled || m.isPending}
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className={cn(
+          'rounded-md p-1.5 transition disabled:opacity-40',
+          isBlocking
+            ? 'bg-secondary hover:bg-destructive/10 hover:text-destructive'
+            : 'bg-success/10 text-success hover:bg-success/20',
+        )}
+      >
+        {m.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : isBlocking ? (
+          <Lock className="h-3.5 w-3.5" />
+        ) : (
+          <Unlock className="h-3.5 w-3.5" />
+        )}
+      </button>
+      {error && (
+        <div role="alert" className="text-destructive mt-1 text-[11px]">
+          {error}
+        </div>
       )}
-    >
-      {m.isPending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : isBlocking ? (
-        <Lock className="h-3.5 w-3.5" />
-      ) : (
-        <Unlock className="h-3.5 w-3.5" />
-      )}
-    </button>
+      <ConfirmDialog
+        open={open}
+        title={isBlocking ? 'Заблокировать сотрудника?' : 'Разблокировать сотрудника?'}
+        description={
+          isBlocking
+            ? `${user.fullName}: вход будет закрыт, активные сессии отозваны.`
+            : `${user.fullName} снова сможет входить в систему.`
+        }
+        variant={isBlocking ? 'danger' : 'default'}
+        confirmText={isBlocking ? 'Заблокировать' : 'Разблокировать'}
+        loading={m.isPending}
+        onConfirm={() => m.mutate({ userId: user.id, isActive: !user.isActive })}
+        onCancel={() => setOpen(false)}
+      />
+    </>
   );
 }
 

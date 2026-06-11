@@ -6,11 +6,15 @@ import { cn } from '../lib/utils';
 import { kopecksToRub } from '../lib/money';
 import { InventoryBatchForm } from '../components/InventoryBatchForm';
 import { PhotoUploader } from '../components/PhotoUploader';
+import { ConfirmDialog } from '../components/ui';
 
 export function InventoryItemPage() {
   const [match, params] = useRoute('/inventory/:id');
   const itemId = match ? params.id : '';
   const [showBatchForm, setShowBatchForm] = useState(false);
+  const [writeoffBatch, setWriteoffBatch] = useState<{ id: string; remaining: string } | null>(
+    null,
+  );
 
   const item = trpc.inventoryItems.get.useQuery(
     { id: itemId },
@@ -28,6 +32,7 @@ export function InventoryItemPage() {
   const utils = trpc.useUtils();
   const writeoff = trpc.inventoryBatches.writeoff.useMutation({
     onSuccess: () => {
+      setWriteoffBatch(null);
       void utils.inventoryBatches.listByItem.invalidate({ itemId });
       void utils.inventoryItems.movements.invalidate({ itemId });
       void utils.inventoryItems.get.invalidate({ id: itemId });
@@ -129,11 +134,12 @@ export function InventoryItemPage() {
                       {!empty && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (confirm(`Списать остаток партии (${b.quantityRemaining})?`)) {
-                              writeoff.mutate({ batchId: b.id, comment: 'Списание партии' });
-                            }
-                          }}
+                          onClick={() =>
+                            setWriteoffBatch({
+                              id: b.id,
+                              remaining: String(b.quantityRemaining),
+                            })
+                          }
                           className="text-muted-foreground hover:text-destructive"
                           aria-label="Списать"
                           title="Списать остаток"
@@ -151,6 +157,24 @@ export function InventoryItemPage() {
           <div className="text-muted-foreground p-4 text-center text-sm">Партий пока нет</div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={writeoffBatch !== null}
+        title="Списать остаток партии?"
+        description={
+          writeoffBatch
+            ? `Остаток ${writeoffBatch.remaining} будет списан со склада. Движение попадёт в журнал.`
+            : undefined
+        }
+        variant="danger"
+        confirmText="Списать"
+        loading={writeoff.isPending}
+        onConfirm={() =>
+          writeoffBatch &&
+          writeoff.mutate({ batchId: writeoffBatch.id, comment: 'Списание партии' })
+        }
+        onCancel={() => setWriteoffBatch(null)}
+      />
 
       <section className="bg-card overflow-hidden rounded-lg border">
         <div className="border-b p-3">

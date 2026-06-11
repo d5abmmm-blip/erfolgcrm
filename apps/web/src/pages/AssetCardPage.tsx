@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { PromptDialog } from '../components/ui';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -39,6 +40,7 @@ export function AssetCardPage() {
 
   const [statusDraft, setStatusDraft] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [decommissionOpen, setDecommissionOpen] = useState(false);
 
   const updateStatus = trpc.assets.update.useMutation({
     onSuccess: async () => {
@@ -57,6 +59,7 @@ export function AssetCardPage() {
   });
   const decommission = trpc.assets.decommission.useMutation({
     onSuccess: async () => {
+      setDecommissionOpen(false);
       await Promise.all([
         utils.assets.get.invalidate({ id }),
         utils.assets.events.invalidate({ assetId: id }),
@@ -289,16 +292,9 @@ export function AssetCardPage() {
             <div className="border-t pt-4">
               <button
                 type="button"
-                onClick={() => {
-                  const reason = prompt(
-                    'Причина списания (опционально):',
-                    'Списание по решению директора',
-                  );
-                  if (reason !== null) {
-                    decommission.mutate({ id: a.id, comment: reason || undefined });
-                  }
-                }}
-                className="hover:bg-destructive/10 text-destructive inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm transition"
+                onClick={() => setDecommissionOpen(true)}
+                disabled={decommission.isPending}
+                className="hover:bg-destructive/10 text-destructive disabled:opacity-50 inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm transition"
               >
                 <Archive className="h-3.5 w-3.5" />
                 Списать
@@ -306,6 +302,20 @@ export function AssetCardPage() {
               <p className="text-muted-foreground mt-1 text-xs">
                 Только для директора, оставляет запись в хронологии
               </p>
+              <PromptDialog
+                open={decommissionOpen}
+                title="Списать технику?"
+                description="Техника перейдёт в статус «Списана». Запись останется в хронологии."
+                label="Причина списания (необязательна)"
+                initialValue="Списание по решению директора"
+                variant="danger"
+                confirmText="Списать"
+                loading={decommission.isPending}
+                onConfirm={(reason) =>
+                  decommission.mutate({ id: a.id, comment: reason.trim() || undefined })
+                }
+                onCancel={() => setDecommissionOpen(false)}
+              />
             </div>
           )}
         </section>

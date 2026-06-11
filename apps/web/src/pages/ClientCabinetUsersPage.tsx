@@ -17,6 +17,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { ConfirmDialog } from '../components/ui';
 
 export function ClientCabinetUsersPage() {
   const [, params] = useRoute<{ id: string }>('/clients/:id/cabinet-users');
@@ -31,12 +32,16 @@ export function ClientCabinetUsersPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [resetTarget, setResetTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
 
   const setActive = trpc.adminClientUsers.setActive.useMutation({
     onSuccess: () => utils.adminClientUsers.list.invalidate(),
   });
   const remove = trpc.adminClientUsers.remove.useMutation({
-    onSuccess: () => utils.adminClientUsers.list.invalidate(),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      return utils.adminClientUsers.list.invalidate();
+    },
   });
 
   if (client.isLoading || list.isLoading) {
@@ -138,11 +143,7 @@ export function ClientCabinetUsersPage() {
                       </IconBtn>
                       <IconBtn
                         title="Удалить (мягко)"
-                        onClick={() => {
-                          if (confirm(`Удалить логин ${u.email}? Восстановить можно только обращением в поддержку.`)) {
-                            remove.mutate({ id: u.id });
-                          }
-                        }}
+                        onClick={() => setDeleteTarget({ id: u.id, email: u.email })}
                       >
                         <Trash2 className="text-destructive h-4 w-4" />
                       </IconBtn>
@@ -154,6 +155,21 @@ export function ClientCabinetUsersPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Удалить логин кабинета?"
+        description={
+          deleteTarget
+            ? `Логин ${deleteTarget.email} будет удалён. Восстановить можно только обращением в поддержку.`
+            : undefined
+        }
+        variant="danger"
+        confirmText="Удалить"
+        loading={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate({ id: deleteTarget.id })}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {showCreate && (
         <CreateClientUserModal clientId={clientId} onClose={() => setShowCreate(false)} />

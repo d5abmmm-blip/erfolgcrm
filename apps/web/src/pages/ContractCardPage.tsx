@@ -10,6 +10,7 @@ import { Link, useRoute } from 'wouter';
 import { Archive, ChevronLeft, FileSignature, Pencil, Printer } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { PhotoUploader } from '../components/PhotoUploader';
+import { ConfirmDialog } from '../components/ui';
 import { cn } from '../lib/utils';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -47,8 +48,10 @@ export function ContractCardPage() {
   );
 
   const utils = trpc.useUtils();
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const archive = trpc.contracts.archive.useMutation({
     onSuccess: async () => {
+      setArchiveOpen(false);
       await utils.contracts.list.invalidate();
       await utils.contracts.get.invalidate({ id });
     },
@@ -168,18 +171,27 @@ export function ContractCardPage() {
             </Link>
           )}
           {canEdit && c.status !== 'terminated' && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!confirm('Расторгнуть и архивировать договор?')) return;
-                archive.mutate({ id: c.id });
-              }}
-              disabled={archive.isPending}
-              className="hover:bg-destructive/10 hover:text-destructive inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-            >
-              <Archive className="h-3.5 w-3.5" />
-              Архив
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setArchiveOpen(true)}
+                disabled={archive.isPending}
+                className="hover:bg-destructive/10 hover:text-destructive inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Архив
+              </button>
+              <ConfirmDialog
+                open={archiveOpen}
+                title="Расторгнуть договор?"
+                description={`Договор № ${c.contractNumber} будет помечен как расторгнутый и уйдёт в архив.`}
+                variant="danger"
+                confirmText="Расторгнуть"
+                loading={archive.isPending}
+                onConfirm={() => archive.mutate({ id: c.id })}
+                onCancel={() => setArchiveOpen(false)}
+              />
+            </>
           )}
         </div>
       </div>

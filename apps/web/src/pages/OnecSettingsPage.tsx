@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, ClipboardCopy, Database, Loader2, RefreshC
 import { trpc } from '../lib/trpc';
 import { getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { ConfirmDialog } from '../components/ui';
 
 const EXCHANGE_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   pending: { label: 'В процессе', cls: 'bg-warning/15 text-warning' },
@@ -49,6 +50,8 @@ export function OnecSettingsPage() {
 
   const [shownToken, setShownToken] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [exportResult, setExportResult] = useState<{
     exchangeId: string;
     xml: string;
@@ -229,11 +232,10 @@ export function OnecSettingsPage() {
                 disabled={generateToken.isPending}
                 onClick={() => {
                   setActionError(null);
-                  if (
-                    cfg.data?.hasIncomingToken &&
-                    !confirm('Текущий токен будет аннулирован. Продолжить?')
-                  )
+                  if (cfg.data?.hasIncomingToken) {
+                    setConfirmRegenerate(true);
                     return;
+                  }
                   generateToken.mutate();
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
@@ -249,8 +251,7 @@ export function OnecSettingsPage() {
                   disabled={revokeToken.isPending}
                   onClick={() => {
                     setActionError(null);
-                    if (!confirm('Отозвать токен? 1С перестанет авторизоваться.')) return;
-                    revokeToken.mutate();
+                    setConfirmRevoke(true);
                   }}
                   className="hover:bg-destructive/10 hover:text-destructive inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                 >
@@ -261,6 +262,33 @@ export function OnecSettingsPage() {
                 </button>
               )}
             </div>
+
+            <ConfirmDialog
+              open={confirmRegenerate}
+              title="Перевыпустить токен?"
+              description="Текущий токен будет аннулирован — 1С перестанет авторизоваться, пока в неё не вставят новый."
+              variant="danger"
+              confirmText="Перевыпустить"
+              loading={generateToken.isPending}
+              onConfirm={() => {
+                setConfirmRegenerate(false);
+                generateToken.mutate();
+              }}
+              onCancel={() => setConfirmRegenerate(false)}
+            />
+            <ConfirmDialog
+              open={confirmRevoke}
+              title="Отозвать токен?"
+              description="1С перестанет авторизоваться до выпуска нового токена."
+              variant="danger"
+              confirmText="Отозвать"
+              loading={revokeToken.isPending}
+              onConfirm={() => {
+                setConfirmRevoke(false);
+                revokeToken.mutate();
+              }}
+              onCancel={() => setConfirmRevoke(false)}
+            />
           </div>
 
           {/* URL for 1C */}

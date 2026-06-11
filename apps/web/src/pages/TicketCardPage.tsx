@@ -32,6 +32,7 @@ import type {
 } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { PromptDialog } from '../components/ui/PromptDialog';
 import { WorkOrderEditor, kopecksToRub } from '../components/WorkOrderEditor';
 import { TicketPayments } from '../components/TicketPayments';
 import { PhotoUploader } from '../components/PhotoUploader';
@@ -110,6 +111,10 @@ export function TicketCardPage() {
   );
 
   const [tab, setTab] = useState<Tab>('details');
+  // Вместо браузерных alert(): предупреждение об аттестации и ошибки печати PDF
+  // показываем встроенными баннерами под шапкой.
+  const [attestationWarning, setAttestationWarning] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
 
   const invalidateAll = async () => {
     await Promise.all([
@@ -126,8 +131,7 @@ export function TicketCardPage() {
       await invalidateAll();
       // Stage 10'.I — surface attestation warning от ticket update.
       if (data && 'attestationWarning' in data && data.attestationWarning) {
-        // eslint-disable-next-line no-alert
-        alert(`Внимание: ${data.attestationWarning}`);
+        setAttestationWarning(String(data.attestationWarning));
       }
     },
   });
@@ -152,11 +156,15 @@ export function TicketCardPage() {
   const statusBadge = STATUS_BADGE[t.status];
   const totalKop = wo.data?.totalAmountKopecks ?? '0';
   const vatRate = wo.data?.vatRate ?? '20';
+  const ticketContact = t.contactId
+    ? clientFull.data?.contacts.find((c) => c.id === t.contactId)
+    : undefined;
 
   const printDocument = async (
     kind: 'intake_act' | 'invoice' | 'work_act' | 'asset_label',
     _name: string,
   ) => {
+    setPrintError(null);
     try {
       const [{ printIntakeAct, printInvoice, printWorkAct, printAssetLabel }, { ERFOLG_FALLBACK }] =
         await Promise.all([
@@ -221,19 +229,19 @@ export function TicketCardPage() {
         await printIntakeAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData });
       } else if (kind === 'invoice') {
         if (!workOrderData) {
-          alert('Нельзя сформировать счёт: наряд ещё не создан или не содержит позиций.');
+          setPrintError('Нельзя сформировать счёт: наряд ещё не создан или не содержит позиций.');
           return;
         }
         await printInvoice({ tenant: tenantData, client: clientData, ticket: ticketData, workOrder: workOrderData });
       } else if (kind === 'work_act') {
         if (!workOrderData) {
-          alert('Нельзя сформировать акт работ: наряд ещё не создан.');
+          setPrintError('Нельзя сформировать акт работ: наряд ещё не создан.');
           return;
         }
         await printWorkAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData });
       } else {
         if (!assetData) {
-          alert('Нельзя сформировать ярлык: к заявке не привязана техника.');
+          setPrintError('Нельзя сформировать ярлык: к заявке не привязана техника.');
           return;
         }
         await printAssetLabel({
@@ -250,7 +258,9 @@ export function TicketCardPage() {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[print]', err);
-      alert(`Не удалось сформировать PDF: ${err instanceof Error ? err.message : String(err)}`);
+      setPrintError(
+        `Не удалось сформировать PDF: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -270,6 +280,39 @@ export function TicketCardPage() {
           <PrintBtn icon={Tag} label="Ярлык" onClick={() => printDocument('asset_label', 'ярлык на технику')} />
         </div>
       </div>
+
+      {attestationWarning && (
+        <div className="bg-warning/10 text-warning border-warning/30 flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Внимание: {attestationWarning}</span>
+          </div>
+          <button
+            type="button"
+            aria-label="Скрыть предупреждение"
+            onClick={() => setAttestationWarning(null)}
+            className="shrink-0 hover:opacity-70"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {printError && (
+        <div className="bg-destructive/10 text-destructive border-destructive/30 flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
+          <div className="flex items-start gap-2">
+            <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{printError}</span>
+          </div>
+          <button
+            type="button"
+            aria-label="Скрыть ошибку"
+            onClick={() => setPrintError(null)}
+            className="shrink-0 hover:opacity-70"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       <header className="bg-card rounded-lg border p-4 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -313,10 +356,21 @@ export function TicketCardPage() {
             </Link>
           </InfoBlock>
           <InfoBlock label="Контакт" icon={Phone}>
-            {t.contactId ? (
-              <span className="text-muted-foreground text-xs">id {t.contactId.slice(0, 8)}…</span>
-            ) : (
+            {!t.contactId ? (
               <span className="text-muted-foreground">—</span>
+            ) : ticketContact ? (
+              <div>
+                <div className="font-medium">{ticketContact.fullName ?? '—'}</div>
+                {(ticketContact.position || ticketContact.phone) && (
+                  <div className="text-muted-foreground text-xs">
+                    {[ticketContact.position, ticketContact.phone].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </div>
+            ) : clientFull.isLoading ? (
+              <span className="text-muted-foreground text-xs">Загрузка…</span>
+            ) : (
+              <span className="text-muted-foreground text-xs">контакт удалён из карточки клиента</span>
             )}
           </InfoBlock>
           <InfoBlock label="Где техника" icon={MapPin}>
@@ -626,9 +680,16 @@ function ActionsPanel({
 }) {
   const [statusDraft, setStatusDraft] = useState<TicketStatus | null>(null);
   const [priorityDraft, setPriorityDraft] = useState<TicketPriority | null>(null);
-  const [engineerDraft, setEngineerDraft] = useState('');
-  const [dispatcherDraft, setDispatcherDraft] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+
+  // Список сотрудников для назначений: включаем заблокированных, чтобы
+  // уже назначенный, но заблокированный сотрудник не «исчезал» из селекта.
+  const usersQ = trpc.users.list.useQuery({ includeBlocked: true });
+  const engineerOptions = (usersQ.data ?? []).filter((u) => u.role === 'engineer');
+  const dispatcherOptions = (usersQ.data ?? []).filter(
+    (u) => u.role === 'dispatcher' || u.role === 'director',
+  );
 
   const isClosed = t.status === 'closed' || t.status === 'cancelled';
   const allowedStatuses = role === 'engineer' ? ENGINEER_STATUSES : STAFF_STATUSES;
@@ -724,16 +785,14 @@ function ActionsPanel({
 
       {!isClosed && (
         <div className="space-y-1">
-          <UuidAssign
+          <AssignSelect
             icon={Wrench}
-            label="Инженер (UUID)"
-            placeholder={t.assignedEngineerId ?? 'не назначен'}
-            value={engineerDraft}
-            onChange={setEngineerDraft}
-            onApply={() => {
-              onUpdate({ assignedEngineerId: engineerDraft || null });
-              setEngineerDraft('');
-            }}
+            label="Инженер"
+            value={t.assignedEngineerId}
+            options={engineerOptions}
+            loading={usersQ.isLoading}
+            disabled={pending}
+            onApply={(id) => onUpdate({ assignedEngineerId: id })}
           />
           <EngineerAttestationBadge
             engineerId={t.assignedEngineerId}
@@ -742,16 +801,14 @@ function ActionsPanel({
         </div>
       )}
       {!isClosed && (
-        <UuidAssign
+        <AssignSelect
           icon={UserCog}
-          label="Диспетчер (UUID)"
-          placeholder={t.assignedDispatcherId ?? 'не назначен'}
-          value={dispatcherDraft}
-          onChange={setDispatcherDraft}
-          onApply={() => {
-            onUpdate({ assignedDispatcherId: dispatcherDraft || null });
-            setDispatcherDraft('');
-          }}
+          label="Диспетчер"
+          value={t.assignedDispatcherId}
+          options={dispatcherOptions}
+          loading={usersQ.isLoading}
+          disabled={pending}
+          onApply={(id) => onUpdate({ assignedDispatcherId: id })}
         />
       )}
 
@@ -782,11 +839,9 @@ function ActionsPanel({
           {!isClosed ? (
             <button
               type="button"
-              onClick={() => {
-                const reason = prompt('Причина отмены (опционально):', '');
-                if (reason !== null) onCancel(reason || undefined);
-              }}
-              className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
+              onClick={() => setCancelOpen(true)}
+              disabled={pending}
+              className="text-destructive border-destructive/30 hover:bg-destructive/10 disabled:opacity-50 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
             >
               <XCircle className="h-3.5 w-3.5" />
               Отменить заявку
@@ -795,14 +850,33 @@ function ActionsPanel({
             <button
               type="button"
               onClick={onReopen}
-              className="text-primary border-primary/30 hover:bg-primary/10 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
+              disabled={pending}
+              className="text-primary border-primary/30 hover:bg-primary/10 disabled:opacity-50 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Reopen
+              Переоткрыть
             </button>
           )}
         </div>
       )}
+
+      <PromptDialog
+        open={cancelOpen}
+        title="Отменить заявку?"
+        description="Заявка перейдёт в статус «Отменена». Вернуть её в работу сможет директор кнопкой «Переоткрыть»."
+        label="Причина отмены (необязательно)"
+        placeholder="Например: клиент отказался от ремонта"
+        multiline
+        variant="danger"
+        confirmText="Отменить заявку"
+        cancelText="Не отменять"
+        loading={pending}
+        onConfirm={(v) => {
+          onCancel(v.trim() || undefined);
+          setCancelOpen(false);
+        }}
+        onCancel={() => setCancelOpen(false)}
+      />
     </section>
   );
 }
@@ -854,44 +928,45 @@ function EngineerAttestationBadge({
   );
 }
 
-function UuidAssign({
+function AssignSelect({
   icon: Icon,
   label,
-  placeholder,
   value,
-  onChange,
+  options,
+  loading,
+  disabled,
   onApply,
 }: {
   icon: typeof Wrench;
   label: string;
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  onApply: () => void;
+  /** Текущий назначенный пользователь (id) или null. */
+  value: string | null;
+  options: Array<{ id: string; fullName: string; isActive: boolean }>;
+  loading: boolean;
+  disabled: boolean;
+  onApply: (id: string | null) => void;
 }) {
   return (
-    <div>
-      <div className="text-muted-foreground mb-1 inline-flex items-center gap-1 text-xs uppercase">
+    <label className="block">
+      <span className="text-muted-foreground mb-1 inline-flex items-center gap-1 text-xs uppercase">
         <Icon className="h-3 w-3" />
         {label}
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="bg-background flex-1 rounded-md border px-2 py-1.5 font-mono text-xs outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        <button
-          type="button"
-          onClick={onApply}
-          className="hover:bg-muted rounded-md border px-2 py-1.5 text-xs"
-        >
-          OK
-        </button>
-      </div>
-    </div>
+      </span>
+      <select
+        value={value ?? ''}
+        disabled={disabled || loading}
+        onChange={(e) => onApply(e.target.value || null)}
+        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+      >
+        <option value="">{loading ? 'загрузка…' : 'не назначен'}</option>
+        {options.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.fullName}
+            {u.isActive ? '' : ' (заблокирован)'}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

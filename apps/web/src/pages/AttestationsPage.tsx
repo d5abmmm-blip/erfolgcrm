@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { ConfirmDialog } from '../components/ui';
 
 type Status = 'active' | 'expiring_soon' | 'expired';
 
@@ -195,22 +196,36 @@ export function AttestationsPage() {
 
 function DeleteButton({ id }: { id: string }) {
   const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
   const m = trpc.attestations.remove.useMutation({
-    onSuccess: () => utils.attestations.list.invalidate(),
+    onSuccess: () => {
+      setOpen(false);
+      return utils.attestations.list.invalidate();
+    },
   });
   return (
-    <button
-      type="button"
-      title="Удалить"
-      disabled={m.isPending}
-      onClick={() => {
-        if (!confirm('Удалить аттестацию? Запись останется в БД для аудита.')) return;
-        m.mutate({ id });
-      }}
-      className="bg-secondary hover:bg-destructive/10 hover:text-destructive rounded-md p-1.5 disabled:opacity-40"
-    >
-      {m.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-    </button>
+    <>
+      <button
+        type="button"
+        title="Удалить"
+        aria-label="Удалить аттестацию"
+        disabled={m.isPending}
+        onClick={() => setOpen(true)}
+        className="bg-secondary hover:bg-destructive/10 hover:text-destructive rounded-md p-1.5 disabled:opacity-40"
+      >
+        {m.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+      </button>
+      <ConfirmDialog
+        open={open}
+        title="Удалить аттестацию?"
+        description="Запись останется в базе для аудита."
+        variant="danger"
+        confirmText="Удалить"
+        loading={m.isPending}
+        onConfirm={() => m.mutate({ id })}
+        onCancel={() => setOpen(false)}
+      />
+    </>
   );
 }
 

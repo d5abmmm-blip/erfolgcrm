@@ -94,6 +94,9 @@ export function NewTicketPage() {
     { clientId: clientId || '' },
     { enabled: !!clientId },
   );
+
+  // Инженеры для назначения — выпадающий список вместо ручного ввода UUID.
+  const engineers = trpc.users.list.useQuery({ onlyEngineers: true });
   const isBudgetClient = clientDetail.data?.subtype === 'budget';
   const contractRequired = isBudgetClient;
 
@@ -349,17 +352,25 @@ export function NewTicketPage() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <Label>Назначить инженера (UUID)</Label>
-            <input
-              type="text"
+            <Label>Назначить инженера</Label>
+            <select
               {...form.register('assignedEngineerId')}
-              placeholder="оставить пустым — назначим позже"
-              className="bg-background w-full rounded-md border px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <p className="text-muted-foreground mt-1 text-xs">
-              {/* TODO: заменить на combobox после появления users router */}
-              временно: вставьте UUID; полноценный выбор — после добавления users роутера
-            </p>
+              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <option value="">
+                {engineers.isLoading ? 'загрузка…' : 'назначим позже'}
+              </option>
+              {(engineers.data ?? []).map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.fullName}
+                </option>
+              ))}
+            </select>
+            {engineers.error && (
+              <p className="text-destructive mt-1 text-xs">
+                Не удалось загрузить список инженеров
+              </p>
+            )}
           </div>
           <div>
             <Label>Дедлайн</Label>
