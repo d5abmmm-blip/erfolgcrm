@@ -55,14 +55,19 @@ export function MobileShell({ children, session }: Props) {
 
   return (
     <div className="bg-background flex h-full min-h-[100dvh] flex-col">
-      <header className="bg-card sticky top-0 z-30 flex h-14 items-center justify-between border-b px-3">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary/10 text-primary grid h-9 w-9 place-items-center rounded-full text-sm font-semibold">
+      {/* Шапка в «чернилах Эрфольга» — как сайдбар десктопа: экран сразу
+          делится на навигацию и работу, статус связи виден боковым зрением. */}
+      <header
+        className="bg-sidebar text-sidebar-foreground sticky top-0 z-30 flex h-14 items-center justify-between px-3"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="bg-primary/25 grid h-9 w-9 place-items-center rounded-full text-sm font-semibold">
             {initials || '??'}
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold">{headerTitle}</div>
-            <div className="text-muted-foreground text-[11px]">
+            <div className="text-sidebar-muted text-[11px]">
               {session.user.fullName.split(' ').slice(0, 2).join(' ')} ·{' '}
               {session.tenant.displayName}
             </div>
@@ -94,8 +99,17 @@ export function MobileShell({ children, session }: Props) {
                 isActive ? 'text-primary' : 'text-muted-foreground',
               )}
             >
-              <Icon className="h-6 w-6" />
-              <span className="text-[11px] font-medium">{n.label}</span>
+              <span
+                className={cn(
+                  'grid h-8 w-12 place-items-center rounded-xl transition',
+                  isActive && 'bg-primary/12',
+                )}
+              >
+                <Icon className="h-5.5 w-5.5" />
+              </span>
+              <span className={cn('text-[11px]', isActive ? 'font-semibold' : 'font-medium')}>
+                {n.label}
+              </span>
             </Link>
           );
         })}
@@ -104,7 +118,9 @@ export function MobileShell({ children, session }: Props) {
           onClick={() => logout.mutate()}
           className="text-muted-foreground hover:text-foreground flex flex-col items-center justify-center gap-0.5 transition"
         >
-          <LogOut className="h-6 w-6" />
+          <span className="grid h-8 w-12 place-items-center rounded-xl">
+            <LogOut className="h-5.5 w-5.5" />
+          </span>
           <span className="text-[11px] font-medium">Выйти</span>
         </button>
       </nav>
@@ -123,9 +139,10 @@ function OutboxBadge({
   isSyncing: boolean;
   onSync: () => void;
 }) {
+  // Бейдж живёт на тёмной шапке — тона чуть плотнее, чем на светлом фоне.
   if (isOnline && pending === 0) {
     return (
-      <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[11px]">
+      <span className="text-sidebar-muted inline-flex items-center gap-1.5 text-[11px]">
         <Cloud className="h-3.5 w-3.5" />
         онлайн
       </span>
@@ -133,7 +150,7 @@ function OutboxBadge({
   }
   if (!isOnline) {
     return (
-      <span className="bg-destructive/10 text-destructive inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium">
+      <span className="bg-destructive text-destructive-foreground inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold">
         <CloudOff className="h-3.5 w-3.5" />
         нет связи{pending > 0 ? ` · ${pending}` : ''}
       </span>
@@ -144,7 +161,7 @@ function OutboxBadge({
       type="button"
       onClick={onSync}
       disabled={isSyncing}
-      className="bg-warning/15 text-warning inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium disabled:opacity-60"
+      className="bg-warning text-warning-foreground inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold disabled:opacity-60"
     >
       <CloudOff className="h-3.5 w-3.5" />
       {isSyncing ? 'синк…' : `в очереди · ${pending}`}
