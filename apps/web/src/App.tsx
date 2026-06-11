@@ -9,6 +9,7 @@ import { TicketCardPage } from './pages/TicketCardPage';
 import { TicketsListPage } from './pages/TicketsListPage';
 import { TicketsKanbanPage } from './pages/TicketsKanbanPage';
 import { SchedulePage } from './pages/SchedulePage';
+import { CalendarPage } from './pages/CalendarPage';
 import { NewTicketPage } from './pages/NewTicketPage';
 import { LoginPage } from './pages/LoginPage';
 import { ClientsListPage } from './pages/ClientsListPage';
@@ -133,6 +134,7 @@ function StaffApp() {
           <Route path="/tickets" component={TicketsListPage} />
           <Route path="/tickets/kanban" component={TicketsKanbanPage} />
           <Route path="/schedule" component={SchedulePage} />
+          <Route path="/calendar" component={CalendarPage} />
           <Route path="/tickets/new" component={NewTicketPage} />
           <Route path="/tickets/:id" component={TicketCardPage} />
           <Route path="/leads" component={LeadsListPage} />

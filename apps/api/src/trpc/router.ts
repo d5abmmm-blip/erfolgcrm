@@ -30,6 +30,7 @@ import { ticketKpRouter } from '../modules/kp-versions';
 import { reportsRouter } from '../modules/reports';
 import { tradeInRouter } from '../modules/trade-in';
 import { roadmapRouter } from '../modules/roadmap';
+import { calendarRouter } from '../modules/calendar';
 import {
   clientAuthRouter,
   clientCabinetRouter,
@@ -87,6 +88,8 @@ export const appRouter = router({
   tradeIn: tradeInRouter,
   /** Дорожная карта — цели компании по кварталам (перенос из v1). */
   roadmap: roadmapRouter,
+  /** Календарь компании — выезды, дедлайны, ТО, окончания договоров/гарантий. */
+  calendar: calendarRouter,
 });
 
 export type AppRouter = typeof appRouter;
