@@ -144,7 +144,7 @@ function OutboxBadge({
       type="button"
       onClick={onSync}
       disabled={isSyncing}
-      className="bg-amber-500/15 text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium disabled:opacity-60"
+      className="bg-warning/15 text-warning inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium disabled:opacity-60"
     >
       <CloudOff className="h-3.5 w-3.5" />
       {isSyncing ? 'синк…' : `в очереди · ${pending}`}

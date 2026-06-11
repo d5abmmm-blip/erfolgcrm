@@ -51,7 +51,7 @@ export function SecurityPage() {
       </div>
 
       {isDirector && !enabled && (
-        <div className="bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/30 dark:text-amber-200 flex items-start gap-3 rounded-lg border p-4 text-sm">
+        <div className="bg-warning/10 text-warning border-warning/30 flex items-start gap-3 rounded-lg border p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <div className="font-medium">Включите 2FA — требование 152-ФЗ.</div>
@@ -318,7 +318,7 @@ function DisableModal({
           m.mutate({ password, code: code.trim() });
         }}
       >
-        <div className="bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/30 dark:text-amber-200 rounded-md border p-3 text-sm">
+        <div className="bg-warning/10 text-warning border-warning/30 rounded-md border p-3 text-sm">
           После отключения вход будет защищён только паролем.
         </div>
         <Field label="Пароль">
@@ -450,7 +450,7 @@ function CodesView({ codes, onContinue }: { codes: string[]; onContinue: () => v
   }
   return (
     <div className="space-y-4">
-      <div className="bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/30 dark:text-amber-200 flex items-start gap-3 rounded-md border p-3 text-sm">
+      <div className="bg-warning/10 text-warning border-warning/30 flex items-start gap-3 rounded-md border p-3 text-sm">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
           Эти коды показываются <b>один раз</b>. Сохраните их в надёжном месте — они помогут

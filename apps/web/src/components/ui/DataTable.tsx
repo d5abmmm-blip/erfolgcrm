@@ -85,9 +85,22 @@ export function DataTable<T>({
             <tr
               key={rowKey(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
+              // Клавиатурный доступ: строка фокусируется Tab'ом, открывается Enter/Space.
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    }
+                  : undefined
+              }
               className={cn(
                 'transition',
-                onRowClick && 'hover:bg-muted/20 cursor-pointer',
+                onRowClick &&
+                  'hover:bg-muted/20 focus-visible:bg-muted/20 cursor-pointer outline-none',
                 rowClassName?.(row),
               )}
             >

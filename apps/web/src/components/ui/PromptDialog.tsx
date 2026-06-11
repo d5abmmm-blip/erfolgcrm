@@ -46,6 +46,7 @@ export function PromptDialog({
 }: PromptDialogProps) {
   const [value, setValue] = useState(initialValue);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Reset state when dialog re-opens.
   useEffect(() => {
@@ -62,6 +63,24 @@ export function PromptDialog({
       if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
+        return;
+      }
+      // Focus trap: Tab не уходит за пределы открытого диалога (WAI-ARIA).
+      if (e.key === 'Tab' && rootRef.current) {
+        const focusables = rootRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -79,6 +98,7 @@ export function PromptDialog({
 
   return (
     <div
+      ref={rootRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="prompt-dialog-title"

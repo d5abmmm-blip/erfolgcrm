@@ -469,7 +469,7 @@ export function TicketCardPage() {
           <section className="bg-card rounded-lg border p-4">
             <h3 className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold">
               <Calendar className="h-4 w-4" />
-              Хронология ({events.data?.length ?? 0})
+              Последние события
             </h3>
             <ol className="space-y-3 text-xs">
               {events.isLoading ? (

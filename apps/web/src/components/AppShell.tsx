@@ -108,7 +108,7 @@ export function AppShell({ children, session }: AppShellProps) {
           <img src="/favicon.png" alt="ErfolgCRM" className="h-8 w-8" />
           <div className="leading-tight">
             <div className="text-sm font-semibold">ErfolgCRM</div>
-            <div className="text-muted-foreground text-xs">demo · v0.0.0</div>
+            <div className="text-muted-foreground text-xs">ООО «Эрфольг»</div>
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 p-2">

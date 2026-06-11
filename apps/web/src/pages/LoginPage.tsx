@@ -97,7 +97,7 @@ export function LoginPage() {
           </ul>
         </div>
 
-        <div className="text-xs opacity-70">© 2026 ErfolgCRM · v0.0.0</div>
+        <div className="text-xs opacity-70">© 2026 ErfolgCRM</div>
       </aside>
 
       {/* Правая панель: форма */}
