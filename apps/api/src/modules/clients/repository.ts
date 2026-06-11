@@ -284,6 +284,39 @@ export async function searchClients(
   });
 }
 
+/**
+ * Поиск существующего физлица по телефону — защита от дубликатов при
+ * самообслуживании (Telegram-бот): один человек, обратившийся трижды,
+ * должен оставаться ОДНИМ клиентом в картотеке.
+ *
+ * Телефон хранится зашифрованным (152-ФЗ), поэтому сравниваем
+ * расшифрованное значение по последним 10 цифрам — так «+7 928 …» и
+ * «8928…» считаются одним номером. Физлиц немного, sequential scan ок.
+ */
+export async function findIndividualClientIdByPhone(
+  db: Db,
+  tenantId: string,
+  key: string,
+  phone: string,
+): Promise<string | null> {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  const tail = digits.slice(-10);
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx.execute<{ id: string }>(sql`
+      SELECT id FROM clients
+      WHERE type = 'individual'
+        AND status = 'active'
+        AND phone_encrypted IS NOT NULL
+        AND RIGHT(regexp_replace(${decryptSql(clients.phoneEncrypted, key)}, '\\D', '', 'g'), 10) = ${tail}
+      ORDER BY created_at
+      LIMIT 1
+    `);
+    const arr = rows as unknown as Array<{ id: string }>;
+    return arr[0]?.id ?? null;
+  });
+}
+
 export async function createClient(
   db: Db,
   tenantId: string,

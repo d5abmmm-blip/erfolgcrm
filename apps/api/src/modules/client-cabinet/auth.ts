@@ -15,6 +15,7 @@ import { verify } from 'argon2';
 import { writeAudit } from '../../lib/audit';
 import { logger } from '../../lib/logger';
 import {
+  CLIENT_SESSION_TTL_SECONDS,
   createClientSession,
   findClientUserByEmail,
   getClientDisplayName,
@@ -24,7 +25,8 @@ import {
 import type { Db } from '@erfolg/db';
 
 const CLIENT_SESSION_COOKIE = 'client_session_token';
-const COOKIE_MAX_AGE = 1000 * 60 * 60 * 24 * 30; // 30 дней
+// Cookie = серверный TTL (7 дней); rolling-продление — в trpc/context.ts.
+const COOKIE_MAX_AGE = CLIENT_SESSION_TTL_SECONDS * 1000;
 
 interface LoginCtx {
   db: Db;

@@ -154,7 +154,12 @@ const server = app.listen(PORT, HOST, () => {
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, 'shutdown initiated');
-  server.close();
+  // Перестаём принимать новые соединения и дожидаемся завершения текущих
+  // запросов (потолок 10 секунд — затем выходим, не дожидаясь keep-alive).
+  await Promise.race([
+    new Promise<void>((resolve) => server.close(() => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+  ]);
   await shutdownQueues();
   await shutdownMailer();
   process.exit(0);

@@ -22,10 +22,18 @@ interface Payload {
 }
 
 function getSecret(): string {
-  const candidate =
-    process.env.SESSION_SECRET ||
-    process.env.PII_ENCRYPTION_KEY ||
-    'dev-only-2fa-challenge-secret';
+  const candidate = process.env.SESSION_SECRET || process.env.PII_ENCRYPTION_KEY;
+  if (!candidate) {
+    // Тот же принцип, что у PII-ключа (packages/db/src/crypto.ts): в production
+    // тихий fallback недопустим — подпись 2FA-токенов должна опираться на
+    // настоящий секрет, иначе приложение не стартует.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'SESSION_SECRET (или PII_ENCRYPTION_KEY) обязателен в production — без него 2FA-challenge не подписывается',
+      );
+    }
+    return 'dev-only-2fa-challenge-secret';
+  }
   return candidate;
 }
 

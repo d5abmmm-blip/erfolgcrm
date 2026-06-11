@@ -22,7 +22,7 @@ import { users, withTenantTx } from '@erfolg/db';
 import { verify } from 'argon2';
 import { z } from 'zod';
 import { router, publicProcedure, tenantProcedure, authedProcedure } from '../../trpc/trpc';
-import { createSession, revokeSession } from '../../lib/session';
+import { createSession, revokeSession, SESSION_TTL_SECONDS } from '../../lib/session';
 import { logger } from '../../lib/logger';
 import { writeAudit } from '../../lib/audit';
 import { issueChallengeToken } from './challenge';
@@ -30,7 +30,9 @@ import { twoFactorRouter } from './two-fa-router';
 import { verify2faProcedure } from './verify2fa';
 
 const SESSION_COOKIE = 'session_token';
-const COOKIE_MAX_AGE = 1000 * 60 * 60 * 24 * 30; // 30 дней
+// Cookie живёт ровно столько же, сколько серверная сессия (7 дней).
+// Rolling-продление обоих происходит в trpc/context.ts при каждом запросе.
+const COOKIE_MAX_AGE = SESSION_TTL_SECONDS * 1000;
 
 export const authRouter = router({
   /**

@@ -14,7 +14,10 @@ import { writeAudit } from '../../lib/audit';
 import { logger } from '../../lib/logger';
 import { sendMessage, type TgUpdate } from '../../lib/telegram-client';
 import { createTicket, type CreateTicketInput } from '../tickets/repository';
-import { createClient as repoCreateClient } from '../clients/repository';
+import {
+  createClient as repoCreateClient,
+  findIndividualClientIdByPhone,
+} from '../clients/repository';
 import { getTenantEncryptionKey } from '@erfolg/db';
 import { enqueuePushToUser } from '../notifications';
 import {
@@ -109,16 +112,20 @@ async function createTicketFromConversation(
     throw new Error('createTicketFromConversation: incomplete state');
   }
 
-  // 1. Клиент: создаём individual с зашифрованными ПДн.
+  // 1. Клиент: сначала ищем существующего по телефону (иначе каждое обращение
+  //    через бота плодило бы дубликат в картотеке), создаём только если не нашли.
   const key = getTenantEncryptionKey({ id: ctx.tenant.id, kmsKeyId: ctx.tenant.kmsKeyId });
-  const initials = makeInitials(state.fullName);
-  const { id: clientId } = await repoCreateClient(ctx.db, ctx.tenant.id, key, {
-    type: 'individual',
-    displayName: initials,
-    individualFullName: state.fullName,
-    individualPhone: state.phone,
-    individualAddress: state.address,
-  });
+  let clientId = await findIndividualClientIdByPhone(ctx.db, ctx.tenant.id, key, state.phone);
+  if (!clientId) {
+    const initials = makeInitials(state.fullName);
+    ({ id: clientId } = await repoCreateClient(ctx.db, ctx.tenant.id, key, {
+      type: 'individual',
+      displayName: initials,
+      individualFullName: state.fullName,
+      individualPhone: state.phone,
+      individualAddress: state.address,
+    }));
+  }
 
   // 2. Заявка с source='telegram'.
   const ticketInput: CreateTicketInput = {

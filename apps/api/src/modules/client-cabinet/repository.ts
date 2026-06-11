@@ -11,9 +11,9 @@
  * (assets/tickets/invoices/contracts), чтобы каждый клиент видел только свои
  * данные внутри одного tenant'а.
  */
+import { randomBytes } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { hash, verify } from 'argon2';
-import { uuidv7 } from 'uuidv7';
 import {
   assets,
   clientSessions,
@@ -31,7 +31,13 @@ import {
 } from '@erfolg/db';
 import { getRedis } from '../../lib/redis';
 
-const CLIENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 дней
+/**
+ * 7 дней — как у сотрудников (политика 152-ФЗ: короткие сессии с продлением
+ * «по активности» через touchClientSession, см. trpc/context.ts).
+ */
+export const CLIENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+/** Порог синхронизации expires_at в БД (не чаще раза в час), как у staff-сессий. */
+const CLIENT_TOUCH_DB_THRESHOLD_SECONDS = 60 * 60;
 
 /**
  * 152-ФЗ — фиксированное значение subject_type для записей consent_records,
@@ -443,7 +449,8 @@ export async function createClientSession(
   clientUserId: string,
   meta: { ip?: string; userAgent?: string } = {},
 ): Promise<{ token: string; expiresAt: Date }> {
-  const token = uuidv7().replace(/-/g, '');
+  // 256 бит случайности (uuidv7 содержит предсказуемый timestamp — не годится).
+  const token = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + CLIENT_SESSION_TTL_SECONDS * 1000);
 
   const cached = await withTenantTx(db, tenantId, async (tx) => {
@@ -508,6 +515,42 @@ export async function resolveClientSession(
     return data;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Rolling-продление клиентской сессии «по активности» — зеркало touchSession
+ * для staff (lib/session.ts): Redis продлевается на полный TTL при каждом
+ * запросе, БД (client_sessions.expires_at) — не чаще раза в час.
+ */
+export async function touchClientSession(db: Db, token: string): Promise<void> {
+  if (!token) return;
+  const redis = getRedis();
+  const raw = await redis.get(REDIS_KEY(token));
+  if (!raw) return;
+  let data: CachedClientSession;
+  try {
+    data = JSON.parse(raw) as CachedClientSession;
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  if (data.expiresAt < now) {
+    await redis.del(REDIS_KEY(token));
+    return;
+  }
+  const newExpiresAt = now + CLIENT_SESSION_TTL_SECONDS * 1000;
+  const updated: CachedClientSession = { ...data, expiresAt: newExpiresAt };
+  await redis.set(REDIS_KEY(token), JSON.stringify(updated), 'EX', CLIENT_SESSION_TTL_SECONDS);
+
+  const remainingSec = Math.max(0, Math.floor((data.expiresAt - now) / 1000));
+  if (remainingSec < CLIENT_SESSION_TTL_SECONDS - CLIENT_TOUCH_DB_THRESHOLD_SECONDS) {
+    await withTenantTx(db, data.tenantId, async (tx) => {
+      await tx
+        .update(clientSessions)
+        .set({ expiresAt: new Date(newExpiresAt) })
+        .where(eq(clientSessions.sessionToken, token));
+    });
   }
 }
 

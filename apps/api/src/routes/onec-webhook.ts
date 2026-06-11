@@ -79,9 +79,9 @@ export function makeOnecWebhookRouter(): Router {
         errors: result.errors,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'internal error';
+      // Текст внутренней ошибки наружу не отдаём — подробности только в логе.
       logger.warn({ err }, 'onec-webhook: failed');
-      res.status(400).json({ error: message });
+      res.status(400).json({ error: 'exchange failed' });
     }
   });
 

@@ -13,9 +13,35 @@
 import type { CreateExpressContextOptions } from '@trpc/server/adapters/express';
 import { getDb } from '@erfolg/db';
 import { resolveTenant, type ResolvedTenant } from '../lib/tenant';
-import { getSession, touchSession, type SessionData } from '../lib/session';
+import { getSession, touchSession, SESSION_TTL_SECONDS, type SessionData } from '../lib/session';
 import { logger } from '../lib/logger';
-import { resolveClientSession, type ResolvedClientSession } from '../modules/client-cabinet/repository';
+import {
+  CLIENT_SESSION_TTL_SECONDS,
+  resolveClientSession,
+  touchClientSession,
+  type ResolvedClientSession,
+} from '../modules/client-cabinet/repository';
+
+/**
+ * Rolling-продление cookie: серверная сессия продлевается «по активности»
+ * (touchSession), и cookie должен продлеваться вместе с ней — иначе через
+ * 7 дней браузер потеряет cookie даже у активно работающего сотрудника.
+ */
+function refreshCookie(
+  res: CreateExpressContextOptions['res'],
+  name: string,
+  token: string,
+  ttlSeconds: number,
+): void {
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie(name, token, {
+    httpOnly: true,
+    sameSite: isProd ? 'strict' : 'lax',
+    secure: isProd,
+    maxAge: ttlSeconds * 1000,
+    path: '/',
+  });
+}
 
 export interface Context {
   db: ReturnType<typeof getDb>;
@@ -45,6 +71,7 @@ export async function createContext({ req, res }: CreateExpressContextOptions): 
       void touchSession(db, cookieToken).catch((err) =>
         logger.warn({ err }, 'touchSession failed'),
       );
+      refreshCookie(res, 'session_token', cookieToken, SESSION_TTL_SECONDS);
     } else if (candidate && candidate.tenantId !== tenant.id) {
       logger.warn(
         { sessionTenantId: candidate.tenantId, requestTenantId: tenant.id, ip: req.ip },
@@ -61,6 +88,10 @@ export async function createContext({ req, res }: CreateExpressContextOptions): 
       const candidate = await resolveClientSession(db, clientCookie);
       if (candidate && candidate.tenantId === tenant.id) {
         clientUser = candidate;
+        void touchClientSession(db, clientCookie).catch((err) =>
+          logger.warn({ err }, 'touchClientSession failed'),
+        );
+        refreshCookie(res, 'client_session_token', clientCookie, CLIENT_SESSION_TTL_SECONDS);
       } else if (candidate && candidate.tenantId !== tenant.id) {
         logger.warn(
           { sessionTenantId: candidate.tenantId, requestTenantId: tenant.id, ip: req.ip },

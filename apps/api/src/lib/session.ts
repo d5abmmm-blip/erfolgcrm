@@ -14,9 +14,9 @@
  *
  * Все БД-операции через withTenantTx (sessions под RLS).
  */
+import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { sessions, withTenantTx, type Db } from '@erfolg/db';
-import { uuidv7 } from 'uuidv7';
 import { getRedis } from './redis';
 
 export interface SessionData {
@@ -29,7 +29,7 @@ export interface SessionData {
 }
 
 /** 7 дней — окно активности. При активной работе обновляется через touchSession. */
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 /** Минимальный «зазор» в Redis-TTL до полного обновления. Чтобы не слать UPDATE на каждый запрос
  * за миллисекунду до конца окна. Если оставшийся TTL ≥ этого значения — UPDATE в БД пропускаем. */
 const TOUCH_DB_THRESHOLD_SECONDS = 60 * 60; // 1 час
@@ -40,7 +40,8 @@ export async function createSession(
   data: Omit<SessionData, 'expiresAt'>,
   meta: { ip?: string; userAgent?: string } = {},
 ): Promise<{ token: string; data: SessionData }> {
-  const token = uuidv7().replace(/-/g, '');
+  // 256 бит чистой случайности: uuidv7 не годится — часть его бит предсказуема (timestamp).
+  const token = randomBytes(32).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_SECONDS * 1000;
   const sessionData: SessionData = { ...data, expiresAt };
 

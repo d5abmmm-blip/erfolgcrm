@@ -81,12 +81,16 @@ export const usersRouter = router({
         })
         .optional(),
     )
-    .query(({ ctx, input }) =>
-      listUsers(ctx.db, ctx.tenant.id, {
+    .query(async ({ ctx, input }) => {
+      const rows = await listUsers(ctx.db, ctx.tenant.id, {
         onlyEngineers: input?.onlyEngineers,
         includeBlocked: input?.includeBlocked,
-      }),
-    ),
+      });
+      // Почасовая ставка — зарплатные данные: видны только директору.
+      // Остальным список нужен лишь для выпадающих назначений (id + ФИО).
+      if (ctx.session?.role === 'director') return rows;
+      return rows.map((r) => ({ ...r, hourlyCostRateKopecks: '0' }));
+    }),
 
   getById: directorProcedure
     .input(z.object({ userId: z.string().uuid() }))

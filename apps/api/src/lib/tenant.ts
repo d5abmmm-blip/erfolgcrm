@@ -43,12 +43,23 @@ export function extractSubdomain(req: Request): string | null {
   return candidate;
 }
 
+/**
+ * После пивота tenant фактически один — нет смысла ходить за ним в БД на
+ * каждый запрос. Кэшируем на 60 секунд: смена status/timezone подхватится
+ * в течение минуты, что для single-company более чем достаточно.
+ */
+const TENANT_CACHE_TTL_MS = 60_000;
+const tenantCache = new Map<string, { value: ResolvedTenant | null; until: number }>();
+
 export async function resolveTenant(
   db: Db,
   req: Request,
 ): Promise<ResolvedTenant | null> {
   const subdomain = extractSubdomain(req);
   if (!subdomain) return null;
+
+  const hit = tenantCache.get(subdomain);
+  if (hit && hit.until > Date.now()) return hit.value;
 
   const rows = await db
     .select({
@@ -63,5 +74,7 @@ export async function resolveTenant(
     .where(and(eq(tenants.subdomain, subdomain), isNull(tenants.deletedAt)))
     .limit(1);
 
-  return rows[0] ?? null;
+  const value = rows[0] ?? null;
+  tenantCache.set(subdomain, { value, until: Date.now() + TENANT_CACHE_TTL_MS });
+  return value;
 }
