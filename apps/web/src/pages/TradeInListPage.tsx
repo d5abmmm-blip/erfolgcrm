@@ -75,7 +75,7 @@ export function TradeInListPage() {
 
   const list = trpc.tradeIn.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined) as TradeInStatus | undefined,
+    status: (status || undefined),
     page,
   });
   const stats = trpc.tradeIn.stats.useQuery();

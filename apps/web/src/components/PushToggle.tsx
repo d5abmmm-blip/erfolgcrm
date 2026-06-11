@@ -73,7 +73,7 @@ export function PushToggle() {
         </div>
         <button
           type="button"
-          onClick={onDisable}
+          onClick={() => void onDisable()}
           disabled={busy}
           className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
         >
@@ -102,7 +102,7 @@ export function PushToggle() {
       <div className="mt-2 flex gap-2">
         <button
           type="button"
-          onClick={onEnable}
+          onClick={() => void onEnable()}
           disabled={busy}
           className="bg-primary text-primary-foreground inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >

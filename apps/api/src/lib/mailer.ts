@@ -73,13 +73,13 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   }
   const from = input.from ?? process.env.MAIL_FROM ?? DEFAULT_FROM;
   try {
-    const info = await transporter.sendMail({
+    const info = (await transporter.sendMail({
       from,
       to: input.to,
       subject: input.subject,
       text: input.text,
       html: input.html,
-    });
+    })) as { messageId?: string };
     logger.info({ messageId: info.messageId, to: maskEmail(input.to), subject: input.subject }, 'mail sent');
     return { skipped: false, messageId: info.messageId };
   } catch (err) {
@@ -89,11 +89,12 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
 }
 
 /** Закрыть transporter — для graceful shutdown. */
-export async function shutdownMailer(): Promise<void> {
+export function shutdownMailer(): Promise<void> {
   if (_transporter) {
     _transporter.close();
     _transporter = null;
   }
+  return Promise.resolve();
 }
 
 /** Тест-only: подменить transporter (для unit-тестов). */

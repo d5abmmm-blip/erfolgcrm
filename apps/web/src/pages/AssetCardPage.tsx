@@ -104,7 +104,7 @@ export function AssetCardPage() {
           </Link>
           <button
             type="button"
-            onClick={async () => {
+            onClick={() => void (async () => {
               const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
                 import('../lib/pdf'),
                 import('../lib/pdf/branding'),
@@ -121,7 +121,7 @@ export function AssetCardPage() {
                 fallbackBarcode: a.id,
                 tenantDisplayName: ERFOLG_FALLBACK.displayName,
               });
-            }}
+            })()}
             className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
           >
             <Tag className="h-3.5 w-3.5" />
@@ -394,7 +394,8 @@ function EventRow({
     title = 'Перемещение';
     body = (
       <div className="text-muted-foreground text-xs">
-        {String(payload.from ?? '—')} → {String(payload.to ?? '—')}
+        {typeof payload.from === 'string' ? payload.from : '—'} →{' '}
+        {typeof payload.to === 'string' ? payload.to : '—'}
       </div>
     );
   } else if (type === 'note') {

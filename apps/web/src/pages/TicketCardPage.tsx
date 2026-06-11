@@ -256,7 +256,7 @@ export function TicketCardPage() {
         recordPrint.mutate({ ticketId: t.id, documentKind: kind });
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error('[print]', err);
       setPrintError(
         `Не удалось сформировать PDF: ${err instanceof Error ? err.message : String(err)}`,
@@ -274,10 +274,10 @@ export function TicketCardPage() {
           <ChevronLeft className="h-4 w-4" />К списку заявок
         </Link>
         <div className="flex items-center gap-2">
-          <PrintBtn icon={FileText} label="Акт приёма" onClick={() => printDocument('intake_act', 'акт приёма')} />
-          <PrintBtn icon={FileText} label="Счёт" onClick={() => printDocument('invoice', 'счёт на оплату')} />
-          <PrintBtn icon={Printer} label="Акт работ" onClick={() => printDocument('work_act', 'акт выполненных работ')} />
-          <PrintBtn icon={Tag} label="Ярлык" onClick={() => printDocument('asset_label', 'ярлык на технику')} />
+          <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
+          <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
+          <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
+          <PrintBtn icon={Tag} label="Ярлык" onClick={() => void printDocument('asset_label', 'ярлык на технику')} />
         </div>
       </div>
 
@@ -1062,7 +1062,8 @@ function EventRow({ event, compact }: { event: EventDto; compact?: boolean }) {
     title = p.role === 'dispatcher' ? 'Назначен диспетчер' : 'Назначен инженер';
     body = (
       <div className="text-muted-foreground text-xs">
-        {String(p.from ?? '—')} → <span className="text-foreground">{String(p.to ?? '—')}</span>
+        {typeof p.from === 'string' ? p.from : '—'} →{' '}
+        <span className="text-foreground">{typeof p.to === 'string' ? p.to : '—'}</span>
       </div>
     );
   } else if (event.type === 'priority_change') {

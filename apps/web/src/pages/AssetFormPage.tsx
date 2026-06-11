@@ -39,7 +39,7 @@ const EMPTY: FormValues = {
 export function AssetFormPage() {
   const [, navigate] = useLocation();
   const [matchEdit, params] = useRoute<{ id: string }>('/assets/:id/edit');
-  const editingId = matchEdit ? params!.id : null;
+  const editingId = matchEdit ? params.id : null;
   const isEdit = !!editingId;
 
   const utils = trpc.useUtils();
@@ -68,7 +68,7 @@ export function AssetFormPage() {
       inventoryNumber: a.inventoryNumber ?? '',
       location: a.location ?? '',
       lifecycleStatus: a.lifecycleStatus,
-      riskClass: (a.riskClass ?? '') as FormValues['riskClass'],
+      riskClass: (a.riskClass ?? ''),
       requiredAttestationCategory: a.requiredAttestationCategory ?? '',
       commissionedAt: a.commissionedAt ?? '',
       warrantyUntil: a.warrantyUntil ?? '',
@@ -139,7 +139,7 @@ export function AssetFormPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <div>

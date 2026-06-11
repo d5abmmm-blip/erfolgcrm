@@ -124,7 +124,7 @@ export function SecurityPage() {
           onClose={() => setWizardOpen(false)}
           onDone={() => {
             setWizardOpen(false);
-            me.refetch();
+            void me.refetch();
           }}
         />
       )}
@@ -151,7 +151,7 @@ export function SecurityPage() {
           onClose={() => setDisableOpen(false)}
           onDone={() => {
             setDisableOpen(false);
-            me.refetch();
+            void me.refetch();
           }}
         />
       )}
@@ -202,7 +202,6 @@ function Setup2faWizard({
 
   useEffect(() => {
     start.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function onSubmitVerify(e: React.FormEvent) {

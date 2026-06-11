@@ -88,7 +88,7 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <form
-        onSubmit={submit}
+        onSubmit={(e) => void submit(e)}
         onClick={(e) => e.stopPropagation()}
         className="bg-card w-full max-w-md rounded-lg border p-4 shadow-xl"
       >

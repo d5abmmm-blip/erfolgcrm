@@ -57,7 +57,7 @@ export function ContractsListPage() {
 
   const list = trpc.contracts.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined) as ContractStatus | undefined,
+    status: (status || undefined),
     page,
   });
 

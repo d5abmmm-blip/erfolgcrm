@@ -159,7 +159,7 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
       }
       if (e.key === 'Enter' && flat[activeIdx]) {
         e.preventDefault();
-        const target = flat[activeIdx]!;
+        const target = flat[activeIdx];
         navigate(target.href);
         onClose();
       }

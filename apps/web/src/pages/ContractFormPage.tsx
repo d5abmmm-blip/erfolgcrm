@@ -76,7 +76,7 @@ const VAT_OPTS: Array<{ v: VatRate; label: string }> = [
 export function ContractFormPage() {
   const [, navigate] = useLocation();
   const [isEdit, params] = useRoute('/contracts/:id/edit');
-  const editId = isEdit ? params!.id : null;
+  const editId = isEdit ? params.id : null;
   const utils = trpc.useUtils();
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [serverError, setServerError] = useState<string | null>(null);
@@ -179,7 +179,7 @@ export function ContractFormPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <div>

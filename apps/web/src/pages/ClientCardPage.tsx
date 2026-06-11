@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { AssetLifecycleStatus } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -247,7 +246,7 @@ export function ClientCardPage() {
             </thead>
             <tbody className="divide-y">
               {assets.data.map((a) => {
-                const meta = ASSET_STATUS_META[a.lifecycleStatus as AssetLifecycleStatus];
+                const meta = ASSET_STATUS_META[a.lifecycleStatus];
                 return (
                   <tr key={a.id} className="hover:bg-muted/20">
                     <td className="px-3 py-2">
@@ -352,7 +351,7 @@ function AddContactInline({ clientId }: { clientId: string }) {
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
       className="mt-3 space-y-2 border-t pt-3"
     >
       <input

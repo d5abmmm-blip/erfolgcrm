@@ -110,7 +110,7 @@ async function loadTicketDetails(
       clientType: r.clientType,
       clientDisplayName: r.clientDisplayName ?? '',
       clientEmail: r.clientEmail,
-      individualFullName: (r.individualFullName as unknown as string | null) ?? null,
+      individualFullName: (r.individualFullName as string | null) ?? null,
       assetModel: r.assetModel,
       engineerFullName: r.engineerFullName,
     };

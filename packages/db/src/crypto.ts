@@ -64,7 +64,7 @@ export function getTenantEncryptionKey(_tenant: TenantKeyContext): string {
   }
 
   if (!warnedAboutFallback && process.env.NODE_ENV !== 'test') {
-    // eslint-disable-next-line no-console
+     
     console.warn(
       '[crypto] PII_ENCRYPTION_KEY not set (or equals dev fallback) — using dev fallback. ' +
         'NEVER deploy this to production.',

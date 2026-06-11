@@ -194,7 +194,7 @@ export async function exportInvoicesToOnecCmd(ctx: CmdCtx): Promise<ExportResult
           date: inv.issueDate,
           totalAmount: kopecksToRubNumber(BigInt(inv.totalAmountKopecks)),
           vatAmount: kopecksToRubNumber(BigInt(inv.vatAmountKopecks)),
-          vatRate: inv.vatRate as OnecInvoiceDoc['vatRate'],
+          vatRate: inv.vatRate,
           supplier: supplierCp,
           buyer,
           lines,

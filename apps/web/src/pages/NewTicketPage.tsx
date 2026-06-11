@@ -106,7 +106,6 @@ export function NewTicketPage() {
     form.setValue('contactId', '');
     form.setValue('contractId', '');
     // intentionally not depending on form
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   const create = trpc.tickets.create.useMutation({
@@ -220,7 +219,7 @@ export function NewTicketPage() {
       )}
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <div>

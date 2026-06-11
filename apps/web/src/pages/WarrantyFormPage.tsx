@@ -42,7 +42,7 @@ const TYPE_OPTS: Array<{ v: WarrantyType; label: string }> = [
 export function WarrantyFormPage() {
   const [, navigate] = useLocation();
   const [isEdit, params] = useRoute('/warranties/:id/edit');
-  const editId = isEdit ? params!.id : null;
+  const editId = isEdit ? params.id : null;
   const utils = trpc.useUtils();
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [assetId, setAssetId] = useState<string | null>(null);
@@ -133,7 +133,7 @@ export function WarrantyFormPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <div>

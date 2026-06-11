@@ -99,7 +99,7 @@ function CreateDialog({ open, onClose, ticketId, kind, onSaved }: CreateProps) {
       tpl.items.map((label) => ({
         uid: makeUid(),
         label,
-        status: 'ok' as ItemStatus,
+        status: 'ok',
         comment: '',
         photoAttachmentId: null,
         photoName: null,

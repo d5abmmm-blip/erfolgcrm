@@ -71,8 +71,8 @@ export function WarrantiesListPage() {
 
   const list = trpc.warranties.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined) as WarrantyStatus | undefined,
-    type: (type || undefined) as WarrantyType | undefined,
+    status: (status || undefined),
+    type: (type || undefined),
     page,
   });
   const stats = trpc.warranties.stats.useQuery();

@@ -45,7 +45,7 @@ const SOURCE_OPTS = (Object.keys(LEAD_SOURCE_LABEL) as LeadSource[]).map((v) => 
 export function LeadFormPage() {
   const [, navigate] = useLocation();
   const [isEdit, params] = useRoute('/leads/:id/edit');
-  const editId = isEdit ? params!.id : null;
+  const editId = isEdit ? params.id : null;
   const utils = trpc.useUtils();
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [serverError, setServerError] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export function LeadFormPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <div>

@@ -305,7 +305,7 @@ describe('createTicket — защита asset.owner_client_id', () => {
       getDb(),
       erfolgId,
       myClientId,
-      otherAssets[0]!.id,
+      otherAssets[0].id,
     );
     expect(result).toBeNull();
   });

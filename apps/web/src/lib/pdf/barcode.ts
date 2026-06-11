@@ -21,12 +21,12 @@ export interface BarcodeOptions {
  * Falls back to an empty data URL if bwip-js fails (so PDF generation
  * never breaks because of a barcode error).
  */
-export async function generateBarcodeDataUrl(
+export function generateBarcodeDataUrl(
   value: string,
   options: BarcodeOptions = {},
 ): Promise<string> {
   const { scale = 2, heightMm = 12, includeText = true } = options;
-  if (!value) return '';
+  if (!value) return Promise.resolve('');
 
   try {
     const canvas = document.createElement('canvas');
@@ -52,10 +52,9 @@ export async function generateBarcodeDataUrl(
       paddingheight: 2,
     });
 
-    return canvas.toDataURL('image/png');
+    return Promise.resolve(canvas.toDataURL('image/png'));
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[pdf/barcode] generation failed, falling back to empty image', err);
-    return '';
+    return Promise.resolve('');
   }
 }

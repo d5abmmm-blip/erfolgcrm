@@ -170,7 +170,7 @@ export function InvoiceCardPage() {
             : String(ticketQuery.receivedAt)
           : new Date().toISOString(),
         repairType:
-          (ticketQuery?.repairType as 'paid' | 'warranty' | 'service_contract') ?? 'paid',
+          (ticketQuery?.repairType) ?? 'paid',
         symptom: ticketQuery?.symptom ?? null,
         barcode: ticketQuery?.barcode ?? inv.data.ticketId,
       };
@@ -179,15 +179,13 @@ export function InvoiceCardPage() {
         client: clientData,
         ticket: ticketData,
         workOrder: {
-          vatRate: workOrderQuery.vatRate as Parameters<
-            typeof printInvoice
-          >[0]['workOrder']['vatRate'],
+          vatRate: workOrderQuery.vatRate,
           worksAmountKopecks: Number(workOrderQuery.worksAmountKopecks),
           partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
           expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
           totalAmountKopecks: Number(workOrderQuery.totalAmountKopecks),
           lines: workOrderQuery.lines.map((l) => ({
-            lineType: l.lineType as 'work' | 'part' | 'expense',
+            lineType: l.lineType,
             name: l.name,
             unit: l.unit,
             quantity: Number(l.quantity),
@@ -277,7 +275,7 @@ export function InvoiceCardPage() {
           <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={() => void handlePrint()}
             disabled={printing}
             className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
           >
@@ -373,7 +371,7 @@ export function InvoiceCardPage() {
           )}
         </div>
         {editingNotes ? (
-          <form onSubmit={notesForm.handleSubmit(onSubmitNotes)} className="space-y-2">
+          <form onSubmit={(e) => void notesForm.handleSubmit(onSubmitNotes)(e)} className="space-y-2">
             <textarea
               {...notesForm.register('notes')}
               rows={3}

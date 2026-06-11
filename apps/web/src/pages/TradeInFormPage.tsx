@@ -59,7 +59,7 @@ const STATUS_OPTS: Array<{ v: Exclude<TradeInStatus, 'sold'>; label: string }> =
 export function TradeInFormPage() {
   const [, navigate] = useLocation();
   const [isEdit, params] = useRoute('/trade-in/:id/edit');
-  const editId = isEdit ? params!.id : null;
+  const editId = isEdit ? params.id : null;
   const utils = trpc.useUtils();
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [clientId, setClientId] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function TradeInFormPage() {
       serialNumber: t.serialNumber ?? '',
       year: t.year ? String(t.year) : '',
       condition: t.condition,
-      status: (t.status === 'sold' ? 'in_stock' : t.status) as Exclude<TradeInStatus, 'sold'>,
+      status: (t.status === 'sold' ? 'in_stock' : t.status),
       purchaseRub: kopecksToRubStr(t.purchasePriceKopecks),
       assessedRub: kopecksToRubStr(t.assessedPriceKopecks),
       receivedAt: t.receivedAt,
@@ -170,7 +170,7 @@ export function TradeInFormPage() {
       )}
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         <fieldset disabled={isSold} className="space-y-5">

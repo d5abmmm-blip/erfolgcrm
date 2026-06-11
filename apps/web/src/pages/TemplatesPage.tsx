@@ -91,7 +91,7 @@ interface TemplateListItem {
 
 export function TemplatesPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [editingId, setEditingId] = useState<string | 'new' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const list = trpc.ticketTemplates.list.useQuery({ includeArchived });
 
   if (editingId !== null) {
@@ -324,7 +324,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
     if (isNew) {
       create.mutate(common);
     } else {
-      update.mutate({ id: id!, patch: common });
+      update.mutate({ id: id, patch: common });
     }
   };
 
@@ -356,7 +356,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             {archived ? (
               <button
                 type="button"
-                onClick={() => unarchive.mutate({ id: id! })}
+                onClick={() => unarchive.mutate({ id: id })}
                 disabled={isPending}
                 className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
               >
@@ -379,7 +379,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
       </div>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-4 rounded-lg border p-4 md:p-6"
       >
         <div>

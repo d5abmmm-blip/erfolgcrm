@@ -44,7 +44,7 @@ export function LeadsListPage() {
 
   const list = trpc.leads.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined) as LeadStatus | undefined,
+    status: (status || undefined),
     page,
   });
   const stats = trpc.leads.funnelStats.useQuery();
@@ -151,7 +151,7 @@ export function LeadsListPage() {
         <div className="flex flex-wrap gap-2">
           {LEAD_STATUS_ORDER.map((s) => {
             const meta = LEAD_STATUS_META[s];
-            const bucket = stats.data!.byStatus[s];
+            const bucket = stats.data.byStatus[s];
             return (
               <button
                 key={s}

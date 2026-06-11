@@ -228,7 +228,7 @@ export function MobileTicketPage() {
         {t.assetModel && (
           <button
             type="button"
-            onClick={async () => {
+            onClick={() => void (async () => {
               const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
                 import('../../lib/pdf'),
                 import('../../lib/pdf/branding'),
@@ -247,7 +247,7 @@ export function MobileTicketPage() {
                 fallbackBarcode: t.assetId ?? t.id,
                 tenantDisplayName: ERFOLG_FALLBACK.displayName,
               });
-            }}
+            })()}
             className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
           >
             <Tag className="h-4 w-4" />
@@ -275,7 +275,7 @@ export function MobileTicketPage() {
                 key={a.target}
                 type="button"
                 disabled={!!busy}
-                onClick={() => onAction(a.target, a.label)}
+                onClick={() => void onAction(a.target, a.label)}
                 className={cn(
                   'flex h-14 w-full items-center justify-center gap-2 rounded-lg text-base font-semibold transition disabled:opacity-60',
                   a.variant === 'primary'
@@ -316,7 +316,7 @@ export function MobileTicketPage() {
         />
         <button
           type="button"
-          onClick={onSendNote}
+          onClick={() => void onSendNote()}
           disabled={!comment.trim() || busy === 'note'}
           className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
         >

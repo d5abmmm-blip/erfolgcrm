@@ -187,7 +187,7 @@ export function TicketKpBlock({ ticketId, canManage }: Props) {
       ) : (
         <ol className="space-y-2">
           {items.map((kp) => {
-            const meta = STATUS_META[kp.status as KpStatus];
+            const meta = STATUS_META[kp.status];
             const isApproved = kp.status === 'approved';
             return (
               <li key={kp.id} className="rounded-md border p-3">

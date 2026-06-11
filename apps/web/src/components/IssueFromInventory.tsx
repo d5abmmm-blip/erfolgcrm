@@ -105,7 +105,7 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <form onSubmit={submit} className="space-y-3 p-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-3 p-4">
           {selectedId ? (
             <div className="bg-muted/50 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
               <div>

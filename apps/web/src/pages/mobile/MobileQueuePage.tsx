@@ -161,7 +161,7 @@ export function MobileQueuePage({ engineerId }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => list.refetch()}
+          onClick={() => void list.refetch()}
           className="text-muted-foreground hover:text-foreground hover:bg-muted grid h-9 w-9 place-items-center rounded transition"
           aria-label="Обновить"
           disabled={list.isFetching}

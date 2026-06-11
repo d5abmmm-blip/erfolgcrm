@@ -155,13 +155,13 @@ async function localRead(key: string): Promise<{ data: Buffer; mimeType: string 
 }
 
 export const localObjectStorage: ObjectStorage = {
-  async presignPut({ key, ttlSeconds }) {
+  presignPut({ key, ttlSeconds }) {
     const { url, exp } = makeLocalUrl('put', key, ttlSeconds ?? DEFAULT_PUT_TTL);
-    return { url, headers: {}, expiresAt: exp };
+    return Promise.resolve({ url, headers: {}, expiresAt: exp });
   },
-  async presignGet(key, ttlSeconds) {
+  presignGet(key, ttlSeconds) {
     const { url, exp } = makeLocalUrl('get', key, ttlSeconds ?? DEFAULT_GET_TTL);
-    return { url, expiresAt: exp };
+    return Promise.resolve({ url, expiresAt: exp });
   },
   async head(key) {
     const ctx = getLocalCtx();

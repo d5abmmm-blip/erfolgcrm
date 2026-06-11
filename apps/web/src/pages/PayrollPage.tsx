@@ -454,7 +454,7 @@ function UserRateRow({
         <button
           type="button"
           disabled={!dirty || isSaving}
-          onClick={() => onSave(val)}
+          onClick={() => void onSave(val)}
           className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-50"
         >
           {isSaving ? (

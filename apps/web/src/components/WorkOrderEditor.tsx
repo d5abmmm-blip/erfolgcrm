@@ -561,7 +561,6 @@ function RowInputs({
   // Если приходят новые значения снаружи (после mutation refetch) — синхронизируем
   useEffect(() => {
     if (!controlled) setVals(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial.name, initial.unit, initial.quantity, initial.unitPriceRub]);
 
   const update = (patch: Partial<typeof vals>) => {

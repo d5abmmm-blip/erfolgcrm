@@ -55,7 +55,7 @@ const EMPTY: FormValues = {
 export function ClientFormPage() {
   const [, navigate] = useLocation();
   const [matchEdit, params] = useRoute<{ id: string }>('/clients/:id/edit');
-  const editingId = matchEdit ? params!.id : null;
+  const editingId = matchEdit ? params.id : null;
   const isEdit = !!editingId;
 
   const utils = trpc.useUtils();
@@ -180,7 +180,7 @@ export function ClientFormPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
         {!isEdit && (

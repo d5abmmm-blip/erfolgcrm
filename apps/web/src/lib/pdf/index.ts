@@ -9,6 +9,7 @@
  */
 
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import type * as pdfMakeNs from 'pdfmake/build/pdfmake';
 
 import { generateBarcodeDataUrl } from './barcode';
 import { buildAssetLabelDoc, type PrintAssetLabelInput } from './asset-label';
@@ -34,7 +35,7 @@ type PdfFontsModule = { pdfMake?: { vfs: Record<string, string> }; vfs?: Record<
  * (UMD) даёт ESM default через esModuleInterop. Используем alias импорт типов
  * + cast .default к нему.
  */
-type PdfMakeRuntime = typeof import('pdfmake/build/pdfmake');
+type PdfMakeRuntime = typeof pdfMakeNs;
 let _pdfMakePromise: Promise<PdfMakeRuntime> | null = null;
 async function getPdfMake(): Promise<PdfMakeRuntime> {
   if (_pdfMakePromise) return _pdfMakePromise;

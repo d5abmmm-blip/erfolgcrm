@@ -64,7 +64,7 @@ const EMPTY_FORM: FormValues = {
 };
 
 export function KbPage() {
-  const [editingId, setEditingId] = useState<string | 'new' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
 
@@ -305,7 +305,7 @@ function KbEditor({
       attachedAssetIds: detail.data?.attachedAssetIds ?? [],
     };
     if (isNew) create.mutate(payload);
-    else update.mutate({ id: id!, patch: payload });
+    else update.mutate({ id: id, patch: payload });
   };
 
   const bodyValue = form.watch('body');
@@ -335,7 +335,7 @@ function KbEditor({
             {archived ? (
               <button
                 type="button"
-                onClick={() => unarchive.mutate({ id: id! })}
+                onClick={() => unarchive.mutate({ id: id })}
                 disabled={isPending}
                 className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
               >
@@ -358,7 +358,7 @@ function KbEditor({
       </div>
 
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-4 rounded-lg border p-4 md:p-6"
       >
         <div>

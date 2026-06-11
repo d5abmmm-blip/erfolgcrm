@@ -154,7 +154,7 @@ export function ContractCardPage() {
           </span>
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={() => void handlePrint()}
             disabled={printing}
             className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
           >

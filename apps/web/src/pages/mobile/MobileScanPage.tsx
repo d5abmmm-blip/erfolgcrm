@@ -136,7 +136,7 @@ export function MobileScanPage() {
               <Camera className="h-10 w-10 opacity-70" />
               <button
                 type="button"
-                onClick={startCamera}
+                onClick={() => void startCamera()}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-12 items-center gap-2 rounded-lg px-5 text-base font-semibold"
               >
                 <Camera className="h-5 w-5" />

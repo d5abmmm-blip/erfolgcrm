@@ -67,7 +67,7 @@ export function MaintenanceRecordForm({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 p-4">
+        <form onSubmit={(e) => void form.handleSubmit(onSubmit)(e)} className="space-y-3 p-4">
           <div>
             <label htmlFor="summary" className="text-muted-foreground text-xs font-medium">
               Что сделано <span className="text-destructive">*</span>

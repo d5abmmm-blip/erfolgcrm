@@ -12,7 +12,7 @@ import { clearConversation } from '../modules/telegram/conversation';
 import type { TgUpdate } from '../lib/telegram-client';
 
 let erfolgId = '';
-let erfolgKmsKeyId: string | null = null;
+const erfolgKmsKeyId: string | null = null;
 
 const TEST_CHAT_ID = 999_888_777;
 const FAKE_TOKEN = '1:fake';

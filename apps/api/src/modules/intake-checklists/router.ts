@@ -13,7 +13,6 @@ import {
   getChecklistWithItems,
   listForTicket,
   softDelete,
-  type ChecklistKind,
 } from './repository';
 import { listTemplates } from './templates';
 
@@ -56,7 +55,7 @@ export const intakeChecklistsRouter = router({
         ctx.db,
         ctx.tenant.id,
         input.ticketId,
-        input.kind as ChecklistKind,
+        input.kind,
         input.items.map((it) => ({
           label: it.label,
           status: it.status,

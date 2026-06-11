@@ -100,7 +100,7 @@ export async function createChecklistWithItems(
     return {
       id: head.id,
       ticketId: head.ticketId,
-      kind: head.kind as ChecklistKind,
+      kind: head.kind,
       completedAt: head.completedAt,
       completedByUserId: head.completedByUserId,
       clientSignatureName: head.clientSignatureName,
@@ -152,7 +152,7 @@ export async function getChecklistWithItems(
     return {
       id: head.id,
       ticketId: head.ticketId,
-      kind: head.kind as ChecklistKind,
+      kind: head.kind,
       completedAt: head.completedAt,
       completedByUserId: head.completedByUserId,
       clientSignatureName: head.clientSignatureName,
@@ -210,7 +210,7 @@ export async function listForTicket(
       return {
         id: h.id,
         ticketId: h.ticketId,
-        kind: h.kind as ChecklistKind,
+        kind: h.kind,
         completedAt: h.completedAt,
         completedByUserId: h.completedByUserId,
         clientSignatureName: h.clientSignatureName,

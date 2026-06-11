@@ -117,7 +117,7 @@ export async function verifyRecoveryCode(
     const h = hashes[i];
     if (!h) continue;
     try {
-      // eslint-disable-next-line no-await-in-loop
+       
       if (await verify(h, cleaned)) return i;
     } catch {
       // ignore malformed hash

@@ -166,17 +166,17 @@ export function UsersPage() {
                   <div className="inline-flex gap-1">
                     <IconButton
                       title="Редактировать"
-                      onClick={() => setEditingUser(u as UserRow)}
+                      onClick={() => setEditingUser(u)}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </IconButton>
                     <IconButton
                       title="Сбросить пароль"
-                      onClick={() => setPwdUser(u as UserRow)}
+                      onClick={() => setPwdUser(u)}
                     >
                       <KeyRound className="h-3.5 w-3.5" />
                     </IconButton>
-                    <BlockToggle user={u as UserRow} disabled={u.id === me.data?.user.id} />
+                    <BlockToggle user={u} disabled={u.id === me.data?.user.id} />
                   </div>
                 </td>
               </tr>
@@ -190,7 +190,7 @@ export function UsersPage() {
           onClose={() => setCreateOpen(false)}
           onSaved={() => {
             setCreateOpen(false);
-            usersQ.refetch();
+            void usersQ.refetch();
           }}
         />
       )}
@@ -200,7 +200,7 @@ export function UsersPage() {
           onClose={() => setEditingUser(null)}
           onSaved={() => {
             setEditingUser(null);
-            usersQ.refetch();
+            void usersQ.refetch();
           }}
         />
       )}

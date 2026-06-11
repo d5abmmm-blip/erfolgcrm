@@ -93,7 +93,7 @@ export function TicketPayments({ ticketId, canManage }: Props) {
 
       {canManage && (
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
           className="bg-card rounded-lg border p-3"
         >
           <h3 className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold">
@@ -164,7 +164,7 @@ export function TicketPayments({ ticketId, canManage }: Props) {
                   <td className="text-muted-foreground px-3 py-2 text-xs tabular-nums">
                     {p.paidAt.toLocaleString('ru-RU')}
                   </td>
-                  <td className="px-3 py-2">{METHOD_LABEL[p.method as PaymentMethod]}</td>
+                  <td className="px-3 py-2">{METHOD_LABEL[p.method]}</td>
                   <td className="px-3 py-2 text-right font-medium tabular-nums">
                     {kopecksToRub(p.amountKopecks)}
                   </td>

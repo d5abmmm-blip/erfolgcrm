@@ -46,7 +46,6 @@ export function MobileShell({ children, session }: Props) {
     if (outbox.isOnline && outbox.pending > 0 && !outbox.isSyncing) {
       void outbox.sync();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const headerTitle =

@@ -155,7 +155,7 @@ export function AttestationsPage() {
                         <button
                           type="button"
                           title="Редактировать"
-                          onClick={() => setEditing(a as AttestationRow)}
+                          onClick={() => setEditing(a)}
                           className="bg-secondary hover:bg-muted rounded-md p-1.5"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -176,7 +176,7 @@ export function AttestationsPage() {
           onClose={() => setCreateOpen(false)}
           onSaved={() => {
             setCreateOpen(false);
-            listQ.refetch();
+            void listQ.refetch();
           }}
         />
       )}
@@ -186,7 +186,7 @@ export function AttestationsPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            listQ.refetch();
+            void listQ.refetch();
           }}
         />
       )}

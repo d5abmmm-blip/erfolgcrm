@@ -61,9 +61,9 @@ function autoSize(sheet: ExcelJSType.Worksheet, minWidth = 10, maxWidth = 50): v
           ? v
           : v instanceof Date
             ? '99.99.9999'
-            : v == null
-              ? ''
-              : String(v);
+            : typeof v === 'number' || typeof v === 'boolean'
+              ? String(v)
+              : '';
       if (s.length > max) max = s.length;
     });
     col.width = Math.min(maxWidth, max + 2);

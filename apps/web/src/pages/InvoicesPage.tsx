@@ -52,7 +52,7 @@ export function InvoicesPage() {
   const [page, setPage] = useState(1);
 
   const list = trpc.invoices.listForTenant.useQuery({
-    status: (status || undefined) as InvoiceStatus | undefined,
+    status: (status || undefined),
     limit: PAGE_SIZE,
     page,
   });

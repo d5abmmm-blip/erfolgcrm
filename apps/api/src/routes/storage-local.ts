@@ -23,10 +23,13 @@ interface QueryShape {
 }
 
 function parseQuery(q: Record<string, unknown>, expectedOp: 'put' | 'get'): QueryShape | null {
-  const op = String(q.op ?? '');
-  const key = String(q.key ?? '');
-  const exp = Number(q.exp ?? 0);
-  const sig = String(q.sig ?? '');
+  // express query-параметры могут быть и массивами/объектами (qs-нотация) —
+  // принимаем только строки, остальное считаем невалидным запросом.
+  const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const op = asStr(q.op);
+  const key = asStr(q.key);
+  const exp = Number(asStr(q.exp) || 0);
+  const sig = asStr(q.sig);
   if (op !== expectedOp || !key || !sig || !Number.isFinite(exp)) return null;
   return { op, key, exp, sig };
 }
@@ -44,7 +47,7 @@ export function makeStorageLocalRouter(): Router {
 
   // PUT: принимаем raw body (вне общего express.json) и пишем на диск.
   router.put('/put', express.raw({ type: '*/*', limit: MAX_UPLOAD_BYTES }), async (req, res) => {
-    const q = parseQuery(req.query as Record<string, unknown>, 'put');
+    const q = parseQuery(req.query, 'put');
     if (!q) return res.status(400).json({ error: 'bad query' });
     if (!verifyLocalToken(q)) return res.status(403).json({ error: 'invalid or expired token' });
     const body = req.body as Buffer;
@@ -60,7 +63,7 @@ export function makeStorageLocalRouter(): Router {
   });
 
   router.get('/get', async (req, res) => {
-    const q = parseQuery(req.query as Record<string, unknown>, 'get');
+    const q = parseQuery(req.query, 'get');
     if (!q) return res.status(400).json({ error: 'bad query' });
     if (!verifyLocalToken(q)) return res.status(403).json({ error: 'invalid or expired token' });
     try {

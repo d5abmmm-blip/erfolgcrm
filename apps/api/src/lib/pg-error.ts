@@ -25,7 +25,9 @@ export function pgErrorText(err: unknown): string {
   const parts: string[] = [];
   let cur: unknown = err;
   for (let depth = 0; depth < 5 && cur; depth++) {
-    parts.push(cur instanceof Error ? cur.message : String(cur));
+    if (cur instanceof Error) parts.push(cur.message);
+    else if (typeof cur === 'string') parts.push(cur);
+    else parts.push(JSON.stringify(cur));
     cur = (cur as { cause?: unknown } | null)?.cause;
   }
   return parts.join(' <- ');

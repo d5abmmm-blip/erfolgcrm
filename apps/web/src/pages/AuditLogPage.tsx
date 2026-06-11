@@ -352,7 +352,7 @@ export function AuditLogPage() {
             )}
             {rows.map((r) => {
               const isOpen = expanded.has(r.id);
-              const tone = ACTION_TONE[r.action as Action] ?? 'bg-muted text-muted-foreground';
+              const tone = ACTION_TONE[r.action] ?? 'bg-muted text-muted-foreground';
               return (
                 <Fragment key={r.id}>
                   <tr
@@ -388,7 +388,7 @@ export function AuditLogPage() {
                           tone,
                         )}
                       >
-                        {ACTION_LABEL[r.action as Action] ?? r.action}
+                        {ACTION_LABEL[r.action] ?? r.action}
                       </span>
                     </td>
                     <td className="p-3 text-xs">
