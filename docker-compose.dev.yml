@@ -1,0 +1,52 @@
+# Локальное окружение разработки.
+# Только PostgreSQL и Redis. Production использует Yandex Managed services.
+# Запуск: pnpm docker:dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erfolgcrm-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: erfolg
+      POSTGRES_PASSWORD: dev_only_password
+      POSTGRES_DB: erfolg_dev
+      # Включаем pgcrypto автоматически
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erfolg -d erfolg_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: erfolgcrm-redis-dev
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # MailHog — локальный SMTP-сервер для тестирования email-уведомлений
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: erfolgcrm-mailhog-dev
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+
+volumes:
+  postgres_data:
+  redis_data:

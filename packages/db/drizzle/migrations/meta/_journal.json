@@ -1,0 +1,237 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777282785830,
+      "tag": "0000_productive_mongu",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777286298692,
+      "tag": "0002_clients_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777286298693,
+      "tag": "0003_enable_pgcrypto",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777286298694,
+      "tag": "0005_tickets_workorders",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777286298695,
+      "tag": "0007_stage5_inventory_maintenance_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777286298696,
+      "tag": "0008_alter_work_orders_for_stage5",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777316800000,
+      "tag": "0010_stage6_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777403200000,
+      "tag": "0011_stage6_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777489600000,
+      "tag": "0012_stage6b_attachment_purge",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777576000000,
+      "tag": "0013_stage7_push_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777662400000,
+      "tag": "0014_stage7_telegram_bot_configs",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777748800000,
+      "tag": "0015_stage8_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777749000000,
+      "tag": "0016_stage8_payments_invoice_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777749200000,
+      "tag": "0017_stage8_cost_margin",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777749400000,
+      "tag": "0018_stage8_onec_exchange",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1777749600000,
+      "tag": "0019_stage9_payroll",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777749800000,
+      "tag": "0020_stage10f_metrology",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777750000000,
+      "tag": "0021_stage10c_2fa",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777750200000,
+      "tag": "0022_stage10g_metrology_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777750400000,
+      "tag": "0023_stage10i_attestations",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1777750600000,
+      "tag": "0024_stage10h_client_cabinet",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1777750800000,
+      "tag": "0025_perf_audit_indices",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1777751000000,
+      "tag": "0026_stage10j_intake_checklists",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1777751200000,
+      "tag": "0027_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777751400000,
+      "tag": "0028_schedule_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1777751600000,
+      "tag": "0029_ticket_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1777810000000,
+      "tag": "0030_kb_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777900000000,
+      "tag": "0031_leads",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777900100000,
+      "tag": "0032_warranties",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1777900200000,
+      "tag": "0033_ticket_kp_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1777900300000,
+      "tag": "0034_trade_in_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1777900400000,
+      "tag": "0035_roadmap_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1777900500000,
+      "tag": "0036_drop_metrology",
+      "breakpoints": true
+    }
+  ]
+}

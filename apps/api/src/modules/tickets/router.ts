@@ -1,0 +1,240 @@
+/**
+ * tRPC роутер для tickets и ticket_events.
+ *
+ * RBAC:
+ * - list / create / update / addNote / recordPrint — staffProcedure (директор + диспетчер).
+ * - get / search / listEvents / changeStatus — engineerProcedure (включая инженера).
+ *   Инженер может менять status только в рабочие статусы (diagnostics/in_progress/act_pending).
+ * - cancel / reopen — directorProcedure.
+ */
+import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
+import {
+  IntakeMethod,
+  RepairType,
+  TicketPriority,
+  TicketSource,
+  TicketStatus,
+} from '@erfolg/shared';
+import {
+  router,
+  directorProcedure,
+  engineerProcedure,
+  staffProcedure,
+} from '../../trpc/trpc';
+import { buildCmdCtx } from '../../trpc/helpers';
+import {
+  addTicketNoteCmd,
+  cancelTicketCmd,
+  changeStatusCmd,
+  createTicketCmd,
+  getTicketQuery,
+  listEventsQuery,
+  listTicketsQuery,
+  myWeeklyScheduleQuery,
+  recordPrintEventCmd,
+  reopenTicketCmd,
+  scheduleCmd,
+  searchTicketsQuery,
+  unscheduleCmd,
+  updateTicketCmd,
+  weeklyScheduleQuery,
+} from './service';
+
+const ENGINEER_ALLOWED_STATUSES: ReadonlyArray<z.infer<typeof TicketStatus>> = [
+  'diagnostics',
+  'in_progress',
+  'act_pending',
+];
+
+const createTicketSchema = z.object({
+  clientId: z.string().uuid(),
+  assetId: z.string().uuid().nullable().optional(),
+  contactId: z.string().uuid().nullable().optional(),
+  contractId: z.string().uuid().nullable().optional(),
+  source: TicketSource.optional(),
+  intakeMethod: IntakeMethod.optional(),
+  repairType: RepairType.optional(),
+  priority: TicketPriority.optional(),
+  symptom: z.string().trim().max(5000).nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional(),
+  assignedDispatcherId: z.string().uuid().nullable().optional(),
+  assignedEngineerId: z.string().uuid().nullable().optional(),
+  slaTargetAt: z.coerce.date().nullable().optional(),
+  deadlineAt: z.coerce.date().nullable().optional(),
+});
+
+const updateTicketSchema = z
+  .object({
+    clientId: z.string().uuid().optional(),
+    assetId: z.string().uuid().nullable().optional(),
+    contactId: z.string().uuid().nullable().optional(),
+    contractId: z.string().uuid().nullable().optional(),
+    source: TicketSource.optional(),
+    intakeMethod: IntakeMethod.optional(),
+    repairType: RepairType.optional(),
+    priority: TicketPriority.optional(),
+    symptom: z.string().trim().max(5000).nullable().optional(),
+    notes: z.string().trim().max(5000).nullable().optional(),
+    assignedDispatcherId: z.string().uuid().nullable().optional(),
+    assignedEngineerId: z.string().uuid().nullable().optional(),
+    slaTargetAt: z.coerce.date().nullable().optional(),
+    deadlineAt: z.coerce.date().nullable().optional(),
+  })
+  .strict();
+
+const changeStatusSchema = z.object({
+  id: z.string().uuid(),
+  status: TicketStatus,
+  cancelReason: z.string().trim().max(2000).optional(),
+});
+
+/**
+ * Stage 11 — расписание инженеров.
+ * estimatedMinutes от 15 минут (минимум осмысленного интервала) до 720 (12 часов).
+ */
+const scheduleInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  engineerId: z.string().uuid(),
+  scheduledStartAt: z.coerce.date(),
+  scheduledEndAt: z.coerce.date().optional(),
+  estimatedMinutes: z.number().int().min(15).max(720).optional(),
+});
+
+const weeklyScheduleInputSchema = z.object({
+  weekStart: z.coerce.date(),
+});
+
+export const ticketsRouter = router({
+  list: staffProcedure
+    .input(
+      z
+        .object({
+          search: z.string().trim().max(100).optional(),
+          statuses: z.array(TicketStatus).optional(),
+          engineerId: z.string().uuid().optional(),
+          clientId: z.string().uuid().optional(),
+          contractId: z.string().uuid().optional(),
+          /** Stage 11 — фильтр по наличию расписания (для UI «незапланированные»). */
+          scheduled: z.boolean().optional(),
+          page: z.number().int().positive().max(1000).optional(),
+          pageSize: z.number().int().positive().max(200).optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) => listTicketsQuery(ctx.db, ctx.tenant, input ?? {})),
+
+  get: engineerProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(({ ctx, input }) => getTicketQuery(ctx.db, ctx.tenant, input.id)),
+
+  search: engineerProcedure
+    .input(z.object({ q: z.string().trim().min(1).max(100) }))
+    .query(({ ctx, input }) => searchTicketsQuery(ctx.db, ctx.tenant, input.q)),
+
+  events: engineerProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        limit: z.number().int().positive().max(500).optional(),
+      }),
+    )
+    .query(({ ctx, input }) => listEventsQuery(ctx.db, ctx.tenant, input.ticketId, input.limit)),
+
+  create: staffProcedure
+    .input(createTicketSchema)
+    .mutation(({ ctx, input }) => createTicketCmd(buildCmdCtx(ctx), input)),
+
+  update: staffProcedure
+    .input(z.object({ id: z.string().uuid(), patch: updateTicketSchema }))
+    .mutation(({ ctx, input }) =>
+      updateTicketCmd(buildCmdCtx(ctx), input.id, input.patch),
+    ),
+
+  addNote: engineerProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        comment: z.string().trim().min(1).max(5000),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      addTicketNoteCmd(buildCmdCtx(ctx), input.ticketId, input.comment),
+    ),
+
+  recordPrint: staffProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        documentKind: z.enum(['intake_act', 'invoice', 'work_act']),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      recordPrintEventCmd(buildCmdCtx(ctx), input.ticketId, input.documentKind),
+    ),
+
+  changeStatus: engineerProcedure.input(changeStatusSchema).mutation(({ ctx, input }) => {
+    if (
+      ctx.session.role === 'engineer' &&
+      !ENGINEER_ALLOWED_STATUSES.includes(input.status)
+    ) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Инженер может ставить только diagnostics / in_progress / act_pending',
+      });
+    }
+    return changeStatusCmd(
+      buildCmdCtx(ctx),
+      input.id,
+      input.status,
+      input.cancelReason ?? null,
+    );
+  }),
+
+  cancel: directorProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        reason: z.string().trim().max(2000).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      cancelTicketCmd(buildCmdCtx(ctx), input.id, input.reason ?? null),
+    ),
+
+  reopen: directorProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) => reopenTicketCmd(buildCmdCtx(ctx), input.id)),
+
+  /* ──────────────────── Stage 11: Schedule ──────────────────── */
+
+  schedule: staffProcedure
+    .input(scheduleInputSchema)
+    .mutation(({ ctx, input }) =>
+      scheduleCmd(buildCmdCtx(ctx), {
+        ticketId: input.ticketId,
+        engineerId: input.engineerId,
+        scheduledStartAt: input.scheduledStartAt,
+        scheduledEndAt: input.scheduledEndAt ?? null,
+        estimatedMinutes: input.estimatedMinutes ?? null,
+      }),
+    ),
+
+  unschedule: staffProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      unscheduleCmd(buildCmdCtx(ctx), { ticketId: input.ticketId }),
+    ),
+
+  weeklySchedule: staffProcedure
+    .input(weeklyScheduleInputSchema)
+    .query(({ ctx, input }) =>
+      weeklyScheduleQuery(buildCmdCtx(ctx), { weekStart: input.weekStart }),
+    ),
+
+  myWeeklySchedule: engineerProcedure
+    .input(weeklyScheduleInputSchema)
+    .query(({ ctx, input }) =>
+      myWeeklyScheduleQuery(buildCmdCtx(ctx), { weekStart: input.weekStart }),
+    ),
+});

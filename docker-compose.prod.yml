@@ -1,0 +1,107 @@
+# Production-каркас для ErfolgCRM v2.
+#
+# Это БАЗОВЫЙ скелет — реальный продакшн обычно идёт в systemd на bare-metal
+# (см. docs/deploy-checklist.md), но этот compose-файл полезен для:
+#   - staging-окружения на отдельном сервере;
+#   - быстрого восстановления конфигурации после rebuild;
+#   - локальной репродукции prod-багов.
+#
+# Запуск:
+#   1. Скопировать .env.example в .env и заполнить ВСЕ production-секреты.
+#      В частности: PII_ENCRYPTION_KEY (через `node scripts/generate-pii-key.mjs`)
+#      и SESSION_SECRET (через `openssl rand -base64 64`).
+#   2. Подготовить TLS — либо проксировать через хостовой nginx + certbot,
+#      либо добавить traefik-сервис (не входит в этот файл, чтобы не усложнять).
+#   3. docker compose -f docker-compose.prod.yml up -d
+#
+# ВАЖНО: postgres и redis тут — для упрощения. На реальном проде лучше использовать
+# managed services от Selectel/Yandex Cloud (бэкапы, мониторинг, failover из коробки).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erfolgcrm-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_USER: erfolg
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD must be set}
+      POSTGRES_DB: erfolg_prod
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erfolg -d erfolg_prod']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Снаружи Postgres НЕ открываем — только внутри сети compose.
+    expose:
+      - '5432'
+
+  redis:
+    image: redis:7-alpine
+    container_name: erfolgcrm-redis-prod
+    restart: always
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    expose:
+      - '6379'
+
+  api:
+    # Собирается из репозитория; см. apps/api/Dockerfile (создать при первом деплое).
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: erfolgcrm-api-prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      WORKERS_ENABLED: 'true'
+    ports:
+      # Слушает локально — наружу торчит nginx с TLS.
+      - '127.0.0.1:3030:3030'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3030/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    # Статика React+Vite, раздаётся nginx-контейнером.
+    # Альтернатива — раздавать напрямую с хостового nginx (см. deploy-checklist.md).
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: erfolgcrm-web-prod
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:8080:80'
+
+volumes:
+  postgres_data:
+  redis_data:

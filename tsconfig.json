@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/db" },
+    { "path": "./packages/ui" },
+    { "path": "./packages/pdf-templates" },
+    { "path": "./apps/api" },
+    { "path": "./apps/bot" },
+    { "path": "./apps/web" }
+  ]
+}

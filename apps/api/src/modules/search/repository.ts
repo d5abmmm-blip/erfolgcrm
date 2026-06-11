@@ -1,0 +1,253 @@
+/**
+ * Глобальный поиск по 5 сущностям: tickets, clients, assets, invoices, contracts.
+ *
+ * Бизнес-цель — одна строка наверху → находит всё, без перехода в раздел.
+ * Сейчас (v1) — простой ILIKE по нужным полям. Производительности достаточно
+ * на типичные размеры данных одного сервисного центра (десятки тысяч строк max).
+ *
+ * Защита:
+ *   • RLS гарантируется withTenantTx (вторая линия после tenant_id-фильтрации).
+ *   • LIMIT 5 per type — даже под пустым ключом не уронит сервер.
+ *   • Пустой/слишком короткий query → возвращаем пусто без удара по БД.
+ *   • % и _ в pattern экранируем (иначе клиент может подставить wildcard).
+ */
+import { asc, desc, eq, ilike, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import {
+  assets,
+  clients,
+  contracts,
+  invoices,
+  tickets,
+  withTenantTx,
+  type Db,
+} from '@erfolg/db';
+
+const LIMIT_PER_TYPE = 5;
+const MIN_QUERY_LENGTH = 2;
+
+export interface TicketHit {
+  id: string;
+  ticketNumber: string;
+  status: string;
+  clientName: string;
+  createdAt: Date;
+}
+
+export interface ClientHit {
+  id: string;
+  displayName: string;
+  type: 'legal' | 'individual';
+  inn: string | null;
+}
+
+export interface AssetHit {
+  id: string;
+  model: string;
+  serialNumber: string | null;
+  ownerClientName: string | null;
+}
+
+export interface InvoiceHit {
+  id: string;
+  invoiceNumber: string;
+  totalAmountKopecks: string;
+  status: string;
+}
+
+export interface ContractHit {
+  id: string;
+  contractNumber: string;
+  clientName: string | null;
+  status: string;
+}
+
+export interface SearchResult {
+  tickets: TicketHit[];
+  clients: ClientHit[];
+  assets: AssetHit[];
+  invoices: InvoiceHit[];
+  contracts: ContractHit[];
+}
+
+const EMPTY_RESULT: SearchResult = {
+  tickets: [],
+  clients: [],
+  assets: [],
+  invoices: [],
+  contracts: [],
+};
+
+/** Экранируем wildcards: иначе клиент может «всё подходит» подставить. */
+function escapeIlike(raw: string): string {
+  return raw.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+function buildPattern(query: string): string {
+  return `%${escapeIlike(query)}%`;
+}
+
+async function searchTicketsHits(
+  tenantId: string,
+  pattern: string,
+  db: Db,
+): Promise<TicketHit[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        status: tickets.status,
+        clientName: clients.displayName,
+        createdAt: tickets.createdAt,
+      })
+      .from(tickets)
+      .leftJoin(clients, eq(tickets.clientId, clients.id))
+      .where(
+        or(
+          ilike(tickets.ticketNumber, pattern),
+          ilike(tickets.symptom, pattern),
+          ilike(tickets.barcode, pattern),
+        ),
+      )
+      .orderBy(desc(tickets.createdAt))
+      .limit(LIMIT_PER_TYPE);
+    return rows.map((r) => ({ ...r, clientName: r.clientName ?? '' }));
+  });
+}
+
+async function searchClientsHits(
+  tenantId: string,
+  pattern: string,
+  db: Db,
+): Promise<ClientHit[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    return tx
+      .select({
+        id: clients.id,
+        displayName: clients.displayName,
+        type: clients.type,
+        inn: clients.inn,
+      })
+      .from(clients)
+      .where(
+        or(
+          ilike(clients.displayName, pattern),
+          ilike(clients.inn, pattern),
+          ilike(clients.email, pattern),
+        ),
+      )
+      .orderBy(asc(clients.displayName))
+      .limit(LIMIT_PER_TYPE);
+  });
+}
+
+async function searchAssetsHits(
+  tenantId: string,
+  pattern: string,
+  db: Db,
+): Promise<AssetHit[]> {
+  const ownerClient = alias(clients, 'owner_client');
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: assets.id,
+        model: assets.model,
+        serialNumber: assets.serialNumber,
+        ownerClientName: ownerClient.displayName,
+      })
+      .from(assets)
+      .leftJoin(ownerClient, eq(ownerClient.id, assets.ownerClientId))
+      .where(
+        or(
+          ilike(assets.model, pattern),
+          ilike(assets.serialNumber, pattern),
+          ilike(assets.inventoryNumber, pattern),
+        ),
+      )
+      .orderBy(asc(assets.model))
+      .limit(LIMIT_PER_TYPE);
+    return rows.map((r) => ({
+      ...r,
+      ownerClientName: r.ownerClientName ?? null,
+    }));
+  });
+}
+
+async function searchInvoicesHits(
+  tenantId: string,
+  pattern: string,
+  db: Db,
+): Promise<InvoiceHit[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        totalAmountKopecks: invoices.totalAmountKopecks,
+        status: invoices.status,
+      })
+      .from(invoices)
+      .where(ilike(invoices.invoiceNumber, pattern))
+      .orderBy(desc(invoices.createdAt))
+      .limit(LIMIT_PER_TYPE);
+    return rows.map((r) => ({
+      ...r,
+      totalAmountKopecks: r.totalAmountKopecks.toString(),
+    }));
+  });
+}
+
+async function searchContractsHits(
+  tenantId: string,
+  pattern: string,
+  db: Db,
+): Promise<ContractHit[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: contracts.id,
+        contractNumber: contracts.contractNumber,
+        clientName: clients.displayName,
+        status: contracts.status,
+      })
+      .from(contracts)
+      .leftJoin(clients, eq(contracts.clientId, clients.id))
+      .where(ilike(contracts.contractNumber, pattern))
+      .orderBy(desc(contracts.createdAt))
+      .limit(LIMIT_PER_TYPE);
+    return rows.map((r) => ({ ...r, clientName: r.clientName ?? null }));
+  });
+}
+
+/**
+ * Главная точка входа: параллельно поднимаем 5 запросов.
+ * Если q короче MIN_QUERY_LENGTH — возвращаем пустой результат, не тратим БД.
+ */
+export async function searchEverything(
+  db: Db,
+  tenantId: string,
+  rawQuery: string,
+): Promise<SearchResult> {
+  const query = (rawQuery ?? '').trim();
+  if (query.length < MIN_QUERY_LENGTH) return EMPTY_RESULT;
+  const pattern = buildPattern(query);
+  const [ticketsHits, clientsHits, assetsHits, invoicesHits, contractsHits] =
+    await Promise.all([
+      searchTicketsHits(tenantId, pattern, db),
+      searchClientsHits(tenantId, pattern, db),
+      searchAssetsHits(tenantId, pattern, db),
+      searchInvoicesHits(tenantId, pattern, db),
+      searchContractsHits(tenantId, pattern, db),
+    ]);
+  return {
+    tickets: ticketsHits,
+    clients: clientsHits,
+    assets: assetsHits,
+    invoices: invoicesHits,
+    contracts: contractsHits,
+  };
+}
+
+// Константы экспортируются для тестов и UI-валидации.
+export { LIMIT_PER_TYPE, MIN_QUERY_LENGTH };

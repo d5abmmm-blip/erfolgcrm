@@ -1,0 +1,63 @@
+{
+  "name": "erfolgcrm-v2",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ErfolgCRM v2 — SaaS multi-tenant CRM для сервисных центров медтехники РФ",
+  "packageManager": "pnpm@10.30.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @erfolg/web --filter @erfolg/api --filter @erfolg/bot dev",
+    "dev:web": "pnpm --filter @erfolg/web dev",
+    "dev:api": "pnpm --filter @erfolg/api dev",
+    "dev:bot": "pnpm --filter @erfolg/bot dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @erfolg/web test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "db:generate": "pnpm --filter @erfolg/db generate",
+    "db:migrate": "pnpm --filter @erfolg/db migrate",
+    "db:studio": "pnpm --filter @erfolg/db studio",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up -d",
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:dev:logs": "docker compose -f docker-compose.dev.yml logs -f",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "eslint": "^9.18.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.21.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "core-js",
+      "esbuild",
+      "msgpackr-extract"
+    ],
+    "overrides": {
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0"
+    }
+  }
+}
