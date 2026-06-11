@@ -19,9 +19,19 @@ const VARIANT_CLS: Record<StatusBadgeVariant, string> = {
   muted: 'bg-muted text-muted-foreground',
 };
 
+const DOT_CLS: Record<StatusBadgeVariant, string> = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-destructive',
+  info: 'bg-primary',
+  muted: 'bg-muted-foreground/50',
+};
+
 /**
  * Универсальный статус-бейдж. Цвета через варианты, не через произвольные классы,
  * чтобы цветовая палитра не разъезжалась по приложению.
+ * Точка-индикатор дублирует цвет насыщенным пятном — статус считывается
+ * боковым зрением даже при беглом просмотре таблицы.
  */
 export function StatusBadge({
   variant,
@@ -33,11 +43,15 @@ export function StatusBadge({
     <span
       className={cn(
         'inline-flex items-center rounded-md font-medium',
-        compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs',
+        compact ? 'gap-1 px-1.5 py-0.5 text-[10px]' : 'gap-1.5 px-2 py-0.5 text-xs',
         VARIANT_CLS[variant],
         className,
       )}
     >
+      <span
+        className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLS[variant])}
+        aria-hidden
+      />
       {children}
     </span>
   );

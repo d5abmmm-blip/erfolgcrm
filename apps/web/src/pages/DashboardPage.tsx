@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   TrendingUp,
   AlertTriangle,
+  CheckCircle2,
   Clock,
   Wallet,
   Package,
@@ -128,7 +129,7 @@ function DirectorDashboard() {
           <PeriodTabs value={period} onChange={setPeriod} />
           <button
             type="button"
-            onClick={handleDailySummaryPdf}
+            onClick={() => void handleDailySummaryPdf()}
             disabled={pdfBusy}
             className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-60"
           >
@@ -141,7 +142,7 @@ function DirectorDashboard() {
           </button>
           <button
             type="button"
-            onClick={handleDailySummaryXlsx}
+            onClick={() => void handleDailySummaryXlsx()}
             disabled={xlsxBusy}
             className="bg-success text-success-foreground hover:bg-success/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-60"
           >
@@ -279,9 +280,26 @@ function OverdueInvoicesCard({
   loading: boolean;
 }) {
   return (
-    <section className="bg-card rounded-lg border">
+    <section className="bg-card rounded-xl border shadow-sm">
       <div className="flex items-center justify-between border-b p-4">
-        <h3 className="font-semibold">Просроченные счета</h3>
+        <h3 className="flex items-center gap-2.5 font-semibold">
+          <span
+            className={cn(
+              'grid h-8 w-8 place-items-center rounded-lg',
+              rows.length > 0
+                ? 'bg-destructive/12 text-destructive'
+                : 'bg-success/12 text-success',
+            )}
+          >
+            <Receipt className="h-4 w-4" />
+          </span>
+          Просроченные счета
+          {rows.length > 0 && (
+            <span className="bg-destructive text-destructive-foreground rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums">
+              {rows.length}
+            </span>
+          )}
+        </h3>
         <Link
           href="/invoices?status=overdue"
           className="text-primary text-sm hover:underline"
@@ -292,7 +310,10 @@ function OverdueInvoicesCard({
       {loading ? (
         <div className="text-muted-foreground p-4 text-sm">Загружаем…</div>
       ) : rows.length === 0 ? (
-        <div className="text-muted-foreground p-4 text-sm">Нет просроченных счетов</div>
+        <div className="text-success flex items-center gap-2 p-4 text-sm">
+          <CheckCircle2 className="h-4 w-4" />
+          Нет просроченных счетов
+        </div>
       ) : (
         <div className="divide-y">
           {rows.map((r) => (
@@ -332,9 +353,24 @@ function SlaAtRiskCard({
   loading: boolean;
 }) {
   return (
-    <section className="bg-card rounded-lg border">
+    <section className="bg-card rounded-xl border shadow-sm">
       <div className="flex items-center justify-between border-b p-4">
-        <h3 className="font-semibold">SLA в зоне риска</h3>
+        <h3 className="flex items-center gap-2.5 font-semibold">
+          <span
+            className={cn(
+              'grid h-8 w-8 place-items-center rounded-lg',
+              rows.length > 0 ? 'bg-warning/15 text-warning' : 'bg-success/12 text-success',
+            )}
+          >
+            <Clock className="h-4 w-4" />
+          </span>
+          SLA в зоне риска
+          {rows.length > 0 && (
+            <span className="bg-warning text-warning-foreground rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums">
+              {rows.length}
+            </span>
+          )}
+        </h3>
         <Link href="/tickets" className="text-primary text-sm hover:underline">
           Все заявки →
         </Link>
@@ -342,7 +378,10 @@ function SlaAtRiskCard({
       {loading ? (
         <div className="text-muted-foreground p-4 text-sm">Загружаем…</div>
       ) : rows.length === 0 ? (
-        <div className="text-muted-foreground p-4 text-sm">Нет заявок на грани SLA</div>
+        <div className="text-success flex items-center gap-2 p-4 text-sm">
+          <CheckCircle2 className="h-4 w-4" />
+          Нет заявок на грани SLA
+        </div>
       ) : (
         <div className="divide-y">
           {rows.map((r) => {
@@ -399,35 +438,62 @@ function MetricTile({
   icon: Icon,
   href,
 }: MetricTileProps) {
-  const toneClasses = {
-    default: 'border-border',
-    warning: 'border-warning/40',
-    danger: 'border-destructive/40',
-    success: 'border-success/40',
+  // Цвет = смысл: зелёный «всё хорошо», янтарный «обрати внимание»,
+  // красный «горит», голубой — нейтральная рабочая метрика.
+  const TONE = {
+    default: {
+      chip: 'bg-primary/10 text-primary',
+      value: 'text-foreground',
+      hint: 'text-muted-foreground',
+      edge: '',
+    },
+    success: {
+      chip: 'bg-success/12 text-success',
+      value: 'text-success',
+      hint: 'text-muted-foreground',
+      edge: 'bg-success',
+    },
+    warning: {
+      chip: 'bg-warning/15 text-warning',
+      value: 'text-foreground',
+      hint: 'text-warning',
+      edge: 'bg-warning',
+    },
+    danger: {
+      chip: 'bg-destructive/12 text-destructive',
+      value: 'text-destructive',
+      hint: 'text-destructive/80',
+      edge: 'bg-destructive',
+    },
   } as const;
-  const toneText = {
-    default: '',
-    warning: 'text-warning',
-    danger: 'text-destructive',
-    success: 'text-success',
-  } as const;
+  const t = TONE[tone];
 
   const content = (
     <div
       className={cn(
-        'bg-card flex h-full flex-col gap-2 rounded-lg border p-4 transition',
-        toneClasses[tone],
-        href && 'hover:border-primary/50 cursor-pointer',
+        'bg-card relative flex h-full flex-col gap-2.5 overflow-hidden rounded-xl border p-4 shadow-sm transition-all',
+        href && 'hover:border-primary/50 hover:shadow-md cursor-pointer',
       )}
     >
-      <div className="flex items-start justify-between">
+      {/* Цветное «ребро» слева — сигнал считывается боковым зрением. */}
+      {t.edge && (
+        <span
+          className={cn('absolute inset-y-3 left-0 w-[3px] rounded-r-full', t.edge)}
+          aria-hidden
+        />
+      )}
+      <div className="flex items-start justify-between gap-2">
         <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
           {title}
         </div>
-        <Icon className={cn('h-4 w-4', toneText[tone] || 'text-muted-foreground')} />
+        <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', t.chip)}>
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      {hint && <div className="text-muted-foreground text-xs">{hint}</div>}
+      <div className={cn('text-2xl font-semibold tabular-nums tracking-tight', t.value)}>
+        {value}
+      </div>
+      {hint && <div className={cn('text-xs', t.hint)}>{hint}</div>}
     </div>
   );
 

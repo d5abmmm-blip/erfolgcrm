@@ -18,6 +18,7 @@
     "@erfolg/api": "workspace:*",
     "@erfolg/shared": "workspace:*",
     "@erfolg/ui": "workspace:*",
+    "@fontsource-variable/golos-text": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.4",

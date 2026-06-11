@@ -100,7 +100,7 @@ export function DataTable<T>({
               className={cn(
                 'transition',
                 onRowClick &&
-                  'hover:bg-muted/20 focus-visible:bg-muted/20 cursor-pointer outline-none',
+                  'hover:bg-primary/[0.05] focus-visible:bg-primary/[0.05] cursor-pointer outline-none',
                 rowClassName?.(row),
               )}
             >

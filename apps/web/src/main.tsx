@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { ThemeProvider } from './lib/theme';
 import { trpc, trpcClient } from './lib/trpc';
+// Фирменный шрифт интерфейса: Golos Text (кириллица из коробки, variable —
+// один файл на все начертания). Self-hosted — работает офлайн в PWA.
+import '@fontsource-variable/golos-text';
 import './styles/globals.css';
 
 const queryClient = new QueryClient({
