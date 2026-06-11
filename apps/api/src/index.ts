@@ -25,6 +25,10 @@ import {
   registerInvoiceReminderWorker,
 } from './workers/invoice-reminder';
 import { registerTicketStatusNotifyWorker } from './workers/ticket-status-notify';
+import {
+  enqueueCalendarReminderSchedule,
+  registerCalendarReminderWorker,
+} from './workers/calendar-reminder';
 
 const app = express();
 const PORT = Number(process.env.API_PORT ?? 3030);
@@ -151,10 +155,16 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerPushSendWorker();
   registerInvoiceReminderWorker();
   registerTicketStatusNotifyWorker();
+  registerCalendarReminderWorker();
   // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
   if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
     void enqueueInvoiceReminderSchedule();
   }
+  // Напоминания календаря — внутренний push, внешних зависимостей нет:
+  // расписание ставим всегда (тик без «созревших» событий — no-op).
+  void enqueueCalendarReminderSchedule().catch((err) =>
+    logger.warn({ err }, 'calendar-reminder schedule failed'),
+  );
 }
 
 const server = app.listen(PORT, HOST, () => {

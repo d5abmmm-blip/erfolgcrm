@@ -72,9 +72,12 @@ export interface EnqueuePushInput {
 export async function enqueuePushToUser(input: EnqueuePushInput): Promise<void> {
   await getQueue<EnqueuePushInput>(QUEUE_NAMES.pushSend).add('send', input, {
     // Дедуп: одинаковый ticketId+userId за 30 секунд не должен залить пользователя.
+    // ВАЖНО: BullMQ запрещает ':' в custom jobId (служебный разделитель ключей) —
+    // из-за разделителя-двоеточия enqueue молча падал и пуши с tag не ставились
+    // вовсе (найдено аудитом 2026-06-11). Поэтому '_' + страховочная замена.
     jobId:
       typeof input.payload.tag === 'string'
-        ? `push:${input.tenantId}:${input.userId}:${input.payload.tag}`
+        ? `push_${input.tenantId}_${input.userId}_${input.payload.tag}`.replace(/:/g, '-')
         : undefined,
   });
 }

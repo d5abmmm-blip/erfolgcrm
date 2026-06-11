@@ -253,6 +253,13 @@
       "when": 1777900800000,
       "tag": "0039_calendar_events",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1777900900000,
+      "tag": "0040_calendar_event_reminders",
+      "breakpoints": true
     }
   ]
 }

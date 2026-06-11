@@ -27,6 +27,8 @@ const eventFields = {
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Время в формате ЧЧ:ММ')
     .nullish(),
   notes: z.string().trim().max(2000).nullish(),
+  /** Push-напоминание накануне в 09:00 (пояс организации). */
+  remind: z.boolean().optional().default(false),
 };
 
 export const calendarRouter = router({
@@ -44,12 +46,19 @@ export const calendarRouter = router({
   createEvent: staffProcedure
     .input(z.object(eventFields))
     .mutation(async ({ ctx, input }) => {
-      const created = await createCalendarEvent(ctx.db, ctx.tenant.id, ctx.session.userId, {
-        title: input.title,
-        date: input.date,
-        time: input.time ?? null,
-        notes: input.notes?.trim() ? input.notes.trim() : null,
-      });
+      const created = await createCalendarEvent(
+        ctx.db,
+        ctx.tenant.id,
+        ctx.session.userId,
+        ctx.tenant.timezone,
+        {
+          title: input.title,
+          date: input.date,
+          time: input.time ?? null,
+          notes: input.notes?.trim() ? input.notes.trim() : null,
+          remind: input.remind,
+        },
+      );
       await writeAudit(ctx.db, ctx.tenant.id, {
         userId: ctx.session.userId,
         action: 'create',
@@ -64,11 +73,12 @@ export const calendarRouter = router({
   updateEvent: staffProcedure
     .input(z.object({ id: z.string().uuid(), ...eventFields }))
     .mutation(async ({ ctx, input }) => {
-      const ok = await updateCalendarEvent(ctx.db, ctx.tenant.id, input.id, {
+      const ok = await updateCalendarEvent(ctx.db, ctx.tenant.id, input.id, ctx.tenant.timezone, {
         title: input.title,
         date: input.date,
         time: input.time ?? null,
         notes: input.notes?.trim() ? input.notes.trim() : null,
+        remind: input.remind,
       });
       if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'Событие не найдено' });
       await writeAudit(ctx.db, ctx.tenant.id, {

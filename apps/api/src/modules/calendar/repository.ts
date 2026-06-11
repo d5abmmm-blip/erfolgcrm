@@ -46,6 +46,8 @@ export interface CalendarEvent {
   href: string;
   /** Заметка — только у custom-событий (нужна для редактирования). */
   notes: string | null;
+  /** Запрошено ли push-напоминание (только custom; для редактирования). */
+  remind: boolean;
 }
 
 const MAINTENANCE_KIND_LABEL: Record<string, string> = {
@@ -104,6 +106,7 @@ export async function listMonthEvents(
         subtitle: r.clientName ?? null,
         href: `/tickets/${r.id}`,
         notes: null,
+        remind: false,
       });
     }
 
@@ -134,6 +137,7 @@ export async function listMonthEvents(
         subtitle: r.clientName ?? null,
         href: `/tickets/${r.id}`,
         notes: null,
+        remind: false,
       });
     }
 
@@ -163,6 +167,7 @@ export async function listMonthEvents(
         subtitle: MAINTENANCE_KIND_LABEL[r.kind] ?? 'ТО',
         href: '/maintenance',
         notes: null,
+        remind: false,
       });
     }
 
@@ -194,6 +199,7 @@ export async function listMonthEvents(
         subtitle: r.clientName ? `истекает · ${r.clientName}` : 'истекает',
         href: `/contracts/${r.id}`,
         notes: null,
+        remind: false,
       });
     }
 
@@ -224,6 +230,7 @@ export async function listMonthEvents(
         subtitle: r.provider ? `гарантия истекает · ${r.provider}` : 'гарантия истекает',
         href: '/warranties',
         notes: null,
+        remind: false,
       });
     }
 
@@ -235,6 +242,7 @@ export async function listMonthEvents(
         date: sql<string>`to_char(${calendarEvents.eventDate}, 'YYYY-MM-DD')`,
         time: sql<string | null>`to_char(${calendarEvents.eventTime}, 'HH24:MI')`,
         notes: calendarEvents.notes,
+        remind: sql<boolean>`(${calendarEvents.remindAt} is not null or ${calendarEvents.remindedAt} is not null)`,
       })
       .from(calendarEvents)
       .where(
@@ -253,6 +261,7 @@ export async function listMonthEvents(
         subtitle: r.notes,
         href: '/calendar',
         notes: r.notes,
+        remind: r.remind,
       });
     }
 
@@ -276,12 +285,28 @@ export interface CalendarEventInput {
   /** HH:MM или null — «весь день». */
   time: string | null;
   notes: string | null;
+  /** Прислать push-напоминание накануне в 09:00 (пояс организации). */
+  remind: boolean;
+}
+
+/**
+ * Момент напоминания: накануне события в 09:00 пояса организации.
+ * Если момент уже в прошлом (событие на сегодня/завтра утром или задним
+ * числом) — NULL: задним числом не напоминаем.
+ */
+function remindAtExpr(date: string, timezone: string) {
+  return sql`case
+    when ((${date}::date - 1) + time '09:00') at time zone ${timezone} > now()
+    then ((${date}::date - 1) + time '09:00') at time zone ${timezone}
+    else null
+  end`;
 }
 
 export async function createCalendarEvent(
   db: Db,
   tenantId: string,
   userId: string | null,
+  timezone: string,
   input: CalendarEventInput,
 ): Promise<{ id: string }> {
   return withTenantTx(db, tenantId, async (tx) => {
@@ -293,6 +318,7 @@ export async function createCalendarEvent(
         eventDate: input.date,
         eventTime: input.time,
         notes: input.notes,
+        remindAt: input.remind ? remindAtExpr(input.date, timezone) : null,
         createdByUserId: userId,
       })
       .returning({ id: calendarEvents.id });
@@ -306,6 +332,7 @@ export async function updateCalendarEvent(
   db: Db,
   tenantId: string,
   id: string,
+  timezone: string,
   input: CalendarEventInput,
 ): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
@@ -316,11 +343,66 @@ export async function updateCalendarEvent(
         eventDate: input.date,
         eventTime: input.time,
         notes: input.notes,
+        // Перенесли событие или передумали — напоминание пересчитывается,
+        // отметка «отправлено» сбрасывается (напомним о новой дате заново).
+        remindAt: input.remind ? remindAtExpr(input.date, timezone) : null,
+        remindedAt: null,
       })
       .where(and(eq(calendarEvents.id, id), isNull(calendarEvents.deletedAt)))
       .returning({ id: calendarEvents.id });
     return rows.length > 0;
   });
+}
+
+/* ───────────── Для воркера напоминаний ───────────── */
+
+export interface DueReminderRow {
+  id: string;
+  title: string;
+  eventDate: string;
+  eventTime: string | null;
+  notes: string | null;
+  createdByUserId: string | null;
+}
+
+/** События, по которым пора отправить push (remind_at наступил, ещё не слали). */
+export async function listDueCalendarReminders(
+  db: Db,
+  tenantId: string,
+): Promise<DueReminderRow[]> {
+  return withTenantTx(db, tenantId, (tx) =>
+    tx
+      .select({
+        id: calendarEvents.id,
+        title: calendarEvents.title,
+        eventDate: sql<string>`to_char(${calendarEvents.eventDate}, 'YYYY-MM-DD')`,
+        eventTime: sql<string | null>`to_char(${calendarEvents.eventTime}, 'HH24:MI')`,
+        notes: calendarEvents.notes,
+        createdByUserId: calendarEvents.createdByUserId,
+      })
+      .from(calendarEvents)
+      .where(
+        and(
+          isNotNull(calendarEvents.remindAt),
+          sql`${calendarEvents.remindAt} <= now()`,
+          isNull(calendarEvents.remindedAt),
+          isNull(calendarEvents.deletedAt),
+        ),
+      ),
+  );
+}
+
+export async function markCalendarReminderSent(
+  db: Db,
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  await withTenantTx(db, tenantId, (tx) =>
+    tx
+      .update(calendarEvents)
+      .set({ remindedAt: new Date() })
+      .where(eq(calendarEvents.id, id)),
+  );
 }
 
 export async function deleteCalendarEvent(

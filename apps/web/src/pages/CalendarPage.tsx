@@ -29,6 +29,7 @@ interface CalendarEvent {
   subtitle: string | null;
   href: string;
   notes: string | null;
+  remind: boolean;
 }
 
 type DialogState =
@@ -369,6 +370,7 @@ function EventDialog({
   const [date, setDate] = useState(isEdit ? initial.event.date : initial.date);
   const [time, setTime] = useState(isEdit ? (initial.event.time ?? '') : '');
   const [notes, setNotes] = useState(isEdit ? (initial.event.notes ?? '') : '');
+  const [remind, setRemind] = useState(isEdit ? initial.event.remind : false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -433,6 +435,7 @@ function EventDialog({
       date,
       time: time || null,
       notes: notes.trim() || null,
+      remind,
     };
     if (isEdit) update.mutate({ id: initial.event.id, ...payload });
     else create.mutate(payload);
@@ -517,6 +520,21 @@ function EventDialog({
             placeholder="Детали, адрес, телефон…"
             className={inputCls}
           />
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={remind}
+            onChange={(e) => setRemind(e.target.checked)}
+            className="accent-primary mt-0.5 h-4 w-4"
+          />
+          <span className="text-sm leading-tight">
+            Напомнить накануне
+            <span className="text-muted-foreground block text-xs">
+              push-уведомление в 09:00 за день до события
+            </span>
+          </span>
         </label>
 
         {error && (

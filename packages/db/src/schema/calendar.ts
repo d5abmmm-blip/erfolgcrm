@@ -3,7 +3,7 @@
  * встречи, поставки, напоминания. Не привязаны к заявкам/договорам,
  * показываются в разделе «Календарь» вместе с системными событиями.
  */
-import { date, index, pgTable, text, time, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, index, pgTable, text, time, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { pk, tenantId, timestamps } from './_shared';
 
@@ -22,7 +22,15 @@ export const calendarEvents = pgTable(
 
     notes: text('notes'),
 
-    /** Кто создал (для аудита). Без FK — пользователи не удаляются физически. */
+    /**
+     * Когда отправить push-напоминание (накануне в 09:00 пояса организации).
+     * NULL — не запрошено или момент уже в прошлом на момент создания/правки.
+     */
+    remindAt: timestamp('remind_at', { withTimezone: true }),
+    /** Когда напоминание фактически отправлено (повторно не шлём). */
+    remindedAt: timestamp('reminded_at', { withTimezone: true }),
+
+    /** Кто создал (для аудита и адресат напоминания). Без FK. */
     createdByUserId: uuid('created_by_user_id'),
 
     ...timestamps,

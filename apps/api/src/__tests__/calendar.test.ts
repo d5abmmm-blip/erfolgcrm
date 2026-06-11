@@ -24,9 +24,11 @@ import { ensureSeed } from './setup';
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  listDueCalendarReminders,
   listMonthEvents,
   updateCalendarEvent,
 } from '../modules/calendar';
+import { processCalendarReminderTick } from '../workers/calendar-reminder';
 import { createTicket } from '../modules/tickets/repository';
 import { createContract } from '../modules/contracts/repository';
 import { createWarranty } from '../modules/warranties/repository';
@@ -190,11 +192,12 @@ describe('calendar.month — события месяца', () => {
 
 describe('calendar — свои события (CRUD)', () => {
   it('create → видно в месяце с временем и заметкой; update меняет; delete убирает', async () => {
-    const { id } = await createCalendarEvent(getDb(), erfolgId, null, {
+    const { id } = await createCalendarEvent(getDb(), erfolgId, null, TZ, {
       title: `${TEST_PREFIX}Поставка запчастей`,
       date: '2031-03-18',
       time: '14:30',
       notes: 'Привезут манжеты для тонометров',
+      remind: false,
     });
 
     let events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
@@ -203,13 +206,15 @@ describe('calendar — свои события (CRUD)', () => {
     expect(ev?.time).toBe('14:30');
     expect(ev?.title).toBe(`${TEST_PREFIX}Поставка запчастей`);
     expect(ev?.notes).toContain('манжеты');
+    expect(ev?.remind).toBe(false);
 
     // update: перенос на другой день без времени.
-    const updated = await updateCalendarEvent(getDb(), erfolgId, id, {
+    const updated = await updateCalendarEvent(getDb(), erfolgId, id, TZ, {
       title: `${TEST_PREFIX}Поставка (перенос)`,
       date: '2031-03-19',
       time: null,
       notes: null,
+      remind: false,
     });
     expect(updated).toBe(true);
     events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
@@ -225,22 +230,91 @@ describe('calendar — свои события (CRUD)', () => {
   });
 
   it('cross-tenant: своё событие demo не видно из erfolg (RLS)', async () => {
-    const { id } = await createCalendarEvent(getDb(), demoId, null, {
+    const { id } = await createCalendarEvent(getDb(), demoId, null, TZ, {
       title: `${TEST_PREFIX}demo-событие`,
       date: '2031-03-12',
       time: null,
       notes: null,
+      remind: false,
     });
     const erfolgEvents = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
     expect(erfolgEvents.some((e) => e.id === id)).toBe(false);
     // Update из чужого tenant'а тоже не должен находить запись.
     expect(
-      await updateCalendarEvent(getDb(), erfolgId, id, {
+      await updateCalendarEvent(getDb(), erfolgId, id, TZ, {
         title: 'x',
         date: '2031-03-12',
         time: null,
         notes: null,
+        remind: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('calendar — напоминания', () => {
+  it('remind=true на будущую дату → флаг в месяце; на прошедшую → напоминание не ставится', async () => {
+    const future = await createCalendarEvent(getDb(), erfolgId, null, TZ, {
+      title: `${TEST_PREFIX}Встреча с клиникой`,
+      date: '2031-03-22',
+      time: '11:00',
+      notes: null,
+      remind: true,
+    });
+    const events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    expect(events.find((e) => e.id === future.id)?.remind).toBe(true);
+
+    // Дата в прошлом: момент «накануне в 09:00» уже прошёл → remind_at NULL.
+    const past = await createCalendarEvent(getDb(), erfolgId, null, TZ, {
+      title: `${TEST_PREFIX}Прошлое событие`,
+      date: '2020-05-10',
+      time: null,
+      notes: null,
+      remind: true,
+    });
+    const may2020 = await listMonthEvents(getDb(), erfolgId, TZ, 2020, 5);
+    expect(may2020.find((e) => e.id === past.id)?.remind).toBe(false);
+  });
+
+  it('тик воркера: шлёт push создателю, помечает reminded_at, повторно не шлёт', async () => {
+    // Адресат — реальный директор erfolg из seed.
+    const directorId = await withTenantTx(getDb(), erfolgId, async (tx) => {
+      const rows = await tx.execute<{ id: string }>(
+        sql`SELECT id FROM users WHERE role = 'director' LIMIT 1`,
+      );
+      return (rows as unknown as Array<{ id: string }>)[0]?.id ?? null;
+    });
+    expect(directorId).toBeTruthy();
+
+    const { id } = await createCalendarEvent(getDb(), erfolgId, directorId, TZ, {
+      title: `${TEST_PREFIX}Напоминание-тест`,
+      date: '2031-03-28',
+      time: '10:00',
+      notes: null,
+      remind: true,
+    });
+
+    // «Перематываем время»: remind_at в прошлое.
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`UPDATE calendar_events SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`),
+    );
+
+    const dueBefore = await listDueCalendarReminders(getDb(), erfolgId);
+    expect(dueBefore.some((e) => e.id === id)).toBe(true);
+
+    const stats = await processCalendarReminderTick();
+    expect(stats.sent).toBeGreaterThanOrEqual(1);
+
+    // Помечено — из очереди «к отправке» исчезло, флаг remind в месяце остался.
+    const dueAfter = await listDueCalendarReminders(getDb(), erfolgId);
+    expect(dueAfter.some((e) => e.id === id)).toBe(false);
+    const events = await listMonthEvents(getDb(), erfolgId, TZ, 2031, 3);
+    expect(events.find((e) => e.id === id)?.remind).toBe(true);
+
+    // Повторный тик ничего по этому событию не шлёт.
+    const stats2 = await processCalendarReminderTick();
+    const dueStill = await listDueCalendarReminders(getDb(), erfolgId);
+    expect(dueStill.some((e) => e.id === id)).toBe(false);
+    expect(stats2.failed).toBe(0);
   });
 });
