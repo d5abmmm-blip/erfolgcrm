@@ -3,4 +3,5 @@
 ALTER TABLE ticket_kp_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ticket_kp_versions FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_ticket_kp_versions ON ticket_kp_versions
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());

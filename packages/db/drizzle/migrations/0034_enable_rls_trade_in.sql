@@ -3,4 +3,5 @@
 ALTER TABLE trade_in_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trade_in_items FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_trade_in_items ON trade_in_items
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());

@@ -4,4 +4,5 @@
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_leads ON leads
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());

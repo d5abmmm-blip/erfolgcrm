@@ -18,7 +18,7 @@
  *  14. Финальный AuditLog имеет ≥ N записей по этому клиенту/тикету
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { eq, inArray, like } from 'drizzle-orm';
+import { eq, inArray, like, sql } from 'drizzle-orm';
 import {
   assets,
   auditLogs,
@@ -95,10 +95,11 @@ afterAll(async () => {
       tx.update(users).set({ hourlyCostRateKopecks: originalEngineerRate }).where(eq(users.id, engineerId)),
     );
   }
-  // Cleanup test data. Порядок:
+  // Cleanup test data. Порядок (миграция 0038: invoices/payments теперь RESTRICT,
+  // каскада при удалении тикета больше нет — финансовые документы чистим явно):
   //   1. inventory_movements (FK на items)
-  //   2. tickets cascade → work_orders → work_order_lines (это очищает FK
-  //      от lines на items — после этого item можно удалить)
+  //   2. payments → invoices → tickets (FK-цепочка финансовых документов)
+  //      → work_orders → work_order_lines каскадом от tickets
   //   3. inventory_batches (FK на items)
   //   4. inventory_items
   //   5. assets, audit, client.
@@ -107,6 +108,14 @@ afterAll(async () => {
       await tx.delete(inventoryMovements).where(inArray(inventoryMovements.itemId, createdItemIds));
     }
     if (createdClientId) {
+      await tx.execute(sql`
+        DELETE FROM payments WHERE ticket_id IN
+          (SELECT id FROM tickets WHERE client_id = ${createdClientId}::uuid)
+      `);
+      await tx.execute(sql`
+        DELETE FROM invoices WHERE ticket_id IN
+          (SELECT id FROM tickets WHERE client_id = ${createdClientId}::uuid)
+      `);
       await tx.delete(tickets).where(eq(tickets.clientId, createdClientId));
       await tx.delete(assets).where(eq(assets.ownerClientId, createdClientId));
     }
@@ -118,7 +127,15 @@ afterAll(async () => {
       await tx.delete(auditLogs).where(eq(auditLogs.entityId, createdClientId));
       await tx.delete(clients).where(eq(clients.id, createdClientId));
     }
-    // На случай отвалов в середине теста чистим по prefix.
+    // На случай отвалов в середине теста чистим по prefix (платежи и счета — первыми).
+    await tx.execute(sql`
+      DELETE FROM payments WHERE ticket_id IN
+        (SELECT id FROM tickets WHERE symptom LIKE ${TEST_PREFIX + '%'})
+    `);
+    await tx.execute(sql`
+      DELETE FROM invoices WHERE ticket_id IN
+        (SELECT id FROM tickets WHERE symptom LIKE ${TEST_PREFIX + '%'})
+    `);
     await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
     // Items только если на них нет ссылок из movements (orphans от прошлых прогонов).
     const stale = await tx

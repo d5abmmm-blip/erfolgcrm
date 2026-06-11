@@ -23,30 +23,35 @@ $$;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_users ON users
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 -- sessions
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_sessions ON sessions
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 -- audit_logs
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_audit_logs ON audit_logs
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 -- consent_records
 ALTER TABLE consent_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consent_records FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_consent_records ON consent_records
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 -- subscriptions (под особым режимом — control plane может читать всё, tenant видит свою)
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_subscriptions ON subscriptions
-  USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+  USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+  WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
 -- ↑ NULL разрешает control plane (где app.current_tenant_id не задан) видеть все подписки
 --   для биллинга. Tenant видит только свою.

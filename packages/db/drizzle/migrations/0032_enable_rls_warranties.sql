@@ -3,4 +3,5 @@
 ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE warranties FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation_warranties ON warranties
-  USING (tenant_id = current_tenant_id());
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
