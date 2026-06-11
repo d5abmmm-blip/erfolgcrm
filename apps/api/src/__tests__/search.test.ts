@@ -146,19 +146,21 @@ describe('searchEverything', () => {
   });
 
   it('cross-tenant: поиск из tenant A не возвращает данные tenant B', async () => {
-    // Создаём тикет в demo с уникальным симптомом
+    // Создаём тикет в demo с уникальным симптомом.
+    // Ищем по симптому, а не по хвосту номера: сквозная нумерация у тенантов
+    // независимая, и на свежей базе номера совпадают (оба T-…-000001) —
+    // поиск по числовому хвосту дал бы ложное «утекло».
     const uniq = `xtenant-${Date.now()}`;
     const { ticketNumber: demoTicketNumber } = await createTestTicketIn(
       demoId,
       demoClientId,
       uniq,
     );
-    // Из erfolg ищем по номеру demo-тикета — RLS должен скрыть.
-    const tail = demoTicketNumber.split('-').pop() ?? demoTicketNumber;
-    const result = await searchEverything(getDb(), erfolgId, tail);
-    expect(result.tickets.some((t) => t.ticketNumber === demoTicketNumber)).toBe(false);
+    // Из erfolg по уникальному симптому demo-тикета — RLS должен скрыть.
+    const result = await searchEverything(getDb(), erfolgId, uniq);
+    expect(result.tickets).toHaveLength(0);
     // А из demo — видит сам себя.
-    const own = await searchEverything(getDb(), demoId, tail);
+    const own = await searchEverything(getDb(), demoId, uniq);
     expect(own.tickets.some((t) => t.ticketNumber === demoTicketNumber)).toBe(true);
   });
 

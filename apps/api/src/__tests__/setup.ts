@@ -1,9 +1,18 @@
 /**
  * Setup для тестов: загружает .env, проверяет что seed-данные есть в БД.
+ *
+ * Тесты ходят в ОТДЕЛЬНУЮ базу erfolg_test (та же docker-Postgres, другая БД):
+ * рабочие данные erfolg_dev не загрязняются TEST-* записями. getDb() ленивый —
+ * переопределение DATABASE_URL здесь срабатывает до первого подключения.
+ * Бутстрап тест-базы (однократно): см. docs/dev-test-db.md.
  */
 import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { getDb, tenants } from '@erfolg/db';
+
+process.env.DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_test';
 
 // Заранее проверяем что есть seed-tenant'ы — иначе тесты бесполезны
 export async function ensureSeed() {
