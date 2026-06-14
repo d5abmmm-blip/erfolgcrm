@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Route, Switch, Link, useLocation } from 'wouter';
-import { Loader2 } from 'lucide-react';
+import { Loader2, EyeOff } from 'lucide-react';
 import { AppShell } from './components/AppShell';
 import { MobileShell } from './components/MobileShell';
 import { PWARegister } from './components/PWARegister';
@@ -35,6 +35,7 @@ import { TradeInFormPage } from './pages/TradeInFormPage';
 import { RoadmapPage } from './pages/RoadmapPage';
 import { TelegramSettingsPage } from './pages/TelegramSettingsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ModulesSettingsPage } from './pages/ModulesSettingsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceCardPage } from './pages/InvoiceCardPage';
 import { OnecSettingsPage } from './pages/OnecSettingsPage';
@@ -45,6 +46,8 @@ import { SecurityPage } from './pages/SecurityPage';
 import { AttestationsPage } from './pages/AttestationsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { KbPage } from './pages/KbPage';
+import { MailListPage } from './pages/MailListPage';
+import { MailSettingsPage } from './pages/MailSettingsPage';
 import { MobileInventoryPage } from './pages/mobile/MobileInventoryPage';
 import { MobileQueuePage } from './pages/mobile/MobileQueuePage';
 import { MobileTicketPage } from './pages/mobile/MobileTicketPage';
@@ -63,6 +66,7 @@ import { ClientProfilePage } from './pages/client/ClientProfilePage';
 import { ClientCabinetUsersPage } from './pages/ClientCabinetUsersPage';
 import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
+import { isPathDisabled } from './lib/modules';
 
 export default function App() {
   const [location] = useLocation();
@@ -126,10 +130,17 @@ function StaffApp() {
     );
   }
 
+  // Раздел отключён директором → не пускаем по прямому URL (меню его уже скрыло).
+  // Маршруты при этом не трогаем — данные/логика живы, это чисто навигационный гард.
+  const sectionDisabled = isPathDisabled(me.data.tenant.disabledModules, location);
+
   return (
     <>
       <AppShell session={me.data}>
-        <Switch>
+        {sectionDisabled ? (
+          <SectionDisabled />
+        ) : (
+          <Switch>
           <Route path="/" component={DashboardPage} />
           <Route path="/tickets" component={TicketsListPage} />
           <Route path="/tickets/kanban" component={TicketsKanbanPage} />
@@ -170,9 +181,12 @@ function StaffApp() {
           <Route path="/reports" component={ReportsPage} />
           <Route path="/templates" component={TemplatesPage} />
           <Route path="/kb" component={KbPage} />
+          <Route path="/mail" component={MailListPage} />
           <Route path="/settings" component={SettingsPage} />
+          <Route path="/settings/modules" component={ModulesSettingsPage} />
           <Route path="/settings/telegram" component={TelegramSettingsPage} />
           <Route path="/settings/onec" component={OnecSettingsPage} />
+          <Route path="/settings/email" component={MailSettingsPage} />
           <Route path="/settings/payroll" component={PayrollSettingsPage} />
           <Route path="/settings/users" component={UsersPage} />
           <Route path="/settings/attestations" component={AttestationsPage} />
@@ -181,10 +195,45 @@ function StaffApp() {
           <Route>
             <NotFound />
           </Route>
-        </Switch>
+          </Switch>
+        )}
       </AppShell>
       <PWARegister />
     </>
+  );
+}
+
+function SectionDisabled() {
+  const [, navigate] = useLocation();
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="bg-muted text-muted-foreground grid h-12 w-12 place-items-center rounded-full">
+        <EyeOff className="h-6 w-6" />
+      </div>
+      <div>
+        <h1 className="text-xl font-semibold">Раздел отключён</h1>
+        <p className="text-muted-foreground mt-1 max-w-md text-sm">
+          Этот раздел скрыт в настройках компании. Данные не удалены — раздел можно вернуть
+          в «Настройки → Разделы».
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Link
+          href="/"
+          onClick={() => navigate('/')}
+          className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium"
+        >
+          На дашборд
+        </Link>
+        <Link
+          href="/settings/modules"
+          onClick={() => navigate('/settings/modules')}
+          className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium"
+        >
+          Настройки разделов
+        </Link>
+      </div>
+    </div>
   );
 }
 

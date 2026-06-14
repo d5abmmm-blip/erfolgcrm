@@ -40,3 +40,4 @@ export * from './kp-versions';
 export * from './trade-in';
 export * from './roadmap';
 export * from './calendar';
+export * from './email';

@@ -12,11 +12,13 @@ import {
   Circle,
   Clock,
   FileText,
+  FileWarning,
   History,
   MapPin,
   Phone,
   Printer,
   RotateCcw,
+  Send,
   Sparkles,
   StickyNote,
   Tag,
@@ -39,6 +41,7 @@ import { PhotoUploader } from '../components/PhotoUploader';
 import { IntakeChecklistDialog, type ChecklistKind } from '../components/IntakeChecklistDialog';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
 import { TicketKpBlock } from '../components/TicketKpBlock';
+import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeEmailModal';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -115,6 +118,7 @@ export function TicketCardPage() {
   // показываем встроенными баннерами под шапкой.
   const [attestationWarning, setAttestationWarning] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const invalidateAll = async () => {
     await Promise.all([
@@ -160,70 +164,77 @@ export function TicketCardPage() {
     ? clientFull.data?.contacts.find((c) => c.id === t.contactId)
     : undefined;
 
+  // Сборка данных для PDF (акты/счёт). Используется и печатью, и вложениями писем.
+  const assemblePdfInputs = async () => {
+    const { ERFOLG_FALLBACK } = await import('../lib/pdf/branding');
+    const cli = clientFull.data;
+    const ass = assetFull.data;
+    const woData = wo.data;
+    const primaryContact = cli?.contacts.find((c) => c.isPrimary) ?? cli?.contacts[0];
+    const tenantData = {
+      ...ERFOLG_FALLBACK,
+      // TODO: брать из tenant settings когда появится trpc endpoint
+    };
+    const clientData = {
+      displayName: cli?.displayName ?? t.clientDisplayName,
+      inn: cli?.inn ?? null,
+      kpp: cli?.kpp ?? null,
+      ogrn: cli?.ogrn ?? null,
+      legalAddress: cli?.legalAddress ?? null,
+      phone: cli?.phone ?? null,
+      contactName: primaryContact?.fullName ?? null,
+      contactPosition: primaryContact?.position ?? null,
+    };
+    const assetData = ass
+      ? {
+          model: ass.model,
+          manufacturer: ass.manufacturer ?? null,
+          serialNumber: ass.serialNumber ?? null,
+          inventoryNumber: ass.inventoryNumber ?? null,
+          riskClass: ass.riskClass ?? null,
+          commissionedAt: ass.commissionedAt ? String(ass.commissionedAt) : null,
+        }
+      : null;
+    const ticketData = {
+      ticketNumber: t.ticketNumber,
+      receivedAt: t.receivedAt instanceof Date ? t.receivedAt.toISOString() : String(t.receivedAt),
+      repairType: t.repairType,
+      symptom: t.symptom ?? null,
+      barcode: t.barcode,
+    };
+    const workOrderData = woData
+      ? {
+          vatRate: woData.vatRate,
+          worksAmountKopecks: Number(woData.worksAmountKopecks),
+          partsAmountKopecks: Number(woData.partsAmountKopecks),
+          expensesAmountKopecks: Number(woData.expensesAmountKopecks),
+          totalAmountKopecks: Number(woData.totalAmountKopecks),
+          diagnosis: woData.diagnosis ?? null,
+          repairDescription: woData.repairDescription ?? null,
+          recommendation: woData.recommendation ?? null,
+          lines: woData.lines.map((l) => ({
+            lineType: l.lineType,
+            name: l.name,
+            unit: l.unit,
+            quantity: Number(l.quantity),
+            unitPriceKopecks: Number(l.unitPriceKopecks),
+            amountKopecks: Number(l.amountKopecks),
+          })),
+        }
+      : null;
+    return { tenantData, clientData, assetData, ticketData, workOrderData };
+  };
+
   const printDocument = async (
-    kind: 'intake_act' | 'invoice' | 'work_act' | 'asset_label',
+    kind: 'intake_act' | 'invoice' | 'work_act' | 'defect_act' | 'asset_label',
     _name: string,
   ) => {
     setPrintError(null);
     try {
-      const [{ printIntakeAct, printInvoice, printWorkAct, printAssetLabel }, { ERFOLG_FALLBACK }] =
-        await Promise.all([
-          import('../lib/pdf'),
-          import('../lib/pdf/branding'),
-        ]);
-      const cli = clientFull.data;
-      const ass = assetFull.data;
-      const woData = wo.data;
-      const primaryContact = cli?.contacts.find((c) => c.isPrimary) ?? cli?.contacts[0];
-      const tenantData = {
-        ...ERFOLG_FALLBACK,
-        // TODO: брать из tenant settings когда появится trpc endpoint
-      };
-      const clientData = {
-        displayName: cli?.displayName ?? t.clientDisplayName,
-        inn: cli?.inn ?? null,
-        kpp: cli?.kpp ?? null,
-        ogrn: cli?.ogrn ?? null,
-        legalAddress: cli?.legalAddress ?? null,
-        contactName: primaryContact?.fullName ?? null,
-        contactPosition: primaryContact?.position ?? null,
-      };
-      const assetData = ass
-        ? {
-            model: ass.model,
-            manufacturer: ass.manufacturer ?? null,
-            serialNumber: ass.serialNumber ?? null,
-            inventoryNumber: ass.inventoryNumber ?? null,
-            riskClass: ass.riskClass ?? null,
-          }
-        : null;
-      const ticketData = {
-        ticketNumber: t.ticketNumber,
-        receivedAt: t.receivedAt instanceof Date ? t.receivedAt.toISOString() : String(t.receivedAt),
-        repairType: t.repairType,
-        symptom: t.symptom ?? null,
-        barcode: t.barcode,
-      };
-      const workOrderData = woData
-        ? {
-            vatRate: woData.vatRate,
-            worksAmountKopecks: Number(woData.worksAmountKopecks),
-            partsAmountKopecks: Number(woData.partsAmountKopecks),
-            expensesAmountKopecks: Number(woData.expensesAmountKopecks),
-            totalAmountKopecks: Number(woData.totalAmountKopecks),
-            diagnosis: woData.diagnosis ?? null,
-            repairDescription: woData.repairDescription ?? null,
-            recommendation: woData.recommendation ?? null,
-            lines: woData.lines.map((l) => ({
-              lineType: l.lineType,
-              name: l.name,
-              unit: l.unit,
-              quantity: Number(l.quantity),
-              unitPriceKopecks: Number(l.unitPriceKopecks),
-              amountKopecks: Number(l.amountKopecks),
-            })),
-          }
-        : null;
+      const { printIntakeAct, printInvoice, printWorkAct, printDefectAct, printAssetLabel } =
+        await import('../lib/pdf');
+      const { tenantData, clientData, assetData, ticketData, workOrderData } =
+        await assemblePdfInputs();
 
       if (kind === 'intake_act') {
         await printIntakeAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData });
@@ -239,6 +250,12 @@ export function TicketCardPage() {
           return;
         }
         await printWorkAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData });
+      } else if (kind === 'defect_act') {
+        if (!workOrderData) {
+          setPrintError('Нельзя сформировать дефектный акт: наряд ещё не создан (нет диагностики и заключения).');
+          return;
+        }
+        await printDefectAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData });
       } else {
         if (!assetData) {
           setPrintError('Нельзя сформировать ярлык: к заявке не привязана техника.');
@@ -264,6 +281,93 @@ export function TicketCardPage() {
     }
   };
 
+  const clientEmail = clientFull.data?.email ?? '';
+  const composeAttachments: AttachmentOption[] = [
+    {
+      id: 'intake_act',
+      label: 'Акт приёма',
+      kind: 'intake_act',
+      build: async () => {
+        const { getIntakeActAsBase64 } = await import('../lib/pdf');
+        const { tenantData, clientData, assetData, ticketData } = await assemblePdfInputs();
+        return {
+          filename: `Акт приёма ${t.ticketNumber}.pdf`,
+          base64: await getIntakeActAsBase64({
+            tenant: tenantData,
+            client: clientData,
+            asset: assetData,
+            ticket: ticketData,
+          }),
+        };
+      },
+    },
+  ];
+  if (wo.data) {
+    composeAttachments.push(
+      {
+        id: 'invoice',
+        label: 'Счёт на оплату',
+        kind: 'invoice',
+        build: async () => {
+          const { getInvoiceAsBase64 } = await import('../lib/pdf');
+          const { tenantData, clientData, ticketData, workOrderData } = await assemblePdfInputs();
+          if (!workOrderData) throw new Error('Наряд не создан');
+          return {
+            filename: `Счёт ${t.ticketNumber}.pdf`,
+            base64: await getInvoiceAsBase64({
+              tenant: tenantData,
+              client: clientData,
+              ticket: ticketData,
+              workOrder: workOrderData,
+            }),
+          };
+        },
+      },
+      {
+        id: 'work_act',
+        label: 'Акт выполненных работ',
+        kind: 'work_act',
+        build: async () => {
+          const { getWorkActAsBase64 } = await import('../lib/pdf');
+          const { tenantData, clientData, assetData, ticketData, workOrderData } =
+            await assemblePdfInputs();
+          if (!workOrderData) throw new Error('Наряд не создан');
+          return {
+            filename: `Акт работ ${t.ticketNumber}.pdf`,
+            base64: await getWorkActAsBase64({
+              tenant: tenantData,
+              client: clientData,
+              asset: assetData,
+              ticket: ticketData,
+              workOrder: workOrderData,
+            }),
+          };
+        },
+      },
+      {
+        id: 'defect_act',
+        label: 'Дефектный акт',
+        kind: 'defect_act',
+        build: async () => {
+          const { getDefectActAsBase64 } = await import('../lib/pdf');
+          const { tenantData, clientData, assetData, ticketData, workOrderData } =
+            await assemblePdfInputs();
+          if (!workOrderData) throw new Error('Наряд не создан');
+          return {
+            filename: `Дефектный акт ${t.ticketNumber}.pdf`,
+            base64: await getDefectActAsBase64({
+              tenant: tenantData,
+              client: clientData,
+              asset: assetData,
+              ticket: ticketData,
+              workOrder: workOrderData,
+            }),
+          };
+        },
+      },
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
@@ -273,8 +377,19 @@ export function TicketCardPage() {
         >
           <ChevronLeft className="h-4 w-4" />К списку заявок
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isStaff && (
+            <button
+              type="button"
+              onClick={() => setComposeOpen(true)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Написать письмо
+            </button>
+          )}
           <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
+          <PrintBtn icon={FileWarning} label="Дефектный акт" onClick={() => void printDocument('defect_act', 'дефектный акт')} />
           <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
           <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
           <PrintBtn icon={Tag} label="Ярлык" onClick={() => void printDocument('asset_label', 'ярлык на технику')} />
@@ -503,6 +618,20 @@ export function TicketCardPage() {
           <SimilarCasesBlock ticketId={t.id} excludeTicketId={t.id} />
         </aside>
       </div>
+
+      <ComposeEmailModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        initialTo={clientEmail}
+        relatedTicketId={t.id}
+        relatedClientId={t.clientId}
+        templateVars={{
+          clientName: t.clientDisplayName,
+          ticketNumber: t.ticketNumber,
+          company: me.data?.tenant.displayName,
+        }}
+        attachmentOptions={composeAttachments}
+      />
     </div>
   );
 }
@@ -1029,7 +1158,7 @@ interface EventDto {
     from?: unknown;
     to?: unknown;
     comment?: string;
-    documentKind?: 'intake_act' | 'invoice' | 'work_act';
+    documentKind?: 'intake_act' | 'invoice' | 'work_act' | 'defect_act';
     role?: 'engineer' | 'dispatcher';
   };
   createdAt: Date;
@@ -1091,7 +1220,9 @@ function EventRow({ event, compact }: { event: EventDto; compact?: boolean }) {
         ? 'Акт приёма'
         : p.documentKind === 'invoice'
           ? 'Счёт'
-          : 'Акт работ';
+          : p.documentKind === 'defect_act'
+            ? 'Дефектный акт'
+            : 'Акт работ';
     title = `Документ напечатан: ${kindLabel}`;
   }
 

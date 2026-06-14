@@ -125,6 +125,21 @@ export const s3ObjectStorage: ObjectStorage = {
     return { url, expiresAt: new Date(Date.now() + ttl * 1000) };
   },
 
+  async putBuffer(key, data, mimeType): Promise<void> {
+    const cfg = _config ?? readConfig();
+    await client().send(
+      new PutObjectCommand({
+        Bucket: bucketForKey(key),
+        Key: key,
+        Body: data,
+        ContentType: mimeType,
+        ...(cfg.kmsKeyId
+          ? { ServerSideEncryption: 'aws:kms', SSEKMSKeyId: cfg.kmsKeyId }
+          : {}),
+      }),
+    );
+  },
+
   async head(key): Promise<ObjectMeta | null> {
     try {
       const out = await client().send(

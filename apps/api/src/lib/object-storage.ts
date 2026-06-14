@@ -47,6 +47,8 @@ export interface ObjectStorage {
   }): Promise<PresignedPut>;
   /** Сгенерировать pre-signed GET URL для просмотра. */
   presignGet(key: string, ttlSeconds?: number): Promise<PresignedGet>;
+  /** Серверная загрузка буфера напрямую (минуя presigned PUT). Для вложений из IMAP. */
+  putBuffer(key: string, data: Buffer, mimeType: string): Promise<void>;
   /** Проверка факта загрузки (вызывается из confirmUpload). */
   head(key: string): Promise<ObjectMeta | null>;
   /** Удалить объект. Идемпотентно (нет ключа = OK). */
@@ -162,6 +164,9 @@ export const localObjectStorage: ObjectStorage = {
   presignGet(key, ttlSeconds) {
     const { url, exp } = makeLocalUrl('get', key, ttlSeconds ?? DEFAULT_GET_TTL);
     return Promise.resolve({ url, expiresAt: exp });
+  },
+  putBuffer(key, data, mimeType) {
+    return localWrite(key, data, mimeType);
   },
   async head(key) {
     const ctx = getLocalCtx();

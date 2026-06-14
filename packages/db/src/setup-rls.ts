@@ -49,6 +49,8 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0034_enable_rls_trade_in.sql': 'trade_in_items',
   '0035_enable_rls_roadmap.sql': 'roadmap_goals',
   '0039_enable_rls_calendar_events.sql': 'calendar_events',
+  '0042_enable_rls_email.sql': 'email_messages',
+  '0044_enable_rls_email_attachments.sql': 'email_attachments',
 };
 
 async function main() {

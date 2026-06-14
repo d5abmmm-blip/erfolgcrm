@@ -29,6 +29,10 @@ import {
   enqueueCalendarReminderSchedule,
   registerCalendarReminderWorker,
 } from './workers/calendar-reminder';
+import {
+  enqueueEmailInboundSchedule,
+  registerEmailInboundWorker,
+} from './workers/email-inbound';
 
 const app = express();
 const PORT = Number(process.env.API_PORT ?? 3030);
@@ -156,6 +160,7 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerInvoiceReminderWorker();
   registerTicketStatusNotifyWorker();
   registerCalendarReminderWorker();
+  registerEmailInboundWorker();
   // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
   if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
     void enqueueInvoiceReminderSchedule();
@@ -165,6 +170,13 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   void enqueueCalendarReminderSchedule().catch((err) =>
     logger.warn({ err }, 'calendar-reminder schedule failed'),
   );
+  // Приём входящих по IMAP — внешняя зависимость (ящик reg.ru), поэтому расписание
+  // ставим только при явном EMAIL_INBOUND_ENABLED=true. На dev дёргаем вручную (email.fetchNow).
+  if (process.env.EMAIL_INBOUND_ENABLED === 'true') {
+    void enqueueEmailInboundSchedule().catch((err) =>
+      logger.warn({ err }, 'email-inbound schedule failed'),
+    );
+  }
 }
 
 const server = app.listen(PORT, HOST, () => {

@@ -29,6 +29,7 @@ import {
 import { logger } from '../lib/logger';
 import { maskEmail } from '../lib/mask';
 import { sendMail } from '../lib/mailer';
+import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
 import {
   renderTicketStatusEmail,
@@ -199,6 +200,16 @@ export async function processTicketStatusNotify(
         { to: maskEmail(to), reason: result.reason, ticketNumber: loaded.ticketNumber },
         'ticket-status-notify: send skipped',
       );
+      await tryJournalEmail(getDb(), payload.tenantId, {
+        direction: 'out',
+        status: 'skipped',
+        to,
+        subject: rendered.subject,
+        bodyText: rendered.text,
+        bodyHtml: rendered.html,
+        relatedTicketId: payload.ticketId,
+        relatedClientId: loaded.clientId,
+      });
       return { status: 'skipped', reason: result.reason ?? 'mailer-skipped' };
     }
     logger.info(
@@ -209,6 +220,18 @@ export async function processTicketStatusNotify(
       },
       'ticket-status-notify: sent',
     );
+    await tryJournalEmail(getDb(), payload.tenantId, {
+      direction: 'out',
+      status: 'sent',
+      to,
+      subject: rendered.subject,
+      bodyText: rendered.text,
+      bodyHtml: rendered.html,
+      messageId: result.messageId ?? null,
+      relatedTicketId: payload.ticketId,
+      relatedClientId: loaded.clientId,
+      sentAt: new Date(),
+    });
     return { status: 'sent' };
   } catch (err) {
     logger.warn(

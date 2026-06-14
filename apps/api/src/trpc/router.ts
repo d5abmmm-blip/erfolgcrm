@@ -31,6 +31,8 @@ import { reportsRouter } from '../modules/reports';
 import { tradeInRouter } from '../modules/trade-in';
 import { roadmapRouter } from '../modules/roadmap';
 import { calendarRouter } from '../modules/calendar';
+import { settingsRouter } from '../modules/settings';
+import { emailRouter } from '../modules/email';
 import {
   clientAuthRouter,
   clientCabinetRouter,
@@ -90,6 +92,10 @@ export const appRouter = router({
   roadmap: roadmapRouter,
   /** Календарь компании — выезды, дедлайны, ТО, окончания договоров/гарантий. */
   calendar: calendarRouter,
+  /** Настройки tenant'а: отключаемые разделы (модули) интерфейса. */
+  settings: settingsRouter,
+  /** Раздел «Почта» (Этап A): реквизиты ящика, отправка писем, журнал. */
+  email: emailRouter,
 });
 
 export type AppRouter = typeof appRouter;

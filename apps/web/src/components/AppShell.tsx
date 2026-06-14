@@ -24,15 +24,17 @@ import {
   LogOut,
   Search,
   BookOpen,
+  Mail,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import type { ModuleKey } from '../lib/modules';
 import { GlobalSearchModal } from './GlobalSearchModal';
 
 interface SessionInfo {
   user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
-  tenant: { id: string; subdomain: string; displayName: string };
+  tenant: { id: string; subdomain: string; displayName: string; disabledModules: string[] };
 }
 
 interface AppShellProps {
@@ -52,6 +54,12 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   /** Если задано — пункт виден только этим ролям. */
   roles?: Array<SessionInfo['user']['role']>;
+  /**
+   * Если задано — это отключаемый раздел (см. lib/modules.ts). Когда ключ в
+   * disabledModules tenant'а, пункт скрыт из меню, а маршрут заблокирован.
+   * Пункты без `module` — «ядро», их отключить нельзя.
+   */
+  module?: ModuleKey;
 };
 
 type NavGroup = { label: string; items: readonly NavItem[] };
@@ -66,36 +74,37 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: '/', label: 'Дашборд', icon: LayoutDashboard },
       { href: '/tickets', label: 'Заявки', icon: Ticket },
-      { href: '/leads', label: 'Лиды', icon: Target, roles: ['director', 'dispatcher'] },
-      { href: '/schedule', label: 'График', icon: Calendar, roles: ['director', 'dispatcher'] },
-      { href: '/calendar', label: 'Календарь', icon: CalendarDays, roles: ['director', 'dispatcher'] },
-      { href: '/kb', label: 'База знаний', icon: BookOpen },
+      { href: '/leads', label: 'Лиды', icon: Target, roles: ['director', 'dispatcher'], module: 'leads' },
+      { href: '/schedule', label: 'График', icon: Calendar, roles: ['director', 'dispatcher'], module: 'schedule' },
+      { href: '/calendar', label: 'Календарь', icon: CalendarDays, roles: ['director', 'dispatcher'], module: 'calendar' },
+      { href: '/kb', label: 'База знаний', icon: BookOpen, module: 'kb' },
+      { href: '/mail', label: 'Почта', icon: Mail, roles: ['director', 'dispatcher'], module: 'mail' },
     ],
   },
   {
     label: 'Картотека',
     items: [
       { href: '/clients', label: 'Клиенты', icon: Users },
-      { href: '/contracts', label: 'Договоры', icon: FileSignature },
-      { href: '/assets', label: 'Техника', icon: Wrench },
-      { href: '/inventory', label: 'Склад', icon: Package },
-      { href: '/maintenance', label: 'Журнал ТО', icon: CalendarCheck },
-      { href: '/warranties', label: 'Гарантии', icon: ShieldCheck },
-      { href: '/trade-in', label: 'Трейд-ин', icon: Recycle, roles: ['director', 'dispatcher'] },
+      { href: '/contracts', label: 'Договоры', icon: FileSignature, module: 'contracts' },
+      { href: '/assets', label: 'Техника', icon: Wrench, module: 'assets' },
+      { href: '/inventory', label: 'Склад', icon: Package, module: 'inventory' },
+      { href: '/maintenance', label: 'Журнал ТО', icon: CalendarCheck, module: 'maintenance' },
+      { href: '/warranties', label: 'Гарантии', icon: ShieldCheck, module: 'warranties' },
+      { href: '/trade-in', label: 'Трейд-ин', icon: Recycle, roles: ['director', 'dispatcher'], module: 'tradeIn' },
     ],
   },
   {
     label: 'Деньги',
     items: [
-      { href: '/invoices', label: 'Финансы', icon: Receipt },
-      { href: '/payroll', label: 'Зарплата', icon: Wallet },
-      { href: '/reports', label: 'Отчёты', icon: BarChart3, roles: ['director', 'dispatcher'] },
+      { href: '/invoices', label: 'Финансы', icon: Receipt, module: 'invoices' },
+      { href: '/payroll', label: 'Зарплата', icon: Wallet, module: 'payroll' },
+      { href: '/reports', label: 'Отчёты', icon: BarChart3, roles: ['director', 'dispatcher'], module: 'reports' },
     ],
   },
   {
     label: 'Система',
     items: [
-      { href: '/roadmap', label: 'Дорожная карта', icon: MapIcon, roles: ['director'] },
+      { href: '/roadmap', label: 'Дорожная карта', icon: MapIcon, roles: ['director'], module: 'roadmap' },
       { href: '/settings', label: 'Настройки', icon: Settings },
     ],
   },
@@ -124,6 +133,8 @@ export function AppShell({ children, session }: AppShellProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const disabledModules = session.tenant.disabledModules;
+
   const initials = session.user.fullName
     .split(/\s+/)
     .slice(0, 2)
@@ -144,7 +155,9 @@ export function AppShell({ children, session }: AppShellProps) {
         <nav className="flex-1 overflow-y-auto px-2 pb-2">
           {NAV_GROUPS.map((group) => {
             const visible = group.items.filter(
-              (item) => !item.roles || item.roles.includes(session.user.role),
+              (item) =>
+                (!item.roles || item.roles.includes(session.user.role)) &&
+                (!item.module || !disabledModules.includes(item.module)),
             );
             if (visible.length === 0) return null;
             return (

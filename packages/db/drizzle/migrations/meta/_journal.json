@@ -260,6 +260,34 @@
       "when": 1777900900000,
       "tag": "0040_calendar_event_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1777901000000,
+      "tag": "0041_tenant_disabled_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1777901100000,
+      "tag": "0042_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1777901200000,
+      "tag": "0043_email_imap_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1777901300000,
+      "tag": "0044_email_threading",
+      "breakpoints": true
     }
   ]
 }

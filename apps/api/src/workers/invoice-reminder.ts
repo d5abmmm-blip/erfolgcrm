@@ -26,6 +26,7 @@ import {
 } from '../modules/invoices';
 import { logger } from '../lib/logger';
 import { sendMail } from '../lib/mailer';
+import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
 
 const QUEUE_NAME = 'invoice-reminder';
@@ -134,25 +135,40 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
         // чтобы как только email появится — напоминание пошло.
         continue;
       }
+      const subject = reminderSubject(invoice.invoiceNumber);
+      const text = reminderText({
+        invoiceNumber: invoice.invoiceNumber,
+        totalRub: kopecksToRub(invoice.totalAmountKopecks),
+        paidRub: kopecksToRub(invoice.paidAmountKopecks),
+        dueDate: invoice.dueDate,
+        tenantName: tenant.name,
+      });
       try {
-        const result = await sendMail({
-          to: email,
-          subject: reminderSubject(invoice.invoiceNumber),
-          text: reminderText({
-            invoiceNumber: invoice.invoiceNumber,
-            totalRub: kopecksToRub(invoice.totalAmountKopecks),
-            paidRub: kopecksToRub(invoice.paidAmountKopecks),
-            dueDate: invoice.dueDate,
-            tenantName: tenant.name,
-          }),
-          dryRun: dryRun(),
-        });
+        const result = await sendMail({ to: email, subject, text, dryRun: dryRun() });
         if (result.skipped) {
           stats.remindersSkipped++;
+          await tryJournalEmail(getDb(), tenant.id, {
+            direction: 'out',
+            status: 'skipped',
+            to: email,
+            subject,
+            bodyText: text,
+            relatedClientId: invoice.clientId,
+          });
           continue;
         }
         await markReminderSent(getDb(), tenant.id, invoice.id);
         stats.remindersSent++;
+        await tryJournalEmail(getDb(), tenant.id, {
+          direction: 'out',
+          status: 'sent',
+          to: email,
+          subject,
+          bodyText: text,
+          messageId: result.messageId ?? null,
+          relatedClientId: invoice.clientId,
+          sentAt: new Date(),
+        });
       } catch (err) {
         logger.warn(
           { err, invoiceId: invoice.id, tenantId: tenant.id },

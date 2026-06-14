@@ -20,6 +20,7 @@ import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ASSET_STATUS_META } from '../lib/dictionaries';
+import { ComposeEmailModal } from '../components/ComposeEmailModal';
 import { addContactSchema, type AddContactValues } from './ClientCardPage.schemas';
 
 export function ClientCardPage() {
@@ -28,12 +29,14 @@ export function ClientCardPage() {
   const id = params?.id ?? '';
   const me = trpc.auth.me.useQuery();
   const isDirector = me.data?.user.role === 'director';
+  const isStaff = isDirector || me.data?.user.role === 'dispatcher';
 
   const utils = trpc.useUtils();
   const client = trpc.clients.get.useQuery({ id }, { enabled: !!id });
   const assets = trpc.assets.byClient.useQuery({ clientId: id }, { enabled: !!id });
 
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const archive = trpc.clients.archive.useMutation({
     onSuccess: async () => {
@@ -68,7 +71,17 @@ export function ClientCardPage() {
         >
           <ChevronLeft className="h-4 w-4" />К списку клиентов
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isStaff && (
+            <button
+              type="button"
+              onClick={() => setComposeOpen(true)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Написать письмо
+            </button>
+          )}
           <Link
             href={`/clients/${c.id}/edit`}
             className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
@@ -284,6 +297,14 @@ export function ClientCardPage() {
         loading={archive.isPending}
         onConfirm={() => archive.mutate({ id: c.id })}
         onCancel={() => setArchiveOpen(false)}
+      />
+
+      <ComposeEmailModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        initialTo={c.email ?? ''}
+        relatedClientId={c.id}
+        templateVars={{ clientName: c.displayName, company: me.data?.tenant.displayName }}
       />
     </div>
   );

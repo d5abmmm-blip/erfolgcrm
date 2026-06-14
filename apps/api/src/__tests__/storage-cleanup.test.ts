@@ -44,6 +44,9 @@ function makeMockStorage(): MockStorage {
     async presignGet() {
       return { url: 'mock://get', expiresAt: new Date(Date.now() + 60_000) };
     },
+    async putBuffer() {
+      return undefined;
+    },
     async head() {
       return null;
     },

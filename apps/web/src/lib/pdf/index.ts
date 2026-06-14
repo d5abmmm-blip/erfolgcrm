@@ -15,6 +15,7 @@ import { generateBarcodeDataUrl } from './barcode';
 import { buildAssetLabelDoc, type PrintAssetLabelInput } from './asset-label';
 import { buildContractDoc, type PrintContractInput } from './contract';
 import { buildDailySummaryDoc, type DailySummaryInput } from './daily-summary';
+import { buildDefectActDoc, type PrintDefectActInput } from './defect-act';
 import { buildIntakeActDoc } from './intake-act';
 import { buildInvoiceDoc, type ExtendedPrintInvoiceInput } from './invoice';
 import type {
@@ -63,6 +64,39 @@ async function openDoc(doc: TDocumentDefinitions): Promise<void> {
   pdfMake.createPdf(doc).open();
 }
 
+/**
+ * Build a pdfmake document and return it as base64 (без data:-префикса) —
+ * для вложения в письмо (раздел «Почта»). Та же сборка doc, что и у printXxx,
+ * но вместо открытия вкладки отдаём байты.
+ */
+async function getDocAsBase64(doc: TDocumentDefinitions): Promise<string> {
+  const pdfMake = await getPdfMake();
+  return new Promise<string>((resolve) => {
+    pdfMake.createPdf(doc).getBase64((data: string) => resolve(data));
+  });
+}
+
+export async function getIntakeActAsBase64(input: PrintIntakeInput): Promise<string> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  return getDocAsBase64(buildIntakeActDoc({ ...input, barcodeDataUrl }));
+}
+
+export async function getInvoiceAsBase64(input: ExtendedPrintInvoiceInput): Promise<string> {
+  return getDocAsBase64(buildInvoiceDoc(input));
+}
+
+export async function getWorkActAsBase64(input: PrintWorkActInput): Promise<string> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  return getDocAsBase64(buildWorkActDoc({ ...input, barcodeDataUrl }));
+}
+
+export async function getDefectActAsBase64(
+  input: Omit<PrintDefectActInput, 'barcodeDataUrl'>,
+): Promise<string> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  return getDocAsBase64(buildDefectActDoc({ ...input, barcodeDataUrl }));
+}
+
 export async function printIntakeAct(input: PrintIntakeInput): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildIntakeActDoc({ ...input, barcodeDataUrl });
@@ -78,6 +112,14 @@ export async function printInvoice(input: ExtendedPrintInvoiceInput): Promise<vo
 export async function printWorkAct(input: PrintWorkActInput): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildWorkActDoc({ ...input, barcodeDataUrl });
+  await openDoc(doc);
+}
+
+export async function printDefectAct(
+  input: Omit<PrintDefectActInput, 'barcodeDataUrl'>,
+): Promise<void> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  const doc = buildDefectActDoc({ ...input, barcodeDataUrl });
   await openDoc(doc);
 }
 
@@ -120,5 +162,7 @@ export type {
 export type { PrintAssetLabelInput } from './asset-label';
 export { buildContractDoc } from './contract';
 export type { ContractData, ContractTerms, PrintContractInput } from './contract';
+export { buildDefectActDoc } from './defect-act';
+export type { PrintDefectActInput } from './defect-act';
 export type { ExtendedPrintInvoiceInput } from './invoice';
 export type { DailySummaryInput } from './daily-summary';
