@@ -10,6 +10,7 @@ import {
   Database,
   FileStack,
   History,
+  LayoutGrid,
   Shield,
   Users,
   Wallet,
@@ -24,6 +25,24 @@ export function SettingsPage() {
       </p>
 
       <div className="mt-6 space-y-2">
+        <Link
+          href="/settings/modules"
+          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 text-primary grid h-10 w-10 place-items-center rounded-md">
+              <LayoutGrid className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-medium">Разделы интерфейса</div>
+              <div className="text-muted-foreground text-xs">
+                Включить или скрыть необязательные разделы меню для всей компании
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="text-muted-foreground h-5 w-5" />
+        </Link>
+
         <Link
           href="/settings/users"
           className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"

@@ -4,10 +4,11 @@ import { ListChecks, Package, ScanLine, User, LogOut, CloudOff, Cloud } from 'lu
 import { trpc } from '../lib/trpc';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { cn } from '../lib/utils';
+import type { ModuleKey } from '../lib/modules';
 
 interface SessionInfo {
   user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
-  tenant: { id: string; subdomain: string; displayName: string };
+  tenant: { id: string; subdomain: string; displayName: string; disabledModules: string[] };
 }
 
 interface Props {
@@ -15,7 +16,14 @@ interface Props {
   session: SessionInfo;
 }
 
-const NAV: Array<{ href: string; label: string; icon: typeof ListChecks; match: (p: string) => boolean }> = [
+const NAV: Array<{
+  href: string;
+  label: string;
+  icon: typeof ListChecks;
+  match: (p: string) => boolean;
+  /** Отключаемый раздел (см. lib/modules.ts) — скрываем вкладку, если выключен. */
+  module?: ModuleKey;
+}> = [
   {
     href: '/m/queue',
     label: 'Очередь',
@@ -23,7 +31,7 @@ const NAV: Array<{ href: string; label: string; icon: typeof ListChecks; match: 
     match: (p) => p === '/m/queue' || p.startsWith('/m/tickets'),
   },
   { href: '/m/scan', label: 'Сканер', icon: ScanLine, match: (p) => p.startsWith('/m/scan') },
-  { href: '/m/inventory', label: 'Склад', icon: Package, match: (p) => p.startsWith('/m/inventory') },
+  { href: '/m/inventory', label: 'Склад', icon: Package, match: (p) => p.startsWith('/m/inventory'), module: 'inventory' },
   { href: '/m/profile', label: 'Профиль', icon: User, match: (p) => p.startsWith('/m/profile') },
 ];
 
@@ -47,6 +55,10 @@ export function MobileShell({ children, session }: Props) {
       void outbox.sync();
     }
   }, []);
+
+  const visibleNav = NAV.filter(
+    (n) => !n.module || !session.tenant.disabledModules.includes(n.module),
+  );
 
   const headerTitle =
     NAV.find((n) => n.match(location))?.label ??
@@ -83,10 +95,14 @@ export function MobileShell({ children, session }: Props) {
       <main className="flex-1 overflow-y-auto pb-20">{children}</main>
 
       <nav
-        className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 border-t"
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          // +1 колонка под кнопку «Выйти». Сетка ужимается при скрытых вкладках.
+          gridTemplateColumns: `repeat(${visibleNav.length + 1}, minmax(0, 1fr))`,
+        }}
       >
-        {NAV.map((n) => {
+        {visibleNav.map((n) => {
           const isActive = n.match(location);
           const Icon = n.icon;
           return (

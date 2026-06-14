@@ -18,7 +18,7 @@
  */
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull } from 'drizzle-orm';
-import { users, withTenantTx } from '@erfolg/db';
+import { users, tenants, withTenantTx } from '@erfolg/db';
 import { verify } from 'argon2';
 import { z } from 'zod';
 import { router, publicProcedure, tenantProcedure, authedProcedure } from '../../trpc/trpc';
@@ -186,6 +186,14 @@ export const authRouter = router({
         .where(eq(users.id, userId))
         .limit(1),
     );
+    // disabled_modules читаем напрямую (tenants — control-plane без RLS), а не из
+    // кэша resolveTenant — так смена разделов директором подхватывается сразу после
+    // инвалидации auth.me на клиенте, не дожидаясь 60-сек TTL кэша tenant'а.
+    const [tenantRow] = await ctx.db
+      .select({ disabledModules: tenants.disabledModules })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+      .limit(1);
     return {
       user: {
         id: ctx.session.userId,
@@ -198,6 +206,7 @@ export const authRouter = router({
         id: ctx.tenant.id,
         subdomain: ctx.tenant.subdomain,
         displayName: ctx.tenant.displayName,
+        disabledModules: tenantRow?.disabledModules ?? [],
       },
     };
   }),

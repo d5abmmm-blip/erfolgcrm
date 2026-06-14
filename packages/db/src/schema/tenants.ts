@@ -3,6 +3,7 @@
  * Эти таблицы — БЕЗ tenant_id (они и есть про tenant'ов).
  */
 import { boolean, integer, jsonb, pgEnum, pgTable, text, timestamp, varchar, unique } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { fkUuid, pk, slug, timestamps } from './_shared';
 
 export const tenantStatusEnum = pgEnum('tenant_status', ['trial', 'active', 'suspended', 'cancelled']);
@@ -58,6 +59,19 @@ export const tenants = pgTable(
 
     /** Идентификатор ключа шифрования в Yandex KMS (для pgcrypto колонок). В dev — пусто. */
     kmsKeyId: varchar('kms_key_id', { length: 200 }),
+
+    /**
+     * Разделы (модули) интерфейса, отключённые директором — массив ключей модулей
+     * (см. apps/web/src/lib/modules.ts). Пусто = все разделы включены.
+     *
+     * Отключение влияет ТОЛЬКО на навигацию и маршруты UI: данные и API остаются
+     * живыми, поэтому скрыть можно лишь те разделы, без которых не ломается логика
+     * (ядро — Дашборд/Заявки/Клиенты/Настройки — в этот список не попадает).
+     */
+    disabledModules: jsonb('disabled_modules')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
 
     ...timestamps,
   },
