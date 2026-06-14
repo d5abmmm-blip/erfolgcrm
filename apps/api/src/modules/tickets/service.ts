@@ -429,7 +429,7 @@ export async function addTicketNoteCmd(
 export async function recordPrintEventCmd(
   ctx: CmdCtx,
   ticketId: string,
-  documentKind: 'intake_act' | 'invoice' | 'work_act',
+  documentKind: 'intake_act' | 'invoice' | 'work_act' | 'defect_act',
 ): Promise<{ id: string }> {
   const result = await repoRecordPrint(
     ctx.db,

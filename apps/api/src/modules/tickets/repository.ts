@@ -620,7 +620,7 @@ export async function recordPrintEvent(
   tenantId: string,
   userId: string | null,
   ticketId: string,
-  documentKind: 'intake_act' | 'invoice' | 'work_act',
+  documentKind: 'intake_act' | 'invoice' | 'work_act' | 'defect_act',
 ): Promise<{ id: string }> {
   return withTenantTx(db, tenantId, async (tx) => {
     const exists = await tx

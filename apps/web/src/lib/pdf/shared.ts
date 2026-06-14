@@ -32,6 +32,8 @@ export interface ClientData {
   kpp: string | null;
   ogrn: string | null;
   legalAddress: string | null;
+  /** Рабочий телефон организации — для дефектного акта («Владелец оборудования»). */
+  phone?: string | null;
   /** для актов — кого вписать как представителя клиента */
   contactName?: string | null;
   contactPosition?: string | null;
@@ -43,6 +45,8 @@ export interface AssetData {
   serialNumber: string | null;
   inventoryNumber: string | null;
   riskClass: '1' | '2a' | '2b' | '3' | null;
+  /** ISO date ввода в эксплуатацию — для строки «Год выпуска/ввода» дефектного акта. */
+  commissionedAt?: string | null;
 }
 
 export type RepairType = 'paid' | 'warranty' | 'service_contract';
