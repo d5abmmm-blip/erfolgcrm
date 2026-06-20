@@ -35,6 +35,15 @@ const PRESET_LABEL: Record<Preset, string> = {
 
 const ACCOUNT_ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
 
+/** BigInt без падения: пустое/кривое значение (рассинхрон версий) → 0n, а не краш страницы. */
+function safeBig(v: string | number | null | undefined): bigint {
+  try {
+    return BigInt(v ?? 0);
+  } catch {
+    return 0n;
+  }
+}
+
 export function FinanceOverviewPage() {
   const [preset, setPreset] = useState<Preset>('today');
   const [txOpen, setTxOpen] = useState(false);
@@ -88,8 +97,8 @@ export function FinanceOverviewPage() {
               accent
             />
             {data.balances.accounts.map((a) => {
-              const Icon = ACCOUNT_ICON[a.kind];
-              const neg = BigInt(a.balanceKopecks) < 0n;
+              const Icon = ACCOUNT_ICON[a.kind] ?? Wallet;
+              const neg = safeBig(a.balanceKopecks) < 0n;
               return (
                 <BalanceCard
                   key={a.id}
@@ -123,7 +132,7 @@ export function FinanceOverviewPage() {
               title={`Разница · ${PRESET_LABEL[preset].toLowerCase()}`}
               value={formatRubWhole(data.summary.profitKopecks)}
               icon={Scale}
-              tone={BigInt(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}
+              tone={safeBig(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}
             />
           </div>
 
@@ -230,9 +239,11 @@ function CollectedHero({
   byKind,
 }: {
   label: string;
-  totalKopecks: string;
-  byKind: { cashKopecks: string; cardKopecks: string; bankKopecks: string };
+  totalKopecks?: string;
+  // byKind может отсутствовать (старый бэкенд / рассинхрон версий) — не должно ронять страницу.
+  byKind?: { cashKopecks?: string; cardKopecks?: string; bankKopecks?: string } | null;
 }) {
+  const k = byKind ?? {};
   return (
     <section className="bg-card rounded-xl border p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
@@ -242,13 +253,13 @@ function CollectedHero({
             Собрано · {label}
           </div>
           <div className="text-success mt-1 text-3xl font-semibold tabular-nums tracking-tight md:text-4xl">
-            {formatRubWhole(totalKopecks)}
+            {formatRubWhole(totalKopecks ?? '0')}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <MethodChip icon={Banknote} label="Наличными" value={byKind.cashKopecks} />
-          <MethodChip icon={CreditCard} label="Картой" value={byKind.cardKopecks} />
-          <MethodChip icon={Landmark} label="Безнал" value={byKind.bankKopecks} />
+          <MethodChip icon={Banknote} label="Наличными" value={k.cashKopecks ?? '0'} />
+          <MethodChip icon={CreditCard} label="Картой" value={k.cardKopecks ?? '0'} />
+          <MethodChip icon={Landmark} label="Безнал" value={k.bankKopecks ?? '0'} />
         </div>
       </div>
     </section>
