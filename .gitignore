@@ -54,6 +54,11 @@ samples/**/*
 !samples/**/.gitkeep
 !samples/README.md
 
+# Дамп данных из старой БД WinServisePro — реальные ПДн клиентов (152-ФЗ), НЕ коммитим.
+# Это разовый артефакт переноса; код-импортёр коммитим, сами данные — нет.
+scripts/import-winservice/winservice-export.json
+scripts/import-winservice/*-export.json
+
 # Terraform local state
 infra/terraform/.terraform/
 infra/terraform/*.tfstate

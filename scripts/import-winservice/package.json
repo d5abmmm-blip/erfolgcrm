@@ -1,0 +1,14 @@
+{
+  "name": "import-winservice",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Перенос данных из WinServisePro (Firebird) в ErfolgCRM (PostgreSQL)",
+  "type": "module",
+  "scripts": {
+    "export": "node export-fdb.mjs",
+    "spike": "node spike.cjs"
+  },
+  "dependencies": {
+    "node-firebird": "^1.1.9"
+  }
+}
