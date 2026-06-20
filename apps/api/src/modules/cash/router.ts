@@ -186,6 +186,6 @@ export const cashRouter = router({
   transactions: transactionsRouter,
 
   overview: staffProcedure
-    .input(z.object({ preset: z.enum(['week', 'month', 'quarter', 'year']).optional() }).optional())
+    .input(z.object({ preset: z.enum(['today', 'week', 'month', 'quarter', 'year']).optional() }).optional())
     .query(({ ctx, input }) => svc.overviewQuery(ctx.db, ctx.tenant, input?.preset ?? 'month')),
 });

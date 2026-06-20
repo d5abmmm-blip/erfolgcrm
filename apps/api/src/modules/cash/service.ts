@@ -11,7 +11,7 @@ import * as repo from './repository';
 
 /* ─────────────────────────── Период ──────────────────────────── */
 
-export type PeriodPreset = 'week' | 'month' | 'quarter' | 'year';
+export type PeriodPreset = 'today' | 'week' | 'month' | 'quarter' | 'year';
 
 /** Пресет периода → [start, end) в UTC. Границы по UTC (не зависят от tz сервера). */
 export function resolvePeriod(preset: PeriodPreset): repo.PeriodInput {
@@ -21,6 +21,8 @@ export function resolvePeriod(preset: PeriodPreset): repo.PeriodInput {
   end.setUTCDate(end.getUTCDate() + 1); // конец = завтра 00:00 UTC (сегодня включительно)
 
   switch (preset) {
+    case 'today':
+      return { start: startOfToday, end };
     case 'week': {
       const start = new Date(startOfToday);
       start.setUTCDate(start.getUTCDate() - 6);

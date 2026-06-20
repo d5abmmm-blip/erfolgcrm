@@ -597,6 +597,8 @@ export interface PeriodSummary {
   /** Расходы по статьям, по убыванию суммы. */
   expenseByCategory: Array<{ categoryId: string | null; categoryName: string; amountKopecks: string }>;
   incomeByCategory: Array<{ categoryId: string | null; categoryName: string; amountKopecks: string }>;
+  /** Приход за период по типу счёта (способу): наличные / карта / безнал. Для «собрано сегодня». */
+  incomeByKind: { cashKopecks: string; cardKopecks: string; bankKopecks: string };
 }
 
 function dateOnly(d: Date): string {
@@ -648,10 +650,30 @@ export async function getPeriodSummary(
       amountKopecks: string;
     }>;
 
+    // Приход по типу счёта (способу): наличные / карта / банк.
+    const byKindRows = (await tx.execute(sql`
+      SELECT a.kind AS "kind",
+             COALESCE(SUM(ct.amount_kopecks)::text, '0') AS "amountKopecks"
+      FROM cash_transactions ct
+      JOIN cash_accounts a ON a.id = ct.account_id
+      WHERE ct.deleted_at IS NULL
+        AND ct.kind = 'income'
+        AND ct.occurred_on >= ${from}::date
+        AND ct.occurred_on <  ${toExcl}::date
+      GROUP BY a.kind
+    `)) as unknown as Array<{ kind: CashAccountKind; amountKopecks: string }>;
+    const byKind: Record<CashAccountKind, string> = { cash: '0', bank: '0', card: '0' };
+    for (const r of byKindRows) byKind[r.kind] = r.amountKopecks;
+
     return {
       incomeKopecks: income.toString(),
       expenseKopecks: expense.toString(),
       profitKopecks: (income - expense).toString(),
+      incomeByKind: {
+        cashKopecks: byKind.cash,
+        cardKopecks: byKind.card,
+        bankKopecks: byKind.bank,
+      },
       expenseByCategory: byCat
         .filter((r) => r.kind === 'expense')
         .map((r) => ({ categoryId: r.categoryId, categoryName: r.categoryName, amountKopecks: r.amountKopecks })),

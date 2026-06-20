@@ -92,6 +92,32 @@ describe('cash aggregates (этап A)', () => {
     expect(row?.amountKopecks).toBe('77000');
   });
 
+  it('incomeByKind разносит приход по типу счёта (нал/карта/безнал)', async () => {
+    const cashAcc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}нал`, kind: 'cash' });
+    const cardAcc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}карта`, kind: 'card' });
+    const bankAcc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}банк2`, kind: 'bank' });
+    const inc = await createCategory(getDb(), erfolgId, { name: `${TEST_PREFIX}д2`, direction: 'income' });
+
+    const before = await getPeriodSummary(getDb(), erfolgId, resolvePeriod('today'));
+    await createTransaction(getDb(), erfolgId, {
+      kind: 'income', accountId: cashAcc.id, categoryId: inc.id,
+      amountKopecks: 30_000n, occurredOn: today, comment: `${TEST_PREFIX}c`, userId: null,
+    });
+    await createTransaction(getDb(), erfolgId, {
+      kind: 'income', accountId: cardAcc.id, categoryId: inc.id,
+      amountKopecks: 12_000n, occurredOn: today, comment: `${TEST_PREFIX}k`, userId: null,
+    });
+    await createTransaction(getDb(), erfolgId, {
+      kind: 'income', accountId: bankAcc.id, categoryId: inc.id,
+      amountKopecks: 50_000n, occurredOn: today, comment: `${TEST_PREFIX}b`, userId: null,
+    });
+    const after = await getPeriodSummary(getDb(), erfolgId, resolvePeriod('today'));
+
+    expect(BigInt(after.incomeByKind.cashKopecks) - BigInt(before.incomeByKind.cashKopecks)).toBe(30_000n);
+    expect(BigInt(after.incomeByKind.cardKopecks) - BigInt(before.incomeByKind.cardKopecks)).toBe(12_000n);
+    expect(BigInt(after.incomeByKind.bankKopecks) - BigInt(before.incomeByKind.bankKopecks)).toBe(50_000n);
+  });
+
   it('listTransactions: фильтр по счёту изолирует операции, total верен', async () => {
     const acc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}изоляция`, kind: 'cash' });
     const inc = await createCategory(getDb(), erfolgId, { name: `${TEST_PREFIX}д`, direction: 'income' });

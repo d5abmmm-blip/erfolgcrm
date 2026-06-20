@@ -24,8 +24,9 @@ import { FinanceTabs } from '../components/finance/FinanceTabs';
 import { CashTransactionModal } from '../components/finance/CashTransactionModal';
 import { CASH_ACCOUNT_KIND_LABEL, CASH_TX_KIND_META } from '../lib/dictionaries';
 
-type Preset = 'week' | 'month' | 'quarter' | 'year';
+type Preset = 'today' | 'week' | 'month' | 'quarter' | 'year';
 const PRESET_LABEL: Record<Preset, string> = {
+  today: 'Сегодня',
   week: 'Неделя',
   month: 'Месяц',
   quarter: 'Квартал',
@@ -35,7 +36,7 @@ const PRESET_LABEL: Record<Preset, string> = {
 const ACCOUNT_ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
 
 export function FinanceOverviewPage() {
-  const [preset, setPreset] = useState<Preset>('month');
+  const [preset, setPreset] = useState<Preset>('today');
   const [txOpen, setTxOpen] = useState(false);
   const q = trpc.cash.overview.useQuery({ preset });
   const data = q.data;
@@ -70,6 +71,13 @@ export function FinanceOverviewPage() {
 
       {data && (
         <>
+          {/* Собрано за период — главный вопрос менеджера «сколько сегодня?» */}
+          <CollectedHero
+            label={PRESET_LABEL[preset].toLowerCase()}
+            totalKopecks={data.summary.incomeKopecks}
+            byKind={data.summary.incomeByKind}
+          />
+
           {/* Остатки по счетам */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <BalanceCard
@@ -103,14 +111,8 @@ export function FinanceOverviewPage() {
             )}
           </div>
 
-          {/* KPI за период */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <KpiCard
-              title={`Приход · ${PRESET_LABEL[preset].toLowerCase()}`}
-              value={formatRubWhole(data.summary.incomeKopecks)}
-              icon={TrendingUp}
-              tone="success"
-            />
+          {/* KPI за период (приход вынесен в герой «Собрано» выше) */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <KpiCard
               title={`Расход · ${PRESET_LABEL[preset].toLowerCase()}`}
               value={formatRubWhole(data.summary.expenseKopecks)}
@@ -215,6 +217,51 @@ function KpiCard({
       </div>
       <div className={cn('text-2xl font-semibold tabular-nums tracking-tight', tone === 'success' ? 'text-success' : 'text-destructive')}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── «Собрано» за период ─────────────────────── */
+
+function CollectedHero({
+  label,
+  totalKopecks,
+  byKind,
+}: {
+  label: string;
+  totalKopecks: string;
+  byKind: { cashKopecks: string; cardKopecks: string; bankKopecks: string };
+}) {
+  return (
+    <section className="bg-card rounded-xl border p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div>
+          <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
+            <TrendingUp className="text-success h-4 w-4" />
+            Собрано · {label}
+          </div>
+          <div className="text-success mt-1 text-3xl font-semibold tabular-nums tracking-tight md:text-4xl">
+            {formatRubWhole(totalKopecks)}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <MethodChip icon={Banknote} label="Наличными" value={byKind.cashKopecks} />
+          <MethodChip icon={CreditCard} label="Картой" value={byKind.cardKopecks} />
+          <MethodChip icon={Landmark} label="Безнал" value={byKind.bankKopecks} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MethodChip({ icon: Icon, label, value }: { icon: typeof Wallet; label: string; value: string }) {
+  return (
+    <div className="bg-secondary/60 inline-flex items-center gap-2.5 rounded-lg px-3 py-2">
+      <Icon className="text-muted-foreground h-4 w-4 shrink-0" />
+      <div className="leading-tight">
+        <div className="text-muted-foreground text-[11px]">{label}</div>
+        <div className="text-sm font-semibold tabular-nums">{formatRubWhole(value)}</div>
       </div>
     </div>
   );
@@ -366,7 +413,7 @@ function RecentTransactionsCard({
 }
 
 function PeriodTabs({ value, onChange }: { value: Preset; onChange: (p: Preset) => void }) {
-  const presets: Preset[] = ['week', 'month', 'quarter', 'year'];
+  const presets: Preset[] = ['today', 'week', 'month', 'quarter', 'year'];
   return (
     <div className="bg-secondary inline-flex rounded-md p-0.5 text-xs">
       {presets.map((p) => (
