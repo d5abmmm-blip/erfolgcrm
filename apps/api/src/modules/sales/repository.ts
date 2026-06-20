@@ -30,6 +30,7 @@ export interface SaleItemInput {
   name: string;
   quantity: number;
   unitPriceKopecks: bigint;
+  unitCostKopecks: bigint;
 }
 
 export interface SaleItemDto {
@@ -37,7 +38,9 @@ export interface SaleItemDto {
   name: string;
   quantity: number;
   unitPriceKopecks: string;
+  unitCostKopecks: string;
   lineTotalKopecks: string;
+  lineCostKopecks: string;
 }
 
 export interface SaleListDto {
@@ -68,13 +71,20 @@ const PAGE_SIZE = 25;
 
 /* ───────────────────────────── helpers ───────────────────────────── */
 
+/** Пересчёт материализованных сумм продажи из позиций: выручка и закупка (для маржи). */
 async function recomputeTotal(tx: Tx, saleId: string): Promise<bigint> {
   const rows = (await tx.execute(sql`
-    SELECT COALESCE(SUM(quantity * unit_price_kopecks), 0)::bigint::text AS total
+    SELECT
+      COALESCE(SUM(quantity * unit_price_kopecks), 0)::bigint::text AS total,
+      COALESCE(SUM(quantity * unit_cost_kopecks),  0)::bigint::text AS cost
     FROM sale_items WHERE sale_id = ${saleId}::uuid
-  `)) as unknown as Array<{ total: string }>;
+  `)) as unknown as Array<{ total: string; cost: string }>;
   const total = BigInt(rows[0]?.total ?? '0');
-  await tx.update(sales).set({ totalKopecks: total }).where(eq(sales.id, saleId));
+  const cost = BigInt(rows[0]?.cost ?? '0');
+  await tx
+    .update(sales)
+    .set({ totalKopecks: total, purchaseCostKopecks: cost })
+    .where(eq(sales.id, saleId));
   return total;
 }
 
@@ -89,7 +99,9 @@ async function loadItems(tx: Tx, saleId: string): Promise<SaleItemDto[]> {
     name: r.name,
     quantity: r.quantity,
     unitPriceKopecks: r.unitPriceKopecks.toString(),
+    unitCostKopecks: r.unitCostKopecks.toString(),
     lineTotalKopecks: (BigInt(r.quantity) * r.unitPriceKopecks).toString(),
+    lineCostKopecks: (BigInt(r.quantity) * r.unitCostKopecks).toString(),
   }));
 }
 
@@ -107,6 +119,7 @@ async function insertItems(
       name: it.name,
       quantity: it.quantity,
       unitPriceKopecks: it.unitPriceKopecks,
+      unitCostKopecks: it.unitCostKopecks,
       sortOrder: idx,
     })),
   );
@@ -245,7 +258,6 @@ export async function getSale(
 export interface CreateSaleInput {
   clientId: string;
   supplier: string | null;
-  purchaseCostKopecks: bigint;
   comment: string | null;
   items: SaleItemInput[];
   createdBy: string | null;
@@ -269,7 +281,6 @@ export async function createSale(
         saleNo,
         clientId: input.clientId,
         supplier: input.supplier,
-        purchaseCostKopecks: input.purchaseCostKopecks,
         comment: input.comment,
         createdBy: input.createdBy,
       })
@@ -283,7 +294,6 @@ export async function createSale(
 
 export interface UpdateSaleInput {
   supplier?: string | null;
-  purchaseCostKopecks?: bigint;
   comment?: string | null;
   items?: SaleItemInput[];
 }
@@ -307,7 +317,6 @@ export async function updateSale(
 
     const set: Record<string, unknown> = {};
     if (patch.supplier !== undefined) set.supplier = patch.supplier;
-    if (patch.purchaseCostKopecks !== undefined) set.purchaseCostKopecks = patch.purchaseCostKopecks;
     if (patch.comment !== undefined) set.comment = patch.comment;
     if (Object.keys(set).length > 0) {
       await tx.update(sales).set(set).where(eq(sales.id, id));

@@ -16,6 +16,8 @@ const itemSchema = z.object({
   name: z.string().trim().min(1).max(255),
   quantity: z.number().int().min(1).max(1_000_000),
   priceRub: z.number().min(0).max(MAX_AMOUNT_RUB),
+  /** Закупочная цена за единицу (за сколько купили). Опционально. */
+  costRub: z.number().min(0).max(MAX_AMOUNT_RUB).optional(),
 });
 
 const mapItems = (items: Array<z.infer<typeof itemSchema>>) =>
@@ -23,6 +25,7 @@ const mapItems = (items: Array<z.infer<typeof itemSchema>>) =>
     name: it.name,
     quantity: it.quantity,
     unitPriceKopecks: rubToKopecks(it.priceRub),
+    unitCostKopecks: rubToKopecks(it.costRub ?? 0),
   }));
 
 export const salesRouter = router({
@@ -47,7 +50,6 @@ export const salesRouter = router({
       z.object({
         clientId: z.string().uuid(),
         supplier: z.string().trim().max(200).nullable().optional(),
-        purchaseCostRub: z.number().min(0).max(MAX_AMOUNT_RUB).optional(),
         comment: z.string().trim().max(2000).nullable().optional(),
         items: z.array(itemSchema).min(1, 'Добавьте хотя бы одну позицию'),
       }),
@@ -56,7 +58,6 @@ export const salesRouter = router({
       svc.createSaleCmd(buildCmdCtx(ctx), {
         clientId: input.clientId,
         supplier: input.supplier ?? null,
-        purchaseCostKopecks: rubToKopecks(input.purchaseCostRub ?? 0),
         comment: input.comment ?? null,
         items: mapItems(input.items),
       }),
@@ -67,7 +68,6 @@ export const salesRouter = router({
       z.object({
         id: z.string().uuid(),
         supplier: z.string().trim().max(200).nullable().optional(),
-        purchaseCostRub: z.number().min(0).max(MAX_AMOUNT_RUB).optional(),
         comment: z.string().trim().max(2000).nullable().optional(),
         items: z.array(itemSchema).min(1).optional(),
       }),
@@ -75,8 +75,6 @@ export const salesRouter = router({
     .mutation(({ ctx, input }) =>
       svc.updateSaleCmd(buildCmdCtx(ctx), input.id, {
         supplier: input.supplier,
-        purchaseCostKopecks:
-          input.purchaseCostRub !== undefined ? rubToKopecks(input.purchaseCostRub) : undefined,
         comment: input.comment,
         items: input.items ? mapItems(input.items) : undefined,
       }),

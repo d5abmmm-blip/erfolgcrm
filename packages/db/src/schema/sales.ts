@@ -79,6 +79,8 @@ export const saleItems = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     quantity: integer('quantity').notNull().default(1),
     unitPriceKopecks: bigint('unit_price_kopecks', { mode: 'bigint' }).notNull().default(0n),
+    /** Закупочная цена за единицу (за сколько купили). 0 — не указана. Для маржи. */
+    unitCostKopecks: bigint('unit_cost_kopecks', { mode: 'bigint' }).notNull().default(0n),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -86,5 +88,6 @@ export const saleItems = pgTable(
     index('sale_items_tenant_sale_idx').on(t.tenantId, t.saleId),
     check('sale_items_qty_pos', sql`quantity > 0`),
     check('sale_items_price_non_negative', sql`unit_price_kopecks >= 0`),
+    check('sale_items_cost_non_negative', sql`unit_cost_kopecks >= 0`),
   ],
 );

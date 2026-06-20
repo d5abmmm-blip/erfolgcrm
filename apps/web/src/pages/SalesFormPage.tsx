@@ -17,13 +17,14 @@ interface ItemRow {
   name: string;
   qtyStr: string;
   priceRubStr: string;
+  costRubStr: string;
 }
 
 const inputCls =
   'border-input bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const emptyRow = (): ItemRow => ({ name: '', qtyStr: '1', priceRubStr: '' });
+const emptyRow = (): ItemRow => ({ name: '', qtyStr: '1', priceRubStr: '', costRubStr: '' });
 
 export function SalesFormPage() {
   const [, navigate] = useLocation();
@@ -39,7 +40,6 @@ export function SalesFormPage() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>('');
   const [supplier, setSupplier] = useState('');
-  const [purchaseRub, setPurchaseRub] = useState('');
   const [comment, setComment] = useState('');
   const [items, setItems] = useState<ItemRow[]>([emptyRow()]);
   const [hydrated, setHydrated] = useState(false);
@@ -58,7 +58,6 @@ export function SalesFormPage() {
     setClientId(sale.clientId);
     setClientName(sale.clientName ?? '');
     setSupplier(sale.supplier ?? '');
-    setPurchaseRub(sale.purchaseCostKopecks !== '0' ? (Number(sale.purchaseCostKopecks) / 100).toString() : '');
     setComment(sale.comment ?? '');
     setItems(
       sale.items.length
@@ -66,6 +65,9 @@ export function SalesFormPage() {
             name: i.name,
             qtyStr: String(i.quantity),
             priceRubStr: (Number(i.unitPriceKopecks) / 100).toString(),
+            costRubStr: i.unitCostKopecks && i.unitCostKopecks !== '0'
+              ? (Number(i.unitCostKopecks) / 100).toString()
+              : '',
           }))
         : [emptyRow()],
     );
@@ -82,6 +84,15 @@ export function SalesFormPage() {
         const qty = Math.floor(Number(r.qtyStr)) || 0;
         const price = Math.round((Number(r.priceRubStr.replace(',', '.')) || 0) * 100);
         return sum + qty * price;
+      }, 0),
+    [items],
+  );
+  const costKopecks = useMemo(
+    () =>
+      items.reduce((sum, r) => {
+        const qty = Math.floor(Number(r.qtyStr)) || 0;
+        const cost = Math.round((Number(r.costRubStr.replace(',', '.')) || 0) * 100);
+        return sum + qty * cost;
       }, 0),
     [items],
   );
@@ -124,6 +135,7 @@ export function SalesFormPage() {
         name: r.name.trim(),
         quantity: Math.max(1, Math.floor(Number(r.qtyStr)) || 1),
         priceRub: Number(r.priceRubStr.replace(',', '.')) || 0,
+        costRub: Number(r.costRubStr.replace(',', '.')) || 0,
       }))
       .filter((r) => r.name.length > 0);
 
@@ -138,11 +150,10 @@ export function SalesFormPage() {
       setErr('Добавьте хотя бы одну позицию с названием');
       return;
     }
-    const purchaseCostRub = Number(purchaseRub.replace(',', '.')) || 0;
     if (isEdit && editId) {
-      update.mutate({ id: editId, supplier: supplier.trim() || null, purchaseCostRub, comment: comment.trim() || null, items: built });
+      update.mutate({ id: editId, supplier: supplier.trim() || null, comment: comment.trim() || null, items: built });
     } else {
-      create.mutate({ clientId, supplier: supplier.trim() || null, purchaseCostRub, comment: comment.trim() || null, items: built });
+      create.mutate({ clientId, supplier: supplier.trim() || null, comment: comment.trim() || null, items: built });
     }
   };
 
@@ -194,15 +205,9 @@ export function SalesFormPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Поставщик (опц.)</label>
-            <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} disabled={isPaid} placeholder="У кого закупаем" className={inputCls} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Закупка всего, ₽ (опц.)</label>
-            <input type="text" inputMode="decimal" value={purchaseRub} onChange={(e) => setPurchaseRub(e.target.value)} disabled={isPaid} placeholder="Для расчёта маржи" className={inputCls} />
-          </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Поставщик (опц.)</label>
+          <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} disabled={isPaid} placeholder="У кого закупаем" className={inputCls} />
         </div>
 
         {/* Позиции */}
@@ -216,9 +221,16 @@ export function SalesFormPage() {
               </button>
             )}
           </div>
+          <div className="text-muted-foreground mb-1 hidden grid-cols-[1fr_52px_92px_92px_32px] gap-2 px-1 text-[11px] sm:grid">
+            <span>Наименование</span>
+            <span className="text-right">Кол-во</span>
+            <span className="text-right">Цена ₽</span>
+            <span className="text-right">Закупка ₽</span>
+            <span />
+          </div>
           <div className="space-y-2">
             {items.map((row, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_70px_110px_32px] gap-2">
+              <div key={idx} className="grid grid-cols-[1fr_52px_92px_92px_32px] gap-2">
                 <input
                   type="text"
                   value={row.name}
@@ -245,6 +257,16 @@ export function SalesFormPage() {
                   placeholder="Цена, ₽"
                   className={`${inputCls} text-right`}
                 />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={row.costRubStr}
+                  onChange={(e) => setItems((p) => p.map((r, i) => (i === idx ? { ...r, costRubStr: e.target.value } : r)))}
+                  disabled={isPaid}
+                  placeholder="Закупка"
+                  title="За сколько купили (за единицу) — для маржи"
+                  className={`${inputCls} text-right`}
+                />
                 <button
                   type="button"
                   disabled={isPaid || items.length === 1}
@@ -257,9 +279,30 @@ export function SalesFormPage() {
               </div>
             ))}
           </div>
-          <div className="mt-3 border-t pt-3 text-right">
-            <span className="text-muted-foreground text-sm">Итого: </span>
-            <span className="text-lg font-semibold tabular-nums">{formatRub(String(totalKopecks))}</span>
+          <div className="mt-3 space-y-1 border-t pt-3 text-right text-sm">
+            <div>
+              <span className="text-muted-foreground">Сумма продажи: </span>
+              <span className="text-lg font-semibold tabular-nums">{formatRub(String(totalKopecks))}</span>
+            </div>
+            {costKopecks > 0 && (
+              <>
+                <div className="text-muted-foreground">
+                  Закупка: <span className="tabular-nums">{formatRub(String(costKopecks))}</span>
+                </div>
+                <div className="text-muted-foreground">
+                  Маржа:{' '}
+                  <span
+                    className={
+                      totalKopecks - costKopecks >= 0
+                        ? 'text-success font-medium tabular-nums'
+                        : 'text-destructive font-medium tabular-nums'
+                    }
+                  >
+                    {formatRub(String(totalKopecks - costKopecks))}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

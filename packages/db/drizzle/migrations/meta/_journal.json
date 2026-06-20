@@ -323,6 +323,13 @@
       "when": 1777901800000,
       "tag": "0051_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1777901900000,
+      "tag": "0053_sale_item_cost",
+      "breakpoints": true
     }
   ]
 }

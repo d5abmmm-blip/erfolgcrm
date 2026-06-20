@@ -41,11 +41,10 @@ async function balanceOf(accountId: string): Promise<bigint> {
 const baseSale = () => ({
   clientId: uuidv7(),
   supplier: 'ООО Поставщик' as string | null,
-  purchaseCostKopecks: 200_000n,
   comment: `${TEST_PREFIX}заказ`,
   items: [
-    { name: 'Датчик SpO2', quantity: 2, unitPriceKopecks: 150_000n },
-    { name: 'Кабель ЭКГ', quantity: 1, unitPriceKopecks: 50_000n },
+    { name: 'Датчик SpO2', quantity: 2, unitPriceKopecks: 150_000n, unitCostKopecks: 100_000n },
+    { name: 'Кабель ЭКГ', quantity: 1, unitPriceKopecks: 50_000n, unitCostKopecks: 30_000n },
   ],
   createdBy: null,
 });
@@ -61,7 +60,8 @@ describe('продажи ↔ касса', () => {
     expect(sale!.items).toHaveLength(2);
     expect(sale!.saleNo).toBeGreaterThan(0);
     expect(sale!.isPaid).toBe(false);
-    expect(sale!.marginKopecks).toBe('150000'); // 3500 − 2000 закупка
+    // закупка = 2×1000 + 1×300 = 2300 ₽; маржа = 3500 − 2300 = 1200 ₽
+    expect(sale!.marginKopecks).toBe('120000');
   });
 
   it('paySale проводит доход в кассу, отмена возвращает остаток', async () => {
