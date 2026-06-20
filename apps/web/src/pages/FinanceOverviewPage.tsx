@@ -120,7 +120,7 @@ export function FinanceOverviewPage() {
               tone="danger"
             />
             <KpiCard
-              title={`Прибыль · ${PRESET_LABEL[preset].toLowerCase()}`}
+              title={`Разница · ${PRESET_LABEL[preset].toLowerCase()}`}
               value={formatRubWhole(data.summary.profitKopecks)}
               icon={Scale}
               tone={BigInt(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}

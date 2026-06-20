@@ -203,10 +203,14 @@ export function TicketPayments({ ticketId, canManage }: Props) {
         confirmText="Удалить"
         variant="danger"
         loading={remove.isPending}
+        error={remove.error?.message ?? null}
         onConfirm={() => {
           if (deleteTarget) remove.mutate({ id: deleteTarget.id });
         }}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => {
+          setDeleteTarget(null);
+          remove.reset();
+        }}
       />
     </div>
   );

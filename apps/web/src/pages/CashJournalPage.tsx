@@ -257,8 +257,12 @@ export function CashJournalPage() {
         confirmText="Удалить"
         variant="danger"
         loading={del.isPending}
+        error={del.error?.message ?? null}
         onConfirm={() => deleteId && del.mutate({ id: deleteId })}
-        onCancel={() => setDeleteId(null)}
+        onCancel={() => {
+          setDeleteId(null);
+          del.reset();
+        }}
       />
     </div>
   );

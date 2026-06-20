@@ -12,6 +12,8 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   /** Состояние pending для предотвращения двойных кликов. */
   loading?: boolean;
+  /** Ошибка операции — показывается в диалоге, диалог остаётся открытым. */
+  error?: string | null;
 }
 
 /**
@@ -32,6 +34,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   loading,
+  error,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -95,6 +98,11 @@ export function ConfirmDialog({
           <p className="text-muted-foreground mt-2 text-sm whitespace-pre-line">
             {description}
           </p>
+        )}
+        {error && (
+          <div className="bg-destructive/10 text-destructive border-destructive/30 mt-3 rounded-md border p-2 text-xs">
+            {error}
+          </div>
         )}
         <div className="mt-4 flex justify-end gap-2">
           <button

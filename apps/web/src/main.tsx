@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './lib/theme';
 import { trpc, trpcClient } from './lib/trpc';
 // Фирменный шрифт интерфейса: Golos Text (кириллица из коробки, variable —
@@ -27,7 +28,9 @@ createRoot(rootEl).render(
     <ThemeProvider defaultTheme="system" storageKey="erfolg-theme">
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
-          <App />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </QueryClientProvider>
       </trpc.Provider>
     </ThemeProvider>
