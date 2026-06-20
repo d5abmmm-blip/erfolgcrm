@@ -18,6 +18,8 @@
  */
 import { spawn } from 'node:child_process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface BackupExecConfig {
   mode: 'docker' | 'direct';
@@ -137,4 +139,52 @@ function pgDumpArgs(cfg: BackupExecConfig): { cmd: string; args: string[]; env: 
 export function spawnFullDump(cfg = resolveBackupExecConfig()) {
   const { cmd, args, env } = pgDumpArgs(cfg);
   return spawn(cmd, args, { env, windowsHide: true });
+}
+
+// ───────── Импорт старой базы (WinServisePro) ─────────
+//
+// «Загрузка»: директор присылает JSON-экспорт старой базы, мы прогоняем
+// существующий идемпотентный импортёр packages/db/src/import-winservice.ts
+// (UUIDv5 + ON CONFLICT DO NOTHING — повтор безопасен; есть сухой прогон).
+// Запускаем как дочерний процесс под tsx — без переписывания импортёра.
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+/** Абсолютный путь к импортёру: apps/api/src/modules/backup → корень монорепо. */
+const IMPORT_WINSERVICE_PATH = resolve(
+  __dirname,
+  '../../../../../packages/db/src/import-winservice.ts',
+);
+
+function signImport(tenantId: string, expEpochSec: number): string {
+  return createHmac('sha256', tokenSecret())
+    .update(`backup-import:${tenantId}:${expEpochSec}`)
+    .digest('hex');
+}
+
+export function makeImportToken(tenantId: string, ttlSeconds = 10 * 60): { exp: number; sig: string } {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  return { exp, sig: signImport(tenantId, exp) };
+}
+
+export function verifyImportToken(args: { tenantId: string; exp: number; sig: string }): boolean {
+  if (!args.tenantId || !args.sig || !Number.isFinite(args.exp)) return false;
+  if (args.exp * 1000 < Date.now()) return false;
+  const expected = signImport(args.tenantId, args.exp);
+  if (expected.length !== args.sig.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(args.sig, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Запускает импортёр старой базы под tsx (node --import tsx). Файл-экспорт передаётся
+ * первым аргументом, режим — флагом --dry-run. Отдаёт дочерний процесс; вызывающий
+ * собирает stdout (отчёт импортёра) и stderr. Импортёр сам берёт DATABASE_OWNER_URL.
+ */
+export function spawnWinServiceImport(filePath: string, opts: { dryRun: boolean }) {
+  const args = ['--import', 'tsx', IMPORT_WINSERVICE_PATH, filePath];
+  if (opts.dryRun) args.push('--dry-run');
+  return spawn(process.execPath, args, { env: process.env, windowsHide: true });
 }

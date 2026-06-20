@@ -6,7 +6,13 @@
  */
 import { directorProcedure, router } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
-import { apiBaseUrl, fullDumpFileName, makeFullDumpToken, resolveBackupExecConfig } from './service';
+import {
+  apiBaseUrl,
+  fullDumpFileName,
+  makeFullDumpToken,
+  makeImportToken,
+  resolveBackupExecConfig,
+} from './service';
 
 export const backupRouter = router({
   /**
@@ -38,6 +44,28 @@ export const backupRouter = router({
       url: `${apiBaseUrl()}/api/v1/backup/download?${params.toString()}`,
       fileName,
       expiresAt: new Date(exp * 1000),
+    };
+  }),
+
+  /**
+   * Выдаёт HMAC-токен для загрузки старой базы. Сам файл клиент шлёт POST'ом на
+   * /api/v1/backup/import (большой JSON, вне tRPC). Токен живёт 10 минут.
+   */
+  requestImportToken: directorProcedure.mutation(async ({ ctx }) => {
+    const { exp, sig } = makeImportToken(ctx.tenant.id);
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'restore',
+      entityType: 'database_backup',
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+      context: { kind: 'winservice_import_token' },
+    });
+    return {
+      uploadUrl: `${apiBaseUrl()}/api/v1/backup/import`,
+      t: ctx.tenant.id,
+      exp,
+      sig,
     };
   }),
 });
