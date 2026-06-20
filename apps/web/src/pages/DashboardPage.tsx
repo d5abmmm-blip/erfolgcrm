@@ -7,7 +7,10 @@ import {
   Wallet,
   Package,
   CalendarCheck,
+  CalendarDays,
   Receipt,
+  Ticket,
+  Target,
   FileDown,
   FileSpreadsheet,
   Loader2,
@@ -546,46 +549,121 @@ function PeriodTabs({
 /* ========================== SIMPLE DASHBOARD (НЕ ДИРЕКТОР) ========================== */
 
 function SimpleDashboard({ role }: { role: 'director' | 'dispatcher' | 'engineer' }) {
+  if (role === 'dispatcher') return <DispatcherDashboard />;
+  // Инженер работает с мобильного интерфейса — здесь только подсказка-переход.
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold md:text-2xl">Рабочий стол</h2>
         <p className="text-muted-foreground text-sm">
-          {role === 'dispatcher'
-            ? 'Финансовая сводка доступна только директору. Ниже быстрые действия.'
-            : 'Перейдите к мобильному интерфейсу для работы с заявками.'}
+          Перейдите к мобильному интерфейсу для работы с заявками.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
-          href="/tickets"
-          className="bg-card hover:border-primary/50 rounded-lg border p-4 transition"
-        >
+        <Link href="/tickets" className="bg-card hover:border-primary/50 rounded-lg border p-4 transition">
           <div className="text-muted-foreground text-xs uppercase">Перейти</div>
           <div className="mt-1 text-lg font-semibold">Заявки</div>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Список и канбан текущих заявок.
-          </p>
-        </Link>
-        <Link
-          href="/clients"
-          className="bg-card hover:border-primary/50 rounded-lg border p-4 transition"
-        >
-          <div className="text-muted-foreground text-xs uppercase">Перейти</div>
-          <div className="mt-1 text-lg font-semibold">Клиенты</div>
-          <p className="text-muted-foreground mt-1 text-sm">
-            База клиентов и техники.
-          </p>
-        </Link>
-        <Link
-          href="/inventory"
-          className="bg-card hover:border-primary/50 rounded-lg border p-4 transition"
-        >
-          <div className="text-muted-foreground text-xs uppercase">Перейти</div>
-          <div className="mt-1 text-lg font-semibold">Склад</div>
-          <p className="text-muted-foreground mt-1 text-sm">Запчасти и закупки.</p>
         </Link>
       </div>
     </div>
+  );
+}
+
+/**
+ * Рабочий стол менеджера (диспетчера) — «что требует внимания сегодня».
+ * Финансовая аналитика остаётся у директора; здесь — операционные счётчики
+ * из navBadges (доступны staff), каждый ведёт в свой раздел.
+ */
+function DispatcherDashboard() {
+  const nb = trpc.dashboard.navBadges.useQuery(undefined, { refetchInterval: 60_000 });
+  const b = nb.data;
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+      <div>
+        <h2 className="text-xl font-semibold md:text-2xl">Рабочий стол</h2>
+        <p className="text-muted-foreground text-sm">Что требует внимания сегодня</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <AttentionTile label="Заявки на разбор" value={b?.ticketsAttention ?? 0} href="/tickets" icon={Ticket} />
+        <AttentionTile label="Просрочено ТО" value={b?.maintenanceOverdue ?? 0} href="/maintenance" icon={CalendarCheck} bad />
+        <AttentionTile label="Просроченные счета" value={b?.invoicesOverdue ?? 0} href="/finance/invoices" icon={Receipt} bad />
+        <AttentionTile label="Мало на складе" value={b?.inventoryLowStock ?? 0} href="/inventory" icon={Package} bad />
+        <AttentionTile label="Новые лиды" value={b?.leadsNew ?? 0} href="/leads" icon={Target} />
+        <AttentionTile label="События сегодня" value={b?.calendarToday ?? 0} href="/calendar" icon={CalendarDays} />
+      </div>
+
+      <div>
+        <div className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">Быстрые переходы</div>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ['/tickets', 'Заявки'],
+              ['/clients', 'Клиенты'],
+              ['/sales', 'Продажи'],
+              ['/mail', 'Почта'],
+              ['/finance', 'Касса'],
+            ] as const
+          ).map(([href, label]) => (
+            <Link
+              key={href}
+              href={href}
+              className="bg-card hover:border-primary/50 rounded-md border px-3 py-1.5 text-sm transition"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttentionTile({
+  label,
+  value,
+  href,
+  icon: Icon,
+  bad,
+}: {
+  label: string;
+  value: number;
+  href: string;
+  icon: typeof Package;
+  bad?: boolean;
+}) {
+  const active = value > 0;
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'bg-card relative flex items-center justify-between gap-3 overflow-hidden rounded-lg border p-4 transition hover:border-primary/50',
+        active && bad && 'border-destructive/30',
+      )}
+    >
+      <div>
+        <div className="text-muted-foreground text-xs uppercase tracking-wide">{label}</div>
+        <div
+          className={cn(
+            'mt-1 text-3xl font-semibold tabular-nums',
+            !active ? 'text-muted-foreground' : bad ? 'text-destructive' : 'text-primary',
+          )}
+        >
+          {value}
+        </div>
+      </div>
+      <span
+        className={cn(
+          'grid h-10 w-10 shrink-0 place-items-center rounded-lg',
+          active && bad
+            ? 'bg-destructive/10 text-destructive'
+            : active
+              ? 'bg-primary/10 text-primary'
+              : 'bg-secondary text-muted-foreground',
+        )}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+    </Link>
   );
 }
