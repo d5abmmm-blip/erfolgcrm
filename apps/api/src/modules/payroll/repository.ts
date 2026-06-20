@@ -10,12 +10,17 @@
  *
  * Учитываем только work_orders, ticket которых закрыт в периоде.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
+  cashAccounts,
+  cashCategories,
+  cashTransactions,
   engineerPayoutRules,
+  payrollPayouts,
   withTenantTx,
   type Db,
 } from '@erfolg/db';
+import { recalcAccountBalanceInTx } from '../cash/repository';
 
 export type PayrollMode = 'piecework' | 'salary_bonus';
 
@@ -280,5 +285,305 @@ export async function computePayouts(
   };
 }
 
+/* ────────────────────────── Выплаты ЗП ───────────────────────── */
+
+type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
+
+export interface PayoutDto {
+  id: string;
+  engineerId: string;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  computedKopecks: string;
+  amountKopecks: string;
+  paidOn: string;
+  accountId: string;
+  cashTransactionId: string | null;
+  comment: string | null;
+  createdAt: string;
+}
+
+function toPayoutDto(row: typeof payrollPayouts.$inferSelect): PayoutDto {
+  return {
+    id: row.id,
+    engineerId: row.engineerId,
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    periodLabel: row.periodLabel,
+    computedKopecks: row.computedKopecks.toString(),
+    amountKopecks: row.amountKopecks.toString(),
+    paidOn: row.paidOn,
+    accountId: row.accountId,
+    cashTransactionId: row.cashTransactionId,
+    comment: row.comment,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** Статья расхода «Зарплата» — найти по имени или создать (переиспользуем seed'овую). */
+async function ensureSalaryCategory(tx: Tx, tenantId: string): Promise<string> {
+  const existing = await tx
+    .select({ id: cashCategories.id })
+    .from(cashCategories)
+    .where(
+      and(
+        eq(cashCategories.tenantId, tenantId),
+        eq(cashCategories.direction, 'expense'),
+        eq(cashCategories.name, 'Зарплата'),
+        isNull(cashCategories.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) return existing[0].id;
+  const inserted = await tx
+    .insert(cashCategories)
+    .values({ tenantId, name: 'Зарплата', direction: 'expense', isSystem: true })
+    .returning({ id: cashCategories.id });
+  return inserted[0]!.id;
+}
+
+export interface CreatePayoutInput {
+  engineerId: string;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  computedKopecks: bigint;
+  amountKopecks: bigint;
+  paidOn: string;
+  accountId: string;
+  comment: string | null;
+  createdBy: string | null;
+}
+
+/**
+ * Провести выплату: создать расход в кассе (статья «Зарплата») + запись выплаты,
+ * пересчитать остаток счёта. Всё в одной tenant-tx.
+ */
+export async function createPayout(
+  db: Db,
+  tenantId: string,
+  input: CreatePayoutInput,
+): Promise<PayoutDto> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const acc = await tx
+      .select({ id: cashAccounts.id })
+      .from(cashAccounts)
+      .where(
+        and(
+          eq(cashAccounts.tenantId, tenantId),
+          eq(cashAccounts.id, input.accountId),
+          isNull(cashAccounts.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!acc[0]) throw new Error('Денежный счёт не найден');
+
+    const dup = await tx
+      .select({ id: payrollPayouts.id })
+      .from(payrollPayouts)
+      .where(
+        and(
+          eq(payrollPayouts.tenantId, tenantId),
+          eq(payrollPayouts.engineerId, input.engineerId),
+          eq(payrollPayouts.periodStart, input.periodStart),
+          isNull(payrollPayouts.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (dup[0]) throw new Error('За этот период инженеру уже проведена выплата');
+
+    const categoryId = await ensureSalaryCategory(tx, tenantId);
+    const comment = input.comment?.trim() || 'Выплата ЗП';
+
+    const cashRow = await tx
+      .insert(cashTransactions)
+      .values({
+        tenantId,
+        kind: 'expense',
+        accountId: input.accountId,
+        categoryId,
+        amountKopecks: input.amountKopecks,
+        occurredOn: input.paidOn,
+        comment,
+        userId: input.createdBy,
+        source: 'manual',
+      })
+      .returning({ id: cashTransactions.id });
+    const cashTxId = cashRow[0]!.id;
+    await recalcAccountBalanceInTx(tx, tenantId, input.accountId);
+
+    const payoutRow = await tx
+      .insert(payrollPayouts)
+      .values({
+        tenantId,
+        engineerId: input.engineerId,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+        periodLabel: input.periodLabel,
+        computedKopecks: input.computedKopecks,
+        amountKopecks: input.amountKopecks,
+        paidOn: input.paidOn,
+        accountId: input.accountId,
+        cashTransactionId: cashTxId,
+        comment: input.comment,
+        createdBy: input.createdBy,
+      })
+      .returning();
+    return toPayoutDto(payoutRow[0]!);
+  });
+}
+
+export interface UpdatePayoutInput {
+  amountKopecks?: bigint;
+  paidOn?: string;
+  accountId?: string;
+  comment?: string | null;
+}
+
+/**
+ * Ручная правка выплаты: сумма/дата/счёт/комментарий. Расход в кассе пересоздаётся
+ * (старый мягко удаляется), остатки задействованных счетов пересчитываются.
+ */
+export async function updatePayout(
+  db: Db,
+  tenantId: string,
+  id: string,
+  patch: UpdatePayoutInput,
+): Promise<PayoutDto | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select()
+      .from(payrollPayouts)
+      .where(
+        and(
+          eq(payrollPayouts.tenantId, tenantId),
+          eq(payrollPayouts.id, id),
+          isNull(payrollPayouts.deletedAt),
+        ),
+      )
+      .limit(1);
+    const cur = rows[0];
+    if (!cur) return null;
+
+    const newAmount = patch.amountKopecks ?? cur.amountKopecks;
+    const newPaidOn = patch.paidOn ?? cur.paidOn;
+    const newAccountId = patch.accountId ?? cur.accountId;
+    const newComment = patch.comment !== undefined ? patch.comment : cur.comment;
+
+    if (newAccountId !== cur.accountId) {
+      const acc = await tx
+        .select({ id: cashAccounts.id })
+        .from(cashAccounts)
+        .where(
+          and(
+            eq(cashAccounts.tenantId, tenantId),
+            eq(cashAccounts.id, newAccountId),
+            isNull(cashAccounts.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!acc[0]) throw new Error('Денежный счёт не найден');
+    }
+
+    if (cur.cashTransactionId) {
+      await tx
+        .update(cashTransactions)
+        .set({ deletedAt: new Date() })
+        .where(eq(cashTransactions.id, cur.cashTransactionId));
+    }
+    const categoryId = await ensureSalaryCategory(tx, tenantId);
+    const cashRow = await tx
+      .insert(cashTransactions)
+      .values({
+        tenantId,
+        kind: 'expense',
+        accountId: newAccountId,
+        categoryId,
+        amountKopecks: newAmount,
+        occurredOn: newPaidOn,
+        comment: newComment?.trim() || 'Выплата ЗП',
+        userId: cur.createdBy,
+        source: 'manual',
+      })
+      .returning({ id: cashTransactions.id });
+    const newCashTxId = cashRow[0]!.id;
+
+    await recalcAccountBalanceInTx(tx, tenantId, cur.accountId);
+    if (newAccountId !== cur.accountId) {
+      await recalcAccountBalanceInTx(tx, tenantId, newAccountId);
+    }
+
+    const updated = await tx
+      .update(payrollPayouts)
+      .set({
+        amountKopecks: newAmount,
+        paidOn: newPaidOn,
+        accountId: newAccountId,
+        comment: newComment,
+        cashTransactionId: newCashTxId,
+      })
+      .where(eq(payrollPayouts.id, id))
+      .returning();
+    return toPayoutDto(updated[0]!);
+  });
+}
+
+/** Отмена выплаты: мягко удаляем расход в кассе + пересчёт + мягко удаляем выплату. */
+export async function deletePayout(db: Db, tenantId: string, id: string): Promise<boolean> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: payrollPayouts.id,
+        cashTransactionId: payrollPayouts.cashTransactionId,
+        accountId: payrollPayouts.accountId,
+      })
+      .from(payrollPayouts)
+      .where(
+        and(
+          eq(payrollPayouts.tenantId, tenantId),
+          eq(payrollPayouts.id, id),
+          isNull(payrollPayouts.deletedAt),
+        ),
+      )
+      .limit(1);
+    const cur = rows[0];
+    if (!cur) return false;
+    if (cur.cashTransactionId) {
+      await tx
+        .update(cashTransactions)
+        .set({ deletedAt: new Date() })
+        .where(eq(cashTransactions.id, cur.cashTransactionId));
+      await recalcAccountBalanceInTx(tx, tenantId, cur.accountId);
+    }
+    await tx
+      .update(payrollPayouts)
+      .set({ deletedAt: new Date() })
+      .where(eq(payrollPayouts.id, id));
+    return true;
+  });
+}
+
+/** Выплаты за период (по period_start) — чтобы показать «Выплачено» в таблице. */
+export async function listPayouts(
+  db: Db,
+  tenantId: string,
+  periodStart: string,
+): Promise<PayoutDto[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select()
+      .from(payrollPayouts)
+      .where(
+        and(
+          eq(payrollPayouts.tenantId, tenantId),
+          eq(payrollPayouts.periodStart, periodStart),
+          isNull(payrollPayouts.deletedAt),
+        ),
+      );
+    return rows.map(toPayoutDto);
+  });
+}
+
 // Re-export для тестов
-export { engineerPayoutRules, and };
+export { engineerPayoutRules, payrollPayouts, and };

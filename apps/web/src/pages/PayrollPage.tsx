@@ -1,11 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
-import { Loader2, Save, Settings as SettingsIcon, Wallet } from 'lucide-react';
+import { Check, Loader2, Pencil, Save, Settings as SettingsIcon, Wallet, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
 type PayrollMode = 'piecework' | 'salary_bonus';
+
+type PayoutRow = { engineerId: string; engineerName: string; totalEarningsKopecks: string };
+type Payout = {
+  id: string;
+  engineerId: string;
+  amountKopecks: string;
+  computedKopecks: string;
+  paidOn: string;
+  accountId: string;
+  comment: string | null;
+};
+type CashAccount = { id: string; name: string; kind: 'cash' | 'bank' | 'card' };
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+function kopecksToRubInput(kopStr: string): string {
+  return (Number(BigInt(kopStr)) / 100).toString();
+}
+function parseRubNumber(rubStr: string): number {
+  const n = Number(rubStr.replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
 
 const PERIOD_LABEL: Record<Period, string> = {
   today: 'День',
@@ -41,9 +65,28 @@ export function PayrollPage() {
 /* ========================== ДИРЕКТОР ========================== */
 
 function DirectorPayroll() {
+  const utils = trpc.useUtils();
   const [period, setPeriod] = useState<Period>('month');
   const ruleQ = trpc.payroll.getRule.useQuery();
   const payoutsQ = trpc.payroll.computePayouts.useQuery({ preset: period });
+  const paidQ = trpc.payroll.listPayouts.useQuery({ preset: period });
+  const accountsQ = trpc.cash.accounts.list.useQuery();
+
+  const [modal, setModal] = useState<{ row: PayoutRow; existing: Payout | null } | null>(null);
+  const [toCancel, setToCancel] = useState<Payout | null>(null);
+
+  const deletePayoutM = trpc.payroll.deletePayout.useMutation({
+    onSuccess: () => {
+      void utils.payroll.listPayouts.invalidate();
+      void utils.cash.invalidate();
+      setToCancel(null);
+    },
+  });
+
+  const paidByEngineer = new Map<string, Payout>(
+    (paidQ.data ?? []).map((p) => [p.engineerId, p]),
+  );
+  const accounts: CashAccount[] = accountsQ.data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
@@ -117,12 +160,13 @@ function DirectorPayroll() {
                   <th className="p-3 text-right font-medium">Оклад</th>
                   <th className="p-3 text-right font-medium">Сделка/бонус</th>
                   <th className="p-3 text-right font-medium">К выплате</th>
+                  <th className="p-3 text-right font-medium">Выплата</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {payoutsQ.data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-muted-foreground p-6 text-center">
+                    <td colSpan={7} className="text-muted-foreground p-6 text-center">
                       За выбранный период работ нет
                     </td>
                   </tr>
@@ -143,6 +187,15 @@ function DirectorPayroll() {
                     <td className="text-success p-3 text-right text-base font-semibold tabular-nums">
                       {formatRubFromKopecks(r.totalEarningsKopecks)}
                     </td>
+                    <td className="p-3 text-right">
+                      <PayoutCell
+                        existing={paidByEngineer.get(r.engineerId) ?? null}
+                        canPay={accounts.length > 0 && BigInt(r.totalEarningsKopecks) > 0n}
+                        onPay={() => setModal({ row: r, existing: null })}
+                        onEdit={(p) => setModal({ row: r, existing: p })}
+                        onCancel={(p) => setToCancel(p)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -150,6 +203,230 @@ function DirectorPayroll() {
           </div>
         </>
       )}
+
+      {!accountsQ.isLoading && accounts.length === 0 && (
+        <div className="text-muted-foreground bg-card rounded-lg border border-dashed p-4 text-sm">
+          Чтобы проводить выплаты, заведите денежный счёт в{' '}
+          <Link href="/finance/accounts" className="text-primary hover:underline">
+            кассе
+          </Link>
+          .
+        </div>
+      )}
+
+      {modal && (
+        <PayoutModal
+          row={modal.row}
+          existing={modal.existing}
+          period={period}
+          accounts={accounts}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            void utils.payroll.listPayouts.invalidate();
+            void utils.cash.invalidate();
+            setModal(null);
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!toCancel}
+        title="Отменить выплату?"
+        description="Запись о выплате будет удалена, а связанный расход — убран из кассы (остаток счёта вернётся)."
+        confirmText="Отменить выплату"
+        variant="danger"
+        loading={deletePayoutM.isPending}
+        onConfirm={() => toCancel && deletePayoutM.mutate({ id: toCancel.id })}
+        onCancel={() => setToCancel(null)}
+      />
+    </div>
+  );
+}
+
+/* ===================== Выплата: ячейка + окно ===================== */
+
+function PayoutCell({
+  existing,
+  canPay,
+  onPay,
+  onEdit,
+  onCancel,
+}: {
+  existing: Payout | null;
+  canPay: boolean;
+  onPay: () => void;
+  onEdit: (p: Payout) => void;
+  onCancel: (p: Payout) => void;
+}) {
+  if (existing) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-success inline-flex items-center gap-1 text-xs font-medium">
+          <Check className="h-3.5 w-3.5" />
+          {new Date(existing.paidOn).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+        </span>
+        <button
+          type="button"
+          title="Изменить выплату"
+          onClick={() => onEdit(existing)}
+          className="hover:bg-muted text-muted-foreground rounded p-1 transition"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          title="Отменить выплату"
+          onClick={() => onCancel(existing)}
+          className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded p-1 transition"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      disabled={!canPay}
+      onClick={onPay}
+      className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40"
+    >
+      <Wallet className="h-3.5 w-3.5" />
+      Выплатить
+    </button>
+  );
+}
+
+function PayoutModal({
+  row,
+  existing,
+  period,
+  accounts,
+  onClose,
+  onSaved,
+}: {
+  row: PayoutRow;
+  existing: Payout | null;
+  period: Period;
+  accounts: CashAccount[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!existing;
+  const [amountRub, setAmountRub] = useState(() =>
+    kopecksToRubInput(existing?.amountKopecks ?? row.totalEarningsKopecks),
+  );
+  const [paidOn, setPaidOn] = useState(() => existing?.paidOn ?? todayIso());
+  const [accountId, setAccountId] = useState(() => existing?.accountId ?? accounts[0]?.id ?? '');
+  const [comment, setComment] = useState(
+    () => existing?.comment ?? `ЗП · ${row.engineerName}`,
+  );
+
+  const createM = trpc.payroll.createPayout.useMutation({ onSuccess: onSaved });
+  const updateM = trpc.payroll.updatePayout.useMutation({ onSuccess: onSaved });
+  const pending = createM.isPending || updateM.isPending;
+  const error = createM.error?.message ?? updateM.error?.message;
+
+  const amountNum = parseRubNumber(amountRub);
+  const valid = amountNum > 0 && !!accountId && !!paidOn;
+  const computedRub = kopecksToRubInput(existing?.computedKopecks ?? row.totalEarningsKopecks);
+
+  const submit = () => {
+    if (!valid) return;
+    if (isEdit && existing) {
+      updateM.mutate({ id: existing.id, amountRub: amountNum, paidOn, accountId, comment });
+    } else {
+      createM.mutate({ preset: period, engineerId: row.engineerId, amountRub: amountNum, paidOn, accountId, comment });
+    }
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
+      <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 bg-black/40" />
+      <div className="bg-card relative z-10 w-full max-w-md rounded-lg border p-5 shadow-xl">
+        <h3 className="text-base font-semibold">
+          {isEdit ? 'Изменить выплату' : 'Выплатить ЗП'} · {row.engineerName}
+        </h3>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-sm font-medium">Сумма к выплате, ₽</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amountRub}
+              onChange={(e) => setAmountRub(e.target.value)}
+              autoFocus
+              className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+            />
+            <p className="text-muted-foreground mt-1 text-xs">
+              Посчитано системой: {computedRub} ₽ · можно изменить вручную
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Дата</label>
+              <input
+                type="date"
+                value={paidOn}
+                onChange={(e) => setPaidOn(e.target.value)}
+                className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Из счёта</label>
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Комментарий</label>
+            <input
+              type="text"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+            />
+          </div>
+
+          {error && (
+            <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!valid || pending}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {isEdit ? 'Сохранить' : 'Выплатить'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

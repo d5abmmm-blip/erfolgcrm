@@ -7,10 +7,15 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { directorProcedure, engineerProcedure, router } from '../../trpc/trpc';
+import { buildCmdCtx } from '../../trpc/helpers';
 import {
   computePayoutsQuery,
+  createPayoutCmd,
+  deletePayoutCmd,
   getRuleQuery,
+  listPayoutsQuery,
   setRuleCmd,
+  updatePayoutCmd,
 } from './service';
 
 const periodPresetSchema = z.object({
@@ -20,6 +25,10 @@ const periodPresetSchema = z.object({
 });
 
 const payrollModeSchema = z.enum(['piecework', 'salary_bonus']);
+
+const MAX_AMOUNT_RUB = 9_999_999_999;
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
+const rubToKopecks = (rub: number): bigint => BigInt(Math.round(rub * 100));
 
 export const payrollRouter = router({
   getRule: directorProcedure.query(({ ctx }) =>
@@ -73,4 +82,58 @@ export const payrollRouter = router({
         engineerId: ctx.session.userId,
       });
     }),
+
+  /* ── Выплаты ЗП (директор) ── */
+
+  /** Выплаты за период (по period_start) — для отметки «Выплачено» в таблице. */
+  listPayouts: directorProcedure
+    .input(periodPresetSchema)
+    .query(({ ctx, input }) => listPayoutsQuery(ctx.db, ctx.tenant.id, input)),
+
+  /** Провести выплату инженеру: расход в кассе + запись факта. */
+  createPayout: directorProcedure
+    .input(
+      periodPresetSchema.extend({
+        engineerId: z.string().uuid(),
+        amountRub: z.number().positive().max(MAX_AMOUNT_RUB),
+        paidOn: isoDate,
+        accountId: z.string().uuid(),
+        comment: z.string().trim().max(2000).nullable().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      createPayoutCmd(buildCmdCtx(ctx), {
+        engineerId: input.engineerId,
+        period: { preset: input.preset, start: input.start, end: input.end },
+        amountKopecks: rubToKopecks(input.amountRub),
+        paidOn: input.paidOn,
+        accountId: input.accountId,
+        comment: input.comment ?? null,
+      }),
+    ),
+
+  /** Ручная правка выплаты (сумма/дата/счёт/комментарий). */
+  updatePayout: directorProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        amountRub: z.number().positive().max(MAX_AMOUNT_RUB).optional(),
+        paidOn: isoDate.optional(),
+        accountId: z.string().uuid().optional(),
+        comment: z.string().trim().max(2000).nullable().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      updatePayoutCmd(buildCmdCtx(ctx), input.id, {
+        amountKopecks: input.amountRub !== undefined ? rubToKopecks(input.amountRub) : undefined,
+        paidOn: input.paidOn,
+        accountId: input.accountId,
+        comment: input.comment,
+      }),
+    ),
+
+  /** Отмена выплаты: убирает расход из кассы. */
+  deletePayout: directorProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) => deletePayoutCmd(buildCmdCtx(ctx), input.id)),
 });
