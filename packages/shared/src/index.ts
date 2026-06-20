@@ -7,6 +7,24 @@ import { z } from 'zod';
 export const UserRole = z.enum(['director', 'dispatcher', 'engineer']);
 export type UserRole = z.infer<typeof UserRole>;
 
+/**
+ * Должности сотрудников — фиксированный перечень для выбора при заведении
+ * пользователя (произвольный ввод запрещён). Значение печатается в подписях
+ * документов (договоры, акты), поэтому храним сразу человекочитаемый текст.
+ * Чтобы изменить набор должностей — правится только этот список.
+ */
+export const StaffPosition = z.enum([
+  'Генеральный директор',
+  'Директор',
+  'Диспетчер',
+  'Инженер',
+  'Старший инженер',
+  'Бухгалтер',
+]);
+export type StaffPosition = z.infer<typeof StaffPosition>;
+/** Массив значений должностей для рендера выпадающего списка на фронте. */
+export const STAFF_POSITIONS = StaffPosition.options;
+
 export const TicketStatus = z.enum([
   'received',
   'diagnostics',

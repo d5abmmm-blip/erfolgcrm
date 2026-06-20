@@ -57,7 +57,8 @@ export async function enqueueTicketStatusNotify(
 ): Promise<void> {
   await getQueue<TicketStatusNotifyPayload>(QUEUE_NAME).add(JOB_NAME, payload, {
     // Дедуп: одинаковый ticket+to за короткий промежуток не должен залить клиента.
-    jobId: `notify:${payload.tenantId}:${payload.ticketId}:${payload.newStatus}`,
+    // ВАЖНО: BullMQ запрещает ':' в custom jobId (молча отвергает job) → только дефис.
+    jobId: `notify-${payload.tenantId}-${payload.ticketId}-${payload.newStatus}`,
   });
 }
 

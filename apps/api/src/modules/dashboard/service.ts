@@ -111,6 +111,15 @@ export async function listMaintenanceForTodayQuery(
   return repo.listMaintenanceForToday(db, tenantId, includeOverdue, limit);
 }
 
+export async function getNavBadgesQuery(
+  db: Db,
+  tenantId: string,
+  role: 'director' | 'dispatcher' | 'engineer',
+  userId: string,
+): Promise<repo.NavBadgeCounts> {
+  return repo.getNavBadgeCounts(db, tenantId, role, userId);
+}
+
 export async function getDailySummaryQuery(
   db: Db,
   tenantId: string,

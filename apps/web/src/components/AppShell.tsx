@@ -96,7 +96,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: 'Деньги',
     items: [
-      { href: '/invoices', label: 'Финансы', icon: Receipt, module: 'invoices' },
+      { href: '/finance', label: 'Финансы', icon: Receipt, module: 'invoices' },
       { href: '/payroll', label: 'Зарплата', icon: Wallet, module: 'payroll' },
       { href: '/reports', label: 'Отчёты', icon: BarChart3, roles: ['director', 'dispatcher'], module: 'reports' },
     ],
@@ -135,6 +135,38 @@ export function AppShell({ children, session }: AppShellProps) {
 
   const disabledModules = session.tenant.disabledModules;
 
+  // Бейджи-уведомления на пунктах меню — счётчики «требует внимания».
+  // Два источника, оба с лёгким поллингом, чтобы бейджи «оживали» без перехода в раздел
+  // (глобальный дефолт refetchOnWindowFocus=false — включаем точечно):
+  //   • Почта — отдельный запрос (у него уже настроена инвалидация при чтении писем).
+  //     Только для staff и при включённом модуле — у инженера staffProcedure даст ошибку.
+  //   • Остальное — единый ролевой эндпоинт dashboard.navBadges (доступен всем ролям).
+  const role = session.user.role;
+  const mailEnabled =
+    (role === 'director' || role === 'dispatcher') && !disabledModules.includes('mail');
+  const unreadMail = trpc.email.unreadCount.useQuery(undefined, {
+    enabled: mailEnabled,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const navBadges = trpc.dashboard.navBadges.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const nb = navBadges.data;
+  // Ключ = href пункта меню. Скрытые ролью/модулем пункты свой бейдж просто не читают.
+  const badgeByHref: Record<string, number> = {
+    '/mail': mailEnabled ? (unreadMail.data ?? 0) : 0,
+    '/tickets': nb?.ticketsAttention ?? 0,
+    '/leads': nb?.leadsNew ?? 0,
+    '/calendar': nb?.calendarToday ?? 0,
+    '/finance': nb?.invoicesOverdue ?? 0,
+    '/maintenance': nb?.maintenanceOverdue ?? 0,
+    '/inventory': nb?.inventoryLowStock ?? 0,
+  };
+
   const initials = session.user.fullName
     .split(/\s+/)
     .slice(0, 2)
@@ -170,6 +202,7 @@ export function AppShell({ children, session }: AppShellProps) {
                     const isActive =
                       item.href === '/' ? location === '/' : location.startsWith(item.href);
                     const Icon = item.icon;
+                    const badge = badgeByHref[item.href] ?? 0;
                     return (
                       <Link
                         key={item.href}
@@ -188,6 +221,19 @@ export function AppShell({ children, session }: AppShellProps) {
                           )}
                         />
                         {item.label}
+                        {badge > 0 && (
+                          <span
+                            className={cn(
+                              'ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-5 tabular-nums',
+                              isActive
+                                ? 'bg-primary-foreground/25 text-primary-foreground'
+                                : 'bg-primary text-primary-foreground',
+                            )}
+                            aria-label={`непрочитанных писем: ${badge}`}
+                          >
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}

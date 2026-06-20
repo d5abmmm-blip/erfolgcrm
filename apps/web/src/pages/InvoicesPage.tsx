@@ -13,6 +13,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
 import { INVOICE_STATUS_META } from '../lib/dictionaries';
 import { formatRub } from '../lib/money';
+import { FinanceTabs } from '../components/finance/FinanceTabs';
 
 const STATUS_OPTIONS: Array<{ value: InvoiceStatus | ''; label: string }> = [
   { value: '', label: 'Все' },
@@ -128,6 +129,7 @@ export function InvoicesPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
+      <FinanceTabs />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
@@ -136,7 +138,7 @@ export function InvoicesPage() {
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Счета на оплату</h1>
           <p className="text-muted-foreground text-sm">
-            Все счета tenant'а. Создание — из карточки заявки.
+            Все счета компании. Создание — из карточки заявки.
           </p>
         </div>
       </div>

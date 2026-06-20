@@ -171,6 +171,102 @@ export async function getMetrics(
   });
 }
 
+/* ============================== NAV BADGES ============================== */
+
+/** Счётчики «требует внимания» для бейджей бокового меню. */
+export interface NavBadgeCounts {
+  /** Заявки на разбор: staff — новые (received); инженер — свои, ждущие акта. */
+  ticketsAttention: number;
+  /** Новые лиды (status='new'). 0 для инженера. */
+  leadsNew: number;
+  /** События календаря на сегодня. 0 для инженера. */
+  calendarToday: number;
+  /** Просроченные счета (status='overdue'). 0 для инженера. */
+  invoicesOverdue: number;
+  /** Просроченное плановое ТО (next_due_at в прошлом, активно). */
+  maintenanceOverdue: number;
+  /** Позиции склада с остатком ниже минимума. */
+  inventoryLowStock: number;
+}
+
+/**
+ * Лёгкие COUNT-запросы для бейджей навигации (все по существующим индексам).
+ * Ролевые: staff (директор/диспетчер) видят весь операционный «инбокс», инженер —
+ * только свои заявки на акт + операционные склад/ТО (разделы лиды/календарь/счета
+ * ему в меню не видны, поэтому считаем их только для staff). Через RLS (withTenantTx).
+ *
+ * «Сегодня/просрочка» считаются на сервере (CURRENT_DATE / now()), как в getMetrics —
+ * единый источник правды по времени, без рассинхрона с клиентом.
+ */
+export async function getNavBadgeCounts(
+  db: Db,
+  tenantId: string,
+  role: 'director' | 'dispatcher' | 'engineer',
+  userId: string,
+): Promise<NavBadgeCounts> {
+  const isStaff = role === 'director' || role === 'dispatcher';
+  return withTenantTx(db, tenantId, async (tx) => {
+    // Заявки: staff — новые на разбор (received); инженер — свои в act_pending.
+    const ticketCond = isStaff
+      ? sql`status = 'received'`
+      : sql`status = 'act_pending' AND assigned_engineer_id = ${userId}`;
+    const ticketRows = (await tx.execute(sql`
+      SELECT COUNT(*)::int AS cnt FROM tickets
+       WHERE deleted_at IS NULL AND ${ticketCond}
+    `)) as unknown as CountRow[];
+    const ticketsAttention = ticketRows[0]?.cnt ?? 0;
+
+    let leadsNew = 0;
+    let calendarToday = 0;
+    let invoicesOverdue = 0;
+    if (isStaff) {
+      const leadRows = (await tx.execute(sql`
+        SELECT COUNT(*)::int AS cnt FROM leads
+         WHERE deleted_at IS NULL AND status = 'new'
+      `)) as unknown as CountRow[];
+      leadsNew = leadRows[0]?.cnt ?? 0;
+
+      const calRows = (await tx.execute(sql`
+        SELECT COUNT(*)::int AS cnt FROM calendar_events
+         WHERE deleted_at IS NULL AND event_date = CURRENT_DATE
+      `)) as unknown as CountRow[];
+      calendarToday = calRows[0]?.cnt ?? 0;
+
+      const invRows = (await tx.execute(sql`
+        SELECT COUNT(*)::int AS cnt FROM invoices
+         WHERE deleted_at IS NULL AND status = 'overdue'
+      `)) as unknown as CountRow[];
+      invoicesOverdue = invRows[0]?.cnt ?? 0;
+    }
+
+    // Склад/ТО — операционные сигналы, считаем для всех ролей.
+    const maintRows = (await tx.execute(sql`
+      SELECT COUNT(*)::int AS cnt FROM maintenance_schedules
+       WHERE deleted_at IS NULL AND is_active
+         AND next_due_at < (now() - interval '1 day')
+    `)) as unknown as CountRow[];
+    const maintenanceOverdue = maintRows[0]?.cnt ?? 0;
+
+    const lowRows = (await tx.execute(sql`
+      SELECT COUNT(*)::int AS cnt FROM inventory_items i
+       WHERE i.deleted_at IS NULL AND i.min_stock > 0
+         AND COALESCE((
+           SELECT SUM(b.quantity_remaining) FROM inventory_batches b WHERE b.item_id = i.id
+         ), 0) < i.min_stock
+    `)) as unknown as CountRow[];
+    const inventoryLowStock = lowRows[0]?.cnt ?? 0;
+
+    return {
+      ticketsAttention,
+      leadsNew,
+      calendarToday,
+      invoicesOverdue,
+      maintenanceOverdue,
+      inventoryLowStock,
+    };
+  });
+}
+
 /* ============================== DRILL-DOWN ============================== */
 
 export interface OverdueInvoiceRow {

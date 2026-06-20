@@ -88,6 +88,7 @@ const baseConfig = {
   imapPort: null,
   imapSecure: true,
   imapUser: null,
+  signature: null,
 };
 
 describe('email config', () => {
@@ -121,6 +122,16 @@ describe('email config', () => {
     expect(cfg?.password).toBe('secret-pw-123');
     const got = await caller.email.getConfig();
     expect(got?.fromName).toBe('Новое имя');
+  });
+
+  it('подпись сохраняется и возвращается (getConfig + getSignature)', async () => {
+    const caller = appRouter.createCaller(makeCtx('director'));
+    await caller.email.setConfig({ ...baseConfig, signature: 'С уважением,\nООО «Эрфольг»' });
+    const got = await caller.email.getConfig();
+    expect(got?.signature).toBe('С уважением,\nООО «Эрфольг»');
+    // staff-доступ к подписи (для подстановки в окне написания)
+    const dispatcher = appRouter.createCaller(makeCtx('dispatcher'));
+    expect(await dispatcher.email.getSignature()).toBe('С уважением,\nООО «Эрфольг»');
   });
 
   it('dispatcher → FORBIDDEN (настройки только директор)', async () => {

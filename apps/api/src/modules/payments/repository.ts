@@ -21,6 +21,7 @@ import {
 import { recomputeStatusFromPaid } from '../invoices/repository';
 import { withDbRetry } from '../../lib/db-retry';
 import { logger } from '../../lib/logger';
+import { removeCashForPaymentInTx, syncCashFromPaymentInTx } from './cash-sync';
 
 export interface PaymentDto {
   id: string;
@@ -312,6 +313,16 @@ export async function addPayment(
       const invoicePaid = input.invoiceId
         ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
         : null;
+      // Авто-доход в кассу (идемпотентно по payment_id; no-op если нет счетов).
+      await syncCashFromPaymentInTx(tx, tenantId, {
+        id,
+        ticketId: input.ticketId,
+        invoiceId: input.invoiceId ?? null,
+        amountKopecks: input.amountKopecks,
+        method: input.method,
+        paidAt: input.paidAt,
+        userId: input.userId,
+      });
       return {
         skipped: false,
         id,
@@ -337,6 +348,8 @@ export async function deletePayment(
     const row = rows[0];
     if (!row) return null;
     await tx.delete(payments).where(eq(payments.id, paymentId));
+    // Убираем связанный авто-доход из кассы (soft-delete + пересчёт остатка).
+    await removeCashForPaymentInTx(tx, tenantId, paymentId);
     const total = await recalcPaidAmountInTx(tx, tenantId, row.ticketId);
     const invoicePaid = row.invoiceId
       ? (await recalcInvoicePaidInTx(tx, row.invoiceId)).toString()

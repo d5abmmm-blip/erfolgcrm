@@ -63,7 +63,7 @@ export const TOGGLEABLE_MODULES: readonly ModuleMeta[] = [
   { key: 'warranties', label: 'Гарантии', group: 'Картотека', description: 'Гарантийные обязательства на технику', routes: ['/warranties'] },
   { key: 'tradeIn', label: 'Трейд-ин', group: 'Картотека', description: 'Приём б/у техники в зачёт', routes: ['/trade-in'] },
   // Деньги
-  { key: 'invoices', label: 'Финансы', group: 'Деньги', description: 'Счета, оплаты, себестоимость и маржа', routes: ['/invoices'] },
+  { key: 'invoices', label: 'Финансы', group: 'Деньги', description: 'Касса (доходы/расходы), счета на оплату, остатки и обзор', routes: ['/finance', '/invoices'] },
   { key: 'payroll', label: 'Зарплата', group: 'Деньги', description: 'Расчёт зарплаты инженеров (сделка/оклад)', routes: ['/payroll'] },
   { key: 'reports', label: 'Отчёты', group: 'Деньги', description: 'Аналитические отчёты по периодам', routes: ['/reports'] },
   // Система

@@ -8,6 +8,7 @@ import {
   Bot,
   ChevronRight,
   Database,
+  DatabaseBackup,
   FileStack,
   History,
   LayoutGrid,
@@ -181,6 +182,24 @@ export function SettingsPage() {
               <div className="font-medium">Безопасность аккаунта</div>
               <div className="text-muted-foreground text-xs">
                 Двухфакторная защита (TOTP) — для директора обязательно по 152-ФЗ
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="text-muted-foreground h-5 w-5" />
+        </Link>
+
+        <Link
+          href="/settings/backup"
+          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 text-primary grid h-10 w-10 place-items-center rounded-md">
+              <DatabaseBackup className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-medium">Резервные копии и архив</div>
+              <div className="text-muted-foreground text-xs">
+                Полная копия базы для страховки и переноса, выгрузка данных по годам
               </div>
             </div>
           </div>

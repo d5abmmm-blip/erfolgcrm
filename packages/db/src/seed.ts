@@ -19,6 +19,8 @@ import { getTenantEncryptionKey } from './crypto';
 import {
   assetEvents,
   assets,
+  cashAccounts,
+  cashCategories,
   clients,
   contacts,
   inventoryBatches,
@@ -88,6 +90,9 @@ async function main() {
   await seedTickets(db, demoTenantId, 'demo');
 
   await seedStage5(db, erfolgTenantId, 'erfolg');
+
+  await seedCash(db, erfolgTenantId, 'erfolg');
+  await seedCash(db, demoTenantId, 'demo');
 
   console.info('\n✓ Seed complete.');
   console.info('\nLogins (tenant / username / password):');
@@ -1217,6 +1222,131 @@ async function seedStage5(
         );
       console.info(`  + ${prefix} payment for closed ticket`);
     }
+  }
+}
+
+/**
+ * Касса / ДДС: дефолтные денежные счета и статьи доходов/расходов.
+ * Идемпотентно: счета по (tenant, name), статьи по (tenant, name, direction).
+ * Синхронизация существующих payments в кассу — на Этапе B (backfill-миграция + cash-sync).
+ */
+async function seedCash(
+  db: ReturnType<typeof makeDb>,
+  tenantIdValue: string,
+  prefix: string,
+): Promise<void> {
+  const accountSeeds: Array<typeof cashAccounts.$inferInsert> = [
+    { tenantId: tenantIdValue, name: 'Наличные', kind: 'cash', defaultForMethod: 'cash', sortOrder: 10 },
+    {
+      tenantId: tenantIdValue,
+      name: 'Расчётный счёт',
+      kind: 'bank',
+      defaultForMethod: 'bank_transfer',
+      sortOrder: 20,
+    },
+    { tenantId: tenantIdValue, name: 'Карта', kind: 'card', defaultForMethod: 'card', sortOrder: 30 },
+  ];
+
+  let createdAccounts = 0;
+  for (const a of accountSeeds) {
+    const existing = await db
+      .select({ id: cashAccounts.id })
+      .from(cashAccounts)
+      .where(and(eq(cashAccounts.tenantId, tenantIdValue), eq(cashAccounts.name, a.name)))
+      .limit(1);
+    if (existing[0]) continue;
+    await db.insert(cashAccounts).values(a);
+    createdAccounts += 1;
+  }
+
+  const categorySeeds: Array<typeof cashCategories.$inferInsert> = [
+    // Доходы
+    {
+      tenantId: tenantIdValue,
+      name: 'Оплата по заявкам',
+      direction: 'income',
+      isSystem: true,
+      systemCode: 'ticket_payment',
+      sortOrder: 10,
+    },
+    { tenantId: tenantIdValue, name: 'Продажа техники и запчастей', direction: 'income', sortOrder: 20 },
+    { tenantId: tenantIdValue, name: 'Прочий доход', direction: 'income', sortOrder: 30 },
+    // Расходы
+    { tenantId: tenantIdValue, name: 'Зарплата', direction: 'expense', sortOrder: 10 },
+    { tenantId: tenantIdValue, name: 'Закупка запчастей', direction: 'expense', sortOrder: 20 },
+    { tenantId: tenantIdValue, name: 'Аренда', direction: 'expense', sortOrder: 30 },
+    { tenantId: tenantIdValue, name: 'Налоги и взносы', direction: 'expense', sortOrder: 40 },
+    { tenantId: tenantIdValue, name: 'ГСМ и транспорт', direction: 'expense', sortOrder: 50 },
+    { tenantId: tenantIdValue, name: 'Связь и ПО', direction: 'expense', sortOrder: 60 },
+    { tenantId: tenantIdValue, name: 'Хозяйственные расходы', direction: 'expense', sortOrder: 70 },
+    { tenantId: tenantIdValue, name: 'Прочие расходы', direction: 'expense', sortOrder: 80 },
+  ];
+
+  let createdCategories = 0;
+  for (const c of categorySeeds) {
+    const existing = await db
+      .select({ id: cashCategories.id })
+      .from(cashCategories)
+      .where(
+        and(
+          eq(cashCategories.tenantId, tenantIdValue),
+          eq(cashCategories.name, c.name),
+          eq(cashCategories.direction, c.direction),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) continue;
+    await db.insert(cashCategories).values(c);
+    createdCategories += 1;
+  }
+
+  // Синхронизация существующих оплат по заявкам в кассу (как backfill-миграция 0048,
+  // но для платежей, созданных seed'ом ПОСЛЕ наката миграций). Идемпотентно (NOT EXISTS).
+  await db.execute(sql`
+    INSERT INTO cash_transactions (
+      tenant_id, kind, account_id, category_id, amount_kopecks, occurred_on,
+      comment, payment_id, invoice_id, ticket_id, user_id, source
+    )
+    SELECT p.tenant_id, 'income', acc.id, cat.id, p.amount_kopecks, p.paid_at::date,
+           'Оплата по заявке', p.id, p.invoice_id, p.ticket_id, p.user_id, 'payment'
+      FROM payments p
+      JOIN LATERAL (
+        SELECT a.id FROM cash_accounts a
+         WHERE a.tenant_id = p.tenant_id AND a.deleted_at IS NULL AND a.is_archived = false
+           AND (a.default_for_method = p.method
+                OR a.kind::text = CASE p.method::text
+                                    WHEN 'cash' THEN 'cash' WHEN 'card' THEN 'card'
+                                    WHEN 'bank_transfer' THEN 'bank' END)
+         ORDER BY (a.default_for_method = p.method) DESC, a.sort_order ASC
+         LIMIT 1
+      ) acc ON true
+      LEFT JOIN cash_categories cat
+        ON cat.tenant_id = p.tenant_id AND cat.system_code = 'ticket_payment' AND cat.deleted_at IS NULL
+     WHERE p.tenant_id = ${tenantIdValue}
+       AND NOT EXISTS (
+         SELECT 1 FROM cash_transactions ct
+          WHERE ct.tenant_id = p.tenant_id AND ct.payment_id = p.id AND ct.deleted_at IS NULL
+       )
+  `);
+  await db.execute(sql`
+    UPDATE cash_accounts a
+       SET balance_kopecks = a.opening_balance_kopecks + COALESCE((
+             SELECT SUM(CASE
+                      WHEN ct.kind='income'   AND ct.account_id=a.id THEN ct.amount_kopecks
+                      WHEN ct.kind='expense'  AND ct.account_id=a.id THEN -ct.amount_kopecks
+                      WHEN ct.kind='transfer' AND ct.account_id=a.id THEN -ct.amount_kopecks
+                      WHEN ct.kind='transfer' AND ct.counter_account_id=a.id THEN ct.amount_kopecks
+                      ELSE 0 END)
+               FROM cash_transactions ct
+              WHERE ct.deleted_at IS NULL AND (ct.account_id=a.id OR ct.counter_account_id=a.id)
+           ), 0)
+     WHERE a.tenant_id = ${tenantIdValue} AND a.deleted_at IS NULL
+  `);
+
+  if (createdAccounts + createdCategories > 0) {
+    console.info(`  + ${prefix} cash: accounts=${createdAccounts}, categories=${createdCategories}`);
+  } else {
+    console.info(`  = ${prefix} cash already seeded`);
   }
 }
 

@@ -1,12 +1,15 @@
 /**
- * tRPC роутер dashboard — все эндпоинты только для директора.
+ * tRPC роутер dashboard — аналитика только для директора.
+ * Исключение: navBadges (счётчики бейджей навигации) доступен всем ролям —
+ * это навигация, а не отчётность; данные ролевые (см. getNavBadgeCounts).
  * Все методы — query (read-only).
  */
 import { z } from 'zod';
-import { directorProcedure, router } from '../../trpc/trpc';
+import { directorProcedure, engineerProcedure, router } from '../../trpc/trpc';
 import {
   getDailySummaryQuery,
   getMetricsCmd,
+  getNavBadgesQuery,
   listLowStockQuery,
   listMaintenanceForTodayQuery,
   listOverdueInvoicesQuery,
@@ -67,4 +70,9 @@ export const dashboardRouter = router({
     .query(({ ctx, input }) =>
       getDailySummaryQuery(ctx.db, ctx.tenant.id, input.date),
     ),
+
+  /** Счётчики «требует внимания» для бейджей бокового меню (ролевые). */
+  navBadges: engineerProcedure.query(({ ctx }) =>
+    getNavBadgesQuery(ctx.db, ctx.tenant.id, ctx.session.role, ctx.session.userId),
+  ),
 });

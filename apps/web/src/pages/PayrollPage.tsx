@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { Loader2, Save, Settings as SettingsIcon, Wallet } from 'lucide-react';
 import { trpc } from '../lib/trpc';
@@ -234,14 +234,20 @@ export function PayrollSettingsPage() {
   const [pieceworkPercent, setPieceworkPercent] = useState('30');
   const [baseSalaryRub, setBaseSalaryRub] = useState('0');
   const [bonusPercent, setBonusPercent] = useState('0');
+  const [hydrated, setHydrated] = useState(false);
 
-  // Подгружаем актуальные значения в форму, когда rule загрузился
-  if (ruleQ.data && setRuleM.status === 'idle' && mode === 'piecework' && pieceworkPercent === '30') {
-    if (ruleQ.data.mode !== mode) setMode(ruleQ.data.mode);
+  // Подгружаем актуальные значения правила в форму ОДИН раз, когда оно загрузилось.
+  // ВАЖНО: только через useEffect. setState прямо в теле рендера (как было раньше)
+  // при некоторых сохранённых значениях правила давал бесконечный цикл ре-рендеров
+  // («Too many re-renders») → белый экран на /settings/payroll.
+  useEffect(() => {
+    if (!ruleQ.data || hydrated) return;
+    setMode(ruleQ.data.mode);
     setPieceworkPercent(String(ruleQ.data.pieceworkPercent));
     setBaseSalaryRub((Number(ruleQ.data.baseSalaryKopecks) / 100).toString());
     setBonusPercent(String(ruleQ.data.bonusPercent));
-  }
+    setHydrated(true);
+  }, [ruleQ.data, hydrated]);
 
   const submitRule = () => {
     setRuleM.mutate({

@@ -29,6 +29,7 @@ export interface EmailConfigDto {
   imapSecure: boolean;
   imapUser: string | null;
   hasImapPassword: boolean;
+  signature: string | null;
   updatedAt: Date | null;
 }
 
@@ -47,6 +48,7 @@ export interface UpsertEmailConfigInput {
   imapSecure: boolean;
   imapUser: string | null;
   imapPassword?: string | null;
+  signature: string | null;
 }
 
 /** Транспорт для отправки через ящик tenant'а (с расшифрованным паролем). Internal. */
@@ -57,13 +59,14 @@ export interface SmtpTransportConfig {
   port: number | null;
   secure: boolean;
   user: string | null;
+  signature: string | null;
   password: string | null;
 }
 
 export interface EmailMessageDto {
   id: string;
   direction: 'out' | 'in';
-  status: 'sent' | 'skipped' | 'failed' | 'received';
+  status: 'sent' | 'skipped' | 'failed' | 'received' | 'draft' | 'scheduled';
   to: string | null;
   from: string | null;
   subject: string | null;
@@ -80,10 +83,45 @@ export interface EmailMessageDto {
   sentByUserId: string | null;
   sentAt: Date | null;
   receivedAt: Date | null;
+  /** Время запланированной отправки (status='scheduled'); иначе null. */
+  scheduledAt: Date | null;
   createdAt: Date;
 }
 
 const PAGE_SIZE_DEFAULT = 25;
+
+/** Папки почтового клиента. */
+export type EmailFolder = 'in' | 'out' | 'spam' | 'drafts' | 'scheduled' | 'trash';
+
+/**
+ * Предикаты «какие письма показываем в папке».
+ * Корзина — только мягко-удалённые; все остальные папки — только НЕ удалённые.
+ */
+function folderFilters(folder: EmailFolder): SQL[] {
+  if (folder === 'trash') return [sql`${emailMessages.deletedAt} IS NOT NULL`];
+  const f: SQL[] = [sql`${emailMessages.deletedAt} IS NULL`];
+  switch (folder) {
+    case 'in':
+      f.push(eq(emailMessages.direction, 'in'), eq(emailMessages.isSpam, false));
+      break;
+    case 'spam':
+      f.push(eq(emailMessages.direction, 'in'), eq(emailMessages.isSpam, true));
+      break;
+    case 'out':
+      f.push(
+        eq(emailMessages.direction, 'out'),
+        sql`${emailMessages.status} IN ('sent','skipped','failed')`,
+      );
+      break;
+    case 'drafts':
+      f.push(eq(emailMessages.status, 'draft'));
+      break;
+    case 'scheduled':
+      f.push(eq(emailMessages.status, 'scheduled'));
+      break;
+  }
+  return f;
+}
 
 /** Конфиг ящика без секретов (для UI). Пароли — только флагом hasPassword. */
 export async function getConfig(db: Db, tenantId: string): Promise<EmailConfigDto | null> {
@@ -103,6 +141,7 @@ export async function getConfig(db: Db, tenantId: string): Promise<EmailConfigDt
         imapSecure: emailConfigs.imapSecure,
         imapUser: emailConfigs.imapUser,
         hasImapPassword: sql<boolean>`${emailConfigs.imapPasswordEnc} IS NOT NULL`.as('has_imap_pw'),
+        signature: emailConfigs.signature,
         updatedAt: emailConfigs.updatedAt,
       })
       .from(emailConfigs)
@@ -124,6 +163,7 @@ export async function getConfig(db: Db, tenantId: string): Promise<EmailConfigDt
       imapSecure: r.imapSecure,
       imapUser: r.imapUser,
       hasImapPassword: Boolean(r.hasImapPassword),
+      signature: r.signature,
       updatedAt: r.updatedAt,
     };
   });
@@ -145,6 +185,7 @@ export async function getTransportConfig(
         smtpPort: emailConfigs.smtpPort,
         smtpSecure: emailConfigs.smtpSecure,
         smtpUser: emailConfigs.smtpUser,
+        signature: emailConfigs.signature,
         password: decryptSql(emailConfigs.smtpPasswordEnc, key).as('smtp_pw_dec'),
       })
       .from(emailConfigs)
@@ -163,6 +204,7 @@ export async function getTransportConfig(
       port: r.smtpPort,
       secure: r.smtpSecure,
       user: r.smtpUser,
+      signature: r.signature,
       password: (r.password as string | null) ?? null,
     };
   });
@@ -183,12 +225,12 @@ export async function upsertConfig(
         tenant_id, enabled, from_name, from_email,
         smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password_encrypted,
         imap_host, imap_port, imap_secure, imap_user, imap_password_encrypted,
-        updated_at
+        signature, updated_at
       ) VALUES (
         ${tenantId}, ${input.enabled}, ${input.fromName ?? null}, ${input.fromEmail ?? null},
         ${input.smtpHost ?? null}, ${input.smtpPort ?? null}, ${input.smtpSecure}, ${input.smtpUser ?? null}, ${encPw(input.smtpPassword)},
         ${input.imapHost ?? null}, ${input.imapPort ?? null}, ${input.imapSecure}, ${input.imapUser ?? null}, ${encPw(input.imapPassword)},
-        now()
+        ${input.signature ?? null}, now()
       )
       ON CONFLICT (tenant_id) DO UPDATE SET
         enabled = EXCLUDED.enabled,
@@ -204,6 +246,7 @@ export async function upsertConfig(
         imap_secure = EXCLUDED.imap_secure,
         imap_user = EXCLUDED.imap_user,
         imap_password_encrypted = COALESCE(EXCLUDED.imap_password_encrypted, email_configs.imap_password_encrypted),
+        signature = EXCLUDED.signature,
         updated_at = now()
     `);
   });
@@ -218,6 +261,7 @@ export async function listMessages(
     page?: number;
     pageSize?: number;
     search?: string;
+    folder?: EmailFolder;
     direction?: 'out' | 'in';
     spam?: boolean;
   } = {},
@@ -227,9 +271,15 @@ export async function listMessages(
   const offset = (page - 1) * pageSize;
 
   const filters: SQL[] = [];
-  if (opts.direction) filters.push(eq(emailMessages.direction, opts.direction));
-  // spam: undefined — без фильтра; false — только не-спам; true — только спам.
-  if (opts.spam !== undefined) filters.push(eq(emailMessages.isSpam, opts.spam));
+  if (opts.folder) {
+    filters.push(...folderFilters(opts.folder));
+  } else {
+    // Обратная совместимость (вызовы без folder): только не-удалённые + старые фильтры.
+    filters.push(sql`${emailMessages.deletedAt} IS NULL`);
+    if (opts.direction) filters.push(eq(emailMessages.direction, opts.direction));
+    // spam: undefined — без фильтра; false — только не-спам; true — только спам.
+    if (opts.spam !== undefined) filters.push(eq(emailMessages.isSpam, opts.spam));
+  }
   if (opts.search && opts.search.trim()) {
     const q = `%${opts.search.trim()}%`;
     filters.push(
@@ -260,6 +310,7 @@ export async function listMessages(
         sentByUserId: emailMessages.sentByUserId,
         sentAt: emailMessages.sentAt,
         receivedAt: emailMessages.receivedAt,
+        scheduledAt: emailMessages.scheduledAt,
         createdAt: emailMessages.createdAt,
       })
       .from(emailMessages)
@@ -291,6 +342,7 @@ export async function listMessages(
         sentByUserId: r.sentByUserId,
         sentAt: r.sentAt,
         receivedAt: r.receivedAt,
+        scheduledAt: r.scheduledAt,
         createdAt: r.createdAt,
       })),
       total: Number(totalRow[0]?.value ?? 0),
@@ -302,6 +354,8 @@ export async function listMessages(
 export interface EmailMessageFull extends EmailMessageDto {
   bodyText: string | null;
   bodyHtml: string | null;
+  cc: string | null;
+  bcc: string | null;
   inReplyTo: string | null;
   references: string | null;
 }
@@ -317,6 +371,8 @@ function fullSelection(key: string) {
     subject: decryptSql(emailMessages.subjectEnc, key).as('subject_dec'),
     bodyText: decryptSql(emailMessages.bodyTextEnc, key).as('body_text_dec'),
     bodyHtml: decryptSql(emailMessages.bodyHtmlEnc, key).as('body_html_dec'),
+    cc: decryptSql(emailMessages.ccAddrEnc, key).as('cc_dec'),
+    bcc: decryptSql(emailMessages.bccAddrEnc, key).as('bcc_dec'),
     messageId: emailMessages.messageId,
     inReplyTo: emailMessages.inReplyTo,
     references: emailMessages.references,
@@ -332,6 +388,7 @@ function fullSelection(key: string) {
     sentByUserId: emailMessages.sentByUserId,
     sentAt: emailMessages.sentAt,
     receivedAt: emailMessages.receivedAt,
+    scheduledAt: emailMessages.scheduledAt,
     createdAt: emailMessages.createdAt,
   };
 }
@@ -339,12 +396,14 @@ function fullSelection(key: string) {
 type FullRow = {
   id: string;
   direction: 'out' | 'in';
-  status: 'sent' | 'skipped' | 'failed' | 'received';
+  status: 'sent' | 'skipped' | 'failed' | 'received' | 'draft' | 'scheduled';
   to: unknown;
   from: unknown;
   subject: unknown;
   bodyText: unknown;
   bodyHtml: unknown;
+  cc: unknown;
+  bcc: unknown;
   messageId: string | null;
   inReplyTo: string | null;
   references: string | null;
@@ -360,6 +419,7 @@ type FullRow = {
   sentByUserId: string | null;
   sentAt: Date | null;
   receivedAt: Date | null;
+  scheduledAt: Date | null;
   createdAt: Date;
 };
 
@@ -373,6 +433,8 @@ function mapFull(r: FullRow): EmailMessageFull {
     subject: (r.subject as string | null) ?? null,
     bodyText: (r.bodyText as string | null) ?? null,
     bodyHtml: (r.bodyHtml as string | null) ?? null,
+    cc: (r.cc as string | null) ?? null,
+    bcc: (r.bcc as string | null) ?? null,
     messageId: r.messageId,
     inReplyTo: r.inReplyTo,
     references: r.references,
@@ -388,6 +450,7 @@ function mapFull(r: FullRow): EmailMessageFull {
     sentByUserId: r.sentByUserId,
     sentAt: r.sentAt,
     receivedAt: r.receivedAt,
+    scheduledAt: r.scheduledAt,
     createdAt: r.createdAt,
   };
 }
@@ -511,5 +574,195 @@ export async function insertEmailAttachment(
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
     });
+  });
+}
+
+/** Поля черновика (все необязательны — черновик может быть неполным). */
+export interface DraftFields {
+  to?: string | null;
+  cc?: string | null;
+  bcc?: string | null;
+  subject?: string | null;
+  bodyText?: string | null;
+  bodyHtml?: string | null;
+  relatedTicketId?: string | null;
+  relatedClientId?: string | null;
+  inReplyTo?: string | null;
+  references?: string | null;
+  sentByUserId?: string | null;
+}
+
+/** Поля неотправленного исходящего: к DraftFields добавляются статус и время отправки. */
+export interface OutboxFields extends DraftFields {
+  status?: 'draft' | 'scheduled';
+  scheduledAt?: Date | null;
+}
+
+/**
+ * Создать или обновить неотправленное исходящее (черновик или запланированное), direction='out'.
+ * Возвращает id. Если передан id существующей строки — обновляем (пока она draft/scheduled и не
+ * в корзине); иначе (или если уже отправлена/удалена) — вставляем новую.
+ */
+export async function upsertOutbox(
+  db: Db,
+  tenantId: string,
+  key: string,
+  input: OutboxFields & { id?: string },
+): Promise<string> {
+  const enc = (v: string | null | undefined) =>
+    v == null ? sql`NULL` : sql`pgp_sym_encrypt(${v}::text, ${key})`;
+  const ts = (d: Date | null | undefined) =>
+    d == null ? sql`NULL` : sql`${d.toISOString()}::timestamptz`;
+  const status = input.status ?? 'draft';
+  return withTenantTx(db, tenantId, async (tx) => {
+    if (input.id) {
+      const upd = (await tx.execute<{ id: string }>(sql`
+        UPDATE email_messages SET
+          status = ${status},
+          to_addr_encrypted = ${enc(input.to)},
+          cc_addr_encrypted = ${enc(input.cc)},
+          bcc_addr_encrypted = ${enc(input.bcc)},
+          subject_encrypted = ${enc(input.subject)},
+          body_text_encrypted = ${enc(input.bodyText)},
+          body_html_encrypted = ${enc(input.bodyHtml)},
+          related_ticket_id = ${input.relatedTicketId ?? null},
+          related_client_id = ${input.relatedClientId ?? null},
+          in_reply_to = ${input.inReplyTo ?? null},
+          references_list = ${input.references ?? null},
+          scheduled_at = ${ts(input.scheduledAt)},
+          updated_at = now()
+        WHERE id = ${input.id} AND status IN ('draft','scheduled') AND deleted_at IS NULL
+        RETURNING id
+      `)) as unknown as Array<{ id: string }>;
+      if (upd[0]?.id) return upd[0].id;
+    }
+    const ins = (await tx.execute<{ id: string }>(sql`
+      INSERT INTO email_messages (
+        tenant_id, direction, status,
+        to_addr_encrypted, cc_addr_encrypted, bcc_addr_encrypted, subject_encrypted,
+        body_text_encrypted, body_html_encrypted,
+        related_ticket_id, related_client_id, in_reply_to, references_list, scheduled_at, sent_by_user_id
+      ) VALUES (
+        ${tenantId}, 'out', ${status},
+        ${enc(input.to)}, ${enc(input.cc)}, ${enc(input.bcc)}, ${enc(input.subject)},
+        ${enc(input.bodyText)}, ${enc(input.bodyHtml)},
+        ${input.relatedTicketId ?? null}, ${input.relatedClientId ?? null},
+        ${input.inReplyTo ?? null}, ${input.references ?? null}, ${ts(input.scheduledAt)}, ${input.sentByUserId ?? null}
+      ) RETURNING id
+    `)) as unknown as Array<{ id: string }>;
+    const id = ins[0]?.id;
+    if (!id) throw new Error('upsertOutbox: insert returned no id');
+    return id;
+  });
+}
+
+/** Вернуть запланированное письмо в черновики (отмена планирования). Только если ещё scheduled. */
+export async function revertScheduledToDraft(db: Db, tenantId: string, id: string): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx.execute(sql`
+      UPDATE email_messages SET status = 'draft', scheduled_at = NULL, updated_at = now()
+      WHERE id = ${id} AND status = 'scheduled' AND deleted_at IS NULL
+    `);
+  });
+}
+
+/** Мягкое удаление (в корзину): помечаем deleted_at. Статус не трогаем. */
+export async function softDeleteMessage(db: Db, tenantId: string, id: string): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx.execute(sql`
+      UPDATE email_messages SET deleted_at = now(), updated_at = now()
+      WHERE id = ${id} AND deleted_at IS NULL
+    `);
+  });
+}
+
+/** Восстановление из корзины: снимаем deleted_at. */
+export async function restoreMessage(db: Db, tenantId: string, id: string): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx.execute(sql`
+      UPDATE email_messages SET deleted_at = NULL, updated_at = now()
+      WHERE id = ${id} AND deleted_at IS NOT NULL
+    `);
+  });
+}
+
+/** Полное удаление — ТОЛЬКО из корзины. Возвращает true, если строка реально удалена. */
+export async function purgeMessage(db: Db, tenantId: string, id: string): Promise<boolean> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const del = (await tx.execute<{ id: string }>(sql`
+      DELETE FROM email_messages WHERE id = ${id} AND deleted_at IS NOT NULL RETURNING id
+    `)) as unknown as Array<{ id: string }>;
+    if (!del[0]?.id) return false;
+    // email_attachments без FK-cascade — чистим явно (вложения входящих в корзине).
+    await tx.execute(sql`DELETE FROM email_attachments WHERE message_id = ${id}`);
+    return true;
+  });
+}
+
+/** Поля для перевода письма (черновик/запланированное) в финальный статус при отправке. */
+export interface FinalizeSendFields {
+  status: 'sent' | 'skipped' | 'failed';
+  to?: string | null;
+  from?: string | null;
+  cc?: string | null;
+  bcc?: string | null;
+  subject?: string | null;
+  bodyText?: string | null;
+  bodyHtml?: string | null;
+  messageId?: string | null;
+  inReplyTo?: string | null;
+  references?: string | null;
+  threadId?: string | null;
+  relatedTicketId?: string | null;
+  relatedClientId?: string | null;
+  attachmentName?: string | null;
+  attachmentKind?: string | null;
+  error?: string | null;
+  sentByUserId?: string | null;
+  sentAt?: Date | null;
+}
+
+/**
+ * Перевести существующую строку (черновик/запланированное) в финальный статус
+ * (sent/skipped/failed) с актуальным содержимым; scheduled_at сбрасывается в NULL.
+ * Используется при отправке из черновика и воркером отложенной отправки.
+ */
+export async function finalizeMessageSend(
+  db: Db,
+  tenantId: string,
+  key: string,
+  id: string,
+  fields: FinalizeSendFields,
+): Promise<void> {
+  const enc = (v: string | null | undefined) =>
+    v == null ? sql`NULL` : sql`pgp_sym_encrypt(${v}::text, ${key})`;
+  const ts = (d: Date | null | undefined) =>
+    d == null ? sql`NULL` : sql`${d.toISOString()}::timestamptz`;
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx.execute(sql`
+      UPDATE email_messages SET
+        status = ${fields.status},
+        to_addr_encrypted = ${enc(fields.to)},
+        from_addr_encrypted = ${enc(fields.from)},
+        cc_addr_encrypted = ${enc(fields.cc)},
+        bcc_addr_encrypted = ${enc(fields.bcc)},
+        subject_encrypted = ${enc(fields.subject)},
+        body_text_encrypted = ${enc(fields.bodyText)},
+        body_html_encrypted = ${enc(fields.bodyHtml)},
+        message_id = ${fields.messageId ?? null},
+        in_reply_to = ${fields.inReplyTo ?? null},
+        references_list = ${fields.references ?? null},
+        thread_id = ${fields.threadId ?? null},
+        related_ticket_id = ${fields.relatedTicketId ?? null},
+        related_client_id = ${fields.relatedClientId ?? null},
+        attachment_name = ${fields.attachmentName ?? null},
+        attachment_kind = ${fields.attachmentKind ?? null},
+        error = ${fields.error ?? null},
+        sent_by_user_id = ${fields.sentByUserId ?? null},
+        scheduled_at = NULL,
+        sent_at = ${ts(fields.sentAt)},
+        updated_at = now()
+      WHERE id = ${id}
+    `);
   });
 }

@@ -32,6 +32,7 @@ export function MailSettingsPage() {
   const [imapSecure, setImapSecure] = useState(true);
   const [imapUser, setImapUser] = useState('');
   const [imapPassword, setImapPassword] = useState('');
+  const [signature, setSignature] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export function MailSettingsPage() {
     setImapPort(c.imapPort != null ? String(c.imapPort) : '');
     setImapSecure(c.imapSecure);
     setImapUser(c.imapUser ?? '');
+    setSignature(c.signature ?? '');
   }, [cfg.data]);
 
   const setConfig = trpc.email.setConfig.useMutation({
@@ -85,6 +87,7 @@ export function MailSettingsPage() {
       imapSecure,
       imapUser: imapUser.trim() || null,
       imapPassword: imapPassword || undefined,
+      signature: signature.trim() || null,
     });
   };
 
@@ -195,7 +198,7 @@ export function MailSettingsPage() {
           {/* IMAP (Этап B) */}
           <div className="bg-card space-y-3 rounded-lg border p-4">
             <div className="font-medium">
-              IMAP (входящие) <span className="text-muted-foreground text-xs font-normal">— понадобится на следующем этапе</span>
+              IMAP (входящие) <span className="text-muted-foreground text-xs font-normal">— приём входящих писем</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
@@ -225,6 +228,21 @@ export function MailSettingsPage() {
               <input type="checkbox" checked={imapSecure} onChange={(e) => setImapSecure(e.target.checked)} />
               SSL/TLS (порт 993)
             </label>
+          </div>
+
+          {/* Подпись */}
+          <div className="bg-card space-y-3 rounded-lg border p-4">
+            <div className="font-medium">Подпись</div>
+            <p className="text-muted-foreground text-xs">
+              Добавляется в конец каждого исходящего письма (контакты и реквизиты компании).
+            </p>
+            <textarea
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              rows={4}
+              placeholder={'С уважением,\nООО «Эрфольг»\n+7 ...'}
+              className={cn(inputCls, 'resize-y')}
+            />
           </div>
 
           <div className="flex items-center gap-3">

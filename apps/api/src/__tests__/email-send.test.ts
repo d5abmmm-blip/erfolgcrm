@@ -21,6 +21,8 @@ let erfolgId = '';
 let mid = 0;
 const sentMail: Array<{
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   text?: string;
   html?: string;
@@ -35,6 +37,8 @@ beforeAll(async () => {
     sendMail: vi.fn(async (opts: any) => {
       sentMail.push({
         to: opts.to,
+        cc: opts.cc,
+        bcc: opts.bcc,
         subject: opts.subject,
         text: opts.text,
         html: opts.html,
@@ -165,6 +169,25 @@ describe('email.send + journal', () => {
     expect(full?.subject).toBe('Тело внутри');
     expect(full?.bodyText).toBe('Секретный текст письма');
     expect(full?.to).toBe('getone@example.com');
+  });
+
+  it('cc/bcc уходят в SMTP и сохраняются в журнале (расшифровка)', async () => {
+    const caller = appRouter.createCaller(makeCtx('director'));
+    await caller.email.send({
+      to: 'main@example.com',
+      cc: 'copy@example.com',
+      bcc: 'secret@example.com',
+      subject: 'С копиями',
+      bodyText: 'тело',
+    });
+    expect(sentMail[0]?.cc).toBe('copy@example.com');
+    expect(sentMail[0]?.bcc).toBe('secret@example.com');
+
+    const list = await caller.email.list({ search: 'С копиями' });
+    const id = list.items[0]?.id;
+    const full = await caller.email.get({ id: String(id) });
+    expect(full?.cc).toBe('copy@example.com');
+    expect(full?.bcc).toBe('secret@example.com');
   });
 
   it('dispatcher тоже может отправлять (staff)', async () => {

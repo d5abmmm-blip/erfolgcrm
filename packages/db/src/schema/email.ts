@@ -43,6 +43,10 @@ export const emailConfigs = pgTable('email_configs', {
   imapLastUid: bigint('imap_last_uid', { mode: 'number' }),
   imapLastFetchAt: timestamp('imap_last_fetch_at', { withTimezone: true }),
 
+  // Полноценный клиент (0045): подпись компании, подставляется в конец письма.
+  // Не ПДн в обычном смысле — уходит в каждом письме, храним открытым текстом.
+  signature: text('signature'),
+
   ...timestamps,
 });
 
@@ -54,8 +58,11 @@ export const emailMessages = pgTable(
     tenantId: tenantId(),
     /** Направление: исходящее (out) или входящее (in). */
     direction: varchar('direction', { length: 8 }).$type<'out' | 'in'>().notNull().default('out'),
-    /** Статус: отправлено / пропущено (SMTP не настроен) / ошибка / получено (входящее). */
-    status: varchar('status', { length: 16 }).$type<'sent' | 'skipped' | 'failed' | 'received'>().notNull(),
+    /** Статус: отправлено / пропущено (SMTP не настроен) / ошибка / получено (входящее)
+     *  / черновик (draft) / запланировано (scheduled). */
+    status: varchar('status', { length: 16 })
+      .$type<'sent' | 'skipped' | 'failed' | 'received' | 'draft' | 'scheduled'>()
+      .notNull(),
 
     // ПДн — шифруются (152-ФЗ). Читаются только через decryptSql, наружу сырой bytea не отдаём.
     toAddrEnc: encryptedText('to_addr_encrypted'),
@@ -90,13 +97,29 @@ export const emailMessages = pgTable(
     /** Спам: reg.ru помечает ***SPAM*** в теме — прячем из «Входящих». */
     isSpam: boolean('is_spam').notNull().default(false),
 
+    // ── Полноценный клиент (0045): черновики, отложенная отправка, копии ──
+    // Корзина — через стандартный deletedAt из ...timestamps (мягкое удаление).
+    /** Копия (CC) — ПДн, шифруется как to/from. */
+    ccAddrEnc: encryptedText('cc_addr_encrypted'),
+    /** Скрытая копия (BCC) — ПДн, шифруется. */
+    bccAddrEnc: encryptedText('bcc_addr_encrypted'),
+    /** Время отложенной отправки (status='scheduled'); NULL у обычных писем. */
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+
     ...timestamps,
   },
   (t) => [
     index('email_messages_tenant_created_idx').on(t.tenantId, sql`${t.createdAt} DESC`),
     index('email_messages_thread_idx').on(t.tenantId, t.threadId),
+    // Отложенные письма: быстрый разбор папки «Запланированные» и реконсиляция воркера.
+    index('email_messages_scheduled_idx')
+      .on(t.tenantId, t.scheduledAt)
+      .where(sql`${t.scheduledAt} IS NOT NULL`),
     check('email_messages_direction_chk', sql`direction IN ('out','in')`),
-    check('email_messages_status_chk', sql`status IN ('sent','skipped','failed','received')`),
+    check(
+      'email_messages_status_chk',
+      sql`status IN ('sent','skipped','failed','received','draft','scheduled')`,
+    ),
   ],
 );
 

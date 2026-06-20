@@ -17,6 +17,7 @@ import {
   UserCircle2,
   X,
 } from 'lucide-react';
+import { STAFF_POSITIONS, type StaffPosition } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
@@ -385,7 +386,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       username,
       password,
       fullName,
-      position: position || null,
+      position: position ? (position as StaffPosition) : null,
       email: email || null,
       phone: phone || null,
       role,
@@ -425,13 +426,19 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
           />
         </Field>
-        <Field label="Должность">
-          <input
-            type="text"
+        <Field label="Должность" hint="Выбирается из списка">
+          <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          />
+          >
+            <option value="">— не указана —</option>
+            {STAFF_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Email">
@@ -513,10 +520,18 @@ function EditUserModal({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const isKnownPosition = (STAFF_POSITIONS as readonly string[]).includes(position);
     m.mutate({
       userId: user.id,
       fullName,
-      position: position || null,
+      // '' → очистить (null); должность из списка → сохранить;
+      // прежнее значение вне списка → не трогаем (undefined), чтобы не потерять.
+      position:
+        position === ''
+          ? null
+          : isKnownPosition
+            ? (position as StaffPosition)
+            : undefined,
       email: email || null,
       phone: phone || null,
       role,
@@ -545,13 +560,22 @@ function EditUserModal({
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
           />
         </Field>
-        <Field label="Должность">
-          <input
-            type="text"
+        <Field label="Должность" hint="Выбирается из списка">
+          <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          />
+          >
+            <option value="">— не указана —</option>
+            {position && !(STAFF_POSITIONS as readonly string[]).includes(position) && (
+              <option value={position}>{position} (прежнее значение)</option>
+            )}
+            {STAFF_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Email">

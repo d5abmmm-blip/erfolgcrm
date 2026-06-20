@@ -15,11 +15,13 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
 import {
+  calendarEvents,
   clients,
   getDb,
   inventoryBatches,
   inventoryItems,
   invoices,
+  leads,
   maintenanceSchedules,
   tickets,
   withTenantTx,
@@ -40,6 +42,7 @@ import { addPayment } from '../modules/payments/repository';
 import {
   getMetrics,
   getDailySummary,
+  getNavBadgeCounts,
   listOverdueInvoices,
   listSlaAtRisk,
   listLowStock,
@@ -85,6 +88,8 @@ async function clearTestData(): Promise<void> {
       await tx
         .delete(maintenanceSchedules)
         .where(like(maintenanceSchedules.notes, `${TEST_PREFIX}%`));
+      await tx.delete(leads).where(like(leads.name, `${TEST_PREFIX}%`));
+      await tx.delete(calendarEvents).where(like(calendarEvents.title, `${TEST_PREFIX}%`));
     });
   }
 }
@@ -345,5 +350,51 @@ describe('dashboard.getMetrics', () => {
     expect(Array.isArray(summary.lowStock)).toBe(true);
     expect(Array.isArray(summary.maintenanceToday)).toBe(true);
     expect(Array.isArray(summary.closedTicketsToday)).toBe(true);
+  });
+});
+
+describe('dashboard.getNavBadgeCounts (бейджи навигации)', () => {
+  beforeEach(clearTestData);
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+
+  it('staff: новый лид и событие на сегодня увеличивают счётчики (дельта)', async () => {
+    const before = await getNavBadgeCounts(getDb(), erfolgId, 'dispatcher', 'u1');
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-new`, status: 'new' });
+      // не-новый лид в счётчик попасть НЕ должен
+      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-contacted`, status: 'contacted' });
+      await tx.insert(calendarEvents).values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt`, eventDate: todayStr() });
+    });
+    const after = await getNavBadgeCounts(getDb(), erfolgId, 'dispatcher', 'u1');
+    expect(after.leadsNew - before.leadsNew).toBe(1);
+    expect(after.calendarToday - before.calendarToday).toBe(1);
+  });
+
+  it('инженер не видит лиды/календарь/счета (всегда 0)', async () => {
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-eng`, status: 'new' });
+      await tx.insert(calendarEvents).values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt-eng`, eventDate: todayStr() });
+    });
+    // userId — валидный UUID (в проде это всегда ctx.session.userId); заявок на него нет.
+    const eng = await getNavBadgeCounts(getDb(), erfolgId, 'engineer', '00000000-0000-0000-0000-000000000001');
+    expect(eng.leadsNew).toBe(0);
+    expect(eng.calendarToday).toBe(0);
+    expect(eng.invoicesOverdue).toBe(0);
+  });
+
+  it('staff: новая заявка (received) увеличивает ticketsAttention', async () => {
+    const before = await getNavBadgeCounts(getDb(), erfolgId, 'director', 'u1');
+    await createBilledTicket(erfolgId, erfolgClientId, 10_000n); // createTicket → статус received
+    const after = await getNavBadgeCounts(getDb(), erfolgId, 'director', 'u1');
+    expect(after.ticketsAttention - before.ticketsAttention).toBe(1);
+  });
+
+  it('cross-tenant: demo не видит лид erfolg', async () => {
+    const beforeDemo = await getNavBadgeCounts(getDb(), demoId, 'dispatcher', 'u1');
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-iso`, status: 'new' });
+    });
+    const afterDemo = await getNavBadgeCounts(getDb(), demoId, 'dispatcher', 'u1');
+    expect(afterDemo.leadsNew - beforeDemo.leadsNew).toBe(0);
   });
 });

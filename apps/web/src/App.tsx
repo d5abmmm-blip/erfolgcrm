@@ -36,8 +36,12 @@ import { RoadmapPage } from './pages/RoadmapPage';
 import { TelegramSettingsPage } from './pages/TelegramSettingsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ModulesSettingsPage } from './pages/ModulesSettingsPage';
+import { BackupSettingsPage } from './pages/BackupSettingsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceCardPage } from './pages/InvoiceCardPage';
+import { FinanceOverviewPage } from './pages/FinanceOverviewPage';
+import { CashJournalPage } from './pages/CashJournalPage';
+import { CashAccountsPage } from './pages/CashAccountsPage';
 import { OnecSettingsPage } from './pages/OnecSettingsPage';
 import { PayrollPage, PayrollSettingsPage } from './pages/PayrollPage';
 import { UsersPage } from './pages/UsersPage';
@@ -175,6 +179,10 @@ function StaffApp() {
           <Route path="/contracts/new" component={ContractFormPage} />
           <Route path="/contracts/:id/edit" component={ContractFormPage} />
           <Route path="/contracts/:id" component={ContractCardPage} />
+          <Route path="/finance" component={FinanceOverviewPage} />
+          <Route path="/finance/transactions" component={CashJournalPage} />
+          <Route path="/finance/accounts" component={CashAccountsPage} />
+          <Route path="/finance/invoices" component={InvoicesPage} />
           <Route path="/invoices" component={InvoicesPage} />
           <Route path="/invoices/:id" component={InvoiceCardPage} />
           <Route path="/payroll" component={PayrollPage} />
@@ -184,6 +192,7 @@ function StaffApp() {
           <Route path="/mail" component={MailListPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/settings/modules" component={ModulesSettingsPage} />
+          <Route path="/settings/backup" component={BackupSettingsPage} />
           <Route path="/settings/telegram" component={TelegramSettingsPage} />
           <Route path="/settings/onec" component={OnecSettingsPage} />
           <Route path="/settings/email" component={MailSettingsPage} />

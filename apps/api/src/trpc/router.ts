@@ -33,6 +33,8 @@ import { roadmapRouter } from '../modules/roadmap';
 import { calendarRouter } from '../modules/calendar';
 import { settingsRouter } from '../modules/settings';
 import { emailRouter } from '../modules/email';
+import { cashRouter } from '../modules/cash';
+import { backupRouter } from '../modules/backup';
 import {
   clientAuthRouter,
   clientCabinetRouter,
@@ -96,6 +98,10 @@ export const appRouter = router({
   settings: settingsRouter,
   /** Раздел «Почта» (Этап A): реквизиты ящика, отправка писем, журнал. */
   email: emailRouter,
+  /** Касса / ДДС: доходы и расходы, денежные счета с остатками, операции и обзор. */
+  cash: cashRouter,
+  /** Резервные копии и архив по годам (только директор). */
+  backup: backupRouter,
 });
 
 export type AppRouter = typeof appRouter;

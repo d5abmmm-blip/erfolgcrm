@@ -98,4 +98,5 @@ export const QUEUE_NAMES = {
   storageCleanup: 'storage-cleanup',
   pushSend: 'push-send',
   telegramNotify: 'telegram-notify',
+  emailScheduled: 'email-scheduled',
 } as const;

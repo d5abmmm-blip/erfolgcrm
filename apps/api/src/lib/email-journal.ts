@@ -22,6 +22,8 @@ export interface JournalEntry {
   status: 'sent' | 'skipped' | 'failed' | 'received';
   to?: string | null;
   from?: string | null;
+  cc?: string | null;
+  bcc?: string | null;
   subject?: string | null;
   bodyText?: string | null;
   bodyHtml?: string | null;
@@ -61,14 +63,14 @@ export async function insertEmailMessage(
     const result = await tx.execute<{ id: string }>(sql`
       INSERT INTO email_messages (
         tenant_id, direction, status,
-        to_addr_encrypted, from_addr_encrypted, subject_encrypted,
+        to_addr_encrypted, from_addr_encrypted, cc_addr_encrypted, bcc_addr_encrypted, subject_encrypted,
         body_text_encrypted, body_html_encrypted,
         message_id, in_reply_to, references_list, thread_id,
         related_ticket_id, related_client_id,
         attachment_name, attachment_kind, is_spam, error, sent_by_user_id, sent_at, received_at
       ) VALUES (
         ${tenantId}, ${entry.direction ?? 'out'}, ${entry.status},
-        ${enc(entry.to)}, ${enc(entry.from)}, ${enc(entry.subject)},
+        ${enc(entry.to)}, ${enc(entry.from)}, ${enc(entry.cc)}, ${enc(entry.bcc)}, ${enc(entry.subject)},
         ${enc(entry.bodyText)}, ${enc(entry.bodyHtml)},
         ${entry.messageId ?? null}, ${entry.inReplyTo ?? null}, ${entry.references ?? null}, ${entry.threadId ?? null},
         ${entry.relatedTicketId ?? null}, ${entry.relatedClientId ?? null},

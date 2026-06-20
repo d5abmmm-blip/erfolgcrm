@@ -41,6 +41,9 @@ export interface MailAttachment {
 
 export interface SendMailInput {
   to: string;
+  /** Копия / скрытая копия (один или несколько адресов через запятую). */
+  cc?: string;
+  bcc?: string;
   subject: string;
   text: string;
   html?: string;
@@ -143,6 +146,8 @@ export async function sendMailVia(
     const info = (await transporter.sendMail({
       from,
       to: input.to,
+      cc: input.cc,
+      bcc: input.bcc,
       subject: input.subject,
       text: input.text,
       html: input.html,

@@ -16,6 +16,7 @@ import { getRedis } from './lib/redis';
 import { makeStorageLocalRouter } from './routes/storage-local';
 import { makeTelegramWebhookRouter } from './routes/telegram-webhook';
 import { makeOnecWebhookRouter } from './routes/onec-webhook';
+import { makeBackupRouter } from './routes/backup';
 import { shutdownQueues } from './lib/queue';
 import { shutdownMailer } from './lib/mailer';
 import { registerStorageCleanupWorker } from './workers/storage-cleanup';
@@ -33,6 +34,23 @@ import {
   enqueueEmailInboundSchedule,
   registerEmailInboundWorker,
 } from './workers/email-inbound';
+import {
+  reconcileScheduledSends,
+  registerEmailScheduledWorker,
+} from './workers/email-scheduled';
+
+// Глобальная страховка от «тихой смерти» процесса. Незанятое событие 'error' у любого
+// EventEmitter (например обрыв IMAP/TLS-сокета) и необработанный rejected-промис по
+// умолчанию роняют Node. Для внутренней CRM это недопустимо: сбой периферии (почта,
+// очереди) не должен останавливать заявки и клиентов. Логируем ГРОМКО (error) и держим
+// процесс живым. Точечное лечение — слушатель 'error' на каждом эмиттере (например
+// modules/email/imap.ts → attachImapErrorGuard); эти хендлеры — последний рубеж обороны.
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'unhandledRejection — процесс оставлен живым');
+});
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'uncaughtException — процесс оставлен живым');
+});
 
 const app = express();
 const PORT = Number(process.env.API_PORT ?? 3030);
@@ -140,6 +158,10 @@ app.use('/api/v1/telegram', makeTelegramWebhookRouter());
 // 1С webhook (Этап 8.F). Публичный — авторизуется по Bearer токену из onec_configs.incoming_token_hash.
 app.use('/api/v1/onec', makeOnecWebhookRouter());
 
+// Резервные копии: стрим полной копии базы (pg_dump). Авторизуется HMAC-токеном,
+// который выдаёт директор-only процедура backup.requestFullDump.
+app.use('/api/v1/backup', makeBackupRouter());
+
 app.use(
   '/api/v1/trpc',
   createExpressMiddleware({
@@ -161,6 +183,7 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerTicketStatusNotifyWorker();
   registerCalendarReminderWorker();
   registerEmailInboundWorker();
+  registerEmailScheduledWorker();
   // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
   if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
     void enqueueInvoiceReminderSchedule();
@@ -169,6 +192,10 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   // расписание ставим всегда (тик без «созревших» событий — no-op).
   void enqueueCalendarReminderSchedule().catch((err) =>
     logger.warn({ err }, 'calendar-reminder schedule failed'),
+  );
+  // Отложенная отправка писем — переенкью отложенных задач на старте (Redis мог их потерять).
+  void reconcileScheduledSends().catch((err) =>
+    logger.warn({ err }, 'email-scheduled reconcile failed'),
   );
   // Приём входящих по IMAP — внешняя зависимость (ящик reg.ru), поэтому расписание
   // ставим только при явном EMAIL_INBOUND_ENABLED=true. На dev дёргаем вручную (email.fetchNow).

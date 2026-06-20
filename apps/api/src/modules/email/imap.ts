@@ -287,6 +287,25 @@ async function parseAndStore(
   }
 }
 
+/**
+ * Обработчик события 'error' для ImapFlow. Вешается ОБЯЗАТЕЛЬНО до connect().
+ *
+ * ImapFlow — это EventEmitter, а в Node незанятое событие 'error' выбрасывается как
+ * uncaughtException и роняет ВЕСЬ процесс (стандартная семантика EventEmitter).
+ * Ошибка ящика (обрыв TLS, провал аутентификации на reg.ru) прилетает АСИНХРОННО,
+ * в обход await-цепочки fetchInbox, поэтому обычный try/catch её не ловит — спасает
+ * только слушатель. Здесь мы её гасим и логируем: сбой почты не должен ронять API
+ * (заявки/клиенты важнее). Экспортируется для прямого юнит-теста.
+ */
+export function attachImapErrorGuard(
+  client: { on(event: 'error', listener: (err: unknown) => void): unknown },
+  tenantId: string,
+): void {
+  client.on('error', (err) => {
+    logger.warn({ err, tenantId }, 'imap: подавлено событие error от ImapFlow');
+  });
+}
+
 /** Главная процедура приёма: коннект к IMAP, выборка новых писем, запись во входящие. */
 export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult> {
   const key = getTenantEncryptionKey({ id: tenantId, kmsKeyId: null });
@@ -300,12 +319,14 @@ export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult>
     auth: { user: cfg.user, pass: cfg.pass },
     logger: false,
   });
+  // ОБЯЗАТЕЛЬНО до connect(): незанятое событие 'error' у ImapFlow роняет процесс.
+  attachImapErrorGuard(client, tenantId);
 
   let fetched = 0;
   let maxUid = cfg.lastUid;
 
-  await client.connect();
   try {
+    await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
       const exists = client.mailbox && typeof client.mailbox !== 'boolean' ? client.mailbox.exists : 0;
@@ -331,6 +352,8 @@ export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult>
       lock.release();
     }
   } finally {
+    // logout() на мёртвом/неподнятом соединении может бросить или эмитнуть error —
+    // гасим (слушатель выше подстрахует асинхронный случай), соединение закроется в любом случае.
     await client.logout().catch(() => undefined);
   }
 

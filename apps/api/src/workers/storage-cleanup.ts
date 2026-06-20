@@ -33,7 +33,8 @@ function purgeDelayMs(): number {
 /** Ставит delayed-job на физическое удаление объекта. Идемпотентно по jobId. */
 export async function enqueueAttachmentPurge(payload: StorageCleanupPayload): Promise<void> {
   await getQueue<StorageCleanupPayload>(QUEUE_NAMES.storageCleanup).add('purge', payload, {
-    jobId: `purge:${payload.attachmentId}`,
+    // BullMQ запрещает ':' в custom jobId (молча отвергает job) → только дефис.
+    jobId: `purge-${payload.attachmentId}`,
     delay: purgeDelayMs(),
   });
 }

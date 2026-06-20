@@ -9,6 +9,7 @@
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { StaffPosition } from '@erfolg/shared';
 import { authedProcedure, directorProcedure, router } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
 import {
@@ -50,7 +51,9 @@ const phoneSchema = z.string().trim().max(50).nullable().optional();
 
 const fullNameSchema = z.string().trim().min(1, 'Укажите ФИО').max(200);
 
-const positionSchema = z.string().trim().max(100).nullable().optional();
+// Должность выбирается только из фиксированного перечня (StaffPosition) —
+// произвольный текст отклоняется. Пустое значение допускается (null).
+const positionSchema = StaffPosition.nullable().optional();
 
 const roleSchema = z.enum(['director', 'dispatcher', 'engineer']);
 

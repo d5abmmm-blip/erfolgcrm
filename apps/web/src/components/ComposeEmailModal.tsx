@@ -5,10 +5,9 @@
  * передаёт attachmentOptions с build(): тяжёлый pdfmake не тянется, пока пользователь не выберет.
  * Base64 уходит на сервер вместе с письмом (trpc.email.send), сервер пишет журнал.
  */
-import { useEffect, useState } from 'react';
-import { Loader2, Paperclip, Send, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Clock, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
-import { cn } from '../lib/utils';
 import { MAIL_TEMPLATES, applyTemplate } from '../lib/mail-templates';
 
 export interface AttachmentOption {
@@ -33,6 +32,13 @@ interface ComposeEmailModalProps {
   /** Тред-заголовки для ответа (In-Reply-To / References). Только при ответе. */
   inReplyTo?: string;
   references?: string[];
+  /** id черновика для редактирования: сохранение/отправка обновят ту же строку. */
+  draftId?: string;
+  /** Предзаполненные копия / скрытая копия (при правке черновика/запланированного). */
+  initialCc?: string;
+  initialBcc?: string;
+  /** Предзаполненное время отложенной отправки (datetime-local) — при правке запланированного. */
+  initialScheduledAt?: string;
   /** Значения для подстановки в шаблоны ({{clientName}}, {{ticketNumber}}, ...). */
   templateVars?: Record<string, string | undefined>;
   attachmentOptions?: AttachmentOption[];
@@ -50,17 +56,33 @@ export function ComposeEmailModal({
   title = 'Новое письмо',
   inReplyTo,
   references,
+  draftId,
+  initialCc,
+  initialBcc,
+  initialScheduledAt,
   templateVars,
   attachmentOptions = [],
   onSent,
 }: ComposeEmailModalProps) {
   const utils = trpc.useUtils();
+  const rootRef = useRef<HTMLDivElement>(null);
   const [to, setTo] = useState(initialTo);
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState(initialBody);
   const [attachmentId, setAttachmentId] = useState('');
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // id текущего черновика: при «Сохранить черновик»/отправке обновляем ту же строку.
+  const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(draftId);
+  // Копия / скрытая копия (поля скрыты, пока не понадобятся).
+  const [cc, setCc] = useState(initialCc ?? '');
+  const [bcc, setBcc] = useState(initialBcc ?? '');
+  const [showCc, setShowCc] = useState(Boolean(initialCc || initialBcc));
+  // Отложенная отправка: время (datetime-local) и показ блока выбора.
+  const [scheduleAt, setScheduleAt] = useState(initialScheduledAt ?? '');
+  const [showSchedule, setShowSchedule] = useState(Boolean(initialScheduledAt));
+  // Подпись компании (для подсказки — добавляется на сервере при отправке).
+  const signature = trpc.email.getSignature.useQuery(undefined, { staleTime: 300_000 });
 
   // Пересинхронизируем поля при каждом открытии (родитель меняет initial*).
   useEffect(() => {
@@ -70,14 +92,49 @@ export function ComposeEmailModal({
       setBody(initialBody);
       setAttachmentId('');
       setError(null);
+      setCurrentDraftId(draftId);
+      setCc(initialCc ?? '');
+      setBcc(initialBcc ?? '');
+      setShowCc(Boolean(initialCc || initialBcc));
+      setScheduleAt(initialScheduledAt ?? '');
+      setShowSchedule(Boolean(initialScheduledAt));
     }
-  }, [open, initialTo, initialSubject, initialBody]);
+  }, [
+    open,
+    initialTo,
+    initialSubject,
+    initialBody,
+    draftId,
+    initialCc,
+    initialBcc,
+    initialScheduledAt,
+  ]);
 
-  // Esc — закрыть.
+  // Esc — закрыть; Tab — фокус-ловушка внутри модалки (WAI-ARIA), фокус на первое поле.
   useEffect(() => {
     if (!open) return;
+    rootRef.current?.querySelector<HTMLElement>('input, textarea, select')?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab' && rootRef.current) {
+        const focusables = rootRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -88,6 +145,25 @@ export function ComposeEmailModal({
       await utils.email.list.invalidate();
       // Ответ помечает родителя прочитанным на сервере — обновим счётчик непрочитанных.
       await utils.email.unreadCount.invalidate();
+      onSent?.();
+      onClose();
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  const saveDraft = trpc.email.saveDraft.useMutation({
+    onSuccess: async (res) => {
+      setCurrentDraftId(res.id);
+      await utils.email.list.invalidate();
+      onSent?.();
+      onClose();
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  const scheduleSend = trpc.email.schedule.useMutation({
+    onSuccess: async () => {
+      await utils.email.list.invalidate();
       onSent?.();
       onClose();
     },
@@ -123,6 +199,8 @@ export function ComposeEmailModal({
     }
     send.mutate({
       to: to.trim(),
+      ...(cc.trim() ? { cc: cc.trim() } : {}),
+      ...(bcc.trim() ? { bcc: bcc.trim() } : {}),
       subject: subject.trim(),
       bodyText: body,
       relatedTicketId,
@@ -130,11 +208,56 @@ export function ComposeEmailModal({
       attachment,
       ...(inReplyTo ? { inReplyTo } : {}),
       ...(references && references.length > 0 ? { references } : {}),
+      ...(currentDraftId ? { fromDraftId: currentDraftId } : {}),
     });
   };
 
-  const busy = building || send.isPending;
+  const saveDraftNow = () => {
+    setError(null);
+    saveDraft.mutate({
+      id: currentDraftId,
+      to: to.trim() || undefined,
+      cc: cc.trim() || undefined,
+      bcc: bcc.trim() || undefined,
+      subject: subject.trim() || undefined,
+      bodyText: body || undefined,
+      relatedTicketId,
+      relatedClientId,
+      ...(inReplyTo ? { inReplyTo } : {}),
+      ...(references && references.length > 0 ? { references } : {}),
+    });
+  };
+
+  const submitSchedule = () => {
+    setError(null);
+    if (!scheduleAt) {
+      setError('Укажите дату и время отправки.');
+      return;
+    }
+    const when = new Date(scheduleAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now() + 60_000) {
+      setError('Время отправки должно быть в будущем (хотя бы через минуту).');
+      return;
+    }
+    scheduleSend.mutate({
+      to: to.trim(),
+      ...(cc.trim() ? { cc: cc.trim() } : {}),
+      ...(bcc.trim() ? { bcc: bcc.trim() } : {}),
+      subject: subject.trim(),
+      bodyText: body,
+      scheduledAt: when,
+      relatedTicketId,
+      relatedClientId,
+      ...(inReplyTo ? { inReplyTo } : {}),
+      ...(references && references.length > 0 ? { references } : {}),
+      ...(currentDraftId ? { fromDraftId: currentDraftId } : {}),
+    });
+  };
+
+  const busy =
+    building || send.isPending || saveDraft.isPending || scheduleSend.isPending;
   const canSend = to.trim().length > 0 && subject.trim().length > 0 && body.trim().length > 0;
+  const canSaveDraft = to.trim().length > 0 || subject.trim().length > 0 || body.trim().length > 0;
 
   return (
     <div
@@ -143,6 +266,7 @@ export function ComposeEmailModal({
       role="presentation"
     >
       <div
+        ref={rootRef}
         className="bg-card max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border shadow-xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -181,16 +305,55 @@ export function ComposeEmailModal({
             </div>
           )}
 
-          <label className="block">
-            <span className="text-xs font-medium">Кому</span>
+          <div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="compose-to" className="text-xs font-medium">
+                Кому
+              </label>
+              {!showCc && (
+                <button
+                  type="button"
+                  onClick={() => setShowCc(true)}
+                  className="text-muted-foreground hover:text-foreground text-xs"
+                >
+                  Копия / Скрытая
+                </button>
+              )}
+            </div>
             <input
+              id="compose-to"
               type="email"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               placeholder="client@example.com"
               className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
-          </label>
+          </div>
+
+          {showCc && (
+            <>
+              <label className="block">
+                <span className="text-xs font-medium">Копия (Cc)</span>
+                <input
+                  type="text"
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
+                  placeholder="несколько адресов через запятую"
+                  className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium">Скрытая копия (Bcc)</span>
+                <input
+                  type="text"
+                  value={bcc}
+                  onChange={(e) => setBcc(e.target.value)}
+                  placeholder="несколько адресов через запятую"
+                  className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
+                />
+              </label>
+            </>
+          )}
 
           <label className="block">
             <span className="text-xs font-medium">Тема</span>
@@ -211,6 +374,12 @@ export function ComposeEmailModal({
               className="bg-background focus:ring-primary/40 mt-1 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </label>
+
+          {signature.data && signature.data.trim() && (
+            <p className="text-muted-foreground text-xs">
+              К письму автоматически добавится подпись компании.
+            </p>
+          )}
 
           {attachmentOptions.length > 0 && (
             <label className="block">
@@ -233,6 +402,25 @@ export function ComposeEmailModal({
             </label>
           )}
 
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowSchedule((v) => !v)}
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              {showSchedule ? 'Отправить сразу' : 'Отправить позже'}
+            </button>
+            {showSchedule && (
+              <input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)}
+                className="bg-background focus:ring-primary/40 block w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
+              />
+            )}
+          </div>
+
           {error && <div className="text-destructive text-sm">{error}</div>}
         </div>
 
@@ -246,15 +434,42 @@ export function ComposeEmailModal({
           </button>
           <button
             type="button"
-            onClick={() => void submit()}
-            disabled={!canSend || busy}
-            className={cn(
-              'bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition disabled:opacity-50',
-            )}
+            onClick={saveDraftNow}
+            disabled={!canSaveDraft || busy}
+            className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition disabled:opacity-50"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {building ? 'Формируем вложение…' : send.isPending ? 'Отправляем…' : 'Отправить'}
+            {saveDraft.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            Сохранить черновик
           </button>
+          {showSchedule ? (
+            <button
+              type="button"
+              onClick={submitSchedule}
+              disabled={!canSend || busy}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+            >
+              {scheduleSend.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+              Запланировать
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!canSend || busy}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {building ? 'Формируем вложение…' : send.isPending ? 'Отправляем…' : 'Отправить'}
+            </button>
+          )}
         </div>
       </div>
     </div>
