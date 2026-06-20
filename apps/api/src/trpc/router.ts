@@ -34,6 +34,7 @@ import { calendarRouter } from '../modules/calendar';
 import { settingsRouter } from '../modules/settings';
 import { emailRouter } from '../modules/email';
 import { cashRouter } from '../modules/cash';
+import { salesRouter } from '../modules/sales';
 import { backupRouter } from '../modules/backup';
 import {
   clientAuthRouter,
@@ -100,6 +101,8 @@ export const appRouter = router({
   email: emailRouter,
   /** Касса / ДДС: доходы и расходы, денежные счета с остатками, операции и обзор. */
   cash: cashRouter,
+  /** Продажи запчастей/оборудования клиентам (отдельно от ремонтных заявок). */
+  sales: salesRouter,
   /** Резервные копии и архив по годам (только директор). */
   backup: backupRouter,
 });

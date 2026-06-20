@@ -53,6 +53,7 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0044_enable_rls_email_attachments.sql': 'email_attachments',
   '0047_enable_rls_cash.sql': 'cash_accounts',
   '0050_enable_rls_payroll_payouts.sql': 'payroll_payouts',
+  '0052_enable_rls_sales.sql': 'sales',
 };
 
 async function main() {

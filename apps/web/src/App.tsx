@@ -40,6 +40,8 @@ import { BackupSettingsPage } from './pages/BackupSettingsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceCardPage } from './pages/InvoiceCardPage';
 import { FinanceOverviewPage } from './pages/FinanceOverviewPage';
+import { SalesListPage } from './pages/SalesListPage';
+import { SalesFormPage } from './pages/SalesFormPage';
 import { CashJournalPage } from './pages/CashJournalPage';
 import { CashAccountsPage } from './pages/CashAccountsPage';
 import { OnecSettingsPage } from './pages/OnecSettingsPage';
@@ -185,6 +187,9 @@ function StaffApp() {
           <Route path="/finance/invoices" component={InvoicesPage} />
           <Route path="/invoices" component={InvoicesPage} />
           <Route path="/invoices/:id" component={InvoiceCardPage} />
+          <Route path="/sales" component={SalesListPage} />
+          <Route path="/sales/new" component={SalesFormPage} />
+          <Route path="/sales/:id" component={SalesFormPage} />
           <Route path="/payroll" component={PayrollPage} />
           <Route path="/reports" component={ReportsPage} />
           <Route path="/templates" component={TemplatesPage} />

@@ -10,3 +10,4 @@ export {
   CASH_TX_KIND_META,
   PAYMENT_METHOD_LABEL,
 } from './cash';
+export { SALE_STATUS_META, SALE_STATUS_FLOW, type SaleStatus } from './sales';

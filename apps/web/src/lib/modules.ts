@@ -32,7 +32,8 @@ export type ModuleKey =
   | 'payroll'
   | 'reports'
   | 'roadmap'
-  | 'mail';
+  | 'mail'
+  | 'sales';
 
 export type ModuleGroup = 'Работа' | 'Картотека' | 'Деньги' | 'Система';
 
@@ -64,6 +65,7 @@ export const TOGGLEABLE_MODULES: readonly ModuleMeta[] = [
   { key: 'tradeIn', label: 'Трейд-ин', group: 'Картотека', description: 'Приём б/у техники в зачёт', routes: ['/trade-in'] },
   // Деньги
   { key: 'invoices', label: 'Финансы', group: 'Деньги', description: 'Касса (доходы/расходы), счета на оплату, остатки и обзор', routes: ['/finance', '/invoices'] },
+  { key: 'sales', label: 'Продажи', group: 'Деньги', description: 'Продажа запчастей и оборудования клиентам (отдельно от заявок)', routes: ['/sales'] },
   { key: 'payroll', label: 'Зарплата', group: 'Деньги', description: 'Расчёт зарплаты инженеров (сделка/оклад)', routes: ['/payroll'] },
   { key: 'reports', label: 'Отчёты', group: 'Деньги', description: 'Аналитические отчёты по периодам', routes: ['/reports'] },
   // Система

@@ -316,6 +316,13 @@
       "when": 1777901700000,
       "tag": "0049_payroll_payouts",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1777901800000,
+      "tag": "0051_sales",
+      "breakpoints": true
     }
   ]
 }
