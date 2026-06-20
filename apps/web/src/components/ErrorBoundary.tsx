@@ -22,7 +22,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
     // Лог в консоль (в проде подхватится Sentry, когда подключат SENTRY_DSN).
-    // eslint-disable-next-line no-console
     console.error('Сбой интерфейса:', error, info.componentStack);
   }
 
