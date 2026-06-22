@@ -13,6 +13,19 @@
 -- Идемпотентность: используем DROP POLICY/INDEX IF EXISTS + CREATE.
 -- RLS-политики из enable_rls-файлов пересоздаём с обоими USING и WITH CHECK.
 
+-- ─────────────── 0. Гарантируем current_tenant_id() ───────────────
+-- Эта миграция (в _journal.json, запускается `drizzle-kit migrate`) пересоздаёт
+-- RLS-политики, которые ссылаются на current_tenant_id(). Сама функция определена
+-- в 0001_enable_rls.sql, который НЕ в _journal.json (применяется через setup-rls.ts
+-- ПОСЛЕ migrate). При чистом деплое (migrate до setup-rls) функции ещё нет и
+-- CREATE POLICY ниже падает с "function current_tenant_id() does not exist".
+-- CREATE OR REPLACE идемпотентен — setup-rls позже переопределит ту же функцию.
+CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS uuid
+  LANGUAGE sql STABLE
+AS $$
+  SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+$$;--> statement-breakpoint
+
 -- ─────────────── 1. Дедупликация платежей из 1С ───────────────
 -- Колонка typed как text чтобы соответствовать схеме (schema/payments.ts: text('external_payment_id')).
 -- Хотя ТЗ говорит varchar(128), PostgreSQL хранит их одинаково; text избегает рассинхрона
