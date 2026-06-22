@@ -8,7 +8,7 @@
 # Сборка ИЗ КОРНЯ репозитория (context: .):
 #   docker build -f apps/api/Dockerfile -t erfolgcrm-api .
 
-FROM node:22-alpine
+FROM node:24-alpine
 
 # argon2 ставится из prebuilt-бинарей (musl). Если на новой версии prebuild
 # отсутствует и сборка падает — раскомментировать toolchain:

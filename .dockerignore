@@ -1,0 +1,17 @@
+# Не тащим в build-контекст артефакты, ломающие установку внутри образа.
+# node_modules содержат symlink'и pnpm на абсолютные пути хоста — в контейнере
+# они битые и затирают symlink'и, созданные `pnpm install` внутри образа.
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/playwright-report
+**/test-results
+**/*.tsbuildinfo
+
+.git
+.github
+*.log
+.env
+.env.*
+!.env.example
