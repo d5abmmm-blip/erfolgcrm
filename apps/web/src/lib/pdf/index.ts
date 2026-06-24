@@ -51,8 +51,20 @@ async function getPdfMake(): Promise<PdfMakeRuntime> {
     const pdfMake: PdfMakeRuntime = (modAny.default ?? modAny);
     const fontsAny = fontsMod as unknown as { default?: PdfFontsModule } & PdfFontsModule;
     const vfsRoot = fontsAny.default ?? fontsAny;
-    (pdfMake as unknown as { vfs: Record<string, string> }).vfs =
-      vfsRoot.pdfMake?.vfs ?? vfsRoot.vfs ?? {};
+    // pdfmake ≥0.2.x в ряде сборок экспортирует карту шрифтов НАПРЯМУЮ
+    // (module.exports = vfs), т.е. сам vfsRoot и есть {'Roboto-Regular.ttf': '...'},
+    // а полей .pdfMake.vfs / .vfs у него нет. Берём по убыванию приоритета:
+    // legacy `.pdfMake.vfs` → modern `.vfs` → сам объект как карту шрифтов.
+    const vfs =
+      vfsRoot.pdfMake?.vfs ??
+      vfsRoot.vfs ??
+      (vfsRoot as unknown as Record<string, string>);
+    // Если шрифты не загрузились — НЕ молчим (иначе createPdf().open() даёт пустую
+    // белую вкладку без ошибки): бросаем явную ошибку, её ловит вызывающий код.
+    if (!vfs || typeof vfs !== 'object' || Object.keys(vfs).length === 0) {
+      throw new Error('pdfmake: не удалось загрузить vfs со шрифтами — печать PDF недоступна');
+    }
+    (pdfMake as unknown as { vfs: Record<string, string> }).vfs = vfs;
     return pdfMake;
   })();
   return _pdfMakePromise;
