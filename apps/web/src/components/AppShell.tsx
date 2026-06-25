@@ -32,6 +32,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
 import { GlobalSearchModal } from './GlobalSearchModal';
+import { ChatPanel } from './ChatPanel';
 
 interface SessionInfo {
   user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
@@ -301,6 +302,7 @@ export function AppShell({ children, session }: AppShellProps) {
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
       <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ChatPanel />
     </div>
   );
 }

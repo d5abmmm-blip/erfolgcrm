@@ -21,6 +21,9 @@ pnpm-debug.log*
 .env.*.local
 !.env.example
 
+# Локальный файл-контекст для Claude (содержит доступы/пароли/IP) — НЕ коммитим
+_CONTEXT.md
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
