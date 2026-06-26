@@ -1,13 +1,20 @@
 /**
  * LLM-адаптер для AI-ассистента CRM.
  *
- * Провайдеро-НЕЗАВИСИМЫЙ: общается по OpenAI-совместимому протоколу
- * (POST {base}/chat/completions с function-calling / tools). Подходят OpenRouter
- * (DeepSeek / Qwen / GPT-* и др.), локальные Ollama / vLLM. Модель в код не зашита —
- * задаётся через env:
- *   LLM_BASE_URL  — напр. https://openrouter.ai/api/v1
+ * Поддерживает ДВА протокола (выбор через LLM_API_STYLE):
+ *   - 'openai' (по умолчанию): POST {base}/chat/completions, function-calling/tools.
+ *     Подходят OpenRouter (DeepSeek/Qwen/GPT-*), Ollama/vLLM.
+ *   - 'anthropic': POST {base}/v1/messages (Messages API). Нужен для z.ai GLM
+ *     Coding Plan (баланс живёт на Anthropic-эндпоинте, а не на /paas/v4).
+ *
+ * Модель в код не зашита — задаётся через env:
+ *   LLM_API_STYLE — 'openai' | 'anthropic' (необязательно, по умолчанию openai)
+ *   LLM_BASE_URL  — напр. https://openrouter.ai/api/v1 или https://api.z.ai/api/anthropic
  *   LLM_API_KEY   — ключ провайдера (пользователь добавляет сам)
- *   LLM_MODEL     — напр. deepseek/deepseek-chat
+ *   LLM_MODEL     — напр. deepseek/deepseek-chat или glm-4.6
+ *
+ * Внутреннее представление сообщений — OpenAI-образное (LlmMessage с tool_calls /
+ * role:'tool'). Для anthropic оно транслируется в Messages API в callAnthropic.
  */
 
 export interface LlmFunctionTool {
@@ -52,10 +59,13 @@ export interface LlmReply {
   toolCalls: LlmToolCall[];
 }
 
+type ApiStyle = 'openai' | 'anthropic';
+
 interface LlmConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  apiStyle: ApiStyle;
 }
 
 /** true, если заданы все обязательные переменные LLM_*. */
@@ -76,9 +86,27 @@ function getConfig(): LlmConfig {
       'AI-ассистент не настроен: задайте LLM_BASE_URL, LLM_API_KEY и LLM_MODEL в .env и перезапустите API.',
     );
   }
-  // Убираем хвостовые слэши, чтобы корректно склеить с /chat/completions.
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey, model };
+  const apiStyle: ApiStyle =
+    process.env.LLM_API_STYLE?.trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'openai';
+  // Убираем хвостовые слэши, чтобы корректно склеить путь.
+  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey, model, apiStyle };
 }
+
+/**
+ * Один вызов модели. Возвращает текст ответа и/или запрошенные вызовы инструментов.
+ * Бросает понятную ошибку при сетевом сбое / HTTP-ошибке провайдера.
+ */
+export async function callLlm(
+  messages: LlmMessage[],
+  tools: LlmFunctionTool[],
+): Promise<LlmReply> {
+  const cfg = getConfig();
+  return cfg.apiStyle === 'anthropic'
+    ? callAnthropic(cfg, messages, tools)
+    : callOpenAi(cfg, messages, tools);
+}
+
+/* ───────────────────────────── OpenAI-совместимый ───────────────────────────── */
 
 interface ChatCompletionResponse {
   choices?: Array<{
@@ -93,16 +121,11 @@ interface ChatCompletionResponse {
   error?: { message?: string };
 }
 
-/**
- * Один вызов модели. Возвращает текст ответа и/или запрошенные вызовы инструментов.
- * Бросает понятную ошибку при сетевом сбое / HTTP-ошибке провайдера.
- */
-export async function callLlm(
+async function callOpenAi(
+  cfg: LlmConfig,
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
 ): Promise<LlmReply> {
-  const cfg = getConfig();
-
   let res: Response;
   try {
     res = await fetch(`${cfg.baseUrl}/chat/completions`, {
@@ -151,4 +174,182 @@ export async function callLlm(
     }));
 
   return { content: msg?.content ?? null, toolCalls };
+}
+
+/* ───────────────────────── Anthropic Messages API ───────────────────────── */
+
+type AnthropicBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string };
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: AnthropicBlock[];
+}
+
+interface AnthropicResponse {
+  content?: Array<{
+    type: string;
+    text?: string;
+    id?: string;
+    name?: string;
+    input?: Record<string, unknown>;
+  }>;
+  error?: { message?: string };
+}
+
+/** Парсит data:image/...;base64,XXXX → { media_type, data } (или null). */
+function parseDataUrl(url: string): { media_type: string; data: string } | null {
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
+  return m ? { media_type: m[1]!, data: m[2]! } : null;
+}
+
+/** Контент пользовательского хода (строка или части text/image) → блоки Anthropic. */
+function userContentToBlocks(content: string | LlmContentPart[]): AnthropicBlock[] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  const blocks: AnthropicBlock[] = [];
+  for (const part of content) {
+    if (part.type === 'text') {
+      blocks.push({ type: 'text', text: part.text });
+      continue;
+    }
+    const parsed = parseDataUrl(part.image_url.url);
+    if (parsed) {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: parsed.media_type, data: parsed.data },
+      });
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Транслирует наше OpenAI-образное представление в Anthropic Messages API:
+ *  - role:'system' → top-level `system`;
+ *  - assistant.tool_calls → блоки tool_use;
+ *  - role:'tool' → user-сообщение с блоком tool_result;
+ *  - картинки (image_url data-URL) → блоки image/base64.
+ * Соседние сообщения одной роли сливаются (Anthropic ждёт чередования ролей).
+ */
+export function toAnthropic(
+  messages: LlmMessage[],
+  tools: LlmFunctionTool[],
+): { system: string; messages: AnthropicMessage[]; tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> } {
+  const systemParts: string[] = [];
+  const out: AnthropicMessage[] = [];
+  const push = (role: 'user' | 'assistant', blocks: AnthropicBlock[]) => {
+    const last = out[out.length - 1];
+    if (last && last.role === role) last.content.push(...blocks);
+    else out.push({ role, content: blocks });
+  };
+
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (typeof m.content === 'string') systemParts.push(m.content);
+      continue;
+    }
+    if (m.role === 'tool') {
+      push('user', [
+        {
+          type: 'tool_result',
+          tool_use_id: m.tool_call_id ?? '',
+          content: typeof m.content === 'string' ? m.content : '',
+        },
+      ]);
+      continue;
+    }
+    if (m.role === 'assistant') {
+      const blocks: AnthropicBlock[] = [];
+      if (typeof m.content === 'string' && m.content.trim()) {
+        blocks.push({ type: 'text', text: m.content });
+      }
+      for (const tc of m.tool_calls ?? []) {
+        let input: Record<string, unknown> = {};
+        try {
+          input = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>;
+        } catch {
+          input = {};
+        }
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input });
+      }
+      if (blocks.length === 0) blocks.push({ type: 'text', text: '' });
+      push('assistant', blocks);
+      continue;
+    }
+    // role === 'user'
+    const blocks = m.content == null ? [] : userContentToBlocks(m.content);
+    if (blocks.length === 0) blocks.push({ type: 'text', text: '' });
+    push('user', blocks);
+  }
+
+  const anthropicTools = tools.map((t) => ({
+    name: t.function.name,
+    description: t.function.description,
+    input_schema: t.function.parameters,
+  }));
+
+  return { system: systemParts.join('\n\n'), messages: out, tools: anthropicTools };
+}
+
+async function callAnthropic(
+  cfg: LlmConfig,
+  messages: LlmMessage[],
+  tools: LlmFunctionTool[],
+): Promise<LlmReply> {
+  const { system, messages: amsgs, tools: atools } = toAnthropic(messages, tools);
+  // base уже без хвостовых слэшей; путь Messages API — /v1/messages.
+  const url = cfg.baseUrl.endsWith('/v1') ? `${cfg.baseUrl}/messages` : `${cfg.baseUrl}/v1/messages`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: 2048,
+        temperature: 0.2,
+        system: system || undefined,
+        messages: amsgs,
+        tools: atools.length ? atools : undefined,
+      }),
+    });
+  } catch (err) {
+    throw new Error(
+      `Не удалось связаться с LLM (${url}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${text.slice(0, 500)}`);
+  }
+
+  const data = (await res.json()) as AnthropicResponse;
+  if (data.error?.message) {
+    throw new Error(`LLM: ${data.error.message}`);
+  }
+
+  const textParts: string[] = [];
+  const toolCalls: LlmToolCall[] = [];
+  for (const b of data.content ?? []) {
+    if (b.type === 'text' && b.text) {
+      textParts.push(b.text);
+    } else if (b.type === 'tool_use' && b.name) {
+      toolCalls.push({
+        id: b.id ?? `call_${toolCalls.length}`,
+        name: b.name,
+        argumentsJson: JSON.stringify(b.input ?? {}),
+      });
+    }
+  }
+
+  return { content: textParts.length ? textParts.join('\n') : null, toolCalls };
 }
