@@ -8,6 +8,7 @@
  * READ-инструменты выполняются сразу. WRITE-инструменты ассистент только ПРЕДЛАГАЕТ —
  * фактический вызов происходит после подтверждения пользователем (см. service.ts).
  */
+import { randomBytes } from 'node:crypto';
 import { TicketPriority, TicketStatus } from '@erfolg/shared';
 import type { appRouter } from '../../trpc/router';
 import type { LlmFunctionTool } from './llm';
@@ -44,6 +45,37 @@ function asNumber(args: Record<string, unknown>, key: string): number | undefine
 
 const TICKET_STATUSES = [...TicketStatus.options];
 const TICKET_PRIORITIES = [...TicketPriority.options];
+
+/* ─────────── генерация логина/пароля для создания сотрудника ─────────── */
+
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
+  и: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+  с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch',
+  ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+function translit(s: string): string {
+  return s
+    .toLowerCase()
+    .split('')
+    .map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch))
+    .join('')
+    .replace(/[^a-z0-9._-]+/g, '');
+}
+
+/** Логин из ФИО (транслит) + короткий суффикс, гарантированно валиден (3–64, латиница). */
+function makeUsername(fullName: string): string {
+  const base = translit(fullName).slice(0, 40) || 'user';
+  const suffix = randomBytes(2).toString('hex'); // 4 hex-символа
+  const u = `${base}.${suffix}`;
+  return u.length >= 3 ? u : `user.${suffix}`;
+}
+
+/** Временный пароль: читаемый, ≥8 символов, латиница+цифры. Сотрудник сменит при входе. */
+function makeTempPassword(): string {
+  return `Erfolg-${randomBytes(4).toString('hex')}`; // напр. Erfolg-1a2b3c4d
+}
 
 /* ───────────────────────────── реестр инструментов ───────────────────────────── */
 
@@ -374,6 +406,233 @@ const TOOLS: Record<string, ToolHandler> = {
         dueDate: asString(args, 'dueDate'),
       }),
     preview: (args) => `Выставить счёт ${asString(args, 'invoiceId') ?? '—'}`,
+  },
+
+  create_client: {
+    kind: 'write',
+    def: {
+      type: 'function',
+      function: {
+        name: 'create_client',
+        description:
+          'Завести нового клиента. Для организации (clientType="legal") обязательно displayName (название); ' +
+          'опционально ИНН/КПП/ОГРН/адрес/телефон/email. Для физлица (clientType="individual") обязательно ' +
+          'individualFullName (ФИО полностью). Данные бери из документа/реквизитов. Сначала проверь поиском, нет ли клиента.',
+        parameters: {
+          type: 'object',
+          properties: {
+            clientType: { type: 'string', enum: ['legal', 'individual'], description: 'Тип клиента' },
+            displayName: { type: 'string', description: 'Название организации (для legal)' },
+            inn: { type: 'string', description: 'ИНН (10 или 12 цифр)' },
+            kpp: { type: 'string', description: 'КПП (9 цифр)' },
+            ogrn: { type: 'string', description: 'ОГРН/ОГРНИП (13 или 15 цифр)' },
+            legalAddress: { type: 'string', description: 'Юридический адрес' },
+            phone: { type: 'string', description: 'Телефон организации' },
+            email: { type: 'string', description: 'Email организации' },
+            individualFullName: { type: 'string', description: 'ФИО полностью (для individual)' },
+            individualPhone: { type: 'string', description: 'Телефон физлица' },
+            individualAddress: { type: 'string', description: 'Адрес физлица' },
+            notes: { type: 'string', description: 'Примечание' },
+          },
+          required: ['clientType'],
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (caller, args) => {
+      const type = reqString(args, 'clientType');
+      if (type === 'individual') {
+        return caller.clients.create({
+          type: 'individual',
+          individualFullName: reqString(args, 'individualFullName'),
+          individualPhone: asString(args, 'individualPhone'),
+          individualAddress: asString(args, 'individualAddress'),
+          notes: asString(args, 'notes') ?? null,
+        });
+      }
+      return caller.clients.create({
+        type: 'legal',
+        displayName: reqString(args, 'displayName'),
+        inn: asString(args, 'inn') ?? null,
+        kpp: asString(args, 'kpp') ?? null,
+        ogrn: asString(args, 'ogrn') ?? null,
+        legalAddress: asString(args, 'legalAddress') ?? null,
+        phone: asString(args, 'phone') ?? null,
+        email: asString(args, 'email') ?? null,
+        notes: asString(args, 'notes') ?? null,
+      });
+    },
+    preview: (args) => {
+      const type = asString(args, 'clientType');
+      if (type === 'individual') {
+        return [
+          `Завести клиента-физлицо: ${asString(args, 'individualFullName') ?? '—'}`,
+          asString(args, 'individualPhone') ? `Телефон: ${asString(args, 'individualPhone')}` : null,
+          asString(args, 'individualAddress') ? `Адрес: ${asString(args, 'individualAddress')}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+      return [
+        `Завести клиента-организацию: ${asString(args, 'displayName') ?? '—'}`,
+        asString(args, 'inn') ? `ИНН: ${asString(args, 'inn')}` : null,
+        asString(args, 'kpp') ? `КПП: ${asString(args, 'kpp')}` : null,
+        asString(args, 'legalAddress') ? `Адрес: ${asString(args, 'legalAddress')}` : null,
+        asString(args, 'phone') ? `Телефон: ${asString(args, 'phone')}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    },
+  },
+
+  create_asset: {
+    kind: 'write',
+    def: {
+      type: 'function',
+      function: {
+        name: 'create_asset',
+        description:
+          'Завести единицу техники/оборудования и закрепить за клиентом. Обязательны ownerClientId (UUID клиента, ' +
+          'найти через search_clients) и model (модель). Опционально производитель, серийный/инвентарный номер, расположение.',
+        parameters: {
+          type: 'object',
+          properties: {
+            ownerClientId: { type: 'string', description: 'UUID клиента-владельца' },
+            model: { type: 'string', description: 'Модель/наименование техники' },
+            manufacturer: { type: 'string', description: 'Производитель' },
+            serialNumber: { type: 'string', description: 'Серийный номер' },
+            inventoryNumber: { type: 'string', description: 'Инвентарный номер' },
+            location: { type: 'string', description: 'Где находится' },
+            notes: { type: 'string', description: 'Примечание' },
+          },
+          required: ['ownerClientId', 'model'],
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (caller, args) =>
+      caller.assets.create({
+        ownerClientId: reqString(args, 'ownerClientId'),
+        model: reqString(args, 'model'),
+        manufacturer: asString(args, 'manufacturer') ?? null,
+        serialNumber: asString(args, 'serialNumber') ?? null,
+        inventoryNumber: asString(args, 'inventoryNumber') ?? null,
+        location: asString(args, 'location') ?? null,
+        notes: asString(args, 'notes') ?? null,
+      }),
+    preview: (args) =>
+      [
+        `Завести технику: ${asString(args, 'model') ?? '—'}`,
+        asString(args, 'manufacturer') ? `Производитель: ${asString(args, 'manufacturer')}` : null,
+        asString(args, 'serialNumber') ? `Серийный №: ${asString(args, 'serialNumber')}` : null,
+        `Владелец: ${asString(args, 'ownerClientId') ?? '—'}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+  },
+
+  create_contract: {
+    kind: 'write',
+    def: {
+      type: 'function',
+      function: {
+        name: 'create_contract',
+        description:
+          'Завести договор с клиентом. Обязательны clientId (UUID, найти через search_clients), contractNumber ' +
+          '(номер договора) и contractDate (дата в формате ГГГГ-ММ-ДД). Опционально тип, ставка НДС, срок действия.',
+        parameters: {
+          type: 'object',
+          properties: {
+            clientId: { type: 'string', description: 'UUID клиента' },
+            contractNumber: { type: 'string', description: 'Номер договора' },
+            contractDate: { type: 'string', description: 'Дата договора, ГГГГ-ММ-ДД' },
+            type: { type: 'string', enum: ['service', 'one_time'], description: 'service — абонентский, one_time — разовый' },
+            vatRate: { type: 'string', enum: ['0', '5', '10', '20', 'without_vat'], description: 'Ставка НДС' },
+            validFrom: { type: 'string', description: 'Действует с (ГГГГ-ММ-ДД)' },
+            validUntil: { type: 'string', description: 'Действует по (ГГГГ-ММ-ДД)' },
+            notes: { type: 'string', description: 'Примечание' },
+          },
+          required: ['clientId', 'contractNumber', 'contractDate'],
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (caller, args) =>
+      caller.contracts.create({
+        clientId: reqString(args, 'clientId'),
+        contractNumber: reqString(args, 'contractNumber'),
+        contractDate: reqString(args, 'contractDate'),
+        type: asString(args, 'type'),
+        vatRate: asString(args, 'vatRate'),
+        validFrom: asString(args, 'validFrom') ?? null,
+        validUntil: asString(args, 'validUntil') ?? null,
+        notes: asString(args, 'notes') ?? null,
+      } as Parameters<Caller['contracts']['create']>[0]),
+    preview: (args) =>
+      [
+        `Завести договор № ${asString(args, 'contractNumber') ?? '—'} от ${asString(args, 'contractDate') ?? '—'}`,
+        `Клиент: ${asString(args, 'clientId') ?? '—'}`,
+        asString(args, 'validUntil') ? `Действует по: ${asString(args, 'validUntil')}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+  },
+
+  create_engineer: {
+    kind: 'write',
+    def: {
+      type: 'function',
+      function: {
+        name: 'create_engineer',
+        description:
+          'Завести нового сотрудника (по умолчанию инженера). Обязательно fullName (ФИО). Логин и временный пароль ' +
+          'генерируются автоматически и возвращаются — их надо передать сотруднику, он сменит пароль при входе. ' +
+          'ВНИМАНИЕ: доступно только директору. Роль по умолчанию engineer.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fullName: { type: 'string', description: 'ФИО сотрудника полностью' },
+            role: {
+              type: 'string',
+              enum: ['engineer', 'dispatcher', 'director'],
+              description: 'Роль (по умолчанию engineer)',
+            },
+            email: { type: 'string', description: 'Email (необязательно)' },
+            phone: { type: 'string', description: 'Телефон (необязательно)' },
+          },
+          required: ['fullName'],
+          additionalProperties: false,
+        },
+      },
+    },
+    run: async (caller, args) => {
+      const fullName = reqString(args, 'fullName');
+      const username = makeUsername(fullName);
+      const tempPassword = makeTempPassword();
+      const created = await caller.users.create({
+        username,
+        password: tempPassword,
+        fullName,
+        email: asString(args, 'email') ?? null,
+        phone: asString(args, 'phone') ?? null,
+        role: (asString(args, 'role') ?? 'engineer') as 'engineer' | 'dispatcher' | 'director',
+      });
+      // Возвращаем логин и ВРЕМЕННЫЙ пароль, чтобы ассистент сообщил их директору.
+      return {
+        created,
+        loginInstructions: {
+          username,
+          tempPassword,
+          note: 'Передайте сотруднику. Пароль временный — пусть сменит после первого входа.',
+        },
+      };
+    },
+    preview: (args) =>
+      [
+        `Завести сотрудника: ${asString(args, 'fullName') ?? '—'}`,
+        `Роль: ${asString(args, 'role') ?? 'engineer'}`,
+        'Логин и временный пароль сгенерируются автоматически.',
+      ].join('\n'),
   },
 };
 

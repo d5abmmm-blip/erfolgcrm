@@ -13,8 +13,9 @@
  * входит в appRouter — статический import создал бы цикл.
  */
 import type { Context } from '../../trpc/context';
-import { callLlm, llmConfigured, type LlmMessage } from './llm';
+import { callLlm, llmConfigured, type LlmContentPart, type LlmMessage } from './llm';
 import { TOOL_DEFS_FOR_LLM, getTool, isWriteTool } from './tools';
+import { processAttachment, type IncomingAttachment } from './extract';
 
 export interface ChatTurn {
   role: 'user' | 'assistant';
@@ -38,15 +39,60 @@ const SYSTEM_PROMPT = `Ты — встроенный помощник CRM сер
 
 Правила:
 - Прежде чем что-то создавать или изменять, найди нужные сущности через инструменты поиска и получи их реальные ID. НИКОГДА не выдумывай ID (UUID).
-- Для операций записи (создание заявки, назначение инженера, смена статуса, планирование, смена владельца техники, счета) система сама покажет пользователю карточку подтверждения. Не спрашивай «вы уверены?» текстом — просто вызови нужный инструмент с корректными аргументами.
+- Для операций записи (создание заявки/клиента/договора/техники/сотрудника, назначение инженера, смена статуса, планирование, смена владельца техники, счета) система сама покажет пользователю карточку подтверждения. Не спрашивай «вы уверены?» текстом — просто вызови нужный инструмент с корректными аргументами.
 - Если данных не хватает (неизвестен клиент/инженер/техника) — сначала найди их поиском или уточни у пользователя.
 - Ты действуешь от имени текущего сотрудника; его права (роль) соблюдаются автоматически. Если операция запрещена — честно сообщи об этом.
-- Отвечай кратко и по делу. Даты показывай в формате ДД.ММ.ГГГГ, суммы — в рублях.`;
+- Отвечай кратко и по делу. Даты показывай в формате ДД.ММ.ГГГГ, суммы — в рублях.
+
+Работа с документами:
+- К сообщению пользователь может приложить документы. Текст PDF/Word добавляется в сообщение блоком «[Документ «…»]», изображения и сканы ты видишь сам.
+- Из договора/реквизитов извлекай: название организации, ИНН, КПП, ОГРН, юр. адрес, телефон, email (или ФИО/телефон/адрес физлица), номер и дату договора, перечень оборудования (модель, производитель, серийный номер).
+- Прежде чем заводить клиента — проверь поиском (по ИНН или названию), нет ли его уже. Если нашёл — используй существующий. Затем предложи завести договор (create_contract) и технику (create_asset) для этого клиента.
+- Если данных для обязательных полей не хватает или документ нечитаемый — честно скажи, чего не хватает, и спроси.`;
 
 function buildBaseMessages(history: ChatTurn[]): LlmMessage[] {
   const msgs: LlmMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }];
   for (const t of history) msgs.push({ role: t.role, content: t.content });
   return msgs;
+}
+
+/**
+ * Разбирает вложения и «вклеивает» их в ПОСЛЕДНЕЕ сообщение пользователя:
+ *  - текст PDF/Word/txt — дописывается блоком в текстовую часть;
+ *  - изображения — добавляются как image_url (их читает vision-модель);
+ *  - нечитаемые — помечаются краткой пометкой.
+ * Если картинок нет — content остаётся строкой (совместимо с любой моделью).
+ */
+async function attachToLastUserMessage(
+  messages: LlmMessage[],
+  attachments: IncomingAttachment[],
+): Promise<void> {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!lastUser) return;
+
+  const processed = await Promise.all(attachments.map(processAttachment));
+  const textBlocks: string[] = [];
+  const imageParts: LlmContentPart[] = [];
+
+  for (const p of processed) {
+    if (p.kind === 'text') {
+      textBlocks.push(`\n\n[Документ «${p.name}»]\n${p.text}`);
+    } else if (p.kind === 'image') {
+      imageParts.push({ type: 'image_url', image_url: { url: p.imageDataUrl } });
+      textBlocks.push(`\n\n[Изображение «${p.name}» — прочитай его содержимое]`);
+    } else {
+      textBlocks.push(`\n\n[Файл «${p.name}»: ${p.note}]`);
+    }
+  }
+
+  const baseText = typeof lastUser.content === 'string' ? lastUser.content : '';
+  const combinedText = `${baseText}${textBlocks.join('')}`;
+
+  if (imageParts.length > 0) {
+    lastUser.content = [{ type: 'text', text: combinedText }, ...imageParts];
+  } else {
+    lastUser.content = combinedText;
+  }
 }
 
 function safeParseArgs(json: string): Record<string, unknown> {
@@ -62,6 +108,7 @@ export async function runAssistant(
   ctx: Context,
   history: ChatTurn[],
   confirm?: { tool: string; args: Record<string, unknown> },
+  attachments?: IncomingAttachment[],
 ): Promise<AssistantResult> {
   if (!llmConfigured()) {
     throw new Error(
@@ -74,6 +121,12 @@ export async function runAssistant(
   const caller = appRouter.createCaller(ctx);
 
   const messages = buildBaseMessages(history);
+
+  // Вложения относятся к последнему ходу пользователя (приходят только с обычным
+  // send, не с confirm). Разбираем и вклеиваем перед прогоном через модель.
+  if (attachments?.length) {
+    await attachToLastUserMessage(messages, attachments);
+  }
 
   // Подтверждённое write-действие: выполняем и даём модели сформулировать итог.
   if (confirm) {

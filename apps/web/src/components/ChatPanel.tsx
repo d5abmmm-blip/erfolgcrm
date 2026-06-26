@@ -9,7 +9,7 @@
  * через LLM_* в .env на стороне API. Если ключ не задан — панель показывает подсказку.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, X, Loader2, Check, Ban } from 'lucide-react';
+import { Bot, Send, X, Loader2, Check, Ban, Paperclip, FileText } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
@@ -22,6 +22,36 @@ interface PendingAction {
   args: Record<string, unknown>;
   preview: string;
 }
+interface Attachment {
+  name: string;
+  mimeType: string;
+  /** base64 без префикса data:. */
+  dataBase64: string;
+  size: number;
+}
+
+const MAX_FILES = 4;
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 МБ
+
+/** File → base64 (без data:-префикса). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = typeof reader.result === 'string' ? reader.result : '';
+      const comma = res.indexOf(',');
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Не удалось прочитать файл'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+}
 
 export function ChatPanel() {
   const [open, setOpen] = useState(false);
@@ -29,7 +59,9 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = trpc.aiAssistant.status.useQuery(undefined, { staleTime: 60_000 });
   const send = trpc.aiAssistant.send.useMutation();
@@ -40,16 +72,61 @@ export function ChatPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, pending, busy, open]);
 
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setError(null);
+    const room = MAX_FILES - attachments.length;
+    if (room <= 0) {
+      setError(`Можно приложить не более ${MAX_FILES} файлов`);
+      return;
+    }
+    const added: Attachment[] = [];
+    for (const f of Array.from(files).slice(0, room)) {
+      if (f.size > MAX_FILE_BYTES) {
+        setError(`Файл «${f.name}» больше 10 МБ`);
+        continue;
+      }
+      try {
+        const dataBase64 = await fileToBase64(f);
+        added.push({
+          name: f.name,
+          mimeType: f.type || 'application/octet-stream',
+          dataBase64,
+          size: f.size,
+        });
+      } catch {
+        setError(`Не удалось прочитать «${f.name}»`);
+      }
+    }
+    if (added.length) setAttachments((a) => [...a, ...added]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removeAttachment(idx: number) {
+    setAttachments((a) => a.filter((_, i) => i !== idx));
+  }
+
   async function handleSend() {
-    const text = input.trim();
-    if (!text || busy) return;
+    if (busy) return;
+    const hasFiles = attachments.length > 0;
+    const text =
+      input.trim() ||
+      (hasFiles ? 'Разбери приложенные документы и предложи, что внести в CRM.' : '');
+    if (!text) return;
     setError(null);
     setPending(null);
     const history: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(history);
     setInput('');
+    const filesToSend = attachments;
+    setAttachments([]);
     try {
-      const res = await send.mutateAsync({ messages: history });
+      const res = await send.mutateAsync({
+        messages: history,
+        attachments: hasFiles
+          ? filesToSend.map(({ name, mimeType, dataBase64 }) => ({ name, mimeType, dataBase64 }))
+          : undefined,
+      });
       if (res.kind === 'message') {
         setMessages([...history, { role: 'assistant', content: res.text || '(пустой ответ)' }]);
       } else {
@@ -130,6 +207,10 @@ export function ChatPanel() {
               <li>«Создай заявку для … на ремонт тонометра»</li>
               <li>«Назначь инженера Петрова на заявку …»</li>
             </ul>
+            <p>
+              Через <Paperclip className="inline h-3 w-3" /> можно приложить договор или фото
+              документов (PDF, Word, картинки) — разберу и предложу, что внести в CRM.
+            </p>
           </div>
         )}
 
@@ -196,7 +277,50 @@ export function ChatPanel() {
 
       {/* Ввод */}
       <div className="shrink-0 border-t p-2">
+        {/* Чипы приложенных файлов */}
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((a, i) => (
+              <span
+                key={i}
+                className="bg-muted text-foreground inline-flex max-w-[14rem] items-center gap-1 rounded-md px-2 py-1 text-xs"
+                title={`${a.name} · ${formatSize(a.size)}`}
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{a.name}</span>
+                <span className="text-muted-foreground shrink-0">{formatSize(a.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(i)}
+                  className="hover:text-destructive shrink-0"
+                  aria-label={`Убрать ${a.name}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.docx,.txt,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={(e) => void handleFiles(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy || attachments.length >= MAX_FILES}
+            title="Прикрепить документы или фото (PDF, Word, изображения)"
+            aria-label="Прикрепить файл"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground grid h-9 w-9 shrink-0 place-items-center rounded-md transition disabled:opacity-50"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -213,7 +337,7 @@ export function ChatPanel() {
           <button
             type="button"
             onClick={() => void handleSend()}
-            disabled={busy || !input.trim()}
+            disabled={busy || (!input.trim() && attachments.length === 0)}
             className="bg-primary text-primary-foreground grid h-9 w-9 shrink-0 place-items-center rounded-md transition hover:opacity-90 disabled:opacity-50"
             aria-label="Отправить"
           >

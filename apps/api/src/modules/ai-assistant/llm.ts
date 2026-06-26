@@ -26,9 +26,18 @@ export interface LlmToolCall {
   argumentsJson: string;
 }
 
+/**
+ * Часть мультимодального сообщения (OpenAI-совместимый формат). Текст или картинка.
+ * Картинки понимают только vision-модели (Qwen-VL, Gemini, GPT-4o и т.п.).
+ */
+export type LlmContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  /** Строка, либо массив частей (текст + картинки) для мультимодальных запросов. */
+  content: string | null | LlmContentPart[];
   tool_calls?: Array<{
     id: string;
     type: 'function';

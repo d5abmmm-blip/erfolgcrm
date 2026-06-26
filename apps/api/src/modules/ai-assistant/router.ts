@@ -19,6 +19,16 @@ const turnSchema = z.object({
   content: z.string().min(1).max(8000),
 });
 
+/**
+ * Вложение: имя, MIME и содержимое в base64. Потолок ~13.6M base64-символов ≈ 10 МБ файла.
+ * До 4 файлов за раз. Изображения читает vision-модель, из PDF/Word извлекается текст.
+ */
+const attachmentSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  mimeType: z.string().trim().min(1).max(150),
+  dataBase64: z.string().min(1).max(13_600_000),
+});
+
 const sendInput = z.object({
   messages: z.array(turnSchema).min(1).max(40),
   confirm: z
@@ -27,6 +37,7 @@ const sendInput = z.object({
       args: z.record(z.unknown()),
     })
     .optional(),
+  attachments: z.array(attachmentSchema).max(4).optional(),
 });
 
 export const aiAssistantRouter = router({
@@ -34,7 +45,7 @@ export const aiAssistantRouter = router({
 
   send: authedProcedure.input(sendInput).mutation(async ({ ctx, input }) => {
     try {
-      return await runAssistant(ctx, input.messages, input.confirm);
+      return await runAssistant(ctx, input.messages, input.confirm, input.attachments);
     } catch (err) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
