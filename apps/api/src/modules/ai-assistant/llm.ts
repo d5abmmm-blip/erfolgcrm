@@ -106,6 +106,43 @@ export async function callLlm(
     : callOpenAi(cfg, messages, tools);
 }
 
+/* ───────────────────────────── сеть с ретраями ───────────────────────────── */
+
+/** Таймаут одного сетевого запроса к LLM (модель + tools могут думать). */
+const LLM_TIMEOUT_MS = 60_000;
+const MAX_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * fetch с ретраями. Провайдеры (в т.ч. z.ai) периодически сбрасывают соединение
+ * (ECONNRESET) или отдают 429/5xx — это перемежающиеся сбои, а не реальная ошибка
+ * запроса. Повторяем до MAX_ATTEMPTS с экспоненциальным бэкоффом, чтобы пользователь
+ * не видел «fetch failed» из-за единичного сетевого блипа. 4xx (кроме 429) — реальные
+ * ошибки (авторизация, валидация), их НЕ повторяем.
+ */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(LLM_TIMEOUT_MS) });
+      const retryableStatus = res.status === 429 || res.status >= 500;
+      if (retryableStatus && attempt < MAX_ATTEMPTS - 1) {
+        await sleep(400 * 2 ** attempt);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleep(400 * 2 ** attempt);
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /* ───────────────────────────── OpenAI-совместимый ───────────────────────────── */
 
 interface ChatCompletionResponse {
@@ -128,7 +165,7 @@ async function callOpenAi(
 ): Promise<LlmReply> {
   let res: Response;
   try {
-    res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    res = await fetchWithRetry(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -305,7 +342,7 @@ async function callAnthropic(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
