@@ -61,6 +61,17 @@ export const aiAssistantRouter = router({
   getConfig: directorProcedure.query(({ ctx }) => getLlmConfigDto(ctx.db, ctx.tenant)),
 
   setConfig: directorProcedure.input(setConfigInput).mutation(async ({ ctx, input }) => {
+    // Нельзя включить ассистента без полного конфига (иначе он молча упадёт в env/«не настроен»).
+    if (input.enabled) {
+      const newKey = Boolean(input.apiKey?.trim());
+      const hasKey = newKey || (await getLlmConfigDto(ctx.db, ctx.tenant)).hasApiKey;
+      if (!input.baseUrl?.trim() || !input.model?.trim() || !hasKey) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Чтобы включить ассистента, заполните базовый URL, модель и API-ключ.',
+        });
+      }
+    }
     await upsertLlmConfig(ctx.db, ctx.tenant, {
       enabled: input.enabled,
       apiStyle: input.apiStyle,

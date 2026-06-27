@@ -91,6 +91,11 @@ const MAX_ATTEMPTS = 3;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Вырезает секрет из текста — на случай, если провайдер/прокси отразил ключ в ответе. */
+function redactSecret(text: string, secret: string): string {
+  return secret ? text.split(secret).join('[REDACTED]') : text;
+}
+
 /**
  * fetch с ретраями. Провайдеры (в т.ч. z.ai) периодически сбрасывают соединение
  * (ECONNRESET) или отдают 429/5xx — это перемежающиеся сбои, а не реальная ошибка
@@ -168,7 +173,7 @@ async function callOpenAi(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${text.slice(0, 500)}`);
+    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`);
   }
 
   const data = (await res.json()) as ChatCompletionResponse;
@@ -343,7 +348,7 @@ async function callAnthropic(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${text.slice(0, 500)}`);
+    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`);
   }
 
   const data = (await res.json()) as AnthropicResponse;

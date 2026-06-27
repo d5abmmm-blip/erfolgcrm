@@ -43,6 +43,9 @@ export function llmConfigFromEnv(): LlmRuntimeConfig | null {
 /**
  * Рабочий конфиг для вызова модели: сперва БД (если включён и заполнен), иначе env.
  * Возвращает null, если ассистент нигде не настроен.
+ *
+ * @internal Результат содержит РАСШИФРОВАННЫЙ apiKey. НЕ логировать, НЕ возвращать
+ * клиенту, НЕ писать в аудит. Использовать только для немедленного вызова callLlm.
  */
 export async function loadLlmRuntimeConfig(
   db: Db,

@@ -33,6 +33,10 @@ export const logger = pino({
       '*.PII_ENCRYPTION_KEY',
       '*.encryptionKey',
       '*.tenantKey',
+      // Ключи внешних провайдеров (LLM-ассистент и т.п.)
+      '*.apiKey',
+      '*.api_key',
+      '*.api_key_encrypted',
       // Описательные тексты в заявках/нарядах: могут содержать жалобы пациента,
       // комментарий о состоянии техники и т.п. — не строго PII, но скрываем.
       '*.symptom',
