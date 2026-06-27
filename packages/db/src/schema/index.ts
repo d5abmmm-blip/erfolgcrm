@@ -43,3 +43,4 @@ export * from './calendar';
 export * from './email';
 export * from './cash';
 export * from './sales';
+export * from './ai';

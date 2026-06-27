@@ -54,6 +54,7 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { KbPage } from './pages/KbPage';
 import { MailListPage } from './pages/MailListPage';
 import { MailSettingsPage } from './pages/MailSettingsPage';
+import { AiSettingsPage } from './pages/AiSettingsPage';
 import { MobileInventoryPage } from './pages/mobile/MobileInventoryPage';
 import { MobileQueuePage } from './pages/mobile/MobileQueuePage';
 import { MobileTicketPage } from './pages/mobile/MobileTicketPage';
@@ -200,6 +201,7 @@ function StaffApp() {
           <Route path="/settings/backup" component={BackupSettingsPage} />
           <Route path="/settings/telegram" component={TelegramSettingsPage} />
           <Route path="/settings/onec" component={OnecSettingsPage} />
+          <Route path="/settings/ai" component={AiSettingsPage} />
           <Route path="/settings/email" component={MailSettingsPage} />
           <Route path="/settings/payroll" component={PayrollSettingsPage} />
           <Route path="/settings/users" component={UsersPage} />

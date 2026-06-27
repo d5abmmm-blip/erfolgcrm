@@ -1,17 +1,21 @@
 /**
  * tRPC роутер AI-ассистента.
  *
- * - status — настроен ли LLM (есть ли ключ). Используется фронтом для подсказки.
- * - send   — основной эндпоинт: принимает историю диалога (и опц. подтверждённое
- *            действие), возвращает либо текст, либо запрос на подтверждение write.
+ * - status     — настроен ли LLM (из БД tenant'а или env). Фронт показывает подсказку.
+ * - send       — основной эндпоинт диалога (текст/подтверждение write/вложения).
+ * - getConfig  — реквизиты подключения к LLM БЕЗ ключа (директор). Для Настроек.
+ * - setConfig  — сохранить реквизиты (директор). Ключ write-only, шифруется.
+ * - testConfig — проверка связи: реальный мини-вызов модели (директор).
  *
- * Все процедуры — authedProcedure: ассистент доступен любому вошедшему сотруднику,
- * а права на конкретные операции проверяются внутри вызываемых процедур (RBAC/RLS).
+ * send/status — authedProcedure (ассистент доступен любому сотруднику, права на
+ * конкретные операции проверяются внутри инструментов). Настройки — directorProcedure.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { authedProcedure, router } from '../../trpc/trpc';
-import { llmConfigured } from './llm';
+import { authedProcedure, directorProcedure, router } from '../../trpc/trpc';
+import { writeAudit } from '../../lib/audit';
+import { callLlm } from './llm';
+import { getLlmConfigDto, loadLlmRuntimeConfig, upsertLlmConfig } from './config';
 import { runAssistant } from './service';
 
 const turnSchema = z.object({
@@ -40,8 +44,67 @@ const sendInput = z.object({
   attachments: z.array(attachmentSchema).max(4).optional(),
 });
 
+const setConfigInput = z.object({
+  enabled: z.boolean(),
+  apiStyle: z.enum(['openai', 'anthropic']),
+  baseUrl: z.string().trim().max(500).nullable(),
+  model: z.string().trim().max(120).nullable(),
+  /** Новый ключ. Пусто/не задан — не менять сохранённый. */
+  apiKey: z.string().max(500).optional(),
+});
+
 export const aiAssistantRouter = router({
-  status: authedProcedure.query(() => ({ configured: llmConfigured() })),
+  status: authedProcedure.query(async ({ ctx }) => ({
+    configured: (await loadLlmRuntimeConfig(ctx.db, ctx.tenant)) != null,
+  })),
+
+  getConfig: directorProcedure.query(({ ctx }) => getLlmConfigDto(ctx.db, ctx.tenant)),
+
+  setConfig: directorProcedure.input(setConfigInput).mutation(async ({ ctx, input }) => {
+    await upsertLlmConfig(ctx.db, ctx.tenant, {
+      enabled: input.enabled,
+      apiStyle: input.apiStyle,
+      baseUrl: input.baseUrl?.trim() || null,
+      model: input.model?.trim() || null,
+      apiKey: input.apiKey?.trim() || undefined,
+    });
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'update',
+      entityType: 'llm_config',
+      entityId: ctx.tenant.id,
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+      context: {
+        enabled: input.enabled,
+        apiStyle: input.apiStyle,
+        baseUrl: input.baseUrl,
+        model: input.model,
+        apiKeyChanged: Boolean(input.apiKey?.trim()),
+      },
+    });
+    return getLlmConfigDto(ctx.db, ctx.tenant);
+  }),
+
+  testConfig: directorProcedure.mutation(async ({ ctx }) => {
+    const cfg = await loadLlmRuntimeConfig(ctx.db, ctx.tenant);
+    if (!cfg) {
+      return { ok: false as const, error: 'Не настроено: укажите ключ и модель и сохраните.' };
+    }
+    try {
+      const reply = await callLlm(
+        [
+          { role: 'system', content: 'Проверка связи. Ответь одним словом.' },
+          { role: 'user', content: 'Ответь одним словом: работает' },
+        ],
+        [],
+        cfg,
+      );
+      return { ok: true as const, model: cfg.model, reply: (reply.content ?? '').slice(0, 80) };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : 'Ошибка связи с LLM' };
+    }
+  }),
 
   send: authedProcedure.input(sendInput).mutation(async ({ ctx, input }) => {
     try {

@@ -7,11 +7,9 @@
  *   - 'anthropic': POST {base}/v1/messages (Messages API). Нужен для z.ai GLM
  *     Coding Plan (баланс живёт на Anthropic-эндпоинте, а не на /paas/v4).
  *
- * Модель в код не зашита — задаётся через env:
- *   LLM_API_STYLE — 'openai' | 'anthropic' (необязательно, по умолчанию openai)
- *   LLM_BASE_URL  — напр. https://openrouter.ai/api/v1 или https://api.z.ai/api/anthropic
- *   LLM_API_KEY   — ключ провайдера (пользователь добавляет сам)
- *   LLM_MODEL     — напр. deepseek/deepseek-chat или glm-4.6
+ * Конфиг (apiStyle/baseUrl/apiKey/model) в код не зашит и в этот модуль НЕ читается
+ * из env напрямую — он передаётся в callLlm. Источник (БД tenant'а из Настроек или
+ * переменные LLM_* как fallback) определяет config.ts (loadLlmRuntimeConfig).
  *
  * Внутреннее представление сообщений — OpenAI-образное (LlmMessage с tool_calls /
  * role:'tool'). Для anthropic оно транслируется в Messages API в callAnthropic.
@@ -59,48 +57,27 @@ export interface LlmReply {
   toolCalls: LlmToolCall[];
 }
 
-type ApiStyle = 'openai' | 'anthropic';
+export type ApiStyle = 'openai' | 'anthropic';
 
-interface LlmConfig {
+/** Рабочий конфиг подключения к LLM. Загружается из БД/env (см. config.ts). */
+export interface LlmRuntimeConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   apiStyle: ApiStyle;
 }
 
-/** true, если заданы все обязательные переменные LLM_*. */
-export function llmConfigured(): boolean {
-  return Boolean(
-    process.env.LLM_BASE_URL?.trim() &&
-      process.env.LLM_API_KEY?.trim() &&
-      process.env.LLM_MODEL?.trim(),
-  );
-}
-
-function getConfig(): LlmConfig {
-  const baseUrl = process.env.LLM_BASE_URL?.trim();
-  const apiKey = process.env.LLM_API_KEY?.trim();
-  const model = process.env.LLM_MODEL?.trim();
-  if (!baseUrl || !apiKey || !model) {
-    throw new Error(
-      'AI-ассистент не настроен: задайте LLM_BASE_URL, LLM_API_KEY и LLM_MODEL в .env и перезапустите API.',
-    );
-  }
-  const apiStyle: ApiStyle =
-    process.env.LLM_API_STYLE?.trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'openai';
-  // Убираем хвостовые слэши, чтобы корректно склеить путь.
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey, model, apiStyle };
-}
-
 /**
- * Один вызов модели. Возвращает текст ответа и/или запрошенные вызовы инструментов.
- * Бросает понятную ошибку при сетевом сбое / HTTP-ошибке провайдера.
+ * Один вызов модели. Конфиг (ключ/база/модель/протокол) передаётся явно — источник
+ * (БД tenant'а или env) определяет вызывающая сторона (config.loadLlmRuntimeConfig).
+ * Возвращает текст ответа и/или запрошенные вызовы инструментов. Бросает понятную
+ * ошибку при сетевом сбое / HTTP-ошибке провайдера.
  */
 export async function callLlm(
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
+  cfg: LlmRuntimeConfig,
 ): Promise<LlmReply> {
-  const cfg = getConfig();
   return cfg.apiStyle === 'anthropic'
     ? callAnthropic(cfg, messages, tools)
     : callOpenAi(cfg, messages, tools);
@@ -159,7 +136,7 @@ interface ChatCompletionResponse {
 }
 
 async function callOpenAi(
-  cfg: LlmConfig,
+  cfg: LlmRuntimeConfig,
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
 ): Promise<LlmReply> {
@@ -332,7 +309,7 @@ export function toAnthropic(
 }
 
 async function callAnthropic(
-  cfg: LlmConfig,
+  cfg: LlmRuntimeConfig,
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
 ): Promise<LlmReply> {

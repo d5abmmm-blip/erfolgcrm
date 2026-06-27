@@ -13,7 +13,8 @@
  * входит в appRouter — статический import создал бы цикл.
  */
 import type { Context } from '../../trpc/context';
-import { callLlm, llmConfigured, type LlmContentPart, type LlmMessage } from './llm';
+import { callLlm, type LlmContentPart, type LlmMessage } from './llm';
+import { loadLlmRuntimeConfig } from './config';
 import { TOOL_DEFS_FOR_LLM, getTool, isWriteTool } from './tools';
 import { processAttachment, type IncomingAttachment } from './extract';
 
@@ -110,9 +111,13 @@ export async function runAssistant(
   confirm?: { tool: string; args: Record<string, unknown> },
   attachments?: IncomingAttachment[],
 ): Promise<AssistantResult> {
-  if (!llmConfigured()) {
+  if (!ctx.tenant) {
+    throw new Error('Нет контекста организации (требуется вход).');
+  }
+  const llmCfg = await loadLlmRuntimeConfig(ctx.db, ctx.tenant);
+  if (!llmCfg) {
     throw new Error(
-      'AI-ассистент не настроен: добавьте LLM_BASE_URL, LLM_API_KEY и LLM_MODEL в .env и перезапустите API.',
+      'AI-ассистент не настроен: задайте ключ и модель в Настройках → ИИ-ассистент (или переменные LLM_* на сервере).',
     );
   }
 
@@ -164,7 +169,7 @@ export async function runAssistant(
   }
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const reply = await callLlm(messages, TOOL_DEFS_FOR_LLM);
+    const reply = await callLlm(messages, TOOL_DEFS_FOR_LLM, llmCfg);
 
     if (reply.toolCalls.length === 0) {
       return { kind: 'message', text: reply.content ?? '' };

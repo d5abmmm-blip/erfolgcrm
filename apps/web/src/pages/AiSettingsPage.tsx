@@ -1,0 +1,236 @@
+/**
+ * /settings/ai — реквизиты подключения AI-ассистента к LLM. Доступ — только директор.
+ *
+ * Ключ write-only: с сервера приходит лишь флаг hasApiKey, пустое поле = не менять.
+ * Протокол: z.ai GLM Coding Plan → anthropic; OpenRouter/OpenAI-совместимые → openai.
+ */
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Loader2, Sparkles, Wifi } from 'lucide-react';
+import { trpc } from '../lib/trpc';
+import { cn } from '../lib/utils';
+
+type ApiStyle = 'openai' | 'anthropic';
+
+const PRESETS: Record<ApiStyle, { baseUrl: string; model: string; hint: string }> = {
+  anthropic: {
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    model: 'glm-4.6',
+    hint: 'z.ai GLM Coding Plan. glm-4.6 умеет и текст, и картинки (фото документов).',
+  },
+  openai: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'deepseek/deepseek-chat',
+    hint: 'OpenRouter и другие OpenAI-совместимые. Для фото нужна vision-модель.',
+  },
+};
+
+export function AiSettingsPage() {
+  const cfg = trpc.aiAssistant.getConfig.useQuery();
+  const utils = trpc.useUtils();
+
+  const [enabled, setEnabled] = useState(false);
+  const [apiStyle, setApiStyle] = useState<ApiStyle>('anthropic');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const c = cfg.data;
+    if (!c) return;
+    setEnabled(c.enabled);
+    setApiStyle(c.apiStyle);
+    setBaseUrl(c.baseUrl ?? '');
+    setModel(c.model ?? '');
+  }, [cfg.data]);
+
+  const setConfig = trpc.aiAssistant.setConfig.useMutation({
+    onSuccess: async () => {
+      setSaved(true);
+      setApiKey('');
+      setTimeout(() => setSaved(false), 2500);
+      await utils.aiAssistant.getConfig.invalidate();
+      await utils.aiAssistant.status.invalidate();
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  const testConfig = trpc.aiAssistant.testConfig.useMutation({
+    onSuccess: (r) =>
+      setTestMsg(
+        r.ok
+          ? `Связь есть. Модель «${r.model}» ответила: ${r.reply || '(пусто)'}`
+          : `Ошибка: ${r.error}`,
+      ),
+    onError: (e) => setTestMsg(`Ошибка: ${e.message}`),
+  });
+
+  const applyPreset = (style: ApiStyle) => {
+    setApiStyle(style);
+    // Подставляем рекомендуемые база/модель только если поля пустые — не затираем своё.
+    if (!baseUrl.trim()) setBaseUrl(PRESETS[style].baseUrl);
+    if (!model.trim()) setModel(PRESETS[style].model);
+  };
+
+  const save = () => {
+    setError(null);
+    setConfig.mutate({
+      enabled,
+      apiStyle,
+      baseUrl: baseUrl.trim() || null,
+      model: model.trim() || null,
+      apiKey: apiKey || undefined,
+    });
+  };
+
+  const inputCls =
+    'bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2';
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div className="flex items-center gap-3">
+        <Sparkles className="text-primary h-6 w-6" />
+        <h1 className="text-2xl font-semibold">ИИ-ассистент — подключение</h1>
+      </div>
+
+      <p className="text-muted-foreground text-sm">
+        Ключ и модель для встроенного помощника. Получите ключ у провайдера (z.ai, OpenRouter
+        и т.п.), вставьте сюда и включите. Ключ хранится в зашифрованном виде и не показывается
+        обратно.
+      </p>
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border px-4 py-2 text-sm">
+          {error}
+        </div>
+      )}
+
+      {cfg.data?.usingEnvFallback && (
+        <div className="bg-muted text-muted-foreground rounded-md px-4 py-2 text-xs">
+          Сейчас ассистент работает из серверных переменных окружения (LLM_*). Заполните и
+          сохраните форму, чтобы управлять настройками отсюда.
+        </div>
+      )}
+
+      {cfg.isLoading ? (
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Загрузка…
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Включение */}
+          <div className="bg-card flex items-center justify-between rounded-lg border p-4">
+            <div>
+              <div className="font-medium">Ассистент включён</div>
+              <div className="text-muted-foreground text-xs">
+                Если выключено — кнопка-бот доступна, но запросы к модели не идут
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEnabled((v) => !v)}
+              className={cn(
+                'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                enabled ? 'bg-primary' : 'bg-muted',
+              )}
+              role="switch"
+              aria-checked={enabled}
+            >
+              <span
+                className={cn(
+                  'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform',
+                  enabled ? 'translate-x-5' : 'translate-x-0',
+                )}
+              />
+            </button>
+          </div>
+
+          {/* Провайдер */}
+          <div className="bg-card space-y-3 rounded-lg border p-4">
+            <div className="font-medium">Провайдер и модель</div>
+
+            <label className="block">
+              <span className="text-xs font-medium">Тип API</span>
+              <select
+                value={apiStyle}
+                onChange={(e) => applyPreset(e.target.value as ApiStyle)}
+                className={inputCls}
+              >
+                <option value="anthropic">Anthropic-совместимый (z.ai GLM Coding Plan)</option>
+                <option value="openai">OpenAI-совместимый (OpenRouter и др.)</option>
+              </select>
+              <span className="text-muted-foreground mt-1 block text-xs">{PRESETS[apiStyle].hint}</span>
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-medium">Базовый URL</span>
+                <input
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder={PRESETS[apiStyle].baseUrl}
+                  className={inputCls}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium">Модель</span>
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={PRESETS[apiStyle].model}
+                  className={inputCls}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-xs font-medium">API-ключ</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={cfg.data?.hasApiKey ? '•••••• (сохранён, пусто — не менять)' : 'вставьте ключ'}
+                autoComplete="off"
+                className={inputCls}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={setConfig.isPending}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+            >
+              {setConfig.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Сохранить
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTestMsg(null);
+                testConfig.mutate();
+              }}
+              disabled={testConfig.isPending}
+              className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+            >
+              {testConfig.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+              Проверить связь
+            </button>
+            {saved && (
+              <span className="text-success inline-flex items-center gap-1 text-sm">
+                <CheckCircle2 className="h-4 w-4" />
+                Сохранено
+              </span>
+            )}
+            {testMsg && <span className="text-muted-foreground text-sm">{testMsg}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

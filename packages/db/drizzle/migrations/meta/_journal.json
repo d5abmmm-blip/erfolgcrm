@@ -330,6 +330,13 @@
       "when": 1777901900000,
       "tag": "0053_sale_item_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1778000000000,
+      "tag": "0054_llm_configs",
+      "breakpoints": true
     }
   ]
 }

@@ -3,22 +3,18 @@
  * Мокаем global.fetch; проверяем, что callLlm повторяет запрос и в итоге успешен,
  * а реальные 4xx-ошибки не ретраит.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { callLlm } from '../modules/ai-assistant/llm';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { callLlm, type LlmRuntimeConfig } from '../modules/ai-assistant/llm';
 
-beforeEach(() => {
-  process.env.LLM_API_STYLE = 'anthropic';
-  process.env.LLM_BASE_URL = 'https://example.test/api/anthropic';
-  process.env.LLM_API_KEY = 'test-key';
-  process.env.LLM_MODEL = 'glm-4.6';
-});
+const CFG: LlmRuntimeConfig = {
+  apiStyle: 'anthropic',
+  baseUrl: 'https://example.test/api/anthropic',
+  apiKey: 'test-key',
+  model: 'glm-4.6',
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.LLM_API_STYLE;
-  delete process.env.LLM_BASE_URL;
-  delete process.env.LLM_API_KEY;
-  delete process.env.LLM_MODEL;
 });
 
 describe('callLlm — ретраи', () => {
@@ -37,7 +33,7 @@ describe('callLlm — ретраи', () => {
       }),
     );
 
-    const r = await callLlm([{ role: 'user', content: 'привет' }], []);
+    const r = await callLlm([{ role: 'user', content: 'привет' }], [], CFG);
     expect(calls).toBe(3);
     expect(r.content).toBe('готово');
   });
@@ -52,7 +48,7 @@ describe('callLlm — ретраи', () => {
       }),
     );
 
-    await expect(callLlm([{ role: 'user', content: 'привет' }], [])).rejects.toThrow(/400/);
+    await expect(callLlm([{ role: 'user', content: 'привет' }], [], CFG)).rejects.toThrow(/400/);
     expect(calls).toBe(1);
   });
 
@@ -66,7 +62,7 @@ describe('callLlm — ретраи', () => {
       }),
     );
 
-    await expect(callLlm([{ role: 'user', content: 'привет' }], [])).rejects.toThrow(
+    await expect(callLlm([{ role: 'user', content: 'привет' }], [], CFG)).rejects.toThrow(
       /Не удалось связаться с LLM/,
     );
     expect(calls).toBe(3);
