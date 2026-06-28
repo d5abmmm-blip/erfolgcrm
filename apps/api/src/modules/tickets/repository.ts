@@ -67,6 +67,17 @@ export interface TicketListItem {
   deadlineAt: Date | null;
   receivedAt: Date;
   createdAt: Date;
+  /** Фича A — флаг «Ждём запчасть» (для бейджа в списке/канбане). */
+  waitingForPart: boolean;
+  /**
+   * Полных суток без активности на момент запроса. «Активность» = максимум из
+   * tickets.received_at и времени последнего ticket_event (та же семантика, что у
+   * AI-инструмента list_aged_tickets — бейдж «Висит N дн.» и ответ ИИ не расходятся).
+   * Берём received_at, а не updated_at: служебные апдейты строки (напр. отметка
+   * ready_notified_at без события) не должны ложно сбрасывать счётчик простоя.
+   * Для закрытых/отменённых заявок не несёт смысла — бейдж их игнорирует на клиенте.
+   */
+  idleDays: number;
 }
 
 export interface TicketDetailDto extends TicketListItem {
@@ -87,6 +98,8 @@ export interface TicketDetailDto extends TicketListItem {
   scheduledStartAt: Date | null;
   scheduledEndAt: Date | null;
   estimatedMinutes: number | null;
+  /** Фича A — заметка к флагу «Ждём запчасть» (что именно ждём). */
+  waitingForPartNote: string | null;
 }
 
 export interface TicketEventDto {
@@ -130,6 +143,9 @@ export interface UpdateTicketInput {
   assignedEngineerId?: string | null;
   slaTargetAt?: Date | null;
   deadlineAt?: Date | null;
+  /** Фича A — флаг «Ждём запчасть» и заметка к нему. */
+  waitingForPart?: boolean;
+  waitingForPartNote?: string | null;
 }
 
 const PAGE_SIZE_DEFAULT = 25;
@@ -148,6 +164,8 @@ export interface ListTicketsOpts {
    *   undefined → без фильтра.
    */
   scheduled?: boolean;
+  /** Фича A — только заявки с флагом «Ждём запчасть». */
+  waitingForPart?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -190,6 +208,7 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
   if (opts.contractId) filters.push(eq(tickets.contractId, opts.contractId));
   if (opts.scheduled === true) filters.push(isNotNull(tickets.scheduledStartAt));
   if (opts.scheduled === false) filters.push(isNull(tickets.scheduledStartAt));
+  if (opts.waitingForPart === true) filters.push(eq(tickets.waitingForPart, true));
   if (opts.search) {
     const q = `%${opts.search.trim()}%`;
     filters.push(
@@ -233,6 +252,17 @@ export async function listTickets(
         deadlineAt: tickets.deadlineAt,
         receivedAt: tickets.receivedAt,
         createdAt: tickets.createdAt,
+        waitingForPart: tickets.waitingForPart,
+        // Простой в полных сутках: max(received_at, последнее ticket_event.created_at).
+        // Та же «последняя активность», что в ai-assistant/read-queries (list_aged_tickets):
+        // received_at (а не updated_at), иначе служебные апдейты строки сбрасывали бы бейдж.
+        idleDays: sql<number>`floor(extract(epoch from (now() - greatest(
+          ${tickets.receivedAt},
+          coalesce(
+            (select max(te.created_at) from ${ticketEvents} te where te.ticket_id = ${tickets.id}),
+            ${tickets.receivedAt}
+          )
+        ))) / 86400)::int`,
       })
       .from(tickets)
       .leftJoin(clients, eq(tickets.clientId, clients.id))
@@ -304,6 +334,17 @@ export async function getTicket(
         scheduledStartAt: tickets.scheduledStartAt,
         scheduledEndAt: tickets.scheduledEndAt,
         estimatedMinutes: tickets.estimatedMinutes,
+        waitingForPart: tickets.waitingForPart,
+        waitingForPartNote: tickets.waitingForPartNote,
+        // То же определение «простоя», что и в listTickets / list_aged_tickets
+        // (базовая дата — received_at, а не updated_at).
+        idleDays: sql<number>`floor(extract(epoch from (now() - greatest(
+          ${tickets.receivedAt},
+          coalesce(
+            (select max(te.created_at) from ${ticketEvents} te where te.ticket_id = ${tickets.id}),
+            ${tickets.receivedAt}
+          )
+        ))) / 86400)::int`,
       })
       .from(tickets)
       .leftJoin(clients, eq(tickets.clientId, clients.id))
@@ -452,6 +493,8 @@ function buildUpdateSet(patch: UpdateTicketInput): Record<string, unknown> {
     'assignedEngineerId',
     'slaTargetAt',
     'deadlineAt',
+    'waitingForPart',
+    'waitingForPartNote',
   ];
   for (const k of keys) {
     if (patch[k] !== undefined) setObj[k] = patch[k];
@@ -612,6 +655,60 @@ export async function addNote(
       })
       .returning({ id: ticketEvents.id });
     return { id: inserted[0]!.id };
+  });
+}
+
+/**
+ * Фича A — установить/снять флаг «Ждём запчасть» + заметку.
+ * Запись в журнал делаем событием type='note' (не плодим новое значение enum
+ * ticket_event_type — это потребовало бы ALTER TYPE и риска для живой схемы).
+ * Идемпотентно: если флаг и заметка не меняются, событие не пишем.
+ */
+export async function setWaitingForPart(
+  db: Db,
+  tenantId: string,
+  userId: string | null,
+  ticketId: string,
+  waiting: boolean,
+  note: string | null,
+): Promise<{ id: string; waitingForPart: boolean; waitingForPartNote: string | null }> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        waitingForPart: tickets.waitingForPart,
+        waitingForPartNote: tickets.waitingForPartNote,
+      })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+    const before = rows[0];
+    if (!before) throw new TicketNotFoundError();
+
+    // Заметку храним только когда флаг включён; при снятии чистим её.
+    const nextNote = waiting ? (note?.trim() || null) : null;
+    const changed =
+      before.waitingForPart !== waiting || (before.waitingForPartNote ?? null) !== nextNote;
+
+    if (changed) {
+      await tx
+        .update(tickets)
+        .set({ waitingForPart: waiting, waitingForPartNote: nextNote })
+        .where(eq(tickets.id, ticketId));
+
+      const comment = waiting
+        ? `Ждём запчасть${nextNote ? `: ${nextNote}` : ''}`
+        : 'Запчасть получена — ожидание снято';
+      await tx.insert(ticketEvents).values({
+        tenantId,
+        ticketId,
+        userId,
+        type: 'note',
+        payload: { comment },
+      });
+    }
+
+    return { id: ticketId, waitingForPart: waiting, waitingForPartNote: nextNote };
   });
 }
 

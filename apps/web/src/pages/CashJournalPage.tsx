@@ -1,5 +1,5 @@
 /**
- * /finance/transactions — журнал операций кассы (ДДС).
+ * /finance/transactions — журнал прихода и расхода кассы (движение денег).
  * Фильтры (тип / счёт / статья / период), кнопки +Доход/+Расход/Перевод (модалка),
  * удаление операции. RBAC: staff. Авто-доходы от оплат помечены «из заявки».
  */
@@ -155,7 +155,7 @@ export function CashJournalPage() {
       <FinanceTabs />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold md:text-2xl">Операции</h1>
+        <h1 className="text-xl font-semibold md:text-2xl">Приход и расход</h1>
         <div className="flex items-center gap-2">
           <button
             type="button"

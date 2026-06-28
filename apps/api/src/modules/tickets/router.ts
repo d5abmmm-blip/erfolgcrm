@@ -35,6 +35,7 @@ import {
   recordPrintEventCmd,
   reopenTicketCmd,
   scheduleCmd,
+  setWaitingForPartCmd,
   searchTicketsQuery,
   unscheduleCmd,
   updateTicketCmd,
@@ -117,6 +118,8 @@ export const ticketsRouter = router({
           contractId: z.string().uuid().optional(),
           /** Stage 11 — фильтр по наличию расписания (для UI «незапланированные»). */
           scheduled: z.boolean().optional(),
+          /** Фича A — только заявки, ждущие запчасть. */
+          waitingForPart: z.boolean().optional(),
           page: z.number().int().positive().max(1000).optional(),
           pageSize: z.number().int().positive().max(200).optional(),
         })
@@ -160,6 +163,19 @@ export const ticketsRouter = router({
     )
     .mutation(({ ctx, input }) =>
       addTicketNoteCmd(buildCmdCtx(ctx), input.ticketId, input.comment),
+    ),
+
+  /** Фича A — установить/снять флаг «Ждём запчасть» + заметку. */
+  setWaitingForPart: staffProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        waiting: z.boolean(),
+        note: z.string().trim().max(500).nullable().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      setWaitingForPartCmd(buildCmdCtx(ctx), input.ticketId, input.waiting, input.note ?? null),
     ),
 
   recordPrint: staffProcedure

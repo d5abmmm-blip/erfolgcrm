@@ -73,6 +73,15 @@ export const tenants = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
 
+    /**
+     * Фича B — тумблер уведомления клиента по e-mail, когда техника готова к выдаче
+     * (заявка переходит в статус act_pending). Это письмо уже отправляется воркером
+     * ticket-status-notify; тумблер позволяет директору его ОТКЛЮЧИТЬ. ПО УМОЛЧАНИЮ
+     * ВКЛЮЧЕНО (true) — чтобы поведение прода, где письмо уже шлётся, не изменилось.
+     * Без email у клиента письмо тихо не отправляется.
+     */
+    notifyClientWhenReady: boolean('notify_client_when_ready').notNull().default(true),
+
     ...timestamps,
   },
   (t) => [unique('tenants_subdomain_unique').on(t.subdomain)],

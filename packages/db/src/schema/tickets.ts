@@ -13,6 +13,7 @@
  */
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -170,6 +171,22 @@ export const tickets = pgTable(
     closedAt: timestamp('closed_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelReason: text('cancel_reason'),
+
+    /**
+     * Флаг «Ждём запчасть» — заявка стоит из-за ожидания детали (не вина инженера).
+     * Это пометка, НЕ статус: статус заявки продолжает жить своей жизнью, а флаг лишь
+     * подсвечивает причину простоя менеджеру (бейдж в списке/канбане + фильтр).
+     */
+    waitingForPart: boolean('waiting_for_part').notNull().default(false),
+    /** Что именно ждём (деталь / поставщик / срок). Опционально. */
+    waitingForPartNote: text('waiting_for_part_note'),
+
+    /**
+     * Фича B — guard идемпотентности авто-уведомления клиента «техника готова».
+     * Заполняется при первой успешной отправке письма «готово к выдаче» (статус
+     * act_pending). Пока не NULL — повторно письмо «готово» не шлём.
+     */
+    readyNotifiedAt: timestamp('ready_notified_at', { withTimezone: true }),
 
     ...timestamps,
   },

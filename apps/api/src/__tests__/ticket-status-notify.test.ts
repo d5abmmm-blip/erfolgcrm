@@ -9,7 +9,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import { clients, getDb, tickets, withTenantTx } from '@erfolg/db';
+import { clients, getDb, tenants, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import { __setTransporterForTesting } from '../lib/mailer';
@@ -46,6 +46,14 @@ beforeAll(async () => {
       .where(eq(clients.id, primaryClientId));
   });
 
+  // Фича B — уведомление «готово» (act_pending) опт-ин, по умолчанию ВКЛЮЧЕНО
+  // (DB DEFAULT true). Явно выставляем true для детерминизма тестов отправки.
+  // tenants — control-plane без RLS.
+  await getDb()
+    .update(tenants)
+    .set({ notifyClientWhenReady: true })
+    .where(eq(tenants.id, erfolgId));
+
   __setTransporterForTesting({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sendMail: vi.fn(async (opts: any) => {
@@ -63,6 +71,11 @@ afterAll(async () => {
   await withTenantTx(getDb(), erfolgId, async (tx) => {
     await tx.update(clients).set({ email: originalEmail }).where(eq(clients.id, primaryClientId));
   });
+  // Фича B — вернём опт-ин в дефолтное (ВКЛЮЧЕНО) состояние.
+  await getDb()
+    .update(tenants)
+    .set({ notifyClientWhenReady: true })
+    .where(eq(tenants.id, erfolgId));
 });
 
 async function clearTestData(): Promise<void> {
@@ -208,5 +221,49 @@ describe('processTicketStatusNotify (worker)', () => {
     });
     expect(result.status).toBe('sent');
     expect(sentMail[0]?.subject).toContain('закрыта');
+  });
+
+  it('Фича B: act_pending при выключенном опт-ине — skipped, письмо не шлём', async () => {
+    const { id } = await createTestTicket();
+    // временно выключаем опт-ин
+    await getDb()
+      .update(tenants)
+      .set({ notifyClientWhenReady: false })
+      .where(eq(tenants.id, erfolgId));
+    try {
+      const result = await processTicketStatusNotify({
+        tenantId: erfolgId,
+        ticketId: id,
+        oldStatus: 'in_progress',
+        newStatus: 'act_pending',
+      });
+      expect(result.status).toBe('skipped');
+      expect(result.reason).toBe('ready-notify-disabled');
+      expect(sentMail.length).toBe(0);
+    } finally {
+      await getDb()
+        .update(tenants)
+        .set({ notifyClientWhenReady: true })
+        .where(eq(tenants.id, erfolgId));
+    }
+  });
+
+  it('Фича B: act_pending шлём один раз (идемпотентность по ready_notified_at)', async () => {
+    const { id } = await createTestTicket();
+    const payload: TicketStatusNotifyPayload = {
+      tenantId: erfolgId,
+      ticketId: id,
+      oldStatus: 'in_progress',
+      newStatus: 'act_pending',
+    };
+    const first = await processTicketStatusNotify(payload);
+    expect(first.status).toBe('sent');
+    expect(sentMail.length).toBe(1);
+
+    // повторный переход в act_pending (например после возврата на доделку) — не дублируем
+    const second = await processTicketStatusNotify(payload);
+    expect(second.status).toBe('skipped');
+    expect(second.reason).toBe('ready-already-notified');
+    expect(sentMail.length).toBe(1);
   });
 });

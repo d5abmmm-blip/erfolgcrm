@@ -31,6 +31,22 @@ export const ACTIVE_TICKET_STATUSES: readonly TicketStatus[] = [
   'act_pending',
 ] as const;
 
+/**
+ * Порог «зависшей» заявки в днях. Открытая заявка без активности дольше этого
+ * порога подсвечивается бейджем «Висит N дн.». Совпадает с дефолтным порогом
+ * AI-инструмента list_aged_tickets, чтобы бейдж и ответ ИИ не расходились.
+ */
+export const STALE_TICKET_DAYS = 7;
+
+/**
+ * Заявка «висит» = открыта (не closed/cancelled) и без активности дольше порога.
+ * idleDays приходит из API (max(received_at, последнее ticket_event)).
+ */
+export function isTicketStale(status: TicketStatus, idleDays: number): boolean {
+  if (status === 'closed' || status === 'cancelled') return false;
+  return idleDays >= STALE_TICKET_DAYS;
+}
+
 /** Метаданные приоритета заявки. */
 export const TICKET_PRIORITY_META: Record<TicketPriority, MetaEntry> = {
   low: { label: 'низкий', variant: 'muted' },

@@ -9,20 +9,101 @@
  * фактический вызов происходит после подтверждения пользователем (см. service.ts).
  */
 import { randomBytes } from 'node:crypto';
+import { TRPCError } from '@trpc/server';
 import { TicketPriority, TicketStatus } from '@erfolg/shared';
+import type { Db } from '@erfolg/db';
 import type { appRouter } from '../../trpc/router';
+import type { ResolvedTenant } from '../../lib/tenant';
 import type { LlmFunctionTool } from './llm';
+import {
+  getFinanceSummary,
+  getTicketsStats,
+  listAgedTickets,
+  type FinancePeriod,
+} from './read-queries';
 
 type Caller = ReturnType<typeof appRouter.createCaller>;
 
+/** Роль сотрудника текущей сессии — для RBAC-гейта read-инструментов. */
+export type SessionRole = 'director' | 'dispatcher' | 'engineer';
+
+/**
+ * Read-only инструменты «спроси у системы» вызывают агрегаты кассы/заявок напрямую
+ * (минуя tRPC-caller), поэтому им нужен доступ к db+tenant. Передаём отдельным ctx —
+ * write-инструменты его игнорируют и работают через caller, как раньше.
+ *
+ * role нужен потому, что эти инструменты обходят tRPC-caller (а с ним и RBAC
+ * staffProcedure). Без него инженер мог бы через чат получить финансы и список
+ * заявок с ПДн — те же данные гейтятся staffProcedure в обычных роутерах.
+ */
+export interface ToolRunCtx {
+  db: Db;
+  tenant: ResolvedTenant;
+  role: SessionRole;
+}
+
 export type ToolKind = 'read' | 'write';
+
+/** Роли «staff» (директор + диспетчер) — та же семантика, что у staffProcedure (trpc.ts). */
+const STAFF_ROLES: SessionRole[] = ['director', 'dispatcher'];
+
+function isStaffRole(role: SessionRole): boolean {
+  return STAFF_ROLES.includes(role);
+}
+
+/**
+ * Гейт для read-инструментов уровня staff (финансы / заявки с ПДн): инженеру
+ * отказываем тем же механизмом и кодом, что staffProcedure (TRPCError FORBIDDEN).
+ * Ошибка ловится в service.ts → модель сообщит пользователю о нехватке прав.
+ */
+function requireStaff(ctx: ToolRunCtx): void {
+  if (!isStaffRole(ctx.role)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Доступ только для ролей: director, dispatcher',
+    });
+  }
+}
 
 interface ToolHandler {
   kind: ToolKind;
+  /**
+   * true — инструмент доступен только роли «staff» (director|dispatcher).
+   * Жёстко проверяется в run (requireStaff) и используется для фильтрации
+   * списка инструментов, отдаваемого модели (см. toolDefsForRole).
+   */
+  staffOnly?: boolean;
   def: LlmFunctionTool;
-  run: (caller: Caller, args: Record<string, unknown>) => Promise<unknown>;
+  run: (
+    caller: Caller,
+    args: Record<string, unknown>,
+    ctx?: ToolRunCtx,
+  ) => Promise<unknown>;
   /** Человекочитаемое описание для карточки подтверждения (только write). */
   preview?: (args: Record<string, unknown>) => string;
+}
+
+const FINANCE_PERIODS: FinancePeriod[] = [
+  'today',
+  'week',
+  'month',
+  'prev_month',
+  'quarter',
+  'year',
+];
+
+/** Безопасно привести аргумент period к допустимому пресету (по умолчанию month). */
+function asFinancePeriod(args: Record<string, unknown>, fallback: FinancePeriod = 'month'): FinancePeriod {
+  const v = args.period;
+  return typeof v === 'string' && (FINANCE_PERIODS as string[]).includes(v)
+    ? (v as FinancePeriod)
+    : fallback;
+}
+
+/** Read-инструменты «спроси у системы» требуют db+tenant — service всегда их передаёт. */
+function reqCtx(ctx?: ToolRunCtx): ToolRunCtx {
+  if (!ctx) throw new Error('Внутренняя ошибка: нет контекста БД для read-инструмента');
+  return ctx;
 }
 
 /* ───────────────────── helpers для разбора аргументов модели ───────────────────── */
@@ -166,6 +247,99 @@ const TOOLS: Record<string, ToolHandler> = {
       },
     },
     run: (caller, args) => caller.tickets.get({ id: reqString(args, 'id') }),
+  },
+
+  get_finance_summary: {
+    kind: 'read',
+    staffOnly: true,
+    def: {
+      type: 'function',
+      function: {
+        name: 'get_finance_summary',
+        description:
+          'Сводка по деньгам (касса/ДДС) за период: сколько пришло (доход), сколько ушло (расход) и ' +
+          'разница, плюс разбивка прихода по виду денег (наличные / карта / безнал) и текущие остатки по счетам. ' +
+          'Используй, когда спрашивают «сколько заработали/собрали/потратили», «прибыль», «сколько в кассе» и т.п. ' +
+          'period: today (сегодня), week (7 дней), month (текущий месяц), prev_month (прошлый месяц), quarter, year. По умолчанию month.',
+        parameters: {
+          type: 'object',
+          properties: {
+            period: {
+              type: 'string',
+              enum: FINANCE_PERIODS,
+              description: 'Период: today | week | month | prev_month | quarter | year',
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (_caller, args, ctx) => {
+      const c = reqCtx(ctx);
+      requireStaff(c);
+      return getFinanceSummary(c.db, c.tenant, asFinancePeriod(args));
+    },
+  },
+
+  list_aged_tickets: {
+    kind: 'read',
+    staffOnly: true,
+    def: {
+      type: 'function',
+      function: {
+        name: 'list_aged_tickets',
+        description:
+          'Открытые (незакрытые) заявки без активности дольше N дней — «зависшие». Возвращает количество и ' +
+          'краткий список (номер заявки, клиент, статус, сколько суток простаивает). Используй для вопросов ' +
+          '«какие заявки зависли», «что давно не двигалось», «застрявшие заявки». По умолчанию порог 7 дней.',
+        parameters: {
+          type: 'object',
+          properties: {
+            days: {
+              type: 'number',
+              description: 'Порог простоя в днях (по умолчанию 7)',
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (_caller, args, ctx) => {
+      const c = reqCtx(ctx);
+      requireStaff(c);
+      return listAgedTickets(c.db, c.tenant, asNumber(args, 'days') ?? 7);
+    },
+  },
+
+  get_tickets_stats: {
+    kind: 'read',
+    staffOnly: true,
+    def: {
+      type: 'function',
+      function: {
+        name: 'get_tickets_stats',
+        description:
+          'Счётчики заявок по статусам за период (по дате регистрации заявки). Возвращает общее число и ' +
+          'разбивку по статусам. Используй для вопросов «сколько заявок за месяц», «сколько закрыли/в работе». ' +
+          'period: today | week | month | prev_month | quarter | year. По умолчанию month.',
+        parameters: {
+          type: 'object',
+          properties: {
+            period: {
+              type: 'string',
+              enum: FINANCE_PERIODS,
+              description: 'Период: today | week | month | prev_month | quarter | year',
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (_caller, args, ctx) => {
+      const c = reqCtx(ctx);
+      requireStaff(c);
+      return getTicketsStats(c.db, c.tenant, asFinancePeriod(args));
+    },
   },
 
   // ===================== WRITE (требуют подтверждения) =====================
@@ -638,6 +812,18 @@ const TOOLS: Record<string, ToolHandler> = {
 
 /** Описания всех инструментов для передачи модели. */
 export const TOOL_DEFS_FOR_LLM: LlmFunctionTool[] = Object.values(TOOLS).map((t) => t.def);
+
+/**
+ * Инструменты, доступные конкретной роли. staff-only инструменты (финансы/заявки
+ * с ПДн) не отдаём инженеру вовсе — чтобы модель их даже не предлагала. Это в
+ * дополнение к жёсткому гейту requireStaff в run (а не вместо него).
+ */
+export function toolDefsForRole(role: SessionRole): LlmFunctionTool[] {
+  if (isStaffRole(role)) return TOOL_DEFS_FOR_LLM;
+  return Object.values(TOOLS)
+    .filter((t) => !t.staffOnly)
+    .map((t) => t.def);
+}
 
 export function getTool(name: string): ToolHandler | undefined {
   return TOOLS[name];

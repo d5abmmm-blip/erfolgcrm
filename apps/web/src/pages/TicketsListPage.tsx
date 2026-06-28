@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { Plus, Search, Ticket as TicketIcon, LayoutGrid, List } from 'lucide-react';
+import {
+  Clock,
+  Package,
+  Plus,
+  Search,
+  Ticket as TicketIcon,
+  LayoutGrid,
+  List,
+} from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -8,7 +16,7 @@ import { useDebounce } from '../lib/hooks/useDebounce';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
-import { TICKET_STATUS_META, TICKET_PRIORITY_META } from '../lib/dictionaries';
+import { TICKET_STATUS_META, TICKET_PRIORITY_META, isTicketStale } from '../lib/dictionaries';
 
 interface TicketRow {
   id: string;
@@ -24,6 +32,8 @@ interface TicketRow {
   assignedEngineerName: string | null;
   slaTargetAt: Date | null;
   receivedAt: Date;
+  waitingForPart: boolean;
+  idleDays: number;
 }
 
 const PAGE_SIZE = 25;
@@ -32,11 +42,13 @@ export function TicketsListPage() {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search.trim(), 300);
   const [statuses, setStatuses] = useState<TicketStatus[]>([]);
+  const [onlyWaitingPart, setOnlyWaitingPart] = useState(false);
   const [page, setPage] = useState(1);
 
   const list = trpc.tickets.list.useQuery({
     search: debounced || undefined,
     statuses: statuses.length > 0 ? statuses : undefined,
+    waitingForPart: onlyWaitingPart ? true : undefined,
     page,
     pageSize: PAGE_SIZE,
   });
@@ -54,12 +66,16 @@ export function TicketsListPage() {
       key: 'ticketNumber',
       label: '№',
       render: (t) => (
-        <Link
-          href={`/tickets/${t.id}`}
-          className="text-foreground hover:text-primary font-mono font-medium"
-        >
-          {t.ticketNumber}
-        </Link>
+        <div className="flex flex-col gap-1">
+          <Link
+            href={`/tickets/${t.id}`}
+            className="text-foreground hover:text-primary font-mono font-medium"
+          >
+            {t.ticketNumber}
+          </Link>
+          {t.waitingForPart && <WaitingPartBadge />}
+          {isTicketStale(t.status, t.idleDays) && <StaleBadge days={t.idleDays} />}
+        </div>
       ),
     },
     {
@@ -204,6 +220,25 @@ export function TicketsListPage() {
             сбросить
           </button>
         )}
+
+        <span className="bg-border mx-1 h-4 w-px self-center" aria-hidden />
+
+        <button
+          type="button"
+          onClick={() => {
+            setOnlyWaitingPart((v) => !v);
+            setPage(1);
+          }}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs transition',
+            onlyWaitingPart
+              ? 'border-warning bg-warning/10 text-warning'
+              : 'border-border text-muted-foreground hover:border-foreground/30',
+          )}
+        >
+          <Package className="h-3 w-3" />
+          Только ждущие запчасть
+        </button>
       </div>
 
       <DataTable
@@ -287,6 +322,29 @@ function SlaBadge({
     <StatusBadge variant="success" compact>
       через {Math.round(diffH / 24)}д
     </StatusBadge>
+  );
+}
+
+function WaitingPartBadge() {
+  return (
+    <span className="bg-warning/15 text-warning inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
+      <Package className="h-3 w-3" />
+      ждём запчасть
+    </span>
+  );
+}
+
+/** Бейдж «зависшей» заявки — давно без активности. Красный мягкий фон, чтобы
+ *  отличаться от амбер-бейджа «ждём запчасть» и не сливаться с ним. */
+function StaleBadge({ days }: { days: number }) {
+  return (
+    <span
+      className="bg-destructive/10 text-destructive inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+      title="Открытая заявка давно без активности"
+    >
+      <Clock className="h-3 w-3" />
+      висит {days} дн.
+    </span>
   );
 }
 

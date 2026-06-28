@@ -1,5 +1,5 @@
 /**
- * Под-навигация раздела «Финансы»: Обзор / Операции / Счета на оплату / Счета и статьи.
+ * Под-навигация раздела «Финансы»: Обзор / Приход и расход / Счета на оплату / Счета и статьи.
  * Вкладка «Счета и статьи» — только директору (управление кассой).
  */
 import { Link, useLocation } from 'wouter';
@@ -16,7 +16,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { href: '/finance', label: 'Обзор', exact: true },
-  { href: '/finance/transactions', label: 'Операции' },
+  { href: '/finance/transactions', label: 'Приход и расход' },
   { href: '/finance/invoices', label: 'Счета на оплату' },
   { href: '/finance/accounts', label: 'Счета и статьи', directorOnly: true },
 ];

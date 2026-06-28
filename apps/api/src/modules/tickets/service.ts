@@ -27,6 +27,7 @@ import {
   listEvents as repoListEvents,
   listTickets as repoListTickets,
   recordPrintEvent as repoRecordPrint,
+  setWaitingForPart as repoSetWaitingForPart,
   repoMyWeeklySchedule,
   repoSchedule,
   repoUnschedule,
@@ -420,6 +421,41 @@ export async function addTicketNoteCmd(
     entityType: 'ticket_event',
     entityId: result.id,
     after: { type: 'note', ticketId },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+  return result;
+}
+
+/**
+ * Фича A — установить/снять флаг «Ждём запчасть». RBAC (staff) — в роутере.
+ * Пишет note-событие в журнал (через repo) + audit.
+ */
+export async function setWaitingForPartCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+  waiting: boolean,
+  note: string | null,
+): Promise<{ id: string; waitingForPart: boolean; waitingForPartNote: string | null }> {
+  let result;
+  try {
+    result = await repoSetWaitingForPart(
+      ctx.db,
+      ctx.tenant.id,
+      ctx.session.userId,
+      ticketId,
+      waiting,
+      note,
+    );
+  } catch (err) {
+    throw toTRPCError(err);
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'update',
+    entityType: 'ticket',
+    entityId: ticketId,
+    after: { waitingForPart: result.waitingForPart, hasNote: Boolean(result.waitingForPartNote) },
     ip: ctx.audit.ip ?? null,
     userAgent: ctx.audit.userAgent ?? null,
   });

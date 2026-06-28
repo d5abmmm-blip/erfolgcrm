@@ -15,7 +15,7 @@
 import type { Context } from '../../trpc/context';
 import { callLlm, type LlmContentPart, type LlmMessage } from './llm';
 import { loadLlmRuntimeConfig } from './config';
-import { TOOL_DEFS_FOR_LLM, getTool, isWriteTool } from './tools';
+import { getTool, isWriteTool, toolDefsForRole, type ToolRunCtx } from './tools';
 import { processAttachment, type IncomingAttachment } from './extract';
 
 export interface ChatTurn {
@@ -42,6 +42,7 @@ const SYSTEM_PROMPT = `Ты — встроенный помощник CRM сер
 - Прежде чем что-то создавать или изменять, найди нужные сущности через инструменты поиска и получи их реальные ID. НИКОГДА не выдумывай ID (UUID).
 - Для операций записи (создание заявки/клиента/договора/техники/сотрудника, назначение инженера, смена статуса, планирование, смена владельца техники, счета) система сама покажет пользователю карточку подтверждения. Не спрашивай «вы уверены?» текстом — просто вызови нужный инструмент с корректными аргументами.
 - Если данных не хватает (неизвестен клиент/инженер/техника) — сначала найди их поиском или уточни у пользователя.
+- На вопросы о бизнесе («сколько собрали/заработали/потратили», «прибыль», «сколько в кассе», «какие заявки зависли», «сколько заявок за месяц») вызывай read-инструменты get_finance_summary, list_aged_tickets, get_tickets_stats — это чтение, оно выполняется сразу без подтверждения. В ответе указывай период и откуда взялась цифра. Суммы возвращаются в копейках — переводи в рубли.
 - Ты действуешь от имени текущего сотрудника; его права (роль) соблюдаются автоматически. Если операция запрещена — честно сообщи об этом.
 - Отвечай кратко и по делу. Даты показывай в формате ДД.ММ.ГГГГ, суммы — в рублях.
 
@@ -114,6 +115,9 @@ export async function runAssistant(
   if (!ctx.tenant) {
     throw new Error('Нет контекста организации (требуется вход).');
   }
+  if (!ctx.session) {
+    throw new Error('Требуется вход.');
+  }
   const llmCfg = await loadLlmRuntimeConfig(ctx.db, ctx.tenant);
   if (!llmCfg) {
     throw new Error(
@@ -124,6 +128,15 @@ export async function runAssistant(
   // Ленивый импорт — разрыв цикла ai-assistant ↔ appRouter.
   const { appRouter } = await import('../../trpc/router');
   const caller = appRouter.createCaller(ctx);
+
+  // Контекст для read-инструментов «спроси у системы» (прямой доступ к db+tenant).
+  // role нужен для RBAC-гейта staff-only инструментов (финансы/заявки с ПДн),
+  // которые обходят tRPC-caller и потому теряли бы проверку staffProcedure.
+  const role = ctx.session.role;
+  const toolCtx: ToolRunCtx = { db: ctx.db, tenant: ctx.tenant, role };
+
+  // Инженеру не показываем staff-only инструменты — модель их даже не предложит.
+  const toolDefs = toolDefsForRole(role);
 
   const messages = buildBaseMessages(history);
 
@@ -141,7 +154,7 @@ export async function runAssistant(
     }
     let resultJson: string;
     try {
-      const result = await tool.run(caller, confirm.args);
+      const result = await tool.run(caller, confirm.args, toolCtx);
       resultJson = JSON.stringify({ ok: true, result });
     } catch (err) {
       resultJson = JSON.stringify({
@@ -169,7 +182,7 @@ export async function runAssistant(
   }
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const reply = await callLlm(messages, TOOL_DEFS_FOR_LLM, llmCfg);
+    const reply = await callLlm(messages, toolDefs, llmCfg);
 
     if (reply.toolCalls.length === 0) {
       return { kind: 'message', text: reply.content ?? '' };
@@ -213,7 +226,7 @@ export async function runAssistant(
         content = JSON.stringify({ error: `Неизвестный инструмент: ${tc.name}` });
       } else {
         try {
-          content = JSON.stringify(await tool.run(caller, args));
+          content = JSON.stringify(await tool.run(caller, args, toolCtx));
         } catch (err) {
           content = JSON.stringify({
             error: err instanceof Error ? err.message : String(err),

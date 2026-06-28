@@ -1,4 +1,4 @@
-/** Метки кассы (ДДС) — типы счетов и операций. Источник истины — enum'ы schema/cash.ts. */
+/** Метки кассы (движение денег) — типы счетов и операций. Источник истины — enum'ы schema/cash.ts. */
 
 export type CashAccountKind = 'cash' | 'bank' | 'card';
 export type CashTxKind = 'income' | 'expense' | 'transfer';

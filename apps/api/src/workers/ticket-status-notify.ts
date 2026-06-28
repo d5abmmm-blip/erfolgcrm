@@ -73,6 +73,8 @@ interface LoadedTicket {
   individualFullName: string | null;
   assetModel: string | null;
   engineerFullName: string | null;
+  /** Фича B — guard идемпотентности уведомления «готово к выдаче». */
+  readyNotifiedAt: Date | null;
 }
 
 async function loadTicketDetails(
@@ -95,6 +97,7 @@ async function loadTicketDetails(
         ),
         assetModel: assets.model,
         engineerFullName: users.fullName,
+        readyNotifiedAt: tickets.readyNotifiedAt,
       })
       .from(tickets)
       .leftJoin(clients, eq(tickets.clientId, clients.id))
@@ -115,7 +118,32 @@ async function loadTicketDetails(
       individualFullName: (r.individualFullName as string | null) ?? null,
       assetModel: r.assetModel,
       engineerFullName: r.engineerFullName,
+      readyNotifiedAt: r.readyNotifiedAt,
     };
+  });
+}
+
+/**
+ * Фича B — тумблер tenant'а на письмо «техника готова». tenants — control-plane без RLS,
+ * читаем напрямую. По умолчанию true (прод уже шлёт это письмо — поведение не меняем);
+ * директор может отключить в Настройках → Уведомления клиентам.
+ */
+async function isReadyNotifyEnabled(tenantId: string): Promise<boolean> {
+  const rows = await getDb()
+    .select({ enabled: tenants.notifyClientWhenReady })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/** Фича B — отметить, что письмо «готово» по заявке уже отправлено (guard идемпотентности). */
+async function markReadyNotified(tenantId: string, ticketId: string): Promise<void> {
+  await withTenantTx(getDb(), tenantId, async (tx) => {
+    await tx
+      .update(tickets)
+      .set({ readyNotifiedAt: new Date() })
+      .where(eq(tickets.id, ticketId));
   });
 }
 
@@ -153,11 +181,17 @@ export async function processTicketStatusNotify(
   if (!shouldNotifyClient(payload.newStatus)) {
     return { status: 'skipped', reason: 'status-not-notifiable' };
   }
-  // TODO: notify_status_changes колонку добавим отдельной миграцией; пока
-  // считаем, что клиент согласен на уведомления (true). Опт-аут реализуем
-  // вместе с UI-настройкой клиента.
-  const notifyStatusChanges = true;
-  if (!notifyStatusChanges) return { status: 'skipped', reason: 'opt-out' };
+
+  // Фича B — «техника готова к выдаче» = переход в act_pending. Это письмо уже слалось
+  // воркером и раньше; теперь его можно ОТКЛЮЧИТЬ тумблером tenant'а (по умолчанию ВКЛ,
+  // чтобы прод-поведение не изменилось). Если тумблер выключен — для act_pending не шлём.
+  const isReadyNotification = payload.newStatus === 'act_pending';
+  if (isReadyNotification) {
+    const enabled = await isReadyNotifyEnabled(payload.tenantId);
+    if (!enabled) {
+      return { status: 'skipped', reason: 'ready-notify-disabled' };
+    }
+  }
 
   const loaded = await loadTicketDetails(payload.tenantId, payload.ticketId);
   if (!loaded) {
@@ -166,6 +200,16 @@ export async function processTicketStatusNotify(
       'ticket-status-notify: ticket not found',
     );
     return { status: 'skipped', reason: 'ticket-not-found' };
+  }
+
+  // Фича B — идемпотентность: письмо «готово» по одной заявке шлём один раз
+  // (guard ready_notified_at). Защищает от повторов act_pending → in_progress → act_pending.
+  if (isReadyNotification && loaded.readyNotifiedAt) {
+    logger.info(
+      { ticketId: payload.ticketId, ticketNumber: loaded.ticketNumber },
+      'ticket-status-notify: ready already notified, skipping',
+    );
+    return { status: 'skipped', reason: 'ready-already-notified' };
   }
 
   const to = resolveRecipient(loaded);
@@ -233,6 +277,10 @@ export async function processTicketStatusNotify(
       relatedClientId: loaded.clientId,
       sentAt: new Date(),
     });
+    // Фича B — ставим guard ПОСЛЕ успешной отправки «готово», чтобы повторно не слать.
+    if (isReadyNotification) {
+      await markReadyNotified(payload.tenantId, payload.ticketId);
+    }
     return { status: 'sent' };
   } catch (err) {
     logger.warn(

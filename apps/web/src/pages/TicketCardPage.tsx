@@ -15,6 +15,7 @@ import {
   FileWarning,
   History,
   MapPin,
+  Package,
   Phone,
   Printer,
   RotateCcw,
@@ -140,6 +141,7 @@ export function TicketCardPage() {
     },
   });
   const addNote = trpc.tickets.addNote.useMutation({ onSuccess: invalidateAll });
+  const setWaitingForPart = trpc.tickets.setWaitingForPart.useMutation({ onSuccess: invalidateAll });
   const cancel = trpc.tickets.cancel.useMutation({ onSuccess: invalidateAll });
   const reopen = trpc.tickets.reopen.useMutation({ onSuccess: invalidateAll });
   const recordPrint = trpc.tickets.recordPrint.useMutation({ onSuccess: invalidateAll });
@@ -615,6 +617,17 @@ export function TicketCardPage() {
             }
           />
 
+          {isStaff && (
+            <WaitingForPartPanel
+              waiting={t.waitingForPart}
+              note={t.waitingForPartNote}
+              pending={setWaitingForPart.isPending}
+              onSave={(waiting, note) =>
+                setWaitingForPart.mutate({ ticketId: t.id, waiting, note })
+              }
+            />
+          )}
+
           <SimilarCasesBlock ticketId={t.id} excludeTicketId={t.id} />
         </aside>
       </div>
@@ -1006,6 +1019,89 @@ function ActionsPanel({
         }}
         onCancel={() => setCancelOpen(false)}
       />
+    </section>
+  );
+}
+
+/**
+ * Фича A — панель «Ждём запчасть». Флаг-пометка (не статус): простой из-за ожидания
+ * детали — не вина инженера. Менеджер ставит флаг и пишет, что именно ждём.
+ */
+function WaitingForPartPanel({
+  waiting,
+  note,
+  pending,
+  onSave,
+}: {
+  waiting: boolean;
+  note: string | null;
+  pending: boolean;
+  onSave: (waiting: boolean, note: string | null) => void;
+}) {
+  const [noteDraft, setNoteDraft] = useState(note ?? '');
+  // Синхронизируем черновик при смене заявки/значения с сервера.
+  const [lastNote, setLastNote] = useState(note ?? '');
+  if ((note ?? '') !== lastNote) {
+    setLastNote(note ?? '');
+    setNoteDraft(note ?? '');
+  }
+
+  return (
+    <section
+      className={cn(
+        'rounded-lg border p-4',
+        waiting ? 'border-warning/40 bg-warning/5' : 'bg-card',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide">
+          <Package className={cn('h-4 w-4', waiting && 'text-warning')} />
+          Ждём запчасть
+        </h3>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={waiting}
+          aria-label="Ждём запчасть"
+          disabled={pending}
+          onClick={() => onSave(!waiting, !waiting ? noteDraft.trim() || null : null)}
+          className={cn(
+            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
+            waiting ? 'bg-warning' : 'bg-muted',
+          )}
+        >
+          <span
+            className={cn(
+              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform',
+              waiting ? 'translate-x-5' : 'translate-x-0',
+            )}
+          />
+        </button>
+      </div>
+      <p className="text-muted-foreground mt-1 text-xs">
+        Пометка для менеджера: заявка стоит из-за ожидания детали (простой не на инженере).
+      </p>
+      {waiting && (
+        <div className="mt-3">
+          <div className="text-muted-foreground mb-1 text-xs uppercase">Что ждём</div>
+          <textarea
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="Например: плата питания Mindray, поставщик МедКомплект, срок ~2 нед."
+            className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <button
+            type="button"
+            disabled={pending || noteDraft.trim() === (note ?? '')}
+            onClick={() => onSave(true, noteDraft.trim() || null)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 mt-1.5 rounded-md px-3 py-1.5 text-xs"
+          >
+            Сохранить заметку
+          </button>
+        </div>
+      )}
     </section>
   );
 }

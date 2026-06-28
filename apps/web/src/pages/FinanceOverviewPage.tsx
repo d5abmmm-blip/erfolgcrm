@@ -1,5 +1,5 @@
 /**
- * /finance — Обзор кассы: остатки по счетам, приход/расход/прибыль за период,
+ * /finance — Обзор кассы: остатки по счетам, приход/расход/разница за период,
  * помесячная динамика, расходы по статьям, последние операции.
  * RBAC: staff (директор + диспетчер). Графики — самописные (библиотеки нет).
  */
@@ -129,7 +129,7 @@ export function FinanceOverviewPage() {
               tone="danger"
             />
             <KpiCard
-              title={`Разница · ${PRESET_LABEL[preset].toLowerCase()}`}
+              title={`Разница (приход − расход) · ${PRESET_LABEL[preset].toLowerCase()}`}
               value={formatRubWhole(data.summary.profitKopecks)}
               icon={Scale}
               tone={safeBig(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}

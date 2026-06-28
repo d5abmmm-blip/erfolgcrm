@@ -3,8 +3,19 @@
  * Подменяем tRPC-caller моком и проверяем, что write-инструменты вызывают нужные
  * процедуры с правильно смаппленными аргументами, а previews формируются.
  */
-import { describe, it, expect } from 'vitest';
-import { getTool, isWriteTool } from '../modules/ai-assistant/tools';
+import { describe, it, expect, vi } from 'vitest';
+
+// Мокаем read-запросы (бьют в БД) — проверяем только маппинг аргументов в диспатче.
+vi.mock('../modules/ai-assistant/read-queries', () => ({
+  getFinanceSummary: vi.fn(() => Promise.resolve({ ok: 'finance' })),
+  listAgedTickets: vi.fn(() => Promise.resolve({ ok: 'aged' })),
+  getTicketsStats: vi.fn(() => Promise.resolve({ ok: 'stats' })),
+}));
+
+import { getTool, isWriteTool, toolDefsForRole } from '../modules/ai-assistant/tools';
+import * as readQueries from '../modules/ai-assistant/read-queries';
+
+const STAFF_ONLY_TOOLS = ['get_finance_summary', 'list_aged_tickets', 'get_tickets_stats'] as const;
 
 interface RecordedCall {
   proc: string;
@@ -37,6 +48,107 @@ describe('реестр инструментов', () => {
 
   it('поисковые инструменты остаются read', () => {
     expect(getTool('search_clients')?.kind).toBe('read');
+  });
+
+  it('инструменты «спроси у системы» — read (выполняются без подтверждения)', () => {
+    for (const name of ['get_finance_summary', 'list_aged_tickets', 'get_tickets_stats']) {
+      expect(getTool(name)?.kind).toBe('read');
+      expect(isWriteTool(name)).toBe(false);
+    }
+  });
+});
+
+describe('read-инструменты «спроси у системы»', () => {
+  // Фейковый ctx (db+tenant+role) — в моках реальные значения не используются.
+  // role='director' (staff) — чтобы staff-only инструменты проходили RBAC-гейт.
+  const ctx = { db: {} as never, tenant: { id: 't1' } as never, role: 'director' as const };
+  const caller = {} as Parameters<NonNullable<ReturnType<typeof getTool>>['run']>[0];
+
+  it('get_finance_summary: пресет по умолчанию month', async () => {
+    const res = await getTool('get_finance_summary')!.run(caller, {}, ctx);
+    expect(res).toEqual({ ok: 'finance' });
+    expect(readQueries.getFinanceSummary).toHaveBeenCalledWith(ctx.db, ctx.tenant, 'month');
+  });
+
+  it('get_finance_summary: пробрасывает корректный period', async () => {
+    await getTool('get_finance_summary')!.run(caller, { period: 'prev_month' }, ctx);
+    expect(readQueries.getFinanceSummary).toHaveBeenCalledWith(ctx.db, ctx.tenant, 'prev_month');
+  });
+
+  it('get_finance_summary: невалидный period → month', async () => {
+    await getTool('get_finance_summary')!.run(caller, { period: 'вчера' }, ctx);
+    expect(readQueries.getFinanceSummary).toHaveBeenCalledWith(ctx.db, ctx.tenant, 'month');
+  });
+
+  it('list_aged_tickets: по умолчанию порог 7 дней', async () => {
+    await getTool('list_aged_tickets')!.run(caller, {}, ctx);
+    expect(readQueries.listAgedTickets).toHaveBeenCalledWith(ctx.db, ctx.tenant, 7);
+  });
+
+  it('list_aged_tickets: принимает число дней (в т.ч. строкой)', async () => {
+    await getTool('list_aged_tickets')!.run(caller, { days: '14' }, ctx);
+    expect(readQueries.listAgedTickets).toHaveBeenCalledWith(ctx.db, ctx.tenant, 14);
+  });
+
+  it('get_tickets_stats: пробрасывает period', async () => {
+    await getTool('get_tickets_stats')!.run(caller, { period: 'week' }, ctx);
+    expect(readQueries.getTicketsStats).toHaveBeenCalledWith(ctx.db, ctx.tenant, 'week');
+  });
+
+  it('read-инструмент без ctx бросает понятную ошибку', () => {
+    expect(() => getTool('get_finance_summary')!.run(caller, {})).toThrow(/контекст/i);
+  });
+});
+
+describe('RBAC: staff-only read-инструменты (финансы / заявки с ПДн)', () => {
+  const caller = {} as Parameters<NonNullable<ReturnType<typeof getTool>>['run']>[0];
+  const mkCtx = (role: 'director' | 'dispatcher' | 'engineer') => ({
+    db: {} as never,
+    tenant: { id: 't1' } as never,
+    role,
+  });
+
+  // run() с гейтом бросает синхронно (как reqString в write-инструментах) — это
+  // ловит try/catch вокруг await в service.ts. Оборачиваем в Promise.resolve().then,
+  // чтобы и синхронный, и асинхронный бросок попали в .rejects.
+  const callTool = (name: string, role: 'director' | 'dispatcher' | 'engineer') =>
+    Promise.resolve().then(() => getTool(name)!.run(caller, {}, mkCtx(role)));
+
+  it('инженер: все три staff-only инструмента отклоняются по правам (FORBIDDEN)', async () => {
+    for (const name of STAFF_ONLY_TOOLS) {
+      await expect(callTool(name, 'engineer')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
+  });
+
+  it('директор: staff-only инструменты проходят гейт (вызывают read-запрос)', async () => {
+    for (const name of STAFF_ONLY_TOOLS) {
+      await expect(callTool(name, 'director')).resolves.toBeDefined();
+    }
+  });
+
+  it('диспетчер: staff-only инструменты проходят гейт', async () => {
+    for (const name of STAFF_ONLY_TOOLS) {
+      await expect(callTool(name, 'dispatcher')).resolves.toBeDefined();
+    }
+  });
+
+  it('инженеру staff-only инструменты не отдаются в список для модели', () => {
+    const names = toolDefsForRole('engineer').map((d) => d.function.name);
+    for (const name of STAFF_ONLY_TOOLS) {
+      expect(names).not.toContain(name);
+    }
+    // обычные read/write остаются доступны инженеру
+    expect(names).toContain('search_clients');
+    expect(names).toContain('create_ticket');
+  });
+
+  it('staff (директор/диспетчер) получают полный список, включая staff-only', () => {
+    for (const role of ['director', 'dispatcher'] as const) {
+      const names = toolDefsForRole(role).map((d) => d.function.name);
+      for (const name of STAFF_ONLY_TOOLS) {
+        expect(names).toContain(name);
+      }
+    }
   });
 });
 

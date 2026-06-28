@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { LayoutGrid, List, Plus, Ticket as TicketIcon } from 'lucide-react';
+import { Clock, LayoutGrid, List, Package, Plus, Ticket as TicketIcon } from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -21,6 +21,7 @@ import {
   TICKET_STATUS_META,
   TICKET_PRIORITY_META,
   ACTIVE_TICKET_STATUSES,
+  isTicketStale,
 } from '../lib/dictionaries';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
@@ -41,8 +42,9 @@ interface TicketRow {
   assignedEngineerName: string | null;
   slaTargetAt: Date | null;
   receivedAt: Date;
-  /** Когда заявка попала в текущий статус — берём из последнего ticket_event если есть; пока fallback receivedAt. */
-  statusChangedAt?: Date | null;
+  waitingForPart: boolean;
+  /** Полных суток без активности (max(updated_at, последнее ticket_event)) — из API. */
+  idleDays: number;
 }
 
 const POLL_INTERVAL_MS = 30_000;
@@ -261,9 +263,9 @@ function KanbanCard({
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
-  const refDate = t.statusChangedAt ?? t.receivedAt;
-  const days = Math.floor((Date.now() - new Date(refDate).getTime()) / 86_400_000);
-  const stuck = days > 3;
+  // «Висит» = открытая заявка без активности дольше порога (idleDays из API,
+  // та же семантика, что в списке и у AI-инструмента list_aged_tickets).
+  const stuck = isTicketStale(t.status, t.idleDays);
   return (
     <Link
       href={`/tickets/${t.id}`}
@@ -285,6 +287,25 @@ function KanbanCard({
       <div className="text-muted-foreground mt-0.5 truncate" title={t.assetModel ?? ''}>
         {t.assetModel ?? '—'}
       </div>
+      {(t.waitingForPart || stuck) && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {t.waitingForPart && (
+            <span className="bg-warning/15 text-warning inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
+              <Package className="h-3 w-3" />
+              ждём запчасть
+            </span>
+          )}
+          {stuck && (
+            <span
+              className="bg-destructive/10 text-destructive inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+              title="Открытая заявка давно без активности"
+            >
+              <Clock className="h-3 w-3" />
+              висит {t.idleDays} дн.
+            </span>
+          )}
+        </div>
+      )}
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <span className="text-muted-foreground truncate">
           {t.assignedEngineerName ?? 'не назначен'}
@@ -294,9 +315,9 @@ function KanbanCard({
             'rounded px-1.5 py-0.5 text-[10px] tabular-nums',
             stuck ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground',
           )}
-          title="Дней в этом статусе"
+          title="Дней без активности"
         >
-          {days}д
+          {t.idleDays}д
         </span>
       </div>
     </Link>
