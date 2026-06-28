@@ -28,7 +28,7 @@ import {
 } from '@erfolg/db';
 import { logger } from '../lib/logger';
 import { maskEmail } from '../lib/mask';
-import { sendMail } from '../lib/mailer';
+import { sendMailForTenant } from '../modules/email/auto-send';
 import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
 import {
@@ -234,7 +234,7 @@ export async function processTicketStatusNotify(
   });
 
   try {
-    const result = await sendMail({
+    const result = await sendMailForTenant(getDb(), payload.tenantId, {
       to,
       subject: rendered.subject,
       text: rendered.text,
