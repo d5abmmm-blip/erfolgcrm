@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
 import { Archive, ChevronLeft, FileSignature, Pencil, Printer } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { openPrintWindow } from '../lib/open-print-window';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { ConfirmDialog } from '../components/ui';
 import { cn } from '../lib/utils';
@@ -62,6 +63,7 @@ export function ContractCardPage() {
   const handlePrint = async () => {
     if (!detail.data) return;
     setPrinting(true);
+    const win = openPrintWindow();
     try {
       const [{ printContract }, { ERFOLG_FALLBACK }] = await Promise.all([
         import('../lib/pdf'),
@@ -94,7 +96,9 @@ export function ContractCardPage() {
           terms: c.terms,
           notes: c.notes,
         },
-      });
+      }, win);
+    } catch {
+      win?.close();
     } finally {
       setPrinting(false);
     }

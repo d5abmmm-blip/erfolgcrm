@@ -11,6 +11,7 @@ import { ChevronLeft, FileText, Printer, Trash2, XCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { trpc } from '../lib/trpc';
+import { openPrintWindow } from '../lib/open-print-window';
 import { formatRub } from '../lib/money';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PromptDialog } from '../components/ui/PromptDialog';
@@ -134,6 +135,8 @@ export function InvoiceCardPage() {
   const handlePrint = async () => {
     if (!inv.data) return;
     setPrinting(true);
+    // Вкладку открываем синхронно (в жесте клика), иначе popup заблокируется после await.
+    const win = openPrintWindow();
     try {
       const [{ printInvoice }, { ERFOLG_FALLBACK }] = await Promise.all([
         import('../lib/pdf'),
@@ -147,6 +150,7 @@ export function InvoiceCardPage() {
       const clientQuery = await utils.clients.get.fetch({ id: inv.data.clientId });
 
       if (!workOrderQuery) {
+        win?.close();
         setDialog({ kind: 'pdf-error', message: 'Нельзя сформировать PDF: наряд не найден.' });
         return;
       }
@@ -199,8 +203,9 @@ export function InvoiceCardPage() {
         invoiceNumber: inv.data.invoiceNumber,
         issueDate: inv.data.issueDate,
         dueDate: inv.data.dueDate,
-      });
+      }, win);
     } catch (err) {
+      win?.close();
       setDialog({
         kind: 'pdf-error',
         message: `Ошибка PDF: ${err instanceof Error ? err.message : String(err)}`,

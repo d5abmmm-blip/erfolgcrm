@@ -35,6 +35,7 @@ import type {
 } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { openPrintWindow } from '../lib/open-print-window';
 import { PromptDialog } from '../components/ui/PromptDialog';
 import { WorkOrderEditor, kopecksToRub } from '../components/WorkOrderEditor';
 import { TicketPayments } from '../components/TicketPayments';
@@ -232,6 +233,9 @@ export function TicketCardPage() {
     _name: string,
   ) => {
     setPrintError(null);
+    // Вкладку открываем СИНХРОННО в обработчике клика: иначе после await (загрузка
+    // pdfmake/данных) браузер заблокирует popup и выйдет пустая белая вкладка.
+    const win = openPrintWindow();
     try {
       const { printIntakeAct, printInvoice, printWorkAct, printDefectAct, printAssetLabel } =
         await import('../lib/pdf');
@@ -239,27 +243,31 @@ export function TicketCardPage() {
         await assemblePdfInputs();
 
       if (kind === 'intake_act') {
-        await printIntakeAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData });
+        await printIntakeAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData }, win);
       } else if (kind === 'invoice') {
         if (!workOrderData) {
+          win?.close();
           setPrintError('Нельзя сформировать счёт: наряд ещё не создан или не содержит позиций.');
           return;
         }
-        await printInvoice({ tenant: tenantData, client: clientData, ticket: ticketData, workOrder: workOrderData });
+        await printInvoice({ tenant: tenantData, client: clientData, ticket: ticketData, workOrder: workOrderData }, win);
       } else if (kind === 'work_act') {
         if (!workOrderData) {
+          win?.close();
           setPrintError('Нельзя сформировать акт работ: наряд ещё не создан.');
           return;
         }
-        await printWorkAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData });
+        await printWorkAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData }, win);
       } else if (kind === 'defect_act') {
         if (!workOrderData) {
+          win?.close();
           setPrintError('Нельзя сформировать дефектный акт: наряд ещё не создан (нет диагностики и заключения).');
           return;
         }
-        await printDefectAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData });
+        await printDefectAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData }, win);
       } else {
         if (!assetData) {
+          win?.close();
           setPrintError('Нельзя сформировать ярлык: к заявке не привязана техника.');
           return;
         }
@@ -268,14 +276,14 @@ export function TicketCardPage() {
           ticket: ticketData,
           fallbackBarcode: t.assetId ?? t.id,
           tenantDisplayName: tenantData.displayName,
-        });
+        }, win);
       }
       // Ярлык — не документ; recordPrint фиксирует только акты/счета.
       if (kind !== 'asset_label') {
         recordPrint.mutate({ ticketId: t.id, documentKind: kind });
       }
     } catch (err) {
-       
+      win?.close();
       console.error('[print]', err);
       setPrintError(
         `Не удалось сформировать PDF: ${err instanceof Error ? err.message : String(err)}`,

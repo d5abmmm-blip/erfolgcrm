@@ -70,10 +70,40 @@ async function getPdfMake(): Promise<PdfMakeRuntime> {
   return _pdfMakePromise;
 }
 
-/** Open a pdfmake document in a new browser tab. */
-async function openDoc(doc: TDocumentDefinitions): Promise<void> {
+/**
+ * Показать pdfmake-документ.
+ *  - win === undefined — legacy: pdfmake сам откроет вкладку (обратная совместимость);
+ *  - win — заранее открытая вкладка (в момент клика): навигируем её на blob PDF;
+ *  - win === null — popup был заблокирован браузером → скачиваем файл (надёжный fallback).
+ */
+async function openDoc(
+  doc: TDocumentDefinitions,
+  win?: Window | null,
+  filename = 'document.pdf',
+): Promise<void> {
   const pdfMake = await getPdfMake();
-  pdfMake.createPdf(doc).open();
+  const pdf = pdfMake.createPdf(doc);
+  if (win === undefined) {
+    pdf.open();
+    return;
+  }
+  if (!win || win.closed) {
+    pdf.download(filename);
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    pdf.getBlob((blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      try {
+        win.location.href = url;
+      } catch {
+        pdf.download(filename);
+      }
+      // даём вкладке прогрузить blob, затем освобождаем память
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      resolve();
+    });
+  });
 }
 
 /**
@@ -109,43 +139,62 @@ export async function getDefectActAsBase64(
   return getDocAsBase64(buildDefectActDoc({ ...input, barcodeDataUrl }));
 }
 
-export async function printIntakeAct(input: PrintIntakeInput): Promise<void> {
+export async function printIntakeAct(
+  input: PrintIntakeInput,
+  win?: Window | null,
+): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildIntakeActDoc({ ...input, barcodeDataUrl });
-  await openDoc(doc);
+  await openDoc(doc, win, 'Акт_приёма.pdf');
 }
 
-export async function printInvoice(input: ExtendedPrintInvoiceInput): Promise<void> {
+export async function printInvoice(
+  input: ExtendedPrintInvoiceInput,
+  win?: Window | null,
+): Promise<void> {
   // Invoice has no barcode requirement.
   const doc = buildInvoiceDoc(input);
-  await openDoc(doc);
+  await openDoc(doc, win, 'Счёт.pdf');
 }
 
-export async function printWorkAct(input: PrintWorkActInput): Promise<void> {
+export async function printWorkAct(
+  input: PrintWorkActInput,
+  win?: Window | null,
+): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildWorkActDoc({ ...input, barcodeDataUrl });
-  await openDoc(doc);
+  await openDoc(doc, win, 'Акт_работ.pdf');
 }
 
 export async function printDefectAct(
   input: Omit<PrintDefectActInput, 'barcodeDataUrl'>,
+  win?: Window | null,
 ): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildDefectActDoc({ ...input, barcodeDataUrl });
-  await openDoc(doc);
+  await openDoc(doc, win, 'Дефектный_акт.pdf');
 }
 
-export async function printContract(input: PrintContractInput): Promise<void> {
+export async function printContract(
+  input: PrintContractInput,
+  win?: Window | null,
+): Promise<void> {
   const doc = buildContractDoc(input);
-  await openDoc(doc);
+  await openDoc(doc, win, 'Договор.pdf');
 }
 
-export async function printDailySummary(input: DailySummaryInput): Promise<void> {
+export async function printDailySummary(
+  input: DailySummaryInput,
+  win?: Window | null,
+): Promise<void> {
   const doc = buildDailySummaryDoc(input);
-  await openDoc(doc);
+  await openDoc(doc, win, 'Сводка_дня.pdf');
 }
 
-export async function printAssetLabel(input: PrintAssetLabelInput): Promise<void> {
+export async function printAssetLabel(
+  input: PrintAssetLabelInput,
+  win?: Window | null,
+): Promise<void> {
   const codeValue = input.ticket?.barcode ?? input.fallbackBarcode;
   const barcodeDataUrl = await generateBarcodeDataUrl(codeValue, {
     scale: 2,
@@ -153,7 +202,7 @@ export async function printAssetLabel(input: PrintAssetLabelInput): Promise<void
     includeText: false,
   });
   const doc = buildAssetLabelDoc({ ...input, barcodeDataUrl });
-  await openDoc(doc);
+  await openDoc(doc, win, 'Ярлык.pdf');
 }
 
 // Re-export shared types so call sites import from a single entry point.
