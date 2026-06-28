@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { trpc } from '../lib/trpc';
+import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
 // pdfmake/exceljs lazy-loaded only on button click — см. handleDailySummaryPdf/Xlsx ниже.
 
@@ -89,12 +90,15 @@ function DirectorDashboard() {
   const handleDailySummaryPdf = async () => {
     if (pdfBusy) return;
     setPdfBusy(true);
+    const win = openPrintWindow();
     try {
       const [{ printDailySummary }, summaryInput] = await Promise.all([
         import('../lib/pdf'),
         fetchSummaryInput(),
       ]);
-      await printDailySummary(summaryInput);
+      await printDailySummary(summaryInput, win);
+    } catch {
+      win?.close();
     } finally {
       setPdfBusy(false);
     }

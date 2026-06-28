@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
+import { openPrintWindow } from '../../lib/open-print-window';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
 import { PhotoUploader } from '../../components/PhotoUploader';
@@ -229,6 +230,7 @@ export function MobileTicketPage() {
           <button
             type="button"
             onClick={() => void (async () => {
+              const win = openPrintWindow();
               const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
                 import('../../lib/pdf'),
                 import('../../lib/pdf/branding'),
@@ -246,7 +248,7 @@ export function MobileTicketPage() {
                   : null,
                 fallbackBarcode: t.assetId ?? t.id,
                 tenantDisplayName: ERFOLG_FALLBACK.displayName,
-              });
+              }, win);
             })()}
             className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
           >

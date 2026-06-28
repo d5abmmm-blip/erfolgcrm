@@ -16,6 +16,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
 import { PromptDialog } from '../components/ui';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
@@ -105,6 +106,7 @@ export function AssetCardPage() {
           <button
             type="button"
             onClick={() => void (async () => {
+              const win = openPrintWindow();
               const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
                 import('../lib/pdf'),
                 import('../lib/pdf/branding'),
@@ -120,7 +122,7 @@ export function AssetCardPage() {
                 ticket: null,
                 fallbackBarcode: a.id,
                 tenantDisplayName: ERFOLG_FALLBACK.displayName,
-              });
+              }, win);
             })()}
             className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
           >
