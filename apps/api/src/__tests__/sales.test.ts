@@ -81,6 +81,22 @@ describe('продажи ↔ касса', () => {
     expect((await getSale(getDb(), erfolgId, id))!.isPaid).toBe(false);
   });
 
+  it('повторная оплата продажи не задваивает доход в кассе', async () => {
+    const acc = await createAccount(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}нал`,
+      kind: 'cash',
+      openingBalanceKopecks: 0n,
+    });
+    const { id } = await createSale(getDb(), erfolgId, baseSale());
+    await paySale(getDb(), erfolgId, id, { accountId: acc.id, paidOn: '2026-06-20', userId: null });
+    // Вторая оплата той же продажи отвергается (guard paidOn + FOR UPDATE против гонки).
+    await expect(
+      paySale(getDb(), erfolgId, id, { accountId: acc.id, paidOn: '2026-06-20', userId: null }),
+    ).rejects.toThrow();
+    // В кассе ровно один доход — остаток равен сумме продажи, а не удвоенной.
+    expect(await balanceOf(acc.id)).toBe(350_000n);
+  });
+
   it('редактирование оплаченной продажи запрещено', async () => {
     const acc = await createAccount(getDb(), erfolgId, {
       name: `${TEST_PREFIX}нал`,
