@@ -229,17 +229,21 @@ export async function searchEverything(
   db: Db,
   tenantId: string,
   rawQuery: string,
+  role: 'director' | 'dispatcher' | 'engineer' = 'director',
 ): Promise<SearchResult> {
   const query = (rawQuery ?? '').trim();
   if (query.length < MIN_QUERY_LENGTH) return EMPTY_RESULT;
   const pattern = buildPattern(query);
+  // Инженеру недоступны ПДн клиентов и денежные данные (разделы «Клиенты»/«Счета»/«Договоры»
+  // — staffProcedure). Глобальный поиск для инженера ограничиваем заявками и техникой.
+  const isStaff = role === 'director' || role === 'dispatcher';
   const [ticketsHits, clientsHits, assetsHits, invoicesHits, contractsHits] =
     await Promise.all([
       searchTicketsHits(tenantId, pattern, db),
-      searchClientsHits(tenantId, pattern, db),
+      isStaff ? searchClientsHits(tenantId, pattern, db) : Promise.resolve<ClientHit[]>([]),
       searchAssetsHits(tenantId, pattern, db),
-      searchInvoicesHits(tenantId, pattern, db),
-      searchContractsHits(tenantId, pattern, db),
+      isStaff ? searchInvoicesHits(tenantId, pattern, db) : Promise.resolve<InvoiceHit[]>([]),
+      isStaff ? searchContractsHits(tenantId, pattern, db) : Promise.resolve<ContractHit[]>([]),
     ]);
   return {
     tickets: ticketsHits,

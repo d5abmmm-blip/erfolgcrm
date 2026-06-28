@@ -17,6 +17,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, normalize, resolve, sep } from 'node:path';
+import { logger } from './logger';
 import { s3ObjectStorage } from './object-storage-s3';
 
 export interface PresignedPut {
@@ -203,11 +204,21 @@ let cached: ObjectStorage | null = null;
 export function getObjectStorage(): ObjectStorage {
   if (cached) return cached;
   const driver = process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === 'production' ? 's3' : 'local');
-  // Block A prod-guard: local storage в проде = катастрофа (файлы исчезнут при рестарте контейнера,
-  // нет шифрования at-rest, нет реплик). Падаем сразу, чтобы поймать misconfig до первого upload'а.
+  // Prod-guard: локальный драйвер в production допустим ТОЛЬКО на смонтированном
+  // персистентном томе. Признак намеренной настройки — явно заданный LOCAL_STORAGE_DIR
+  // (абсолютный путь к тому, напр. /data/storage). Без него local в проде = файлы
+  // исчезнут при пересоздании контейнера → падаем сразу, чтобы поймать misconfig.
   if (process.env.NODE_ENV === 'production' && driver === 'local') {
-    throw new Error(
-      'STORAGE_DRIVER=local запрещён в production. Установите STORAGE_DRIVER=s3 и сконфигурируйте S3_* переменные.',
+    if (!process.env.LOCAL_STORAGE_DIR) {
+      throw new Error(
+        'STORAGE_DRIVER=local в production требует LOCAL_STORAGE_DIR — путь к смонтированному ' +
+          'персистентному тому. Иначе используйте STORAGE_DRIVER=s3 и сконфигурируйте S3_* переменные.',
+      );
+    }
+    logger.warn(
+      { dir: process.env.LOCAL_STORAGE_DIR },
+      'object-storage: локальный драйвер в production. Убедитесь, что LOCAL_STORAGE_DIR смонтирован ' +
+        'как персистентный том, иначе файлы пропадут при пересоздании контейнера.',
     );
   }
   cached = driver === 's3' ? s3ObjectStorage : localObjectStorage;

@@ -25,7 +25,7 @@ import {
   markReminderSent,
 } from '../modules/invoices';
 import { logger } from '../lib/logger';
-import { sendMail } from '../lib/mailer';
+import { sendMailForTenant } from '../modules/email/auto-send';
 import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
 
@@ -144,7 +144,12 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
         tenantName: tenant.name,
       });
       try {
-        const result = await sendMail({ to: email, subject, text, dryRun: dryRun() });
+        const result = await sendMailForTenant(getDb(), tenant.id, {
+          to: email,
+          subject,
+          text,
+          dryRun: dryRun(),
+        });
         if (result.skipped) {
           stats.remindersSkipped++;
           await tryJournalEmail(getDb(), tenant.id, {

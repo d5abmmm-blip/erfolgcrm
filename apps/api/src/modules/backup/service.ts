@@ -78,11 +78,17 @@ export function apiBaseUrl(): string {
 // ───────── HMAC-токены для download-роута ─────────
 
 function tokenSecret(): string {
-  return (
-    process.env.BACKUP_TOKEN_SECRET ??
-    process.env.SESSION_SECRET ??
-    'dev_only_backup_secret_replace_in_prod'
-  );
+  const explicit = process.env.BACKUP_TOKEN_SECRET ?? process.env.SESSION_SECRET;
+  if (explicit) return explicit;
+  // Токен авторизует скачивание ПОЛНОГО дампа БД (все ПДн). В production
+  // dev-литерал из git недопустим — иначе токен можно подделать.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'BACKUP_TOKEN_SECRET (или SESSION_SECRET) обязателен в production — ' +
+        'dev-fallback для подписи токена полного дампа БД запрещён.',
+    );
+  }
+  return 'dev_only_backup_secret_replace_in_prod';
 }
 
 function signBackup(tenantId: string, expEpochSec: number): string {

@@ -179,11 +179,14 @@ export function InvoiceCardPage() {
         client: clientData,
         ticket: ticketData,
         workOrder: {
-          vatRate: workOrderQuery.vatRate,
+          // Итог и ставка НДС берутся из «замороженного» снимка счёта (зафиксированы при
+          // выставлении), а НЕ из живого наряда — иначе после правки наряда суммы в PDF
+          // разойдутся с уже выставленным счётом. Детализация строк — из наряда (best available).
+          vatRate: inv.data.vatRate,
           worksAmountKopecks: Number(workOrderQuery.worksAmountKopecks),
           partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
           expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
-          totalAmountKopecks: Number(workOrderQuery.totalAmountKopecks),
+          totalAmountKopecks: Number(inv.data.totalAmountKopecks),
           lines: workOrderQuery.lines.map((l) => ({
             lineType: l.lineType,
             name: l.name,

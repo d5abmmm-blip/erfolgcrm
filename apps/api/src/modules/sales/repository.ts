@@ -365,7 +365,10 @@ export async function paySale(
       .select()
       .from(sales)
       .where(and(eq(sales.id, id), isNull(sales.deletedAt)))
-      .limit(1);
+      .limit(1)
+      // Блокируем строку продажи: при двойном клике/повторе вторая транзакция
+      // дождётся первой и увидит paidOn != null → не задвоит доход в кассе.
+      .for('update');
     const sale = rows[0];
     if (!sale) return false;
     if (sale.paidOn !== null) throw new Error('Продажа уже оплачена');

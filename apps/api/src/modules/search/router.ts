@@ -15,5 +15,7 @@ export const searchRouter = router({
         query: z.string().trim().max(100),
       }),
     )
-    .query(({ ctx, input }) => searchEverything(ctx.db, ctx.tenant.id, input.query)),
+    .query(({ ctx, input }) =>
+      searchEverything(ctx.db, ctx.tenant.id, input.query, ctx.session.role),
+    ),
 });
