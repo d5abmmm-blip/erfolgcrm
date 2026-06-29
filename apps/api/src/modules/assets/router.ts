@@ -35,6 +35,7 @@ const dateOrNull = z
 
 const createAssetSchema = z.object({
   ownerClientId: z.string().uuid(),
+  assetModelId: z.string().uuid().nullable().optional(),
   model: z.string().trim().min(1).max(200),
   manufacturer: z.string().trim().max(200).nullable().optional(),
   serialNumber: z.string().trim().max(100).nullable().optional(),
@@ -51,6 +52,7 @@ const createAssetSchema = z.object({
 const updateAssetSchema = z
   .object({
     ownerClientId: z.string().uuid().optional(),
+    assetModelId: z.string().uuid().nullable().optional(),
     model: z.string().trim().min(1).max(200).optional(),
     manufacturer: z.string().trim().max(200).nullable().optional(),
     serialNumber: z.string().trim().max(100).nullable().optional(),

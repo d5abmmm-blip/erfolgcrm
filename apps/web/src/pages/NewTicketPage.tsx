@@ -11,6 +11,7 @@ import type {
 import { trpc } from '../lib/trpc';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
+import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
 import {
   TicketTemplatePicker,
   type TemplateDefaults,
@@ -80,6 +81,15 @@ export function NewTicketPage() {
   const [picked, setPicked] = useState<TemplateDefaults | null>(null);
   const applyTemplate = trpc.ticketTemplates.applyToTicket.useMutation();
 
+  // Режим «Новый аппарат»: выбираем модель из каталога + вводим серийник/инв. номер.
+  // На submit заводим единицу техники на клиента заявки и привязываем её к тикету.
+  const [addingAsset, setAddingAsset] = useState(false);
+  const [naModelId, setNaModelId] = useState('');
+  const [naModel, setNaModel] = useState<AssetModelLite | null>(null);
+  const [naSerial, setNaSerial] = useState('');
+  const [naInventory, setNaInventory] = useState('');
+  const createAsset = trpc.assets.create.useMutation();
+
   const clientId = form.watch('clientId');
   const assetId = form.watch('assetId');
 
@@ -105,6 +115,11 @@ export function NewTicketPage() {
     form.setValue('assetId', '');
     form.setValue('contactId', '');
     form.setValue('contractId', '');
+    setAddingAsset(false);
+    setNaModelId('');
+    setNaModel(null);
+    setNaSerial('');
+    setNaInventory('');
     // intentionally not depending on form
   }, [clientId]);
 
@@ -144,7 +159,7 @@ export function NewTicketPage() {
     setPicked(null);
   }
 
-  const onSubmit: SubmitHandler<FormValues> = (v) => {
+  const onSubmit: SubmitHandler<FormValues> = async (v) => {
     setServerError(null);
     if (!v.clientId) {
       setServerError('Выберите клиента');
@@ -158,9 +173,38 @@ export function NewTicketPage() {
       setServerError('Для бюджетной организации требуется контракт');
       return;
     }
+
+    // Если включён режим «Новый аппарат» — заводим единицу техники на клиента заявки,
+    // затем привязываем её id к тикету. Серийник/инв. номер опциональны.
+    let assetIdToUse: string | null = v.assetId || null;
+    if (addingAsset) {
+      if (!naModelId || !naModel) {
+        setServerError('Выберите модель аппарата из каталога или вернитесь к выбору существующего');
+        return;
+      }
+      try {
+        const created = await createAsset.mutateAsync({
+          ownerClientId: v.clientId,
+          assetModelId: naModelId,
+          model: naModel.model,
+          manufacturer: naModel.manufacturer,
+          serialNumber: naSerial.trim() || null,
+          inventoryNumber: naInventory.trim() || null,
+          riskClass: naModel.riskClass,
+          requiredAttestationCategory: naModel.requiredAttestationCategory,
+        });
+        assetIdToUse = created.id;
+      } catch (e) {
+        setServerError(
+          `Не удалось завести аппарат: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return;
+      }
+    }
+
     create.mutate({
       clientId: v.clientId,
-      assetId: v.assetId || null,
+      assetId: assetIdToUse,
       contactId: v.contactId || null,
       contractId: v.contractId || null,
       source: v.source,
@@ -174,7 +218,22 @@ export function NewTicketPage() {
     });
   };
 
-  const isPending = create.isPending;
+  const isPending = create.isPending || createAsset.isPending;
+
+  function toggleAddingAsset() {
+    if (!addingAsset) {
+      // включаем режим нового аппарата — сбрасываем выбор существующего
+      form.setValue('assetId', '');
+      setAddingAsset(true);
+    } else {
+      // возвращаемся к выбору существующего — чистим ввод нового
+      setNaModelId('');
+      setNaModel(null);
+      setNaSerial('');
+      setNaInventory('');
+      setAddingAsset(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
@@ -232,15 +291,60 @@ export function NewTicketPage() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <Label>Техника</Label>
-            <AssetPicker
-              value={assetId || null}
-              ownerClientId={clientId || null}
-              onChange={(id) => form.setValue('assetId', id)}
-            />
-            <p className="text-muted-foreground mt-1 text-xs">
-              {clientId ? 'Из парка клиента' : 'Сначала выберите клиента'}
-            </p>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <Label>Техника</Label>
+              {clientId && (
+                <button
+                  type="button"
+                  onClick={toggleAddingAsset}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {addingAsset ? '← выбрать существующий' : '➕ Новый аппарат'}
+                </button>
+              )}
+            </div>
+
+            {!clientId ? (
+              <p className="text-muted-foreground text-xs">Сначала выберите клиента</p>
+            ) : addingAsset ? (
+              <div className="space-y-2">
+                <AssetModelPicker
+                  value={naModelId || null}
+                  onChange={(id, m) => {
+                    setNaModelId(id);
+                    setNaModel(m);
+                  }}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={naSerial}
+                    onChange={(e) => setNaSerial(e.target.value)}
+                    placeholder="Серийный №"
+                    className="bg-background w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                  <input
+                    type="text"
+                    value={naInventory}
+                    onChange={(e) => setNaInventory(e.target.value)}
+                    placeholder="Инвентарный №"
+                    className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  Аппарат добавится в парк клиента при создании заявки
+                </p>
+              </div>
+            ) : (
+              <>
+                <AssetPicker
+                  value={assetId || null}
+                  ownerClientId={clientId || null}
+                  onChange={(id) => form.setValue('assetId', id)}
+                />
+                <p className="text-muted-foreground mt-1 text-xs">Из парка клиента</p>
+              </>
+            )}
           </div>
           <div>
             <Label>Контактное лицо</Label>

@@ -2,6 +2,7 @@ import { router, publicProcedure } from './trpc';
 import { authRouter } from '../modules/auth/router';
 import { clientsRouter } from '../modules/clients';
 import { assetsRouter } from '../modules/assets';
+import { assetModelsRouter } from '../modules/asset-models';
 import { ticketsRouter } from '../modules/tickets';
 import { workOrdersRouter } from '../modules/work-orders';
 import { inventoryItemsRouter } from '../modules/inventory-items';
@@ -51,6 +52,8 @@ export const appRouter = router({
   auth: authRouter,
   clients: clientsRouter,
   assets: assetsRouter,
+  /** Каталог моделей техники (справочник типов аппаратов, не привязан к клиенту). */
+  assetModels: assetModelsRouter,
   tickets: ticketsRouter,
   workOrders: workOrdersRouter,
   inventoryItems: inventoryItemsRouter,

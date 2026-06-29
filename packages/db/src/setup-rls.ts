@@ -55,6 +55,7 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0050_enable_rls_payroll_payouts.sql': 'payroll_payouts',
   '0052_enable_rls_sales.sql': 'sales',
   '0055_enable_rls_llm.sql': 'llm_configs',
+  '0058_enable_rls_asset_models.sql': 'asset_models',
 };
 
 async function main() {
