@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { Plus, Search, Wrench } from 'lucide-react';
+import { BookMarked, Plus, Search, Wrench } from 'lucide-react';
 import type { AssetLifecycleStatus } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { useDebounce } from '../lib/hooks/useDebounce';
@@ -114,13 +114,22 @@ export function AssetsListPage() {
             Все единицы оборудования с привязкой к клиентам и хронологией состояний
           </p>
         </div>
-        <Link
-          href="/assets/new"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition"
-        >
-          <Plus className="h-4 w-4" />
-          Добавить технику
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/asset-models"
+            className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition"
+          >
+            <BookMarked className="h-4 w-4" />
+            Каталог моделей
+          </Link>
+          <Link
+            href="/assets/new"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition"
+          >
+            <Plus className="h-4 w-4" />
+            Добавить технику
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

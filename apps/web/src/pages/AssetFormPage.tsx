@@ -4,9 +4,12 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { ChevronLeft } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { ClientPicker } from '../components/ClientPicker';
+import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
 
 interface FormValues {
   ownerClientId: string;
+  /** Ссылка на модель из каталога (asset_models). Пусто ⇒ заведено свободным текстом. */
+  assetModelId: string;
   model: string;
   manufacturer: string;
   serialNumber: string;
@@ -23,6 +26,7 @@ interface FormValues {
 
 const EMPTY: FormValues = {
   ownerClientId: '',
+  assetModelId: '',
   model: '',
   manufacturer: '',
   serialNumber: '',
@@ -62,6 +66,7 @@ export function AssetFormPage() {
     const a = existing.data;
     form.reset({
       ownerClientId: a.ownerClientId,
+      assetModelId: a.assetModelId ?? '',
       model: a.model,
       manufacturer: a.manufacturer ?? '',
       serialNumber: a.serialNumber ?? '',
@@ -96,6 +101,21 @@ export function AssetFormPage() {
     onError: (e) => setServerError(e.message),
   });
 
+  function handlePickModel(id: string, m: AssetModelLite | null) {
+    form.setValue('assetModelId', id);
+    if (m) {
+      form.setValue('model', m.model);
+      form.setValue('manufacturer', m.manufacturer ?? '');
+      // Подставляем класс риска/аттестацию только если поле ещё пустое — не затираем ручной ввод.
+      if (m.riskClass && !form.getValues('riskClass')) {
+        form.setValue('riskClass', m.riskClass);
+      }
+      if (m.requiredAttestationCategory && !form.getValues('requiredAttestationCategory')) {
+        form.setValue('requiredAttestationCategory', m.requiredAttestationCategory);
+      }
+    }
+  }
+
   const onSubmit: SubmitHandler<FormValues> = (v) => {
     setServerError(null);
     if (!v.ownerClientId) {
@@ -104,6 +124,7 @@ export function AssetFormPage() {
     }
     const payload = {
       ownerClientId: v.ownerClientId,
+      assetModelId: v.assetModelId || null,
       model: v.model,
       manufacturer: v.manufacturer || null,
       serialNumber: v.serialNumber || null,
@@ -148,6 +169,18 @@ export function AssetFormPage() {
             value={form.watch('ownerClientId') || null}
             onChange={(id) => form.setValue('ownerClientId', id)}
           />
+        </div>
+
+        <div>
+          <Label>Модель из каталога</Label>
+          <AssetModelPicker
+            value={form.watch('assetModelId') || null}
+            onChange={handlePickModel}
+          />
+          <p className="text-muted-foreground mt-1 text-xs">
+            Выберите тип аппарата из справочника — поля «Модель» и «Производитель»
+            заполнятся автоматически. Нет нужной модели — добавьте её прямо в поиске.
+          </p>
         </div>
 
         <div>

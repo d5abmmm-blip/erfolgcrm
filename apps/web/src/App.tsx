@@ -16,6 +16,7 @@ import { ClientsListPage } from './pages/ClientsListPage';
 import { ClientFormPage } from './pages/ClientFormPage';
 import { ClientCardPage } from './pages/ClientCardPage';
 import { AssetsListPage } from './pages/AssetsListPage';
+import { AssetModelsPage } from './pages/AssetModelsPage';
 import { AssetFormPage } from './pages/AssetFormPage';
 import { AssetCardPage } from './pages/AssetCardPage';
 import { InventoryListPage } from './pages/InventoryListPage';
@@ -166,6 +167,7 @@ function StaffApp() {
           <Route path="/clients/:id/cabinet-users" component={ClientCabinetUsersPage} />
           <Route path="/clients/:id" component={ClientCardPage} />
           <Route path="/assets" component={AssetsListPage} />
+          <Route path="/asset-models" component={AssetModelsPage} />
           <Route path="/assets/new" component={AssetFormPage} />
           <Route path="/assets/:id/edit" component={AssetFormPage} />
           <Route path="/assets/:id" component={AssetCardPage} />

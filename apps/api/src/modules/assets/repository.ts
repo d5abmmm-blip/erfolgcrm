@@ -48,6 +48,8 @@ export interface AssetDetailDto extends AssetListItem {
   warrantyUntil: string | null;
   /** Stage 10'.I — категория аттестации, необходимая для обслуживания. NULL = не требуется. */
   requiredAttestationCategory: string | null;
+  /** Ссылка на модель из каталога (asset_models). NULL — заведено свободным текстом. */
+  assetModelId: string | null;
   notes: string | null;
 }
 
@@ -61,6 +63,7 @@ export interface AssetEventDto {
 
 export interface CreateAssetInput {
   ownerClientId: string;
+  assetModelId?: string | null;
   model: string;
   manufacturer?: string | null;
   serialNumber?: string | null;
@@ -76,6 +79,7 @@ export interface CreateAssetInput {
 
 export interface UpdateAssetInput {
   ownerClientId?: string;
+  assetModelId?: string | null;
   model?: string;
   manufacturer?: string | null;
   serialNumber?: string | null;
@@ -173,6 +177,7 @@ export async function getAsset(
         commissionedAt: assets.commissionedAt,
         warrantyUntil: assets.warrantyUntil,
         requiredAttestationCategory: assets.requiredAttestationCategory,
+        assetModelId: assets.assetModelId,
         notes: assets.notes,
         createdAt: assets.createdAt,
       })
@@ -277,6 +282,7 @@ export async function createAssetWithEvent(
       .values({
         tenantId,
         ownerClientId: input.ownerClientId,
+        assetModelId: input.assetModelId ?? null,
         model: input.model,
         manufacturer: input.manufacturer ?? null,
         serialNumber: input.serialNumber ?? null,
@@ -343,6 +349,7 @@ export async function updateAssetWithEvents(
     }
 
     const setObj: Record<string, unknown> = {};
+    if (patch.assetModelId !== undefined) setObj.assetModelId = patch.assetModelId;
     if (patch.model !== undefined) setObj.model = patch.model;
     if (patch.manufacturer !== undefined) setObj.manufacturer = patch.manufacturer;
     if (patch.serialNumber !== undefined) setObj.serialNumber = patch.serialNumber;

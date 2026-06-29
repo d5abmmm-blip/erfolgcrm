@@ -50,6 +50,15 @@ export const assets = pgTable(
     /** Текущий владелец. ON DELETE RESTRICT — нельзя удалить клиента, если у него есть техника. */
     ownerClientId: fkUuid('owner_client_id'),
 
+    /**
+     * Ссылка на модель из каталога (asset_models). Опционально:
+     * NULL — техника заведена «по-старому» свободным текстом (исторические записи
+     * и быстрый ввод без каталога). При выборе модели из каталога сюда пишется её id,
+     * а денормализованные model/manufacturer всё равно копируются в строки ниже —
+     * чтобы карточка/печать/поиск работали без join'а и переживали правку каталога.
+     */
+    assetModelId: uuid('asset_model_id'),
+
     model: varchar('model', { length: 200 }).notNull(),
     /** Производитель (Philips, Drager, Mindray и т.п.). Plain varchar, не справочник. */
     manufacturer: varchar('manufacturer', { length: 200 }),
@@ -82,6 +91,40 @@ export const assets = pgTable(
     index('assets_tenant_owner_idx').on(t.tenantId, t.ownerClientId),
     index('assets_tenant_serial_idx').on(t.tenantId, t.serialNumber),
     index('assets_tenant_status_idx').on(t.tenantId, t.lifecycleStatus),
+    index('assets_tenant_model_ref_idx').on(t.tenantId, t.assetModelId),
+  ],
+);
+
+/**
+ * Каталог моделей техники (справочник типов аппаратов), не привязанный к клиенту.
+ * Заполняется один раз и переиспользуется: при заведении единицы техники или
+ * создании заявки модель выбирается отсюда, а серийный/инвентарный номер вводится
+ * для конкретного экземпляра (assets).
+ *
+ * Дубли по (manufacturer, model) предотвращаются в сервисе (case-insensitive
+ * find-or-create) — на уровне БД жёсткой уникальности нет из-за локали «C»
+ * и кириллицы (см. lib/ru-search.ts).
+ */
+export const assetModels = pgTable(
+  'asset_models',
+  {
+    id: pk(),
+    tenantId: tenantId(),
+
+    /** Производитель (Philips, Drager, Mindray…). Опционально. */
+    manufacturer: varchar('manufacturer', { length: 200 }),
+    /** Название модели (Mindray DC-70, Tuttnauer 3870EA…). Обязательно. */
+    model: varchar('model', { length: 200 }).notNull(),
+    /** 1 / 2а / 2б / 3 по Росздравнадзору — подсказка по умолчанию для новой единицы. */
+    riskClass: medDeviceRiskClassEnum('risk_class'),
+    /** Категория аттестации инженеров, обычно требуемая для этой модели. Опционально. */
+    requiredAttestationCategory: varchar('required_attestation_category', { length: 100 }),
+    notes: text('notes'),
+
+    ...timestamps,
+  },
+  (t) => [
+    index('asset_models_tenant_model_idx').on(t.tenantId, t.model),
   ],
 );
 
