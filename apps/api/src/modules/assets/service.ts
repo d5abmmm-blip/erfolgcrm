@@ -41,12 +41,15 @@ export async function createAssetCmd(
   audit: AuditCtx,
   input: CreateAssetInput,
 ): Promise<{ id: string }> {
-  const ownerOk = await clientBelongsToTenant(db, tenant.id, input.ownerClientId);
-  if (!ownerOk) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Указанный клиент не найден в этом tenant',
-    });
+  // Клиент опционален: проверяем принадлежность тенанту только если он указан.
+  if (input.ownerClientId) {
+    const ownerOk = await clientBelongsToTenant(db, tenant.id, input.ownerClientId);
+    if (!ownerOk) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Указанный клиент не найден в этом tenant',
+      });
+    }
   }
   const result = await createAssetWithEvent(db, tenant.id, session.userId, input);
   await writeAudit(db, tenant.id, {
@@ -74,7 +77,8 @@ export async function updateAssetCmd(
   id: string,
   patch: UpdateAssetInput,
 ): Promise<void> {
-  if (patch.ownerClientId !== undefined) {
+  // null — снять привязку к клиенту (проверка не нужна); uuid — проверить принадлежность тенанту.
+  if (patch.ownerClientId != null) {
     const ok = await clientBelongsToTenant(db, tenant.id, patch.ownerClientId);
     if (!ok) {
       throw new TRPCError({

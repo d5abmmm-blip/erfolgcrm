@@ -80,7 +80,8 @@ beforeAll(async () => {
   // (для бюджетников createTicketCmd требует контракт — портит наши asserts).
   const a = await withTenantTx(getDb(), erfolgId, (tx) =>
     tx
-      .select({ id: assets.id, ownerClientId: assets.ownerClientId })
+      // ownerClientId берём из clients.id (innerJoin) — гарантированно не null.
+      .select({ id: assets.id, ownerClientId: clients.id })
       .from(assets)
       .innerJoin(clients, eq(clients.id, assets.ownerClientId))
       .where(or(ne(clients.subtype, 'budget'), isNull(clients.subtype))),

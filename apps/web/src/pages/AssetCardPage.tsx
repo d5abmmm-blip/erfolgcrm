@@ -89,12 +89,21 @@ export function AssetCardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
-        <Link
-          href={`/clients/${a.ownerClientId}`}
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
-        >
-          <ChevronLeft className="h-4 w-4" />К карточке клиента
-        </Link>
+        {a.ownerClientId ? (
+          <Link
+            href={`/clients/${a.ownerClientId}`}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+          >
+            <ChevronLeft className="h-4 w-4" />К карточке клиента
+          </Link>
+        ) : (
+          <Link
+            href="/assets"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+          >
+            <ChevronLeft className="h-4 w-4" />К списку техники
+          </Link>
+        )}
         <div className="flex items-center gap-2">
           <Link
             href={`/assets/${a.id}/edit`}
@@ -173,12 +182,16 @@ export function AssetCardPage() {
 
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <InfoBlock label="Владелец" icon={<Building2 className="h-3.5 w-3.5" />}>
-            <Link
-              href={`/clients/${a.ownerClientId}`}
-              className="text-foreground hover:text-primary"
-            >
-              {a.ownerDisplayName}
-            </Link>
+            {a.ownerClientId ? (
+              <Link
+                href={`/clients/${a.ownerClientId}`}
+                className="text-foreground hover:text-primary"
+              >
+                {a.ownerDisplayName}
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">— без клиента</span>
+            )}
           </InfoBlock>
           <InfoBlock label="Производитель">{a.manufacturer ?? '—'}</InfoBlock>
           <InfoBlock label="Класс риска">{a.riskClass ?? '—'}</InfoBlock>

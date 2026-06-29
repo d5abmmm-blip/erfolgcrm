@@ -34,7 +34,8 @@ const dateOrNull = z
   .nullable();
 
 const createAssetSchema = z.object({
-  ownerClientId: z.string().uuid(),
+  // null — техника без привязки к клиенту (галочка в форме).
+  ownerClientId: z.string().uuid().nullable(),
   assetModelId: z.string().uuid().nullable().optional(),
   model: z.string().trim().min(1).max(200),
   manufacturer: z.string().trim().max(200).nullable().optional(),
@@ -51,7 +52,8 @@ const createAssetSchema = z.object({
 
 const updateAssetSchema = z
   .object({
-    ownerClientId: z.string().uuid().optional(),
+    // null — снять привязку к клиенту; отсутствует — не менять.
+    ownerClientId: z.string().uuid().nullable().optional(),
     assetModelId: z.string().uuid().nullable().optional(),
     model: z.string().trim().min(1).max(200).optional(),
     manufacturer: z.string().trim().max(200).nullable().optional(),

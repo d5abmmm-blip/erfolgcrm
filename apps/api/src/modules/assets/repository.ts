@@ -37,8 +37,10 @@ export interface AssetListItem {
   inventoryNumber: string | null;
   lifecycleStatus: AssetLifecycleStatus;
   riskClass: '1' | '2a' | '2b' | '3' | null;
-  ownerClientId: string;
-  ownerDisplayName: string;
+  /** NULL — техника без привязки к клиенту (см. миграцию 0059). */
+  ownerClientId: string | null;
+  /** NULL — у техники нет клиента-владельца. */
+  ownerDisplayName: string | null;
   createdAt: Date;
 }
 
@@ -62,7 +64,8 @@ export interface AssetEventDto {
 }
 
 export interface CreateAssetInput {
-  ownerClientId: string;
+  /** NULL — завести технику без привязки к клиенту. */
+  ownerClientId: string | null;
   assetModelId?: string | null;
   model: string;
   manufacturer?: string | null;
@@ -78,7 +81,8 @@ export interface CreateAssetInput {
 }
 
 export interface UpdateAssetInput {
-  ownerClientId?: string;
+  /** NULL — снять привязку к клиенту; undefined — не менять. */
+  ownerClientId?: string | null;
   assetModelId?: string | null;
   model?: string;
   manufacturer?: string | null;
@@ -138,7 +142,8 @@ export async function listAssets(
         createdAt: assets.createdAt,
       })
       .from(assets)
-      .innerJoin(clients, eq(assets.ownerClientId, clients.id))
+      // leftJoin (не inner): техника без клиента-владельца тоже попадает в список.
+      .leftJoin(clients, eq(assets.ownerClientId, clients.id))
       .where(whereClause)
       .orderBy(desc(assets.createdAt))
       .limit(PAGE_SIZE_DEFAULT)
@@ -182,7 +187,8 @@ export async function getAsset(
         createdAt: assets.createdAt,
       })
       .from(assets)
-      .innerJoin(clients, eq(assets.ownerClientId, clients.id))
+      // leftJoin (не inner): карточка техники без клиента-владельца тоже открывается.
+      .leftJoin(clients, eq(assets.ownerClientId, clients.id))
       .where(eq(assets.id, id))
       .limit(1);
     return rows[0] ?? null;
@@ -231,7 +237,8 @@ export async function searchAssets(
         ownerDisplayName: clients.displayName,
       })
       .from(assets)
-      .innerJoin(clients, eq(assets.ownerClientId, clients.id))
+      // leftJoin (не inner): техника без клиента тоже находится поиском.
+      .leftJoin(clients, eq(assets.ownerClientId, clients.id))
       .where(
         or(
           ruIlike(assets.model, query),
@@ -281,7 +288,7 @@ export async function createAssetWithEvent(
       .insert(assets)
       .values({
         tenantId,
-        ownerClientId: input.ownerClientId,
+        ownerClientId: input.ownerClientId ?? null,
         assetModelId: input.assetModelId ?? null,
         model: input.model,
         manufacturer: input.manufacturer ?? null,

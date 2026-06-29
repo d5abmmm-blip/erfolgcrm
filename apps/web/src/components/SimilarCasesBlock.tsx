@@ -78,7 +78,7 @@ export function SimilarCasesBlock({
     { enabled: !!resolvedAssetId, staleTime: 30_000 },
   );
   const ticketsByClient = trpc.tickets.list.useQuery(
-    { clientId: ownerClientIdQuery.data?.ownerClientId, pageSize: 50 },
+    { clientId: ownerClientIdQuery.data?.ownerClientId ?? undefined, pageSize: 50 },
     { enabled: !!ownerClientIdQuery.data?.ownerClientId, staleTime: 30_000 },
   );
 

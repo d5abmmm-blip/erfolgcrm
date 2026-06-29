@@ -8,6 +8,8 @@ import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelP
 
 interface FormValues {
   ownerClientId: string;
+  /** Галочка «без привязки к клиенту» — техника ведётся сама по себе (склад, демо, свой парк). */
+  noOwner: boolean;
   /** Ссылка на модель из каталога (asset_models). Пусто ⇒ заведено свободным текстом. */
   assetModelId: string;
   model: string;
@@ -26,6 +28,7 @@ interface FormValues {
 
 const EMPTY: FormValues = {
   ownerClientId: '',
+  noOwner: false,
   assetModelId: '',
   model: '',
   manufacturer: '',
@@ -65,7 +68,8 @@ export function AssetFormPage() {
     if (!isEdit || !existing.data) return;
     const a = existing.data;
     form.reset({
-      ownerClientId: a.ownerClientId,
+      ownerClientId: a.ownerClientId ?? '',
+      noOwner: !a.ownerClientId,
       assetModelId: a.assetModelId ?? '',
       model: a.model,
       manufacturer: a.manufacturer ?? '',
@@ -118,12 +122,12 @@ export function AssetFormPage() {
 
   const onSubmit: SubmitHandler<FormValues> = (v) => {
     setServerError(null);
-    if (!v.ownerClientId) {
-      setServerError('Выберите клиента-владельца');
+    if (!v.noOwner && !v.ownerClientId) {
+      setServerError('Выберите клиента-владельца или отметьте «без привязки к клиенту»');
       return;
     }
     const payload = {
-      ownerClientId: v.ownerClientId,
+      ownerClientId: v.noOwner ? null : v.ownerClientId,
       assetModelId: v.assetModelId || null,
       model: v.model,
       manufacturer: v.manufacturer || null,
@@ -163,12 +167,29 @@ export function AssetFormPage() {
         onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         className="bg-card space-y-5 rounded-lg border p-4 md:p-6"
       >
-        <div>
-          <Label required>Клиент-владелец</Label>
-          <ClientPicker
-            value={form.watch('ownerClientId') || null}
-            onChange={(id) => form.setValue('ownerClientId', id)}
-          />
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              {...form.register('noOwner')}
+              className="h-4 w-4 rounded border accent-primary"
+            />
+            Без привязки к клиенту (веду как своё оборудование)
+          </label>
+          {form.watch('noOwner') ? (
+            <p className="text-muted-foreground text-xs">
+              Техника без клиента-владельца — например, собственный парк сервиса, демо-аппарат
+              или оборудование на складе до продажи. Клиента можно будет указать позже.
+            </p>
+          ) : (
+            <div>
+              <Label required>Клиент-владелец</Label>
+              <ClientPicker
+                value={form.watch('ownerClientId') || null}
+                onChange={(id) => form.setValue('ownerClientId', id)}
+              />
+            </div>
+          )}
         </div>
 
         <div>

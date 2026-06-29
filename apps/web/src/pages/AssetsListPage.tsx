@@ -25,8 +25,8 @@ interface AssetRow {
   model: string;
   manufacturer: string | null;
   serialNumber: string | null;
-  ownerClientId: string;
-  ownerDisplayName: string;
+  ownerClientId: string | null;
+  ownerDisplayName: string | null;
   lifecycleStatus: AssetLifecycleStatus;
   riskClass: string | null;
 }
@@ -75,14 +75,17 @@ export function AssetsListPage() {
     {
       key: 'owner',
       label: 'Владелец',
-      render: (a) => (
-        <Link
-          href={`/clients/${a.ownerClientId}`}
-          className="text-muted-foreground hover:text-primary"
-        >
-          {a.ownerDisplayName}
-        </Link>
-      ),
+      render: (a) =>
+        a.ownerClientId ? (
+          <Link
+            href={`/clients/${a.ownerClientId}`}
+            className="text-muted-foreground hover:text-primary"
+          >
+            {a.ownerDisplayName}
+          </Link>
+        ) : (
+          <span className="text-muted-foreground">— без клиента</span>
+        ),
     },
     {
       key: 'status',

@@ -17,7 +17,7 @@ export async function getMyAssetForCreateTicket(
 ): Promise<{ id: string; ownerClientId: string } | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select({ id: assets.id, ownerClientId: assets.ownerClientId })
+      .select({ id: assets.id })
       .from(assets)
       .where(
         and(
@@ -27,7 +27,8 @@ export async function getMyAssetForCreateTicket(
         ),
       )
       .limit(1);
-    return rows[0] ?? null;
+    // WHERE гарантирует owner_client_id = clientId, поэтому владелец здесь — это clientId.
+    return rows[0] ? { id: rows[0].id, ownerClientId: clientId } : null;
   });
 }
 
