@@ -19,6 +19,7 @@ import {
   getAsset as repoGetAsset,
   listAssets as repoListAssets,
   listAssetsByClient as repoListAssetsByClient,
+  listDeviceTypes as repoListDeviceTypes,
   listEvents as repoListEvents,
   listManufacturers as repoListManufacturers,
   searchAssets as repoSearchAssets,
@@ -190,4 +191,8 @@ export async function assetEventsQuery(
 
 export async function manufacturersQuery(db: Db, tenant: ResolvedTenant) {
   return repoListManufacturers(db, tenant.id);
+}
+
+export async function deviceTypesQuery(db: Db, tenant: ResolvedTenant) {
+  return repoListDeviceTypes(db, tenant.id);
 }

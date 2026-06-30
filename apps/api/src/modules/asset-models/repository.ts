@@ -15,6 +15,7 @@ export type RiskClass = '1' | '2a' | '2b' | '3';
 export interface AssetModelDto {
   id: string;
   manufacturer: string | null;
+  deviceType: string | null;
   model: string;
   riskClass: RiskClass | null;
   requiredAttestationCategory: string | null;
@@ -25,6 +26,7 @@ export interface AssetModelDto {
 export interface AssetModelSearchItem {
   id: string;
   manufacturer: string | null;
+  deviceType: string | null;
   model: string;
   riskClass: RiskClass | null;
   requiredAttestationCategory: string | null;
@@ -32,6 +34,7 @@ export interface AssetModelSearchItem {
 
 export interface CreateAssetModelInput {
   manufacturer?: string | null;
+  deviceType?: string | null;
   model: string;
   riskClass?: RiskClass | null;
   requiredAttestationCategory?: string | null;
@@ -40,6 +43,7 @@ export interface CreateAssetModelInput {
 
 export interface UpdateAssetModelInput {
   manufacturer?: string | null;
+  deviceType?: string | null;
   model?: string;
   riskClass?: RiskClass | null;
   requiredAttestationCategory?: string | null;
@@ -81,6 +85,7 @@ export async function listAssetModels(
       .select({
         id: assetModels.id,
         manufacturer: assetModels.manufacturer,
+        deviceType: assetModels.deviceType,
         model: assetModels.model,
         riskClass: assetModels.riskClass,
         requiredAttestationCategory: assetModels.requiredAttestationCategory,
@@ -113,6 +118,7 @@ export async function searchAssetModels(
       .select({
         id: assetModels.id,
         manufacturer: assetModels.manufacturer,
+        deviceType: assetModels.deviceType,
         model: assetModels.model,
         riskClass: assetModels.riskClass,
         requiredAttestationCategory: assetModels.requiredAttestationCategory,
@@ -139,6 +145,7 @@ export async function getAssetModel(
       .select({
         id: assetModels.id,
         manufacturer: assetModels.manufacturer,
+        deviceType: assetModels.deviceType,
         model: assetModels.model,
         riskClass: assetModels.riskClass,
         requiredAttestationCategory: assetModels.requiredAttestationCategory,
@@ -181,6 +188,7 @@ export async function createAssetModel(
       .values({
         tenantId,
         manufacturer: input.manufacturer?.trim() || null,
+        deviceType: input.deviceType?.trim() || null,
         model,
         riskClass: input.riskClass ?? null,
         requiredAttestationCategory: input.requiredAttestationCategory ?? null,
@@ -202,6 +210,7 @@ export async function updateAssetModel(
   return withTenantTx(db, tenantId, async (tx) => {
     const setObj: Record<string, unknown> = {};
     if (patch.manufacturer !== undefined) setObj.manufacturer = patch.manufacturer?.trim() || null;
+    if (patch.deviceType !== undefined) setObj.deviceType = patch.deviceType?.trim() || null;
     if (patch.model !== undefined) setObj.model = patch.model.trim();
     if (patch.riskClass !== undefined) setObj.riskClass = patch.riskClass;
     if (patch.requiredAttestationCategory !== undefined)

@@ -67,6 +67,8 @@ export const assets = pgTable(
     model: varchar('model', { length: 200 }).notNull(),
     /** Производитель (Philips, Drager, Mindray и т.п.). Plain varchar, не справочник. */
     manufacturer: varchar('manufacturer', { length: 200 }),
+    /** Тип/категория аппарата (УЗИ, рентген, отсасыватель, автоклав…). Свободный текст с подсказками. */
+    deviceType: varchar('device_type', { length: 100 }),
     serialNumber: varchar('serial_number', { length: 100 }),
     /** Инвентарный номер у клиента (для бюджетников критично) */
     inventoryNumber: varchar('inventory_number', { length: 50 }),
@@ -118,6 +120,8 @@ export const assetModels = pgTable(
 
     /** Производитель (Philips, Drager, Mindray…). Опционально. */
     manufacturer: varchar('manufacturer', { length: 200 }),
+    /** Тип/категория аппарата (УЗИ, рентген, отсасыватель…). Подставляется в технику при выборе модели. */
+    deviceType: varchar('device_type', { length: 100 }),
     /** Название модели (Mindray DC-70, Tuttnauer 3870EA…). Обязательно. */
     model: varchar('model', { length: 200 }).notNull(),
     /** 1 / 2а / 2б / 3 по Росздравнадзору — подсказка по умолчанию для новой единицы. */

@@ -24,6 +24,7 @@ interface AssetRow {
   id: string;
   model: string;
   manufacturer: string | null;
+  deviceType: string | null;
   serialNumber: string | null;
   ownerClientId: string | null;
   ownerDisplayName: string | null;
@@ -60,6 +61,9 @@ export function AssetsListPage() {
           >
             {a.model}
           </Link>
+          {a.deviceType && (
+            <div className="text-muted-foreground text-xs">{a.deviceType}</div>
+          )}
           {a.manufacturer && (
             <div className="text-muted-foreground text-xs">{a.manufacturer}</div>
           )}

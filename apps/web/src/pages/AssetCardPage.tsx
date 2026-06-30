@@ -152,6 +152,9 @@ export function AssetCardPage() {
                 Техника
               </div>
               <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">{a.model}</h1>
+              {a.deviceType && (
+                <div className="text-muted-foreground text-sm">{a.deviceType}</div>
+              )}
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                 <span
                   className={cn(
@@ -194,6 +197,7 @@ export function AssetCardPage() {
             )}
           </InfoBlock>
           <InfoBlock label="Производитель">{a.manufacturer ?? '—'}</InfoBlock>
+          <InfoBlock label="Тип">{a.deviceType ?? '—'}</InfoBlock>
           <InfoBlock label="Класс риска">{a.riskClass ?? '—'}</InfoBlock>
           <InfoBlock label="Гарантия до">{a.warrantyUntil ?? '—'}</InfoBlock>
           <InfoBlock label="Введена в эксплуатацию">

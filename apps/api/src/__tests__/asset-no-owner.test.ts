@@ -39,19 +39,22 @@ describe('Техника без клиента-владельца', () => {
     const { id } = await createAssetWithEvent(getDb(), erfolgId, null, {
       ownerClientId: null,
       model: UNIQUE_MODEL,
+      deviceType: 'УЗИ-аппарат',
       serialNumber: 'TEST-NO-OWNER-0059',
     });
     createdIds.push(id);
     expect(id).toBeTruthy();
   });
 
-  it('карточка открывается, владелец пустой', async () => {
+  it('карточка открывается, владелец пустой, тип сохранён', async () => {
     const id = createdIds[0]!;
     const a = await getAsset(getDb(), erfolgId, id);
     expect(a).not.toBeNull();
     expect(a!.model).toBe(UNIQUE_MODEL);
     expect(a!.ownerClientId).toBeNull();
     expect(a!.ownerDisplayName).toBeNull();
+    // device_type (миграция 0060) сохраняется и читается.
+    expect(a!.deviceType).toBe('УЗИ-аппарат');
   });
 
   it('попадает в список (leftJoin, не теряется)', async () => {

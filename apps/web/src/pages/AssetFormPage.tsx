@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
+import { mergeDeviceTypeSuggestions } from '../lib/device-types';
 
 interface FormValues {
   ownerClientId: string;
@@ -14,6 +15,8 @@ interface FormValues {
   assetModelId: string;
   model: string;
   manufacturer: string;
+  /** Тип/категория аппарата (УЗИ, рентген…). Свободный текст с подсказками. */
+  deviceType: string;
   serialNumber: string;
   inventoryNumber: string;
   location: string;
@@ -32,6 +35,7 @@ const EMPTY: FormValues = {
   assetModelId: '',
   model: '',
   manufacturer: '',
+  deviceType: '',
   serialNumber: '',
   inventoryNumber: '',
   location: '',
@@ -52,6 +56,8 @@ export function AssetFormPage() {
   const utils = trpc.useUtils();
   const existing = trpc.assets.get.useQuery({ id: editingId ?? '' }, { enabled: isEdit });
   const manufacturers = trpc.assets.manufacturers.useQuery();
+  const deviceTypes = trpc.assets.deviceTypes.useQuery();
+  const deviceTypeOptions = mergeDeviceTypeSuggestions(deviceTypes.data);
 
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [serverError, setServerError] = useState<string | null>(null);
@@ -73,6 +79,7 @@ export function AssetFormPage() {
       assetModelId: a.assetModelId ?? '',
       model: a.model,
       manufacturer: a.manufacturer ?? '',
+      deviceType: a.deviceType ?? '',
       serialNumber: a.serialNumber ?? '',
       inventoryNumber: a.inventoryNumber ?? '',
       location: a.location ?? '',
@@ -110,6 +117,9 @@ export function AssetFormPage() {
     if (m) {
       form.setValue('model', m.model);
       form.setValue('manufacturer', m.manufacturer ?? '');
+      if (m.deviceType && !form.getValues('deviceType')) {
+        form.setValue('deviceType', m.deviceType);
+      }
       // Подставляем класс риска/аттестацию только если поле ещё пустое — не затираем ручной ввод.
       if (m.riskClass && !form.getValues('riskClass')) {
         form.setValue('riskClass', m.riskClass);
@@ -131,6 +141,7 @@ export function AssetFormPage() {
       assetModelId: v.assetModelId || null,
       model: v.model,
       manufacturer: v.manufacturer || null,
+      deviceType: v.deviceType || null,
       serialNumber: v.serialNumber || null,
       inventoryNumber: v.inventoryNumber || null,
       location: v.location || null,
@@ -212,6 +223,25 @@ export function AssetFormPage() {
             placeholder="Mindray DC-30, Tuttnauer 3870EA…"
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
           />
+        </div>
+
+        <div>
+          <Label>Тип оборудования</Label>
+          <input
+            type="text"
+            list="device-types-list"
+            {...form.register('deviceType')}
+            placeholder="УЗИ, рентген, отсасыватель, автоклав…"
+            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <datalist id="device-types-list">
+            {deviceTypeOptions.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Категория аппарата. Начните печатать — снизу появятся подсказки; можно вписать свой тип.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -33,6 +33,8 @@ export interface AssetListItem {
   id: string;
   model: string;
   manufacturer: string | null;
+  /** Тип/категория аппарата (УЗИ, рентген…). NULL — не задан. */
+  deviceType: string | null;
   serialNumber: string | null;
   inventoryNumber: string | null;
   lifecycleStatus: AssetLifecycleStatus;
@@ -69,6 +71,7 @@ export interface CreateAssetInput {
   assetModelId?: string | null;
   model: string;
   manufacturer?: string | null;
+  deviceType?: string | null;
   serialNumber?: string | null;
   inventoryNumber?: string | null;
   location?: string | null;
@@ -86,6 +89,7 @@ export interface UpdateAssetInput {
   assetModelId?: string | null;
   model?: string;
   manufacturer?: string | null;
+  deviceType?: string | null;
   serialNumber?: string | null;
   inventoryNumber?: string | null;
   location?: string | null;
@@ -133,6 +137,7 @@ export async function listAssets(
         id: assets.id,
         model: assets.model,
         manufacturer: assets.manufacturer,
+        deviceType: assets.deviceType,
         serialNumber: assets.serialNumber,
         inventoryNumber: assets.inventoryNumber,
         lifecycleStatus: assets.lifecycleStatus,
@@ -172,6 +177,7 @@ export async function getAsset(
         id: assets.id,
         model: assets.model,
         manufacturer: assets.manufacturer,
+        deviceType: assets.deviceType,
         serialNumber: assets.serialNumber,
         inventoryNumber: assets.inventoryNumber,
         lifecycleStatus: assets.lifecycleStatus,
@@ -206,6 +212,7 @@ export async function listAssetsByClient(
         id: assets.id,
         model: assets.model,
         manufacturer: assets.manufacturer,
+        deviceType: assets.deviceType,
         serialNumber: assets.serialNumber,
         inventoryNumber: assets.inventoryNumber,
         lifecycleStatus: assets.lifecycleStatus,
@@ -292,6 +299,7 @@ export async function createAssetWithEvent(
         assetModelId: input.assetModelId ?? null,
         model: input.model,
         manufacturer: input.manufacturer ?? null,
+        deviceType: input.deviceType ?? null,
         serialNumber: input.serialNumber ?? null,
         inventoryNumber: input.inventoryNumber ?? null,
         location: input.location ?? null,
@@ -359,6 +367,7 @@ export async function updateAssetWithEvents(
     if (patch.assetModelId !== undefined) setObj.assetModelId = patch.assetModelId;
     if (patch.model !== undefined) setObj.model = patch.model;
     if (patch.manufacturer !== undefined) setObj.manufacturer = patch.manufacturer;
+    if (patch.deviceType !== undefined) setObj.deviceType = patch.deviceType;
     if (patch.serialNumber !== undefined) setObj.serialNumber = patch.serialNumber;
     if (patch.inventoryNumber !== undefined) setObj.inventoryNumber = patch.inventoryNumber;
     if (patch.location !== undefined) setObj.location = patch.location;
@@ -456,5 +465,28 @@ export async function listManufacturers(
        LIMIT 100
     `);
     return (rows as unknown as Array<{ manufacturer: string }>).map((r) => r.manufacturer);
+  });
+}
+
+/**
+ * Distinct типы оборудования (device_type) для autosuggest в форме.
+ * Берём из обеих таблиц: реально заведённой техники и каталога моделей,
+ * чтобы подсказки были даже до первой единицы техники.
+ */
+export async function listDeviceTypes(
+  db: Db,
+  tenantId: string,
+): Promise<string[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx.execute<{ device_type: string }>(sql`
+      SELECT DISTINCT device_type FROM (
+        SELECT device_type FROM assets WHERE device_type IS NOT NULL
+        UNION
+        SELECT device_type FROM asset_models WHERE device_type IS NOT NULL
+      ) t
+       ORDER BY device_type ASC
+       LIMIT 200
+    `);
+    return (rows as unknown as Array<{ device_type: string }>).map((r) => r.device_type);
   });
 }

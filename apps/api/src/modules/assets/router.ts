@@ -21,6 +21,7 @@ import {
   assetsByClientQuery,
   createAssetCmd,
   decommissionAssetCmd,
+  deviceTypesQuery,
   getAssetQuery,
   listAssetsQuery,
   manufacturersQuery,
@@ -39,6 +40,7 @@ const createAssetSchema = z.object({
   assetModelId: z.string().uuid().nullable().optional(),
   model: z.string().trim().min(1).max(200),
   manufacturer: z.string().trim().max(200).nullable().optional(),
+  deviceType: z.string().trim().max(100).nullable().optional(),
   serialNumber: z.string().trim().max(100).nullable().optional(),
   inventoryNumber: z.string().trim().max(50).nullable().optional(),
   location: z.string().trim().max(500).nullable().optional(),
@@ -57,6 +59,7 @@ const updateAssetSchema = z
     assetModelId: z.string().uuid().nullable().optional(),
     model: z.string().trim().min(1).max(200).optional(),
     manufacturer: z.string().trim().max(200).nullable().optional(),
+    deviceType: z.string().trim().max(100).nullable().optional(),
     serialNumber: z.string().trim().max(100).nullable().optional(),
     inventoryNumber: z.string().trim().max(50).nullable().optional(),
     location: z.string().trim().max(500).nullable().optional(),
@@ -100,6 +103,8 @@ export const assetsRouter = router({
     .query(({ ctx, input }) => assetEventsQuery(ctx.db, ctx.tenant, input.assetId, input.limit)),
 
   manufacturers: authedProcedure.query(({ ctx }) => manufacturersQuery(ctx.db, ctx.tenant)),
+
+  deviceTypes: authedProcedure.query(({ ctx }) => deviceTypesQuery(ctx.db, ctx.tenant)),
 
   create: staffProcedure.input(createAssetSchema).mutation(({ ctx, input }) =>
     createAssetCmd(

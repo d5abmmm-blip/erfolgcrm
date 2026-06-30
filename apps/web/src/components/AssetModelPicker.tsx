@@ -5,6 +5,7 @@ import { trpc } from '../lib/trpc';
 export interface AssetModelLite {
   model: string;
   manufacturer: string | null;
+  deviceType: string | null;
   riskClass: '1' | '2a' | '2b' | '3' | null;
   requiredAttestationCategory: string | null;
 }
@@ -54,6 +55,7 @@ export function AssetModelPicker({
       onChange(res.id, {
         model: vars.model,
         manufacturer: vars.manufacturer ?? null,
+        deviceType: vars.deviceType ?? null,
         riskClass: null,
         requiredAttestationCategory: null,
       });
@@ -136,6 +138,7 @@ export function AssetModelPicker({
                       pick(m.id, {
                         model: m.model,
                         manufacturer: m.manufacturer,
+                        deviceType: m.deviceType,
                         riskClass: m.riskClass,
                         requiredAttestationCategory: m.requiredAttestationCategory,
                       })

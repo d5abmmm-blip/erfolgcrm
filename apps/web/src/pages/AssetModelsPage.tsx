@@ -5,12 +5,14 @@ import { trpc } from '../lib/trpc';
 import { useDebounce } from '../lib/hooks/useDebounce';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
+import { mergeDeviceTypeSuggestions } from '../lib/device-types';
 
 type RiskClass = '1' | '2a' | '2b' | '3';
 
 interface ModelRow {
   id: string;
   manufacturer: string | null;
+  deviceType: string | null;
   model: string;
   riskClass: RiskClass | null;
   requiredAttestationCategory: string | null;
@@ -47,6 +49,9 @@ export function AssetModelsPage() {
       render: (m) => (
         <div>
           <div className="text-foreground font-medium">{m.model}</div>
+          {m.deviceType && (
+            <div className="text-muted-foreground text-xs">{m.deviceType}</div>
+          )}
           {m.manufacturer && (
             <div className="text-muted-foreground text-xs">{m.manufacturer}</div>
           )}
@@ -151,6 +156,7 @@ function AssetModelModal({
   const isEdit = !!model;
 
   const [manufacturer, setManufacturer] = useState(model?.manufacturer ?? '');
+  const [deviceType, setDeviceType] = useState(model?.deviceType ?? '');
   const [modelName, setModelName] = useState(model?.model ?? '');
   const [riskClass, setRiskClass] = useState<'' | RiskClass>(model?.riskClass ?? '');
   const [attestation, setAttestation] = useState(model?.requiredAttestationCategory ?? '');
@@ -158,6 +164,8 @@ function AssetModelModal({
   const [error, setError] = useState<string | null>(null);
 
   const cats = trpc.attestations.categories.useQuery();
+  const deviceTypes = trpc.assets.deviceTypes.useQuery();
+  const deviceTypeOptions = mergeDeviceTypeSuggestions(deviceTypes.data);
 
   const onDone = async () => {
     await utils.assetModels.list.invalidate();
@@ -197,6 +205,7 @@ function AssetModelModal({
     }
     const payload = {
       manufacturer: manufacturer.trim() || null,
+      deviceType: deviceType.trim() || null,
       model: modelName.trim(),
       riskClass: riskClass || null,
       requiredAttestationCategory: attestation.trim() || null,
@@ -249,6 +258,22 @@ function AssetModelModal({
               placeholder="Philips, Drager, Mindray…"
               className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
             />
+          </div>
+          <div>
+            <FieldLabel>Тип оборудования</FieldLabel>
+            <input
+              type="text"
+              list="model-device-types-list"
+              value={deviceType}
+              onChange={(e) => setDeviceType(e.target.value)}
+              placeholder="УЗИ, рентген, отсасыватель…"
+              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <datalist id="model-device-types-list">
+              {deviceTypeOptions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

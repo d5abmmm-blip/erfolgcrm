@@ -18,6 +18,7 @@ import {
 
 const createSchema = z.object({
   manufacturer: z.string().trim().max(200).nullable().optional(),
+  deviceType: z.string().trim().max(100).nullable().optional(),
   model: z.string().trim().min(1).max(200),
   riskClass: MedDeviceRiskClass.nullable().optional(),
   requiredAttestationCategory: z.string().trim().max(100).nullable().optional(),
@@ -27,6 +28,7 @@ const createSchema = z.object({
 const updateSchema = z
   .object({
     manufacturer: z.string().trim().max(200).nullable().optional(),
+    deviceType: z.string().trim().max(100).nullable().optional(),
     model: z.string().trim().min(1).max(200).optional(),
     riskClass: MedDeviceRiskClass.nullable().optional(),
     requiredAttestationCategory: z.string().trim().max(100).nullable().optional(),
