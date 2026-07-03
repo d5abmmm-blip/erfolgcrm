@@ -48,6 +48,7 @@ import type {
   TicketPriority,
   RepairType,
   TicketEventType,
+  TicketBlockedReason,
 } from '@erfolg/shared';
 
 export interface TicketListItem {
@@ -100,6 +101,9 @@ export interface TicketDetailDto extends TicketListItem {
   estimatedMinutes: number | null;
   /** Фича A — заметка к флагу «Ждём запчасть» (что именно ждём). */
   waitingForPartNote: string | null;
+  /** Доска — структурная причина простоя и когда он начался. */
+  blockedReason: TicketBlockedReason | null;
+  blockedSince: Date | null;
 }
 
 export interface TicketEventDto {
@@ -336,6 +340,8 @@ export async function getTicket(
         estimatedMinutes: tickets.estimatedMinutes,
         waitingForPart: tickets.waitingForPart,
         waitingForPartNote: tickets.waitingForPartNote,
+        blockedReason: tickets.blockedReason,
+        blockedSince: tickets.blockedSince,
         // То же определение «простоя», что и в listTickets / list_aged_tickets
         // (базовая дата — received_at, а не updated_at).
         idleDays: sql<number>`floor(extract(epoch from (now() - greatest(
@@ -678,6 +684,8 @@ export async function setWaitingForPart(
         id: tickets.id,
         waitingForPart: tickets.waitingForPart,
         waitingForPartNote: tickets.waitingForPartNote,
+        blockedReason: tickets.blockedReason,
+        blockedSince: tickets.blockedSince,
       })
       .from(tickets)
       .where(eq(tickets.id, ticketId))
@@ -691,10 +699,23 @@ export async function setWaitingForPart(
       before.waitingForPart !== waiting || (before.waitingForPartNote ?? null) !== nextNote;
 
     if (changed) {
-      await tx
-        .update(tickets)
-        .set({ waitingForPart: waiting, waitingForPartNote: nextNote })
-        .where(eq(tickets.id, ticketId));
+      // Синхронизируем структурную причину простоя (инвариант доски:
+      // waiting_for_part=true ⟺ blocked_reason='waiting_part').
+      const setObj: Record<string, unknown> = {
+        waitingForPart: waiting,
+        waitingForPartNote: nextNote,
+      };
+      if (waiting) {
+        setObj.blockedReason = 'waiting_part';
+        setObj.blockedSince =
+          before.blockedReason === 'waiting_part' && before.blockedSince
+            ? before.blockedSince
+            : new Date();
+      } else if (before.blockedReason === 'waiting_part') {
+        setObj.blockedReason = null;
+        setObj.blockedSince = null;
+      }
+      await tx.update(tickets).set(setObj).where(eq(tickets.id, ticketId));
 
       const comment = waiting
         ? `Ждём запчасть${nextNote ? `: ${nextNote}` : ''}`
@@ -709,6 +730,100 @@ export async function setWaitingForPart(
     }
 
     return { id: ticketId, waitingForPart: waiting, waitingForPartNote: nextNote };
+  });
+}
+
+/** Русские подписи причин простоя (для события в журнале). Фронт имеет свою карту. */
+export const BLOCKED_REASON_LABEL_RU: Record<TicketBlockedReason, string> = {
+  waiting_part: 'ждём запчасть',
+  waiting_client_approval: 'ждём согласование клиента',
+  waiting_payment: 'ждём оплату',
+  waiting_management_decision: 'ждём решение руководства',
+  no_free_engineer: 'нет свободного инженера',
+  waiting_delivery: 'ждём привоз / самовывоз техники',
+  ready_for_pickup: 'готово — позвонить клиенту',
+};
+
+/**
+ * Установить/снять структурную причину простоя. reason=null снимает простой.
+ * Держит инвариант с флагом «ждём запчасть»: reason='waiting_part' ⟺ waiting_for_part=true.
+ * blocked_since ставится при первом входе в простой и не сбрасывается при смене причины
+ * (честный счётчик «стоит N дней»). Пишет событие note (не плодим enum). Идемпотентно.
+ */
+export async function setBlockedReason(
+  db: Db,
+  tenantId: string,
+  userId: string | null,
+  ticketId: string,
+  reason: TicketBlockedReason | null,
+  note: string | null,
+): Promise<{
+  id: string;
+  blockedReason: TicketBlockedReason | null;
+  blockedSince: Date | null;
+  waitingForPart: boolean;
+  waitingForPartNote: string | null;
+}> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        blockedReason: tickets.blockedReason,
+        blockedSince: tickets.blockedSince,
+        waitingForPart: tickets.waitingForPart,
+        waitingForPartNote: tickets.waitingForPartNote,
+      })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+    const before = rows[0];
+    if (!before) throw new TicketNotFoundError();
+
+    const trimmedNote = note?.trim() || null;
+    const isPart = reason === 'waiting_part';
+    const wasBlocked = before.blockedReason != null;
+    const nextBlockedSince =
+      reason == null ? null : wasBlocked && before.blockedSince ? before.blockedSince : new Date();
+    const nextWaitingNote = isPart ? trimmedNote : null;
+
+    const changed =
+      (before.blockedReason ?? null) !== (reason ?? null) ||
+      before.waitingForPart !== isPart ||
+      (isPart && (before.waitingForPartNote ?? null) !== nextWaitingNote);
+
+    if (changed) {
+      await tx
+        .update(tickets)
+        .set({
+          blockedReason: reason,
+          blockedSince: nextBlockedSince,
+          waitingForPart: isPart,
+          waitingForPartNote: nextWaitingNote,
+        })
+        .where(eq(tickets.id, ticketId));
+
+      const comment =
+        reason == null
+          ? 'Простой снят'
+          : `Причина простоя: ${BLOCKED_REASON_LABEL_RU[reason]}${
+              trimmedNote ? ` — ${trimmedNote}` : ''
+            }`;
+      await tx.insert(ticketEvents).values({
+        tenantId,
+        ticketId,
+        userId,
+        type: 'note',
+        payload: { comment },
+      });
+    }
+
+    return {
+      id: ticketId,
+      blockedReason: reason,
+      blockedSince: nextBlockedSince,
+      waitingForPart: isPart,
+      waitingForPartNote: nextWaitingNote,
+    };
   });
 }
 
@@ -1077,4 +1192,179 @@ export async function repoMyWeeklySchedule(
     clientName: r.clientName ?? '',
     symptom: r.symptom,
   }));
+}
+
+/* ──────────────────────── Доска «кто чем занят / почему стоит» ──────────────────────── */
+
+/** Порог «жёлтого» (заявка ждёт/замедлилась) в днях. */
+export const BOARD_WARN_DAYS = 3;
+/**
+ * Порог «красного» (застряла) в днях. Совпадает со STALE_TICKET_DAYS на фронте и
+ * дефолтом AI-инструмента list_aged_tickets — чтобы сигналы не расходились.
+ */
+export const BOARD_STUCK_DAYS = 7;
+
+export type TrafficLight = 'green' | 'yellow' | 'red';
+
+/**
+ * Эффективная причина простоя для доски. Явно хранимая (blocked_reason) имеет приоритет;
+ * иначе выводим из статуса: estimate/approval → «ждём согласование клиента»,
+ * act_pending → «готово — позвонить». Прочие активные статусы без причины → null (движется).
+ */
+export function deriveEffectiveBlockedReason(
+  status: TicketStatus,
+  blockedReason: TicketBlockedReason | null,
+): TicketBlockedReason | null {
+  if (blockedReason) return blockedReason;
+  if (status === 'estimate' || status === 'approval') return 'waiting_client_approval';
+  if (status === 'act_pending') return 'ready_for_pickup';
+  return null;
+}
+
+/**
+ * «Стоит N дней» — сколько заявка не двигается вперёд. Берём МАКСИМУМ из:
+ *  - stalledDays: дней с последней СМЕНЫ СТАТУСА (прогресса). Заметки/классификация
+ *    причины НЕ сбрасывают этот счётчик — простой считается честно;
+ *  - дней с момента явно проставленного простоя (blocked_since).
+ * Так классификация причины не «омолаживает» давно стоящую заявку.
+ */
+export function computeStuckDays(
+  blockedSince: Date | null,
+  stalledDays: number,
+  nowMs: number,
+): number {
+  const blockedDays = blockedSince
+    ? Math.max(0, Math.floor((nowMs - blockedSince.getTime()) / 86_400_000))
+    : 0;
+  return Math.max(stalledDays, blockedDays);
+}
+
+/**
+ * Светофор карточки. act_pending (готово к выдаче) — зелёный (позитив, «позвонить»).
+ * Красный — застряла (≥ STUCK) или просрочен SLA. Жёлтый — есть причина простоя или
+ * замедлилась (≥ WARN). Иначе зелёный (движется).
+ */
+export function computeTrafficLight(
+  status: TicketStatus,
+  effectiveReason: TicketBlockedReason | null,
+  stuckDays: number,
+  slaTargetAt: Date | null,
+  nowMs: number,
+): TrafficLight {
+  if (status === 'act_pending') return 'green';
+  const slaOverdue = slaTargetAt != null && slaTargetAt.getTime() < nowMs;
+  if (slaOverdue || stuckDays >= BOARD_STUCK_DAYS) return 'red';
+  if (effectiveReason != null || stuckDays >= BOARD_WARN_DAYS) return 'yellow';
+  return 'green';
+}
+
+export interface BoardTicketDto {
+  id: string;
+  ticketNumber: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  clientId: string;
+  clientDisplayName: string;
+  assetId: string | null;
+  assetModel: string | null;
+  deviceType: string | null;
+  assignedEngineerId: string | null;
+  assignedEngineerName: string | null;
+  assignedDispatcherId: string | null;
+  assignedDispatcherName: string | null;
+  waitingForPart: boolean;
+  waitingForPartNote: string | null;
+  /** Явно хранимая причина (может быть null, даже если карточка «жёлтая» по статусу). */
+  blockedReason: TicketBlockedReason | null;
+  /** Причина с учётом вывода из статуса — ключ колонки в виде «По причине». */
+  effectiveReason: TicketBlockedReason | null;
+  blockedSince: Date | null;
+  slaTargetAt: Date | null;
+  idleDays: number;
+  stuckDays: number;
+  light: TrafficLight;
+}
+
+const BOARD_ACTIVE_STATUSES: TicketStatus[] = [
+  'received',
+  'diagnostics',
+  'estimate',
+  'approval',
+  'in_progress',
+  'act_pending',
+];
+
+const LIGHT_RANK: Record<TrafficLight, number> = { red: 2, yellow: 1, green: 0 };
+
+/**
+ * Доска: все активные заявки (без closed/cancelled) одним запросом. Один payload
+ * обслуживает оба вида (по инженеру / по причине) — группировка на клиенте.
+ * Небольшой сервис — без пагинации.
+ */
+export async function boardTickets(db: Db, tenantId: string): Promise<BoardTicketDto[]> {
+  const engineerUser = alias(users, 'board_engineer');
+  const dispatcherUser = alias(users, 'board_dispatcher');
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        status: tickets.status,
+        priority: tickets.priority,
+        clientId: tickets.clientId,
+        clientDisplayName: clients.displayName,
+        assetId: tickets.assetId,
+        assetModel: assets.model,
+        deviceType: assets.deviceType,
+        assignedEngineerId: tickets.assignedEngineerId,
+        assignedEngineerName: engineerUser.fullName,
+        assignedDispatcherId: tickets.assignedDispatcherId,
+        assignedDispatcherName: dispatcherUser.fullName,
+        waitingForPart: tickets.waitingForPart,
+        waitingForPartNote: tickets.waitingForPartNote,
+        blockedReason: tickets.blockedReason,
+        blockedSince: tickets.blockedSince,
+        slaTargetAt: tickets.slaTargetAt,
+        idleDays: sql<number>`floor(extract(epoch from (now() - greatest(
+          ${tickets.receivedAt},
+          coalesce(
+            (select max(te.created_at) from ${ticketEvents} te where te.ticket_id = ${tickets.id}),
+            ${tickets.receivedAt}
+          )
+        ))) / 86400)::int`,
+        // Дней без ПРОГРЕССА: от последней смены статуса (или регистрации). Заметки/
+        // классификация причины сюда НЕ входят — счётчик простоя честный.
+        stalledDays: sql<number>`floor(extract(epoch from (now() - greatest(
+          ${tickets.receivedAt},
+          coalesce(
+            (select max(te.created_at) from ${ticketEvents} te
+              where te.ticket_id = ${tickets.id} and te.type = 'status_change'),
+            ${tickets.receivedAt}
+          )
+        ))) / 86400)::int`,
+      })
+      .from(tickets)
+      .leftJoin(clients, eq(tickets.clientId, clients.id))
+      .leftJoin(assets, eq(tickets.assetId, assets.id))
+      .leftJoin(engineerUser, eq(engineerUser.id, tickets.assignedEngineerId))
+      .leftJoin(dispatcherUser, eq(dispatcherUser.id, tickets.assignedDispatcherId))
+      .where(inArray(tickets.status, BOARD_ACTIVE_STATUSES));
+
+    const nowMs = Date.now();
+    const mapped: BoardTicketDto[] = rows.map((r) => {
+      const effectiveReason = deriveEffectiveBlockedReason(r.status, r.blockedReason);
+      const stuckDays = computeStuckDays(r.blockedSince, r.stalledDays, nowMs);
+      const light = computeTrafficLight(r.status, effectiveReason, stuckDays, r.slaTargetAt, nowMs);
+      return {
+        ...r,
+        clientDisplayName: r.clientDisplayName ?? '',
+        effectiveReason,
+        stuckDays,
+        light,
+      };
+    });
+    // Красные первыми, внутри — дольше стоящие выше.
+    mapped.sort((a, b) => LIGHT_RANK[b.light] - LIGHT_RANK[a.light] || b.stuckDays - a.stuckDays);
+    return mapped;
+  });
 }

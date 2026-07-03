@@ -6,7 +6,7 @@
  * after — только метаданные изменения (ключи, статусы).
  */
 import { TRPCError } from '@trpc/server';
-import type { TicketStatus } from '@erfolg/shared';
+import type { TicketStatus, TicketBlockedReason } from '@erfolg/shared';
 import { withTenantTx, type Db } from '@erfolg/db';
 import { writeAudit, writeAuditInTx } from '../../lib/audit';
 import { toTRPCError } from '../../lib/errors';
@@ -18,6 +18,7 @@ import { enqueueTicketStatusNotify } from '../../workers/ticket-status-notify';
 import {
   addNote as repoAddNote,
   assetBelongsToTenant,
+  boardTickets as repoBoardTickets,
   changeStatus as repoChangeStatus,
   clientBelongsToTenant,
   clientSubtype,
@@ -27,6 +28,7 @@ import {
   listEvents as repoListEvents,
   listTickets as repoListTickets,
   recordPrintEvent as repoRecordPrint,
+  setBlockedReason as repoSetBlockedReason,
   setWaitingForPart as repoSetWaitingForPart,
   repoMyWeeklySchedule,
   repoSchedule,
@@ -35,6 +37,7 @@ import {
   searchTickets as repoSearchTickets,
   updateTicket as repoUpdateTicket,
   userBelongsToTenant,
+  type BoardTicketDto,
   type CreateTicketInput,
   type ListTicketsOpts,
   type ScheduledTicketDto,
@@ -390,6 +393,24 @@ export async function changeStatusCmd(
     }).catch((err: unknown) => {
       logger.warn({ err, ticketId: id }, 'enqueue ticket-status-notify failed');
     });
+
+    // Заявка готова к выдаче → push менеджеру «позвонить клиенту» (доставится, когда
+    // на проде включён VAPID web-push). Шлём назначенному диспетчеру, если он задан.
+    if (result.to === 'act_pending' && before.assignedDispatcherId) {
+      enqueuePushToUser({
+        tenantId: ctx.tenant.id,
+        userId: before.assignedDispatcherId,
+        payload: {
+          title: `Готова к выдаче: ${before.ticketNumber}`,
+          body: 'Заявка готова — позвоните клиенту и согласуйте выдачу.',
+          url: `/tickets/${id}`,
+          tag: `ticket-ready-${id}`,
+          data: { ticketId: id, ticketNumber: before.ticketNumber, kind: 'ready_for_pickup' },
+        },
+      }).catch((err: unknown) => {
+        logger.warn({ err, ticketId: id }, 'enqueue ready push failed');
+      });
+    }
   }
   return result;
 }
@@ -460,6 +481,56 @@ export async function setWaitingForPartCmd(
     userAgent: ctx.audit.userAgent ?? null,
   });
   return result;
+}
+
+/**
+ * Установить/снять структурную причину простоя (доска «почему стоит»). RBAC (staff) — в роутере.
+ * reason=null снимает простой. Синхронизацию с флагом «ждём запчасть» и запись события
+ * делает repo. Плюс audit.
+ */
+export async function setBlockedReasonCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+  reason: TicketBlockedReason | null,
+  note: string | null,
+): Promise<{
+  id: string;
+  blockedReason: TicketBlockedReason | null;
+  blockedSince: Date | null;
+  waitingForPart: boolean;
+  waitingForPartNote: string | null;
+}> {
+  let result;
+  try {
+    result = await repoSetBlockedReason(
+      ctx.db,
+      ctx.tenant.id,
+      ctx.session.userId,
+      ticketId,
+      reason,
+      note,
+    );
+  } catch (err) {
+    throw toTRPCError(err);
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'update',
+    entityType: 'ticket',
+    entityId: ticketId,
+    after: { blockedReason: result.blockedReason, blocked: result.blockedReason != null },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+  return result;
+}
+
+/** Доска «кто чем занят / почему стоит» — все активные заявки одним запросом (staff). */
+export async function boardQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+): Promise<BoardTicketDto[]> {
+  return repoBoardTickets(db, tenant.id);
 }
 
 export async function recordPrintEventCmd(

@@ -38,6 +38,10 @@ import {
   reconcileScheduledSends,
   registerEmailScheduledWorker,
 } from './workers/email-scheduled';
+import {
+  enqueueStuckAlertSchedule,
+  registerStuckAlertWorker,
+} from './workers/stuck-alert';
 
 // Глобальная страховка от «тихой смерти» процесса. Незанятое событие 'error' у любого
 // EventEmitter (например обрыв IMAP/TLS-сокета) и необработанный rejected-промис по
@@ -184,6 +188,7 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerCalendarReminderWorker();
   registerEmailInboundWorker();
   registerEmailScheduledWorker();
+  registerStuckAlertWorker();
   // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
   if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
     void enqueueInvoiceReminderSchedule();
@@ -192,6 +197,11 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   // расписание ставим всегда (тик без «созревших» событий — no-op).
   void enqueueCalendarReminderSchedule().catch((err) =>
     logger.warn({ err }, 'calendar-reminder schedule failed'),
+  );
+  // Алерты о застревании — внутренний push (no-op без VAPID). Расписание гейтится
+  // внутри enqueueStuckAlertSchedule (STUCK_ALERT_ENABLED=false отключает).
+  void enqueueStuckAlertSchedule().catch((err) =>
+    logger.warn({ err }, 'stuck-alert schedule failed'),
   );
   // Отложенная отправка писем — переенкью отложенных задач на старте (Redis мог их потерять).
   void reconcileScheduledSends().catch((err) =>

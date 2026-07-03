@@ -4,6 +4,10 @@ export {
   ACTIVE_TICKET_STATUSES,
   STALE_TICKET_DAYS,
   isTicketStale,
+  BLOCKED_REASON_META,
+  BLOCKED_REASON_COLUMNS,
+  SETTABLE_BLOCKED_REASONS,
+  TRAFFIC_LIGHT_DOT,
 } from './tickets';
 export { INVOICE_STATUS_META } from './invoices';
 export { ASSET_STATUS_META } from './assets';

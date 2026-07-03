@@ -89,6 +89,23 @@ export type TicketPriority = z.infer<typeof TicketPriority>;
 export const RepairType = z.enum(['paid', 'warranty', 'service_contract']);
 export type RepairType = z.infer<typeof RepairType>;
 
+/**
+ * Структурная причина простоя заявки — «почему техника стоит» (для доски).
+ * waiting_client_approval и ready_for_pickup обычно ВЫВОДЯТСЯ из статуса
+ * (estimate/approval, act_pending) и в колонке tickets.blocked_reason не хранятся,
+ * но входят в перечень ради единого ключа колонок доски.
+ */
+export const TicketBlockedReason = z.enum([
+  'waiting_part',
+  'waiting_client_approval',
+  'waiting_payment',
+  'waiting_management_decision',
+  'no_free_engineer',
+  'waiting_delivery',
+  'ready_for_pickup',
+]);
+export type TicketBlockedReason = z.infer<typeof TicketBlockedReason>;
+
 /** Типы событий в хронологии заявки */
 export const TicketEventType = z.enum([
   'created',

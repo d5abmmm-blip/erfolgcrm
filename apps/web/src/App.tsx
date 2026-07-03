@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { TicketCardPage } from './pages/TicketCardPage';
 import { TicketsListPage } from './pages/TicketsListPage';
 import { TicketsKanbanPage } from './pages/TicketsKanbanPage';
+import { BoardPage } from './pages/BoardPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { CalendarPage } from './pages/CalendarPage';
 import { NewTicketPage } from './pages/NewTicketPage';
@@ -151,6 +152,7 @@ function StaffApp() {
         ) : (
           <Switch>
           <Route path="/" component={DashboardPage} />
+          <Route path="/board" component={BoardPage} />
           <Route path="/tickets" component={TicketsListPage} />
           <Route path="/tickets/kanban" component={TicketsKanbanPage} />
           <Route path="/schedule" component={SchedulePage} />

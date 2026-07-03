@@ -365,6 +365,34 @@
       "when": 1778400000000,
       "tag": "0060_asset_device_type",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1778500000000,
+      "tag": "0061_ticket_blocked_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1778500100000,
+      "tag": "0062_user_device_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1778500200000,
+      "tag": "0063_user_availability",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1778500300000,
+      "tag": "0064_ai_daily_summaries",
+      "breakpoints": true
     }
   ]
 }
