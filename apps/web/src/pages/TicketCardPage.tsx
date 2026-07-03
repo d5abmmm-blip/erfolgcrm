@@ -42,6 +42,7 @@ import { TicketPayments } from '../components/TicketPayments';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { IntakeChecklistDialog, type ChecklistKind } from '../components/IntakeChecklistDialog';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
+import { ExplainBlockPanel } from '../components/ExplainBlockPanel';
 import { TicketKpBlock } from '../components/TicketKpBlock';
 import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeEmailModal';
 
@@ -634,6 +635,10 @@ export function TicketCardPage() {
                 setWaitingForPart.mutate({ ticketId: t.id, waiting, note })
               }
             />
+          )}
+
+          {isStaff && t.status !== 'closed' && t.status !== 'cancelled' && (
+            <ExplainBlockPanel ticketId={t.id} />
           )}
 
           <SimilarCasesBlock ticketId={t.id} excludeTicketId={t.id} />

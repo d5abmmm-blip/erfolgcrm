@@ -21,6 +21,7 @@ import { STAFF_POSITIONS, type StaffPosition } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
+import { EngineerProfileSection } from '../components/EngineerProfileSection';
 
 type Role = 'director' | 'dispatcher' | 'engineer';
 const ROLE_LABEL: Record<Role, string> = {
@@ -606,6 +607,7 @@ function EditUserModal({
             <option value="engineer">Инженер</option>
           </select>
         </Field>
+        {user.role === 'engineer' && <EngineerProfileSection userId={user.id} />}
         {error && (
           <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
             {error}

@@ -11,7 +11,7 @@
  *
  * RLS включается отдельным *enable_rls*.sql (см. setup-rls.ts).
  */
-import { boolean, pgTable, varchar } from 'drizzle-orm/pg-core';
+import { boolean, date, pgTable, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { encryptedText, tenantId, timestamps } from './_shared';
 
 /** Реквизиты подключения к LLM. Одна строка на tenant. */
@@ -29,3 +29,22 @@ export const llmConfigs = pgTable('llm_configs', {
   apiKeyEnc: encryptedText('api_key_encrypted'),
   ...timestamps,
 });
+
+/**
+ * Кэш утренней AI-сводки: одна строка на (tenant, дата). Первое открытие дашборда за
+ * день собирает сводку через LLM и кладёт сюда; дальше отдаём из кэша (LLM не дёргаем).
+ * RLS включается отдельным *enable_rls*.sql (см. setup-rls.ts).
+ */
+export const aiDailySummaries = pgTable(
+  'ai_daily_summaries',
+  {
+    tenantId: tenantId(),
+    /** Дата сводки в таймзоне организации. */
+    summaryDate: date('summary_date').notNull(),
+    /** Готовый текст сводки (уже сформулирован LLM). */
+    bodyText: text('body_text').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.summaryDate] })],
+);
+

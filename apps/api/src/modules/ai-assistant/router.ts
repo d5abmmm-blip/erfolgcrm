@@ -12,11 +12,12 @@
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { authedProcedure, directorProcedure, router } from '../../trpc/trpc';
+import { authedProcedure, directorProcedure, router, staffProcedure } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
 import { callLlm } from './llm';
 import { getLlmConfigDto, loadLlmRuntimeConfig, upsertLlmConfig } from './config';
 import { runAssistant } from './service';
+import { explainTicketBlock, getOrBuildDailySummary } from './proactive';
 
 const turnSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -127,4 +128,15 @@ export const aiAssistantRouter = router({
       });
     }
   }),
+
+  /**
+   * Утренняя AI-сводка для менеджера (данные всегда, текст LLM из кэша на день).
+   * staff — директор/диспетчер. Инженер работает в мобильном.
+   */
+  dailySummary: staffProcedure.query(({ ctx }) => getOrBuildDailySummary(ctx.db, ctx.tenant)),
+
+  /** «Почему застряло?» — объяснение простоя заявки (факты + LLM-формулировка). */
+  explainTicketBlock: staffProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .query(({ ctx, input }) => explainTicketBlock(ctx.db, ctx.tenant, input.ticketId)),
 });

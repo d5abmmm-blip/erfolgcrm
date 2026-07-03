@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   IntakeMethod,
   RepairType,
+  TicketBlockedReason,
   TicketPriority,
   TicketSource,
   TicketStatus,
@@ -25,6 +26,7 @@ import {
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   addTicketNoteCmd,
+  boardQuery,
   cancelTicketCmd,
   changeStatusCmd,
   createTicketCmd,
@@ -35,6 +37,7 @@ import {
   recordPrintEventCmd,
   reopenTicketCmd,
   scheduleCmd,
+  setBlockedReasonCmd,
   setWaitingForPartCmd,
   searchTicketsQuery,
   unscheduleCmd,
@@ -176,6 +179,22 @@ export const ticketsRouter = router({
     )
     .mutation(({ ctx, input }) =>
       setWaitingForPartCmd(buildCmdCtx(ctx), input.ticketId, input.waiting, input.note ?? null),
+    ),
+
+  /** Доска — все активные заявки с причиной простоя и светофором (staff). */
+  board: staffProcedure.query(({ ctx }) => boardQuery(ctx.db, ctx.tenant)),
+
+  /** Доска — установить/снять структурную причину простоя (reason=null снимает). */
+  setBlockedReason: staffProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        reason: TicketBlockedReason.nullable(),
+        note: z.string().trim().max(500).nullable().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      setBlockedReasonCmd(buildCmdCtx(ctx), input.ticketId, input.reason, input.note ?? null),
     ),
 
   recordPrint: staffProcedure

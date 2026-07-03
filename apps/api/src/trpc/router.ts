@@ -38,6 +38,7 @@ import { cashRouter } from '../modules/cash';
 import { salesRouter } from '../modules/sales';
 import { backupRouter } from '../modules/backup';
 import { aiAssistantRouter } from '../modules/ai-assistant';
+import { engineerProfileRouter } from '../modules/engineer-profile';
 import {
   clientAuthRouter,
   clientCabinetRouter,
@@ -111,6 +112,7 @@ export const appRouter = router({
   backup: backupRouter,
   /** AI-ассистент: чат с tool-use поверх процедур (LLM провайдеро-независимый). */
   aiAssistant: aiAssistantRouter,
+  engineerProfile: engineerProfileRouter,
 });
 
 export type AppRouter = typeof appRouter;

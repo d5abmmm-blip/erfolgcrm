@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketPriority } from '@erfolg/shared';
+import type { TicketStatus, TicketPriority, TicketBlockedReason } from '@erfolg/shared';
 import type { StatusBadgeVariant } from '../../components/ui/StatusBadge';
 
 interface MetaEntry {
@@ -53,4 +53,45 @@ export const TICKET_PRIORITY_META: Record<TicketPriority, MetaEntry> = {
   normal: { label: 'обычный', variant: 'muted' },
   high: { label: 'высокий', variant: 'warning' },
   urgent: { label: 'срочный', variant: 'danger' },
+};
+
+/** Подписи причин простоя (доска «почему стоит»). Порядок = порядок колонок. */
+export const BLOCKED_REASON_META: Record<TicketBlockedReason, { label: string; short: string }> = {
+  waiting_part: { label: 'Ждём запчасть', short: 'запчасть' },
+  waiting_client_approval: { label: 'Ждём согласование клиента', short: 'согласование' },
+  waiting_payment: { label: 'Ждём оплату', short: 'оплата' },
+  waiting_management_decision: { label: 'Ждём решение руководства', short: 'решение' },
+  no_free_engineer: { label: 'Нет свободного инженера', short: 'нет инженера' },
+  waiting_delivery: { label: 'Ждём привоз / самовывоз', short: 'привоз' },
+  ready_for_pickup: { label: 'Готово — позвонить', short: 'готово' },
+};
+
+/** Порядок колонок в виде «По причине простоя». */
+export const BLOCKED_REASON_COLUMNS: readonly TicketBlockedReason[] = [
+  'waiting_part',
+  'waiting_client_approval',
+  'waiting_payment',
+  'waiting_management_decision',
+  'no_free_engineer',
+  'waiting_delivery',
+  'ready_for_pickup',
+] as const;
+
+/**
+ * Причины, которые менеджер ставит вручную. waiting_client_approval и ready_for_pickup
+ * выводятся из статуса заявки (смета/согласование, готово к выдаче) — их не задают руками.
+ */
+export const SETTABLE_BLOCKED_REASONS: readonly TicketBlockedReason[] = [
+  'waiting_part',
+  'waiting_payment',
+  'waiting_management_decision',
+  'no_free_engineer',
+  'waiting_delivery',
+] as const;
+
+/** Цвет светофора карточки → классы фона (для точки-индикатора). */
+export const TRAFFIC_LIGHT_DOT: Record<'green' | 'yellow' | 'red', string> = {
+  green: 'bg-success',
+  yellow: 'bg-warning',
+  red: 'bg-destructive',
 };

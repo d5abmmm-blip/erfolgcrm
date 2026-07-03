@@ -75,6 +75,22 @@ export const repairTypeEnum = pgEnum('repair_type', [
   'service_contract',
 ]);
 
+/**
+ * Структурная причина простоя заявки («почему техника стоит») — для доски.
+ * Часть значений на доске ВЫВОДИТСЯ из статуса (estimate/approval → waiting_client_approval,
+ * act_pending → ready_for_pickup) и в колонке не хранится, но входит в enum ради единого
+ * ключа колонок. Явно хранимые ставит менеджер (или авто вместе с waiting_for_part).
+ */
+export const ticketBlockedReasonEnum = pgEnum('ticket_blocked_reason', [
+  'waiting_part',
+  'waiting_client_approval',
+  'waiting_payment',
+  'waiting_management_decision',
+  'no_free_engineer',
+  'waiting_delivery',
+  'ready_for_pickup',
+]);
+
 export const ticketEventTypeEnum = pgEnum('ticket_event_type', [
   'created',
   'status_change',
@@ -182,6 +198,18 @@ export const tickets = pgTable(
     waitingForPartNote: text('waiting_for_part_note'),
 
     /**
+     * Структурная причина простоя (доска «почему стоит»). NULL — заявка движется
+     * (или причина выводится из статуса). При включении waiting_for_part проставляется
+     * автоматически = 'waiting_part'. Остальные причины ставит менеджер (setBlockedReason).
+     */
+    blockedReason: ticketBlockedReasonEnum('blocked_reason'),
+    /**
+     * Когда простой начался — для честного счётчика «стоит N дней». В отличие от idle-days
+     * НЕ сбрасывается записью события. Заполняется вместе с blocked_reason, очищается вместе.
+     */
+    blockedSince: timestamp('blocked_since', { withTimezone: true }),
+
+    /**
      * Фича B — guard идемпотентности авто-уведомления клиента «техника готова».
      * Заполняется при первой успешной отправке письма «готово к выдаче» (статус
      * act_pending). Пока не NULL — повторно письмо «готово» не шлём.
@@ -199,6 +227,10 @@ export const tickets = pgTable(
     index('tickets_tenant_engineer_idx').on(t.tenantId, t.assignedEngineerId),
     index('tickets_tenant_received_idx').on(t.tenantId, t.receivedAt),
     index('tickets_tenant_contract_idx').on(t.tenantId, t.contractId),
+    /** Доска «почему стоит» — быстрый выбор заявок с проставленной причиной простоя. */
+    index('tickets_blocked_idx')
+      .on(t.tenantId, t.blockedReason)
+      .where(sql`blocked_reason IS NOT NULL`),
     /**
      * Stage 11 — частичные индексы для графика инженеров.
      * Партиальный WHERE экономит место (большинство тикетов без расписания).

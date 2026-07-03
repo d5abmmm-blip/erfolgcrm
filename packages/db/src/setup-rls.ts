@@ -56,6 +56,9 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0052_enable_rls_sales.sql': 'sales',
   '0055_enable_rls_llm.sql': 'llm_configs',
   '0058_enable_rls_asset_models.sql': 'asset_models',
+  '0062_enable_rls_user_device_skills.sql': 'user_device_skills',
+  '0063_enable_rls_user_availability.sql': 'user_availability',
+  '0064_enable_rls_ai_daily_summaries.sql': 'ai_daily_summaries',
 };
 
 async function main() {

@@ -19,6 +19,7 @@ import { Link } from 'wouter';
 import { trpc } from '../lib/trpc';
 import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
+import { AiDailySummaryCard } from '../components/AiDailySummaryCard';
 // pdfmake/exceljs lazy-loaded only on button click — см. handleDailySummaryPdf/Xlsx ниже.
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
@@ -164,6 +165,8 @@ function DirectorDashboard() {
           </button>
         </div>
       </div>
+
+      <AiDailySummaryCard />
 
       {metricsQ.isLoading && (
         <div className="bg-card flex items-center gap-3 rounded-lg border p-4">
@@ -587,6 +590,8 @@ function DispatcherDashboard() {
         <h2 className="text-xl font-semibold md:text-2xl">Рабочий стол</h2>
         <p className="text-muted-foreground text-sm">Что требует внимания сегодня</p>
       </div>
+
+      <AiDailySummaryCard />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <AttentionTile label="Заявки на разбор" value={b?.ticketsAttention ?? 0} href="/tickets" icon={Ticket} />

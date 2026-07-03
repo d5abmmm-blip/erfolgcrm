@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   LayoutDashboard,
+  LayoutGrid,
   Ticket,
   Users,
   Wrench,
@@ -75,9 +76,10 @@ const NAV_GROUPS: readonly NavGroup[] = [
     label: 'Работа',
     items: [
       { href: '/', label: 'Дашборд', icon: LayoutDashboard },
+      { href: '/board', label: 'Доска', icon: LayoutGrid, roles: ['director', 'dispatcher'] },
       { href: '/tickets', label: 'Заявки', icon: Ticket },
       { href: '/leads', label: 'Лиды', icon: Target, roles: ['director', 'dispatcher'], module: 'leads' },
-      { href: '/schedule', label: 'График', icon: Calendar, roles: ['director', 'dispatcher'], module: 'schedule' },
+      { href: '/schedule', label: 'График (детально)', icon: Calendar, roles: ['director', 'dispatcher'], module: 'schedule' },
       { href: '/calendar', label: 'Календарь', icon: CalendarDays, roles: ['director', 'dispatcher'], module: 'calendar' },
       { href: '/kb', label: 'База знаний', icon: BookOpen, module: 'kb' },
       { href: '/mail', label: 'Почта', icon: Mail, roles: ['director', 'dispatcher'], module: 'mail' },

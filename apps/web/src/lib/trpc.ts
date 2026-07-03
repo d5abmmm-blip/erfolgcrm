@@ -12,10 +12,14 @@
  */
 import { createTRPCReact } from '@trpc/react-query';
 import { httpBatchLink } from '@trpc/client';
+import type { inferRouterOutputs } from '@trpc/server';
 import superjson from 'superjson';
 import type { AppRouter } from '@erfolg/api';
 
 export const trpc = createTRPCReact<AppRouter>();
+
+/** Выведенные типы ответов процедур — RouterOutputs['module']['procedure']. */
+export type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 const TENANT_LS_KEY = 'erfolg-tenant-subdomain';
 
