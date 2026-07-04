@@ -16,6 +16,7 @@ import {
   TicketTemplatePicker,
   type TemplateDefaults,
 } from '../components/TicketTemplatePicker';
+import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 import { cn } from '../lib/utils';
 
 interface FormValues {
@@ -109,6 +110,19 @@ export function NewTicketPage() {
   const engineers = trpc.users.list.useQuery({ onlyEngineers: true });
   const isBudgetClient = clientDetail.data?.subtype === 'budget';
   const contractRequired = isBudgetClient;
+
+  const assignedEngineerId = form.watch('assignedEngineerId');
+  // Тип техники для подсказок при назначении: из сохранённой единицы (по assetId)
+  // или из выбранной модели каталога в режиме «Новый аппарат».
+  const selectedAsset = trpc.assets.get.useQuery(
+    { id: assetId || '' },
+    { enabled: !!assetId },
+  );
+  const hintDeviceType = assetId
+    ? (selectedAsset.data?.deviceType ?? null)
+    : addingAsset
+      ? (naModel?.deviceType ?? null)
+      : null;
 
   // Сброс зависимых полей при смене клиента
   useEffect(() => {
@@ -474,6 +488,11 @@ export function NewTicketPage() {
                 Не удалось загрузить список инженеров
               </p>
             )}
+            <EngineerAssignmentHints
+              deviceType={hintDeviceType}
+              assetId={assetId || null}
+              selectedEngineerId={assignedEngineerId || null}
+            />
           </div>
           <div>
             <Label>Дедлайн</Label>

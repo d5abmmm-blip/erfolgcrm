@@ -45,6 +45,7 @@ import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
 import { ExplainBlockPanel } from '../components/ExplainBlockPanel';
 import { TicketKpBlock } from '../components/TicketKpBlock';
 import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeEmailModal';
+import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -613,6 +614,8 @@ export function TicketCardPage() {
             role={role}
             isDirector={isDirector}
             requiredAttestationCategory={assetFull.data?.requiredAttestationCategory ?? null}
+            assetId={t.assetId ?? null}
+            deviceType={assetFull.data?.deviceType ?? null}
             onChangeStatus={(s) => changeStatus.mutate({ id: t.id, status: s })}
             onUpdate={(patch) => update.mutate({ id: t.id, patch })}
             onAddNote={(comment) => addNote.mutate({ ticketId: t.id, comment })}
@@ -809,6 +812,8 @@ function ActionsPanel({
   role,
   isDirector,
   requiredAttestationCategory,
+  assetId,
+  deviceType,
   onChangeStatus,
   onUpdate,
   onAddNote,
@@ -826,6 +831,10 @@ function ActionsPanel({
   isDirector: boolean;
   /** Stage 10'.I — категория аттестации, требуемая для обслуживания asset'а. */
   requiredAttestationCategory: string | null;
+  /** Единица техники заявки — для подсказок при назначении (аттестация). */
+  assetId: string | null;
+  /** Тип техники заявки — для подсказки «есть ли навык». */
+  deviceType: string | null;
   onChangeStatus: (s: TicketStatus) => void;
   onUpdate: (patch: Record<string, unknown>) => void;
   onAddNote: (c: string) => void;
@@ -948,6 +957,11 @@ function ActionsPanel({
             loading={usersQ.isLoading}
             disabled={pending}
             onApply={(id) => onUpdate({ assignedEngineerId: id })}
+          />
+          <EngineerAssignmentHints
+            deviceType={deviceType}
+            assetId={assetId}
+            selectedEngineerId={t.assignedEngineerId}
           />
           <EngineerAttestationBadge
             engineerId={t.assignedEngineerId}
