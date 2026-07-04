@@ -15,6 +15,7 @@ import {
   setAvailability,
   setSkills,
 } from './repository';
+import { assignmentHints } from './hints';
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате ГГГГ-ММ-ДД');
 const kindSchema = z.enum(['day_off', 'vacation', 'onsite']);
@@ -61,6 +62,26 @@ export const engineerProfileRouter = router({
   availabilityToday: staffProcedure.query(({ ctx }) =>
     listActiveAvailability(ctx.db, ctx.tenant.id, todayInTz(ctx.tenant.timezone)),
   ),
+
+  /**
+   * Умные подсказки при назначении инженера (только чтение): загрузка, навык под
+   * тип техники, занятость сегодня, предупреждение об аттестации. Доступно staff.
+   */
+  assignmentHints: staffProcedure
+    .input(
+      z
+        .object({
+          deviceType: z.string().trim().max(100).nullable().optional(),
+          assetId: z.string().uuid().nullable().optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) =>
+      assignmentHints(ctx.db, ctx.tenant.id, ctx.tenant.timezone, {
+        deviceType: input?.deviceType ?? null,
+        assetId: input?.assetId ?? null,
+      }),
+    ),
 
   setAvailability: staffProcedure
     .input(
