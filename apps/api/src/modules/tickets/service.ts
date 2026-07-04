@@ -45,6 +45,7 @@ import {
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
+import { clearUnansweredCount, snoozeAsk } from '../../lib/nudge-state';
 
 async function ensureRefsExist(
   db: Db,
@@ -531,6 +532,114 @@ export async function boardQuery(
   tenant: ResolvedTenant,
 ): Promise<BoardTicketDto[]> {
   return repoBoardTickets(db, tenant.id);
+}
+
+/**
+ * «Мой день» — активные заявки инженера с полями доски (stuckDays/light/причина).
+ * Активных заявок у tenant'а немного (сотни максимум) — фильтруем в памяти,
+ * чтобы не плодить второй SQL-вариант boardTickets.
+ */
+export async function myTicketsQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  engineerId: string,
+): Promise<BoardTicketDto[]> {
+  const all = await repoBoardTickets(db, tenant.id);
+  return all.filter((t) => t.assignedEngineerId === engineerId);
+}
+
+/** Реакция инженера одной кнопкой (Telegram / web-push / «Мой день»). */
+export type EngineerReactAction = 'inwork' | 'ready' | 'part';
+
+export interface EngineerReactResult {
+  kind: EngineerReactAction | 'noop';
+  /** Человеческое подтверждение — показывается в тосте/боте. */
+  message: string;
+  ticketNumber: string;
+}
+
+/**
+ * Единая команда «инженер ответил одной кнопкой»:
+ *   inwork — заметка «ещё в работе», бот замолкает по заявке на 2 дня;
+ *   ready  — перевод в act_pending (готова к выдаче) со всеми штатными эффектами
+ *            (письмо клиенту, push диспетчеру «позвоните клиенту»);
+ *   part   — причина простоя «ждём запчасть» на доске.
+ *
+ * RBAC: инженер может реагировать ТОЛЬКО на свою заявку (assignedEngineerId);
+ * director/dispatcher — на любую. Вызывается из tRPC-роутера и из Telegram-вебхука
+ * (там ctx собирается синтетически из привязанного пользователя).
+ */
+export async function engineerReactCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+  action: EngineerReactAction,
+): Promise<EngineerReactResult> {
+  const before = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
+  if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  if (ctx.session.role === 'engineer' && before.assignedEngineerId !== ctx.session.userId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Это не ваша заявка' });
+  }
+  if (before.status === 'closed' || before.status === 'cancelled') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Заявка уже закрыта' });
+  }
+
+  if (action === 'inwork') {
+    await addTicketNoteCmd(ctx, ticketId, 'Ответ на напоминание: ещё в работе');
+    await snoozeAsk(ctx.tenant.id, ticketId);
+    await clearUnansweredCount(ctx.tenant.id, ticketId);
+    return {
+      kind: 'inwork',
+      ticketNumber: before.ticketNumber,
+      message: `Принято: ${before.ticketNumber} ещё в работе. Отметил в журнале, пару дней не беспокою.`,
+    };
+  }
+
+  if (action === 'ready') {
+    if (before.status === 'act_pending') {
+      await clearUnansweredCount(ctx.tenant.id, ticketId);
+      return {
+        kind: 'noop',
+        ticketNumber: before.ticketNumber,
+        message: `${before.ticketNumber} уже отмечена готовой к выдаче.`,
+      };
+    }
+    // Из «Диагностики»/«Согласования» идём через in_progress — та же пара нажатий,
+    // что инженер сделал бы в карточке. Из received/estimate «готово» не пускаем.
+    if (before.status === 'received' || before.status === 'estimate') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `${before.ticketNumber} ещё не в работе — откройте заявку и начните диагностику.`,
+      });
+    }
+    if (before.status === 'diagnostics' || before.status === 'approval') {
+      await changeStatusCmd(ctx, ticketId, 'in_progress');
+    }
+    await changeStatusCmd(ctx, ticketId, 'act_pending');
+    await clearUnansweredCount(ctx.tenant.id, ticketId);
+    return {
+      kind: 'ready',
+      ticketNumber: before.ticketNumber,
+      message: `Готово: ${before.ticketNumber} → «Ожидает акта». Диспетчер получил сигнал позвонить клиенту.`,
+    };
+  }
+
+  // action === 'part'
+  if (before.blockedReason === 'waiting_part') {
+    await clearUnansweredCount(ctx.tenant.id, ticketId);
+    return {
+      kind: 'noop',
+      ticketNumber: before.ticketNumber,
+      message: `По ${before.ticketNumber} уже стоит «ждём запчасть».`,
+    };
+  }
+  await setBlockedReasonCmd(ctx, ticketId, 'waiting_part', 'Отметил инженер (ответ на напоминание)');
+  await snoozeAsk(ctx.tenant.id, ticketId);
+  await clearUnansweredCount(ctx.tenant.id, ticketId);
+  return {
+    kind: 'part',
+    ticketNumber: before.ticketNumber,
+    message: `Принято: по ${before.ticketNumber} ждём запчасть. Менеджер видит это на доске.`,
+  };
 }
 
 export async function recordPrintEventCmd(

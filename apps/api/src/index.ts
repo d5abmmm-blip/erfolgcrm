@@ -39,6 +39,10 @@ import {
   registerEmailScheduledWorker,
 } from './workers/email-scheduled';
 import {
+  enqueueEngineerNudgeSchedule,
+  registerEngineerNudgeWorker,
+} from './workers/engineer-nudge';
+import {
   enqueueStuckAlertSchedule,
   registerStuckAlertWorker,
 } from './workers/stuck-alert';
@@ -189,6 +193,7 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerEmailInboundWorker();
   registerEmailScheduledWorker();
   registerStuckAlertWorker();
+  registerEngineerNudgeWorker();
   // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
   if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
     void enqueueInvoiceReminderSchedule();
@@ -202,6 +207,11 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   // внутри enqueueStuckAlertSchedule (STUCK_ALERT_ENABLED=false отключает).
   void enqueueStuckAlertSchedule().catch((err) =>
     logger.warn({ err }, 'stuck-alert schedule failed'),
+  );
+  // Нуджи инженерам (Telegram/push) — внутренние, безопасно всегда: без бота и
+  // VAPID тик просто no-op. Отключаемо ENGINEER_NUDGE_ENABLED=false.
+  void enqueueEngineerNudgeSchedule().catch((err) =>
+    logger.warn({ err }, 'engineer-nudge schedule failed'),
   );
   // Отложенная отправка писем — переенкью отложенных задач на старте (Redis мог их потерять).
   void reconcileScheduledSends().catch((err) =>

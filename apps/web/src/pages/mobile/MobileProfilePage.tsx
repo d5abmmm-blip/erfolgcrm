@@ -2,6 +2,7 @@ import { Link } from 'wouter';
 import { ExternalLink, LogOut, ListChecks, Mail, Building2, BadgeCheck } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { useOutbox } from '../../lib/offline/useOutbox';
+import { TelegramLinkSection } from '../../components/TelegramLinkSection';
 
 const ROLE_LABEL: Record<'director' | 'dispatcher' | 'engineer', string> = {
   director: 'Директор',
@@ -44,6 +45,13 @@ export function MobileProfilePage() {
             {tenant.displayName} <span className="text-muted-foreground/60">· {tenant.subdomain}</span>
           </div>
         </div>
+      </div>
+
+      <div className="bg-card space-y-2 rounded-lg border p-4">
+        <div className="text-muted-foreground text-[11px] font-medium uppercase">
+          Telegram-напоминания
+        </div>
+        <TelegramLinkSection />
       </div>
 
       <div className="bg-card space-y-2 rounded-lg border p-4">

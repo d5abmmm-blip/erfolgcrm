@@ -8,6 +8,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { COMMON_DEVICE_TYPES } from '../lib/device-types';
+import { TelegramLinkSection } from './TelegramLinkSection';
 
 const KIND_LABEL: Record<'day_off' | 'vacation' | 'onsite', string> = {
   day_off: 'выходной',
@@ -53,6 +54,11 @@ export function EngineerProfileSection({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-4 border-t pt-3">
+      <div>
+        <div className="mb-1.5 text-xs font-medium">Telegram-напоминания</div>
+        <TelegramLinkSection userId={userId} />
+      </div>
+
       <div>
         <div className="mb-1.5 flex items-center gap-2 text-xs font-medium">
           Навыки — какие типы техники обслуживает

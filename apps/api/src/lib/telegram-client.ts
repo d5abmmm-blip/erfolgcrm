@@ -6,7 +6,8 @@
  *   handler'ами. У нас per-tenant токены — handler'ы пришлось бы привязывать на лету.
  *   Прямой fetch проще и контролируемей.
  *
- * Что предоставляем: sendMessage, setWebhook, deleteWebhook, getMe.
+ * Что предоставляем: sendMessage, editMessageText, answerCallbackQuery,
+ * setWebhook, deleteWebhook, getMe.
  * Все методы non-throwing на сетевых ошибках возвращают { ok: false, error }.
  */
 import { logger } from './logger';
@@ -46,15 +47,43 @@ export function getMe(token: string): Promise<TgResult<TgUser>> {
   return call<TgUser>(token, 'getMe');
 }
 
+/** Inline-клавиатура: ряды кнопок с callback_data (≤64 байт на кнопку). */
+export interface TgInlineKeyboard {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+}
+
 export interface SendMessageInput {
   chat_id: number | string;
   text: string;
   parse_mode?: 'Markdown' | 'HTML';
-  reply_markup?: unknown;
+  reply_markup?: TgInlineKeyboard;
 }
 
 export function sendMessage(token: string, input: SendMessageInput): Promise<TgResult<unknown>> {
   return call(token, 'sendMessage', input);
+}
+
+export interface EditMessageTextInput {
+  chat_id: number | string;
+  message_id: number;
+  text: string;
+  reply_markup?: TgInlineKeyboard;
+}
+
+/** Заменить текст сообщения (и убрать/заменить кнопки) после нажатия. */
+export function editMessageText(
+  token: string,
+  input: EditMessageTextInput,
+): Promise<TgResult<unknown>> {
+  return call(token, 'editMessageText', input);
+}
+
+/** Погасить «часики» на нажатой inline-кнопке (обязателен ответ на каждый callback). */
+export function answerCallbackQuery(
+  token: string,
+  input: { callback_query_id: string; text?: string; show_alert?: boolean },
+): Promise<TgResult<boolean>> {
+  return call<boolean>(token, 'answerCallbackQuery', input);
 }
 
 export interface SetWebhookInput {

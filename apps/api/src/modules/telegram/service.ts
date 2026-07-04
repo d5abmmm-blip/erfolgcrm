@@ -64,10 +64,12 @@ export async function setConfigCmd(
   const baseUrl = process.env.TELEGRAM_WEBHOOK_BASE_URL ?? process.env.API_PUBLIC_URL ?? '';
   if (baseUrl) {
     const webhookUrl = `${baseUrl}/api/v1/telegram/webhook/${ctx.tenant.subdomain}`;
+    // callback_query — нажатия inline-кнопок (нуджи инженерам). Боты, подключённые
+    // ДО этой правки, получат callback_query только после пересохранения токена.
     await setWebhook(input.botToken, {
       url: webhookUrl,
       secret_token: webhookSecret,
-      allowed_updates: ['message', 'edited_message'],
+      allowed_updates: ['message', 'edited_message', 'callback_query'],
       drop_pending_updates: true,
     });
   }

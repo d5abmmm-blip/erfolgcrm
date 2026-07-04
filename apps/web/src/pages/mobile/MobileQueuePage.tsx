@@ -1,18 +1,22 @@
 import { Link } from 'wouter';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   ChevronRight,
   AlertOctagon,
+  AlertTriangle,
   Clock,
   Loader2,
   Package,
+  Sparkles,
   Wrench,
   RefreshCw,
 } from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
-import { trpc } from '../../lib/trpc';
+import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { cn, getMondayOfThisWeek } from '../../lib/utils';
+import { executeOrQueue } from '../../lib/offline/executor';
+import { BLOCKED_REASON_META } from '../../lib/dictionaries/tickets';
 import { PushToggle } from '../../components/PushToggle';
 
 const ACTIVE_STATUSES: TicketStatus[] = [
@@ -53,28 +57,39 @@ const PRIORITY_BADGE: Record<TicketPriority, { label: string; cls: string }> = {
   urgent: { label: 'срочный', cls: 'bg-destructive/15 text-destructive' },
 };
 
+type ReactAction = 'inwork' | 'ready' | 'part';
+
 interface Props {
   engineerId: string;
 }
 
 /**
- * /m/queue — заявки, назначенные инженеру. Поллинг 30 сек на новые назначения.
+ * /m/queue — «Мой день» инженера: график на сегодня + провисшие с кнопками
+ * быстрого ответа + очередь. Поллинг 30 сек. Понимает query-параметры от
+ * web-push: ?react=<action>&ticket=<id> (кнопка в уведомлении) и ?nudge=<id>.
  */
 export function MobileQueuePage({ engineerId }: Props) {
   const [tab, setTab] = useState<'active' | 'all'>('active');
+  const utils = trpc.useUtils();
+  const tenantSubdomain = getTenantSubdomain();
 
-  const list = trpc.tickets.list.useQuery(
+  const list = trpc.tickets.myList.useQuery(
     {
-      engineerId,
       statuses: tab === 'active' ? ACTIVE_STATUSES : undefined,
       pageSize: 100,
     },
     {
-      // 30 сек поллинг — это MVP-замена push-уведомлений
+      // 30 сек поллинг — MVP-замена push-уведомлений
       refetchInterval: 30_000,
       refetchOnWindowFocus: true,
     },
   );
+
+  // «Мой день»: мои активные заявки с полями доски (светофор/причина/дни простоя).
+  const myTickets = trpc.tickets.myTickets.useQuery(undefined, {
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   // Stage 11 — расписание инженера: «Сегодня по графику» / «Завтра по графику».
   const weekStart = useMemo(() => getMondayOfThisWeek(), []);
@@ -85,6 +100,69 @@ export function MobileQueuePage({ engineerId }: Props) {
       refetchOnWindowFocus: true,
     },
   );
+
+  const reactM = trpc.tickets.engineerReact.useMutation();
+  const [busyTicket, setBusyTicket] = useState<string | null>(null);
+  // «Ещё в работе» не сбрасывает дни простоя на доске (так задумано), поэтому
+  // карточку после ответа прячем локально — иначе кнопка выглядит «неработающей».
+  const [reactedIds, setReactedIds] = useState<Set<string>>(() => new Set());
+  const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(
+    null,
+  );
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (t: NonNullable<typeof toast>) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(t);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  };
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const onReact = async (ticketId: string, action: ReactAction) => {
+    setBusyTicket(ticketId);
+    const result = await executeOrQueue(
+      'tickets.engineerReact',
+      { ticketId, action },
+      (p) => reactM.mutateAsync(p),
+      tenantSubdomain,
+    );
+    setBusyTicket(null);
+    if (result.status === 'ok') {
+      setReactedIds((prev) => new Set(prev).add(ticketId));
+      await Promise.all([
+        utils.tickets.myTickets.invalidate(),
+        utils.tickets.myList.invalidate(),
+      ]);
+      showToast({ kind: 'ok', text: result.data.message });
+    } else if (result.status === 'queued') {
+      setReactedIds((prev) => new Set(prev).add(ticketId));
+      showToast({ kind: 'queued', text: 'Нет связи — ответ сохранён и отправится сам' });
+    } else {
+      showToast({ kind: 'error', text: result.error.message });
+    }
+  };
+
+  // Кнопка в web-push открывает /m/queue?react=<action>&ticket=<id> — выполняем сразу.
+  // Клик по телу уведомления ведёт на /m/queue?nudge=<id> — просто чистим параметр
+  // (провисшие и так наверху экрана).
+  const handledPushAction = useRef(false);
+  useEffect(() => {
+    if (handledPushAction.current) return;
+    handledPushAction.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('react');
+    const ticket = params.get('ticket');
+    if ((action && ticket) || params.get('nudge')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    if (action && ticket && ['inwork', 'ready', 'part'].includes(action)) {
+      void onReact(ticket, action as ReactAction);
+    }
+  }, []);
 
   const { scheduleHeader, scheduleItems } = useMemo(() => {
     const items = schedule.data ?? [];
@@ -113,6 +191,38 @@ export function MobileQueuePage({ engineerId }: Props) {
     return { scheduleHeader: null, scheduleItems: [] as typeof items };
   }, [schedule.data]);
 
+  // «Провисло»: без причины и давно без движения — те же пороги, что жёлтый на доске.
+  // received исключаем: для непочатой заявки кнопки «готово/запчасть» бессмысленны
+  // (и «Готово к выдаче» сервер для received не пускает).
+  const stuckCards = useMemo(
+    () =>
+      (myTickets.data ?? [])
+        .filter(
+          (c) =>
+            c.effectiveReason == null &&
+            c.light !== 'green' &&
+            !reactedIds.has(c.id) &&
+            (c.status === 'diagnostics' || c.status === 'in_progress'),
+        )
+        .sort((a, b) => b.stuckDays - a.stuckDays),
+    [myTickets.data, reactedIds],
+  );
+  /** Причина простоя по id заявки — чип в общем списке. */
+  const reasonById = useMemo(() => {
+    const m = new Map<string, { short: string; light: 'green' | 'yellow' | 'red' }>();
+    for (const c of myTickets.data ?? []) {
+      if (c.effectiveReason) {
+        m.set(c.id, { short: BLOCKED_REASON_META[c.effectiveReason].short, light: c.light });
+      }
+    }
+    return m;
+  }, [myTickets.data]);
+
+  const todayCount = scheduleHeader === 'Сегодня по графику' ? scheduleItems.length : 0;
+  const inWorkCount = (myTickets.data ?? []).filter(
+    (c) => c.status === 'in_progress' || c.status === 'diagnostics',
+  ).length;
+
   // Подсчёт «новых» назначений с прошлого визита для тоста
   const [seenCount, setSeenCount] = useState<number>(() => {
     const v = localStorage.getItem(`m-queue-seen-${engineerId}`);
@@ -122,10 +232,6 @@ export function MobileQueuePage({ engineerId }: Props) {
     () => Math.max(0, (list.data?.total ?? 0) - seenCount),
     [list.data?.total, seenCount],
   );
-  useEffect(() => {
-    if (list.data?.total !== undefined && newCount === 0) return;
-    // ничего не делаем — просто отображаем; пользователь сбрасывает «как прочитано» открытием карточки
-  }, [list.data?.total, newCount]);
 
   const markSeen = () => {
     if (list.data?.total !== undefined) {
@@ -161,7 +267,10 @@ export function MobileQueuePage({ engineerId }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => void list.refetch()}
+          onClick={() => {
+            void list.refetch();
+            void myTickets.refetch();
+          }}
           className="text-muted-foreground hover:text-foreground hover:bg-muted grid h-9 w-9 place-items-center rounded transition"
           aria-label="Обновить"
           disabled={list.isFetching}
@@ -175,6 +284,19 @@ export function MobileQueuePage({ engineerId }: Props) {
       </div>
 
       <PushToggle />
+
+      {(todayCount > 0 || inWorkCount > 0 || stuckCards.length > 0) && (
+        <div className="bg-primary/8 border-primary/20 mx-3 mt-3 flex items-start gap-2 rounded-lg border px-3 py-2">
+          <Sparkles className="text-primary mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-foreground/80 text-xs leading-relaxed">
+            Сегодня: {todayCount > 0 ? `выездов — ${todayCount}, ` : ''}в работе — {inWorkCount}
+            {stuckCards.length > 0
+              ? `, провисло — ${stuckCards.length} (ответьте кнопкой ниже)`
+              : ''}
+            .
+          </p>
+        </div>
+      )}
 
       {newCount > 0 && (
         <button
@@ -240,6 +362,70 @@ export function MobileQueuePage({ engineerId }: Props) {
         </section>
       )}
 
+      {stuckCards.length > 0 && (
+        <section className="px-3 pt-3">
+          <div className="mb-2 flex items-center gap-2">
+            <AlertTriangle className="text-destructive h-4 w-4" />
+            <h2 className="text-destructive text-sm font-semibold">
+              Провисло — ответьте одной кнопкой
+            </h2>
+          </div>
+          <ul className="space-y-2">
+            {stuckCards.map((c) => (
+              <li
+                key={c.id}
+                className="bg-destructive/5 border-destructive/25 rounded-lg border p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold">{c.ticketNumber}</span>
+                  <span className="bg-destructive/10 text-destructive rounded-full px-2 py-0.5 text-[10px] font-medium">
+                    стоит {c.stuckDays} дн
+                  </span>
+                </div>
+                {c.assetModel && (
+                  <div className="mt-1 text-sm font-medium">{c.assetModel}</div>
+                )}
+                <div className="text-destructive/80 mt-0.5 mb-2.5 text-xs">
+                  причина не указана — что происходит?
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={busyTicket === c.id}
+                    onClick={() => void onReact(c.id, 'inwork')}
+                    className="bg-card hover:bg-muted/50 h-11 w-full rounded-lg border text-sm font-semibold transition disabled:opacity-50"
+                  >
+                    Ещё в работе
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyTicket === c.id}
+                    onClick={() => void onReact(c.id, 'ready')}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 w-full rounded-lg text-sm font-semibold transition disabled:opacity-50"
+                  >
+                    Готово к выдаче
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyTicket === c.id}
+                    onClick={() => void onReact(c.id, 'part')}
+                    className="bg-accent text-accent-foreground hover:bg-accent/90 h-11 w-full rounded-lg text-sm font-semibold transition disabled:opacity-50"
+                  >
+                    Жду запчасть
+                  </button>
+                  <Link
+                    href={`/m/tickets/${c.id}`}
+                    className="text-primary py-1 text-center text-xs font-medium"
+                  >
+                    Другое — открыть заявку
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {list.isLoading && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -268,6 +454,7 @@ export function MobileQueuePage({ engineerId }: Props) {
         {list.data?.items.map((t) => {
           const overdue =
             t.deadlineAt && new Date(t.deadlineAt).getTime() < Date.now() && t.status !== 'closed';
+          const reason = reasonById.get(t.id);
           return (
             <li key={t.id}>
               <Link
@@ -292,6 +479,18 @@ export function MobileQueuePage({ engineerId }: Props) {
                         )}
                       >
                         {PRIORITY_BADGE[t.priority].label}
+                      </span>
+                    )}
+                    {reason && (
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                          reason.light === 'red'
+                            ? 'bg-destructive/10 text-destructive'
+                            : 'bg-warning/15 text-warning',
+                        )}
+                      >
+                        {reason.short}
                       </span>
                     )}
                   </div>
@@ -327,6 +526,19 @@ export function MobileQueuePage({ engineerId }: Props) {
           );
         })}
       </ul>
+
+      {toast && (
+        <div
+          className={cn(
+            'fixed inset-x-3 bottom-24 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg',
+            toast.kind === 'ok' && 'bg-success text-white',
+            toast.kind === 'queued' && 'bg-warning text-white',
+            toast.kind === 'error' && 'bg-destructive text-white',
+          )}
+        >
+          {toast.text}
+        </div>
+      )}
     </div>
   );
 }
