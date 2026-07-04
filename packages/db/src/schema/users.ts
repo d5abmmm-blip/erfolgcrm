@@ -3,6 +3,7 @@
  * username уникален в рамках (tenant_id, username), не глобально.
  * email опционален (для восстановления пароля + приглашений).
  */
+import { sql } from 'drizzle-orm';
 import { bigint, boolean, jsonb, pgEnum, pgTable, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { encryptedText, fkUuid, pk, tenantId, timestamps } from './_shared';
 
@@ -39,6 +40,12 @@ export const users = pgTable(
     phone: varchar('phone', { length: 50 }),
 
     /**
+     * Привязка к Telegram-чату tenant-бота (нуджи инженерам с кнопками).
+     * NULL — не привязан. Уникален в рамках tenant'а (частичный индекс).
+     */
+    telegramChatId: bigint('telegram_chat_id', { mode: 'bigint' }),
+
+    /**
      * Этап 8.C — Внутренняя ставка инженера за один час (копейки).
      * Используется для snapshot cost_per_unit в work_order_lines.
      * Для не-engineer ролей значение игнорируется (хранится 0 по умолчанию).
@@ -64,6 +71,10 @@ export const users = pgTable(
     uniqueIndex('users_tenant_username_unique').on(t.tenantId, t.username),
     // Email уникален в рамках tenant'а если задан
     uniqueIndex('users_tenant_email_unique').on(t.tenantId, t.email),
+    // Один Telegram-чат — один сотрудник в рамках tenant'а
+    uniqueIndex('users_tenant_telegram_chat_unique')
+      .on(t.tenantId, t.telegramChatId)
+      .where(sql`telegram_chat_id IS NOT NULL`),
   ],
 );
 

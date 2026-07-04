@@ -63,7 +63,14 @@ describe('telegram handler full flow', () => {
     const fetchSpy = stubFetch();
     const ctx = {
       db: getDb(),
-      tenant: { id: erfolgId, subdomain: 'erfolg', kmsKeyId: erfolgKmsKeyId },
+      tenant: {
+        id: erfolgId,
+        subdomain: 'erfolg',
+        displayName: 'erfolg',
+        status: 'active' as const,
+        timezone: 'Europe/Moscow',
+        kmsKeyId: erfolgKmsKeyId,
+      },
       botToken: FAKE_TOKEN,
       defaultDispatcherUserId: null,
     };
@@ -102,7 +109,14 @@ describe('telegram handler full flow', () => {
     stubFetch();
     const ctx = {
       db: getDb(),
-      tenant: { id: erfolgId, subdomain: 'erfolg', kmsKeyId: erfolgKmsKeyId },
+      tenant: {
+        id: erfolgId,
+        subdomain: 'erfolg',
+        displayName: 'erfolg',
+        status: 'active' as const,
+        timezone: 'Europe/Moscow',
+        kmsKeyId: erfolgKmsKeyId,
+      },
       botToken: FAKE_TOKEN,
       defaultDispatcherUserId: null,
     };
@@ -129,7 +143,14 @@ describe('telegram handler full flow', () => {
     const fetchSpy = stubFetch();
     const ctx = {
       db: getDb(),
-      tenant: { id: erfolgId, subdomain: 'erfolg', kmsKeyId: erfolgKmsKeyId },
+      tenant: {
+        id: erfolgId,
+        subdomain: 'erfolg',
+        displayName: 'erfolg',
+        status: 'active' as const,
+        timezone: 'Europe/Moscow',
+        kmsKeyId: erfolgKmsKeyId,
+      },
       botToken: FAKE_TOKEN,
       defaultDispatcherUserId: null,
     };

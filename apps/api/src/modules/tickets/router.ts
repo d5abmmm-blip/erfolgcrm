@@ -30,9 +30,11 @@ import {
   cancelTicketCmd,
   changeStatusCmd,
   createTicketCmd,
+  engineerReactCmd,
   getTicketQuery,
   listEventsQuery,
   listTicketsQuery,
+  myTicketsQuery,
   myWeeklyScheduleQuery,
   recordPrintEventCmd,
   reopenTicketCmd,
@@ -129,6 +131,44 @@ export const ticketsRouter = router({
         .optional(),
     )
     .query(({ ctx, input }) => listTicketsQuery(ctx.db, ctx.tenant, input ?? {})),
+
+  /**
+   * «Мои заявки» для PWA инженера: тот же список, но engineerId жёстко = я.
+   * list остаётся staff-only (там фильтры по любому инженеру/клиенту).
+   */
+  myList: engineerProcedure
+    .input(
+      z
+        .object({
+          statuses: z.array(TicketStatus).optional(),
+          page: z.number().int().positive().max(1000).optional(),
+          pageSize: z.number().int().positive().max(200).optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) =>
+      listTicketsQuery(ctx.db, ctx.tenant, {
+        ...(input ?? {}),
+        engineerId: ctx.session.userId,
+      }),
+    ),
+
+  /** «Мой день»: мои активные заявки с полями доски (stuckDays / светофор / причина). */
+  myTickets: engineerProcedure.query(({ ctx }) =>
+    myTicketsQuery(ctx.db, ctx.tenant, ctx.session.userId),
+  ),
+
+  /** Реакция одной кнопкой (Мой день / web-push / Telegram-паритет). */
+  engineerReact: engineerProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        action: z.enum(['inwork', 'ready', 'part']),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      engineerReactCmd(buildCmdCtx(ctx), input.ticketId, input.action),
+    ),
 
   get: engineerProcedure
     .input(z.object({ id: z.string().uuid() }))

@@ -27,7 +27,9 @@ export type MutationKind =
   // не сетевая, поэтому при синке мутация пометится как failedHard и не повторится.
   | 'inventoryMovements.issueToWorkOrder'
   // Этап 5: запись о выполненном ТО.
-  | 'maintenance.recordPerformed';
+  | 'maintenance.recordPerformed'
+  // «Мой день»: реакция инженера одной кнопкой (ещё в работе / готово / жду запчасть).
+  | 'tickets.engineerReact';
 
 export interface OutboxItem<P = unknown> {
   id: string;

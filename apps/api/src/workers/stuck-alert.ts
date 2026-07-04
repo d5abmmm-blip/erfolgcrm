@@ -14,6 +14,7 @@ import { getDb, tenants, users, withTenantTx } from '@erfolg/db';
 import { logger } from '../lib/logger';
 import { getQueue, registerWorker } from '../lib/queue';
 import { getRedis } from '../lib/redis';
+import { getUnansweredCount } from '../lib/nudge-state';
 import { enqueuePushToUser } from '../modules/notifications';
 import { BLOCKED_REASON_LABEL_RU, boardTickets } from '../modules/tickets/repository';
 
@@ -73,6 +74,10 @@ export async function processStuckAlertTick(): Promise<TickStats> {
       const reason = t.effectiveReason
         ? BLOCKED_REASON_LABEL_RU[t.effectiveReason]
         : 'причина не указана';
+      // Эскалация второго уровня: если инженера уже нуджили и он молчит — говорим об этом менеджеру.
+      const unanswered = await getUnansweredCount(tenantId, t.id);
+      const escalation =
+        unanswered > 0 ? ` Инженер не ответил на ${unanswered} напоминани${unanswered === 1 ? 'е' : 'я'}.` : '';
       for (const userId of staff) {
         try {
           await enqueuePushToUser({
@@ -80,7 +85,7 @@ export async function processStuckAlertTick(): Promise<TickStats> {
             userId,
             payload: {
               title: `Застряла заявка ${t.ticketNumber}`,
-              body: `${t.assetModel ?? 'Техника'} стоит ${t.stuckDays} дн — ${reason}. Проверьте на доске.`,
+              body: `${t.assetModel ?? 'Техника'} стоит ${t.stuckDays} дн — ${reason}.${escalation} Проверьте на доске.`,
               url: '/board',
               tag: `stuck-${t.id}`,
               data: { ticketId: t.id, ticketNumber: t.ticketNumber, kind: 'stuck' },

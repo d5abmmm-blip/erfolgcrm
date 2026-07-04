@@ -393,6 +393,13 @@
       "when": 1778500300000,
       "tag": "0064_ai_daily_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1778500400000,
+      "tag": "0065_users_telegram_chat_id",
+      "breakpoints": true
     }
   ]
 }
