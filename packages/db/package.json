@@ -20,7 +20,8 @@
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
-    "setup-rls": "tsx src/setup-rls.ts"
+    "setup-rls": "tsx src/setup-rls.ts",
+    "import-repair-archive": "tsx src/import-repair-archive.ts"
   },
   "dependencies": {
     "argon2": "^0.41.1",

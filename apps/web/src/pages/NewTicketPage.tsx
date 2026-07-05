@@ -17,6 +17,7 @@ import {
   type TemplateDefaults,
 } from '../components/TicketTemplatePicker';
 import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
+import { RepairArchiveBlock } from '../components/RepairArchiveBlock';
 import { cn } from '../lib/utils';
 
 interface FormValues {
@@ -122,6 +123,17 @@ export function NewTicketPage() {
     ? (selectedAsset.data?.deviceType ?? null)
     : addingAsset
       ? (naModel?.deviceType ?? null)
+      : null;
+
+  // AI-диагностика по симптому: живая подсказка «похожие ремонты» под полем симптома.
+  const me = trpc.auth.me.useQuery();
+  const canSummarizeArchive =
+    me.data?.user.role === 'director' || me.data?.user.role === 'dispatcher';
+  const watchedSymptom = form.watch('symptom');
+  const archiveModel = assetId
+    ? (selectedAsset.data?.model ?? null)
+    : addingAsset
+      ? (naModel?.model ?? null)
       : null;
 
   // Сброс зависимых полей при смене клиента
@@ -454,6 +466,12 @@ export function NewTicketPage() {
             {...form.register('symptom', { required: true })}
             placeholder="«При включении монитор показывает заставку, после чего гаснет…»"
             className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <RepairArchiveBlock
+            symptom={watchedSymptom}
+            model={archiveModel}
+            canSummarize={canSummarizeArchive}
+            className="mt-3"
           />
         </div>
 

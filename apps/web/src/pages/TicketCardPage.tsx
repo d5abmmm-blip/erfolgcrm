@@ -42,6 +42,7 @@ import { TicketPayments } from '../components/TicketPayments';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { IntakeChecklistDialog, type ChecklistKind } from '../components/IntakeChecklistDialog';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
+import { RepairArchiveBlock } from '../components/RepairArchiveBlock';
 import { ExplainBlockPanel } from '../components/ExplainBlockPanel';
 import { TicketKpBlock } from '../components/TicketKpBlock';
 import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeEmailModal';
@@ -643,6 +644,8 @@ export function TicketCardPage() {
           {isStaff && t.status !== 'closed' && t.status !== 'cancelled' && (
             <ExplainBlockPanel ticketId={t.id} />
           )}
+
+          <RepairArchiveBlock ticketId={t.id} canSummarize={isStaff} autoSummary />
 
           <SimilarCasesBlock ticketId={t.id} excludeTicketId={t.id} />
         </aside>
