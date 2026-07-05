@@ -8,7 +8,7 @@
  * «Входящие» наполнятся после подключения приёма по IMAP (Этап B) — папка уже готова.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import {
   Ban,
   ChevronLeft,
@@ -28,6 +28,8 @@ import {
   Send,
   Settings,
   ShieldAlert,
+  Sparkles,
+  Ticket,
   Trash2,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
@@ -518,7 +520,9 @@ function MessageReader({
 }) {
   const thread = trpc.email.thread.useQuery({ messageId: id });
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [aiReplyLoading, setAiReplyLoading] = useState(false);
   const markRead = trpc.email.markRead.useMutation({
     onSuccess: async () => {
       await utils.email.unreadCount.invalidate();
@@ -597,6 +601,36 @@ function MessageReader({
       relatedClientId: selected.relatedClientId ?? undefined,
     });
 
+  // «Создать заявку из письма» — переходим на форму новой заявки, она сама подтянет
+  // ИИ-черновик (клиент/техника/симптом) по id письма из query-параметра.
+  const onCreateTicketClick = () => navigate(`/tickets/new?fromEmail=${selected.id}`);
+
+  // «ИИ-ответ» — сервер формулирует вежливый ответ клиенту (или шаблон без LLM),
+  // открываем его в окне написания как обычный ответ (цитата исходного письма ниже).
+  const onAiReplyClick = async () => {
+    setAiReplyLoading(true);
+    try {
+      const draft = await utils.email.draftReply.fetch({ emailId: selected.id });
+      onReply({
+        title: 'Ответить (ИИ)',
+        to: replyTo ?? undefined,
+        subject: replySubject(subject),
+        body:
+          draft.text +
+          buildReplyBody({ from: selected.from, date: replyDate, bodyText: selected.bodyText }),
+        inReplyTo: selected.messageId ?? undefined,
+        references: buildReferences(selected.references, selected.messageId),
+        relatedTicketId: selected.relatedTicketId ?? undefined,
+        relatedClientId: selected.relatedClientId ?? undefined,
+      });
+    } catch {
+      // Мягкая деградация: если ИИ-черновик не пришёл — обычный ответ с цитатой.
+      onReplyClick();
+    } finally {
+      setAiReplyLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b p-3">
@@ -609,6 +643,32 @@ function MessageReader({
           <ChevronLeft className="h-4 w-4" />
         </button>
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{subject ?? '(без темы)'}</h2>
+        {selInbound && (
+          <button
+            type="button"
+            onClick={onCreateTicketClick}
+            className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition"
+          >
+            <Ticket className="h-3.5 w-3.5" />
+            Создать заявку
+          </button>
+        )}
+        {selInbound && (
+          <button
+            type="button"
+            onClick={() => void onAiReplyClick()}
+            disabled={aiReplyLoading}
+            className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            title="ИИ подготовит ответ клиенту"
+          >
+            {aiReplyLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            ИИ-ответ
+          </button>
+        )}
         <button
           type="button"
           onClick={onReplyClick}

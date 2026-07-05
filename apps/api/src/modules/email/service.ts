@@ -14,12 +14,17 @@ import { tryJournalEmail } from '../../lib/email-journal';
 import { writeAudit } from '../../lib/audit';
 import { logger } from '../../lib/logger';
 import { getObjectStorage } from '../../lib/object-storage';
+import type { RepairType, TicketPriority } from '@erfolg/shared';
 import {
   finalizeMessageSend,
+  findClientByEmail,
+  getClientBrief,
   getConfig,
   getMessage,
   getThread,
+  getTicketNumberById,
   getTransportConfig,
+  linkMessageToTicket,
   listAttachments,
   listMessages,
   markRead,
@@ -30,6 +35,7 @@ import {
   unreadCount,
   upsertConfig,
   upsertOutbox,
+  type ClientBriefRow,
   type EmailConfigDto,
   type EmailFolder,
   type EmailMessageDto,
@@ -38,6 +44,14 @@ import {
 } from './repository';
 import { fetchInbox, type FetchResult } from './imap';
 import { computeThreadId, normalizeReferences } from './thread';
+import {
+  buildDeviceHint,
+  cleanSymptomFromBody,
+  draftReplyText,
+  extractTicketDraftFromEmail,
+  parseEmailAddress,
+  stripHtmlToText,
+} from './ai-draft';
 import { cancelScheduledSend, enqueueScheduledSend } from '../../workers/email-scheduled';
 
 export interface SendEmailInput {
@@ -467,4 +481,129 @@ export function unreadCountQuery(db: Db, tenant: ResolvedTenant): Promise<number
 /** Ручной приём входящих (кнопка «Проверить почту»). */
 export function fetchInboxNow(db: Db, tenant: ResolvedTenant): Promise<FetchResult> {
   return fetchInbox(db, tenant.id);
+}
+
+/* ─────────────────────────── Заявка из письма ─────────────────────────── */
+
+/** Черновик заявки, собранный из письма (для префилла формы новой заявки). */
+export interface EmailTicketDraftDto {
+  emailId: string;
+  from: string | null;
+  subject: string | null;
+  receivedAt: Date | null;
+  /** Клиент, определённый детерминированно (по адресу отправителя), без ИИ. */
+  client: ClientBriefRow | null;
+  /** Симптом: из ИИ-разбора либо из текста письма (фолбэк). */
+  symptom: string;
+  /** Готовая подсказка по технике для баннера («УЗИ · Mindray DC-70 · сер. …»). */
+  deviceHint: string | null;
+  device: {
+    manufacturer: string | null;
+    model: string | null;
+    deviceType: string | null;
+    serialNumber: string | null;
+  } | null;
+  repairType: RepairType;
+  priority: TicketPriority;
+  /** Уже связанная заявка (номер в теме при приёме / создана ранее из письма). */
+  linkedTicket: { id: string; number: string } | null;
+  /** true — черновик разобрал ИИ (значит текст письма отправлялся в ИИ → плашка 152-ФЗ). */
+  aiUsed: boolean;
+}
+
+/**
+ * Собрать черновик заявки из письма. Клиент определяется БЕЗ ИИ (по адресу отправителя),
+ * техника и симптом — через ИИ (с деградацией: симптом из текста письма, если ИИ недоступен).
+ */
+export async function draftTicketFromEmailQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  emailId: string,
+): Promise<EmailTicketDraftDto> {
+  const key = getTenantEncryptionKey(tenant);
+  const msg = await getMessage(db, tenant.id, key, emailId);
+  if (!msg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Письмо не найдено.' });
+
+  // Клиент — детерминированно: сперва привязанный при приёме, иначе по адресу отправителя.
+  let client: ClientBriefRow | null = msg.relatedClientId
+    ? await getClientBrief(db, tenant.id, msg.relatedClientId)
+    : null;
+  if (!client) {
+    const addr = parseEmailAddress(msg.from);
+    if (addr) client = await findClientByEmail(db, tenant.id, addr);
+  }
+
+  // Уже связанная заявка (по номеру в теме при приёме или создана ранее из письма).
+  let linkedTicket: { id: string; number: string } | null = null;
+  if (msg.relatedTicketId) {
+    const number = await getTicketNumberById(db, tenant.id, msg.relatedTicketId);
+    if (number) linkedTicket = { id: msg.relatedTicketId, number };
+  }
+
+  const bodyForAi = (msg.bodyText && msg.bodyText.trim()) || stripHtmlToText(msg.bodyHtml);
+  const extracted = bodyForAi
+    ? await extractTicketDraftFromEmail(db, tenant, { subject: msg.subject, body: bodyForAi })
+    : null;
+
+  const symptom =
+    (extracted?.symptom && extracted.symptom.trim()) ||
+    cleanSymptomFromBody(msg.bodyText, msg.bodyHtml);
+
+  const hasDevice =
+    extracted != null &&
+    Boolean(
+      extracted.manufacturer || extracted.model || extracted.deviceType || extracted.serialNumber,
+    );
+  const device = hasDevice
+    ? {
+        manufacturer: extracted.manufacturer,
+        model: extracted.model,
+        deviceType: extracted.deviceType,
+        serialNumber: extracted.serialNumber,
+      }
+    : null;
+
+  return {
+    emailId: msg.id,
+    from: msg.from,
+    subject: msg.subject,
+    receivedAt: msg.receivedAt ?? msg.createdAt ?? null,
+    client,
+    symptom,
+    deviceHint: device ? buildDeviceHint(device) : null,
+    device,
+    repairType: extracted?.repairType ?? 'paid',
+    priority: extracted?.priority ?? 'normal',
+    linkedTicket,
+    aiUsed: extracted != null,
+  };
+}
+
+/** ИИ-черновик ответа клиенту на его письмо (text всегда заполнен; aiUsed — сформулировал ли ИИ). */
+export async function draftReplyQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  emailId: string,
+): Promise<{ text: string; aiUsed: boolean }> {
+  const key = getTenantEncryptionKey(tenant);
+  const msg = await getMessage(db, tenant.id, key, emailId);
+  if (!msg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Письмо не найдено.' });
+  const body = (msg.bodyText && msg.bodyText.trim()) || stripHtmlToText(msg.bodyHtml);
+  return draftReplyText(db, tenant, { subject: msg.subject, body });
+}
+
+/** Привязать письмо к созданной из него заявке (для отметки «✓ Заявка T-…»). */
+export async function linkTicketCmd(
+  ctx: CmdCtx,
+  input: { emailId: string; ticketId: string },
+): Promise<{ ok: true }> {
+  // Заявка должна принадлежать текущему tenant'у: RLS-scoped SELECT вернёт null для чужой
+  // или несуществующей — так письмо нельзя привязать к заявке другого tenant'а (целостность).
+  const ticketNumber = await getTicketNumberById(ctx.db, ctx.tenant.id, input.ticketId);
+  if (!ticketNumber) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена.' });
+  await linkMessageToTicket(ctx.db, ctx.tenant.id, {
+    messageId: input.emailId,
+    ticketId: input.ticketId,
+  });
+  return { ok: true };
 }
