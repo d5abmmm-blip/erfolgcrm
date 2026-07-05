@@ -6,6 +6,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { pinoHttp } from 'pino-http';
+import type { IncomingMessage } from 'node:http';
 import { sql } from 'drizzle-orm';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { appRouter } from './trpc/router';
@@ -94,7 +95,23 @@ app.use(
     allowedHeaders: ['Content-Type', 'X-Tenant-Subdomain'],
   }),
 );
-app.use(pinoHttp({ logger }));
+app.use(
+  pinoHttp({
+    logger,
+    // Не логируем query-string целиком: в ней едет input tRPC-GET-запросов (в т.ч.
+    // секретный публичный трек-токен /track). Глоб-redact ('*.token') не ловит токен,
+    // когда он — подстрока внутри req.url, поэтому режем query на уровне сериализатора.
+    serializers: {
+      req(req: IncomingMessage & { id?: number | string }) {
+        return {
+          id: req.id,
+          method: req.method,
+          url: (req.url ?? '').split('?')[0],
+        };
+      },
+    },
+  }),
+);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', ts: new Date().toISOString() });

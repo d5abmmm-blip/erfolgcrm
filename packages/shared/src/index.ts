@@ -226,3 +226,176 @@ export type RoadmapCategory = z.infer<typeof RoadmapCategory>;
 
 export const RoadmapPriority = z.enum(['high', 'medium', 'low']);
 export type RoadmapPriority = z.infer<typeof RoadmapPriority>;
+
+/* ─────────────────── Трек ремонта «как посылка» (фича №3) ─────────────────── */
+
+/**
+ * Клиентские стадии трека — понятная клиенту «дорожка» ремонта (как этапы доставки
+ * посылки). 8 внутренних статусов заявки «складываются» в 6 стадий: estimate+approval
+ * = одна стадия «Согласование сметы», cancelled — отдельная концовка (не стадия).
+ */
+export type TrackStageKey =
+  | 'received'
+  | 'diagnostics'
+  | 'approval'
+  | 'repair'
+  | 'ready'
+  | 'issued';
+
+export interface TrackStageDef {
+  key: TrackStageKey;
+  /** Подпись, которую видит клиент. */
+  label: string;
+  /** Короткое пояснение под подписью. */
+  description: string;
+}
+
+/** Порядок стадий трека (как этапы доставки посылки). Источник истины подписей. */
+export const TRACK_STAGES: readonly TrackStageDef[] = [
+  { key: 'received', label: 'Приняли технику', description: 'Заявка зарегистрирована' },
+  { key: 'diagnostics', label: 'Диагностика', description: 'Ищем причину неисправности' },
+  { key: 'approval', label: 'Согласование сметы', description: 'Согласовываем стоимость работ' },
+  { key: 'repair', label: 'Ремонт', description: 'Инженер выполняет работы' },
+  { key: 'ready', label: 'Готово к выдаче', description: 'Можно забирать' },
+  { key: 'issued', label: 'Техника выдана', description: 'Ремонт завершён' },
+];
+
+/**
+ * Внутренний статус заявки → индекс клиентской стадии трека.
+ * cancelled → null (обрабатывается отдельно как «Заявка отменена»).
+ */
+export function ticketStatusToTrackIndex(status: TicketStatus): number | null {
+  switch (status) {
+    case 'received':
+      return 0;
+    case 'diagnostics':
+      return 1;
+    case 'estimate':
+    case 'approval':
+      return 2;
+    case 'in_progress':
+      return 3;
+    case 'act_pending':
+      return 4;
+    case 'closed':
+      return 5;
+    case 'cancelled':
+      return null;
+    default:
+      return 0;
+  }
+}
+
+export type TrackStageState = 'done' | 'current' | 'upcoming';
+
+export interface TrackTimelineStage extends TrackStageDef {
+  state: TrackStageState;
+  /** ISO-дата достижения стадии (если известна из событий); иначе null. */
+  at: string | null;
+}
+
+export interface TrackTimelineEventInput {
+  type: string;
+  createdAt: string | Date;
+  payload?: unknown;
+}
+
+export interface BuildTrackTimelineInput {
+  status: TicketStatus;
+  receivedAt: string | Date;
+  closedAt?: string | Date | null;
+  cancelledAt?: string | Date | null;
+  waitingForPart?: boolean;
+  events?: TrackTimelineEventInput[];
+}
+
+export interface TrackTimeline {
+  cancelled: boolean;
+  cancelledAt: string | null;
+  /** Индекс текущей стадии (−1 если заявка отменена). */
+  currentIndex: number;
+  stages: TrackTimelineStage[];
+  /**
+   * Ждём запчасть на текущей стадии (плашка в UI) — только ФАКТ, без текста заметки.
+   * Свободный текст waiting_for_part_note — внутренняя пометка для менеджера (поставщик/
+   * цена/контакт), клиенту он НЕ показывается (ни в кабинете, ни на публичном треке).
+   */
+  waitingForPart: boolean;
+}
+
+function trackToIso(v: string | Date | null | undefined): string | null {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Внутренний статус (из события status_change.payload.to) → ключ клиентской стадии. */
+const TRACK_STATUS_TO_KEY: Record<string, TrackStageKey> = {
+  received: 'received',
+  diagnostics: 'diagnostics',
+  estimate: 'approval',
+  approval: 'approval',
+  in_progress: 'repair',
+  act_pending: 'ready',
+  closed: 'issued',
+};
+
+/**
+ * Строит трек-таймлайн из статуса заявки и её событий. Чистая функция (юнит-тест):
+ * не читает БД, детерминирована. Даты стадий берём из событий смены статуса
+ * (первое достижение каждой стадии). Используется и в кабинете клиента, и на
+ * публичной странице по токену (там — на сервере, чтобы наружу уходил только
+ * технический таймлайн без ПДн).
+ */
+export function buildTrackTimeline(input: BuildTrackTimelineInput): TrackTimeline {
+  const cancelled = input.status === 'cancelled';
+  const isClosed = input.status === 'closed';
+  const currentIndex = cancelled ? -1 : ticketStatusToTrackIndex(input.status) ?? 0;
+
+  const stageAt: Record<TrackStageKey, string | null> = {
+    received: trackToIso(input.receivedAt),
+    diagnostics: null,
+    approval: null,
+    repair: null,
+    ready: null,
+    issued: trackToIso(input.closedAt ?? null),
+  };
+
+  for (const e of input.events ?? []) {
+    if (e.type !== 'status_change') continue;
+    const to = (e.payload as { to?: unknown } | undefined | null)?.to;
+    if (typeof to !== 'string') continue;
+    const key = TRACK_STATUS_TO_KEY[to];
+    if (!key) continue;
+    const iso = trackToIso(e.createdAt);
+    // Первое достижение стадии (события отсортированы по времени возрастания).
+    if (iso && !stageAt[key]) stageAt[key] = iso;
+  }
+
+  const stages: TrackTimelineStage[] = TRACK_STAGES.map((def, i) => {
+    let state: TrackStageState;
+    if (cancelled) {
+      state = stageAt[def.key] ? 'done' : 'upcoming';
+    } else if (isClosed) {
+      state = 'done';
+    } else if (i < currentIndex) {
+      state = 'done';
+    } else if (i === currentIndex) {
+      state = 'current';
+    } else {
+      state = 'upcoming';
+    }
+    // Дату показываем только у достигнутых стадий (done/current). У стадий «впереди»
+    // at=null, иначе откат статуса назад (act_pending→in_progress «на доделку», reopen)
+    // рисовал бы будущую стадию с прошедшей датой из старого события — противоречие.
+    return { ...def, state, at: state === 'upcoming' ? null : stageAt[def.key] };
+  });
+
+  return {
+    cancelled,
+    cancelledAt: trackToIso(input.cancelledAt ?? null),
+    currentIndex,
+    stages,
+    waitingForPart: Boolean(input.waitingForPart),
+  };
+}

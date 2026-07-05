@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useRoute } from 'wouter';
 import {
   Activity,
@@ -11,9 +11,12 @@ import {
   ChevronLeft,
   Circle,
   Clock,
+  Copy,
   FileText,
   FileWarning,
   History,
+  Link2,
+  Loader2,
   MapPin,
   Package,
   Phone,
@@ -401,6 +404,7 @@ export function TicketCardPage() {
               Написать письмо
             </button>
           )}
+          {isStaff && <TrackShareButton ticketId={t.id} />}
           <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
           <PrintBtn icon={FileWarning} label="Дефектный акт" onClick={() => void printDocument('defect_act', 'дефектный акт')} />
           <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
@@ -686,6 +690,187 @@ function PrintBtn({
       <Icon className="h-3.5 w-3.5" />
       {label}
     </button>
+  );
+}
+
+/**
+ * Кнопка «Ссылка для клиента» (фича №3 «Трек как посылку»).
+ * Выдаёт публичную ссылку /track/<token> — клиент видит стадию ремонта без логина.
+ * Диалог: показать/скопировать ссылку + отозвать её.
+ */
+function TrackShareButton({ ticketId }: { ticketId: string }) {
+  const [open, setOpen] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const getLink = trpc.tickets.getShareLink.useMutation();
+  const revoke = trpc.tickets.revokeShareLink.useMutation();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // a11y (норма кодовой базы, ср. ConfirmDialog): Escape закрывает, фокус заперт в модалке.
+  useEffect(() => {
+    if (!open) return;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (e.key === 'Tab' && rootRef.current) {
+        const f = rootRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        );
+        if (f.length === 0) return;
+        const first = f[0]!;
+        const last = f[f.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !rootRef.current.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  async function openDialog() {
+    setCopied(false);
+    setCopyFailed(false);
+    setLink(null);
+    setOpen(true);
+    try {
+      const res = await getLink.mutateAsync({ ticketId });
+      setLink(`${window.location.origin}/track/${res.token}`);
+    } catch {
+      /* ошибка показывается через getLink.isError */
+    }
+  }
+
+  async function copy() {
+    if (!link) return;
+    setCopyFailed(false);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Небезопасный контекст (http / старый вебвью) — выделяем поле для ручного Ctrl+C.
+      inputRef.current?.select();
+      setCopyFailed(true);
+    }
+  }
+
+  async function doRevoke() {
+    try {
+      await revoke.mutateAsync({ ticketId });
+      setOpen(false);
+    } catch {
+      /* ошибка отзыва — оставляем диалог открытым */
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void openDialog()}
+        disabled={getLink.isPending}
+        className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition disabled:opacity-50"
+      >
+        <Link2 className="h-3.5 w-3.5" />
+        Ссылка для клиента
+      </button>
+
+      {open && (
+        <div
+          ref={rootRef}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ссылка для клиента"
+        >
+          <div
+            className="bg-card w-full max-w-md rounded-lg border p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <Link2 className="text-primary h-4 w-4" />
+              <h3 className="text-sm font-semibold">Ссылка для клиента</h3>
+            </div>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Клиент откроет её и увидит стадию ремонта — как отслеживание посылки. Логин не
+              нужен. Можно отправить в письме или мессенджере.
+            </p>
+
+            {getLink.isPending && (
+              <div className="text-muted-foreground mt-4 flex items-center gap-2 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Готовим ссылку…
+              </div>
+            )}
+            {getLink.isError && (
+              <div className="text-destructive mt-4 text-sm">Не удалось получить ссылку.</div>
+            )}
+            {link && (
+              <div className="mt-4 flex items-center gap-2">
+                <input
+                  ref={inputRef}
+                  readOnly
+                  value={link}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="bg-muted/40 flex-1 rounded-md border px-2.5 py-1.5 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => void copy()}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+                >
+                  {copied ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {copied ? 'Скопировано' : 'Копировать'}
+                </button>
+              </div>
+            )}
+            {copyFailed && (
+              <div className="text-muted-foreground mt-2 text-xs">
+                Не удалось скопировать автоматически — выделите ссылку и нажмите Ctrl+C.
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => void doRevoke()}
+                disabled={revoke.isPending || !link}
+                className="text-destructive text-sm hover:underline disabled:opacity-50"
+              >
+                Отозвать ссылку
+              </button>
+              <button
+                ref={closeRef}
+                type="button"
+                onClick={() => setOpen(false)}
+                className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm transition"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
