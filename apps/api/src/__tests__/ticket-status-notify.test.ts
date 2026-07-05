@@ -7,7 +7,7 @@
  *   • processTicketStatusNotify — реально шлёт письмо (через мок mailer)
  *     и пропускает: (a) approval, (b) клиент без email, (c) ticket not found.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { clients, getDb, tenants, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
@@ -19,6 +19,7 @@ import {
 } from '../workers/ticket-status-notify';
 import {
   renderTicketStatusEmail,
+  shouldIncludeTrackLink,
   shouldNotifyClient,
 } from '../lib/email-templates/ticket-status';
 
@@ -140,10 +141,60 @@ describe('renderTicketStatusEmail', () => {
     expect(out.text).toContain('Клиент отказался');
     expect(out.text).toContain('не назначен');
   });
+
+  it('вставляет трек-ссылку (кнопку + текст) когда передан trackUrl', () => {
+    const url = 'https://crm.erfolgmt.ru/track/8f2a3c1d-0000-4000-8000-000000000abc';
+    const out = renderTicketStatusEmail({
+      ticketNumber: 'T-2026-000123',
+      newStatus: 'act_pending',
+      clientDisplayName: 'ООО Тест',
+      assetModel: 'УЗИ Mindray DC-70',
+      symptom: 'Не включается',
+      engineerFullName: 'Иванов И.И.',
+      cancelReason: null,
+      tenantDisplayName: 'ООО Эрфольг',
+      trackUrl: url,
+    });
+    expect(out.html).toContain(`href="${url}"`);
+    expect(out.html).toContain('Отследить ремонт онлайн');
+    expect(out.text).toContain(url);
+    expect(out.text).toContain('Отслеживать статус ремонта онлайн');
+  });
+
+  it('НЕ вставляет трек-блок когда trackUrl не передан', () => {
+    const out = renderTicketStatusEmail({
+      ticketNumber: 'T-2026-000124',
+      newStatus: 'act_pending',
+      clientDisplayName: 'ООО Тест',
+      assetModel: null,
+      symptom: null,
+      engineerFullName: null,
+      cancelReason: null,
+      tenantDisplayName: 'ООО Эрфольг',
+    });
+    expect(out.html).not.toContain('Отследить ремонт онлайн');
+    expect(out.html).not.toContain('/track/');
+    expect(out.text).not.toContain('/track/');
+  });
+});
+
+describe('shouldIncludeTrackLink', () => {
+  it('true для ключевых статусов (принята / ремонт / готова)', () => {
+    expect(shouldIncludeTrackLink('received')).toBe(true);
+    expect(shouldIncludeTrackLink('in_progress')).toBe(true);
+    expect(shouldIncludeTrackLink('act_pending')).toBe(true);
+  });
+  it('false для остальных (диагностика / смета / закрыта / отменена)', () => {
+    expect(shouldIncludeTrackLink('diagnostics')).toBe(false);
+    expect(shouldIncludeTrackLink('estimate')).toBe(false);
+    expect(shouldIncludeTrackLink('closed')).toBe(false);
+    expect(shouldIncludeTrackLink('cancelled')).toBe(false);
+  });
 });
 
 describe('processTicketStatusNotify (worker)', () => {
   beforeEach(clearTestData);
+  afterEach(() => vi.unstubAllEnvs());
 
   it('act_pending → отправляет письмо клиенту', async () => {
     const { id, ticketNumber } = await createTestTicket();
@@ -265,5 +316,65 @@ describe('processTicketStatusNotify (worker)', () => {
     expect(second.status).toBe('skipped');
     expect(second.reason).toBe('ready-already-notified');
     expect(sentMail.length).toBe(1);
+  });
+
+  it('трек-ссылка: act_pending с заданным API_PUBLIC_URL → письмо содержит /track/<token>', async () => {
+    vi.stubEnv('API_PUBLIC_URL', 'https://crm.erfolgmt.ru');
+    const { id } = await createTestTicket();
+    const result = await processTicketStatusNotify({
+      tenantId: erfolgId,
+      ticketId: id,
+      oldStatus: 'in_progress',
+      newStatus: 'act_pending',
+    });
+    expect(result.status).toBe('sent');
+    // токен создан и сохранён на заявке
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ token: tickets.publicTrackToken }).from(tickets).where(eq(tickets.id, id)),
+    );
+    expect(row?.token).toBeTruthy();
+    const sent = sentMail[0]!;
+    expect(sent.html).toContain(`https://crm.erfolgmt.ru/track/${row!.token}`);
+    expect(sent.html).toContain('Отследить ремонт онлайн');
+    expect(sent.text).toContain(`https://crm.erfolgmt.ru/track/${row!.token}`);
+  });
+
+  it('трек-ссылка: in_progress тоже получает ссылку', async () => {
+    vi.stubEnv('API_PUBLIC_URL', 'https://crm.erfolgmt.ru');
+    const { id } = await createTestTicket();
+    const result = await processTicketStatusNotify({
+      tenantId: erfolgId,
+      ticketId: id,
+      oldStatus: 'diagnostics',
+      newStatus: 'in_progress',
+    });
+    expect(result.status).toBe('sent');
+    expect(sentMail[0]?.html).toContain('/track/');
+  });
+
+  it('трек-ссылка: diagnostics — письмо есть, но БЕЗ ссылки (не ключевой статус)', async () => {
+    vi.stubEnv('API_PUBLIC_URL', 'https://crm.erfolgmt.ru');
+    const { id } = await createTestTicket();
+    const result = await processTicketStatusNotify({
+      tenantId: erfolgId,
+      ticketId: id,
+      oldStatus: 'received',
+      newStatus: 'diagnostics',
+    });
+    expect(result.status).toBe('sent');
+    expect(sentMail[0]?.html).not.toContain('/track/');
+  });
+
+  it('трек-ссылка: без API_PUBLIC_URL письмо уходит без ссылки (деградация)', async () => {
+    vi.stubEnv('API_PUBLIC_URL', '');
+    const { id } = await createTestTicket();
+    const result = await processTicketStatusNotify({
+      tenantId: erfolgId,
+      ticketId: id,
+      oldStatus: 'in_progress',
+      newStatus: 'act_pending',
+    });
+    expect(result.status).toBe('sent');
+    expect(sentMail[0]?.html).not.toContain('/track/');
   });
 });

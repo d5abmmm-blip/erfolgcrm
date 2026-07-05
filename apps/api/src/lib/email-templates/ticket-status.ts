@@ -28,6 +28,18 @@ export function shouldNotifyClient(status: TicketStatus): boolean {
   return NOTIFY_STATUSES.has(status);
 }
 
+/**
+ * В какие письма вставляем публичную трек-ссылку. По решению владельца — только
+ * ключевые статусы, где отслеживание клиенту актуально: заявка принята, идёт
+ * ремонт, готова к выдаче. В диагностике/смете рано, в закрыта/отменена — уже
+ * поздно (ремонт завершён), чтобы не плодить ссылки без пользы.
+ */
+const TRACK_LINK_STATUSES = new Set<TicketStatus>(['received', 'in_progress', 'act_pending']);
+
+export function shouldIncludeTrackLink(status: TicketStatus): boolean {
+  return TRACK_LINK_STATUSES.has(status);
+}
+
 const STATUS_LABELS: Record<TicketStatus, string> = {
   received: 'Заявка принята',
   diagnostics: 'Приступили к диагностике',
@@ -52,6 +64,8 @@ export interface RenderArgs {
   engineerFullName: string | null;
   cancelReason: string | null;
   tenantDisplayName: string;
+  /** Публичная ссылка отслеживания заявки. null → блок со ссылкой не рисуем. */
+  trackUrl?: string | null;
 }
 
 export interface RenderedEmail {
@@ -81,12 +95,16 @@ function buildPlainText(args: RenderArgs): string {
     args.newStatus === 'cancelled' && args.cancelReason
       ? `Причина отмены: ${args.cancelReason}`
       : null;
+  const trackLines = args.trackUrl
+    ? [``, `Отслеживать статус ремонта онлайн:`, args.trackUrl]
+    : null;
   return [
     `Здравствуйте, ${args.clientDisplayName}.`,
     ``,
     `Статус вашей заявки №${args.ticketNumber}${assetText} изменился на: ${statusLabel(args.newStatus)}.`,
     symptomLine,
     cancelLine,
+    ...(trackLines ?? []),
     engineerLine,
     ``,
     `С уважением,`,
@@ -116,6 +134,15 @@ function buildHtml(args: RenderArgs): string {
   const assetBlock = asset
     ? `<p style="margin:0 0 4px;color:#6b7280;font-size:13px">${asset}</p>`
     : '';
+  // Трек-ссылка «как посылку» — только если базовый адрес настроен (иначе пусто).
+  const trackBlock = args.trackUrl
+    ? [
+        `<div style="margin:18px 0 4px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;text-align:center">`,
+        `<div style="font-size:13px;color:#0c4a6e;margin-bottom:10px">Следите за ремонтом онлайн — как за посылкой</div>`,
+        `<a href="${escapeHtml(args.trackUrl)}" style="display:inline-block;padding:11px 22px;background:${BRAND_PRIMARY};color:#ffffff;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none">Отследить ремонт онлайн</a>`,
+        `</div>`,
+      ].join('')
+    : '';
 
   return [
     `<!doctype html><html lang="ru"><body style="margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827">`,
@@ -131,6 +158,7 @@ function buildHtml(args: RenderArgs): string {
     `<div style="display:inline-block;padding:8px 14px;background:${BRAND_ACCENT};color:#ffffff;border-radius:4px;font-weight:600">${status}</div>`,
     symptomBlock,
     cancelBlock,
+    trackBlock,
     `<p style="margin:16px 0 0;color:#374151"><strong>Назначенный инженер:</strong> ${engineer}</p>`,
     `</div>`,
     `<div style="border-top:1px solid #e5e7eb;padding:12px 20px;color:#6b7280;font-size:12px">`,
