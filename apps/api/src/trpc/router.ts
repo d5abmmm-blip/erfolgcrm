@@ -25,6 +25,7 @@ import { searchRouter } from '../modules/search';
 import { intakeChecklistsRouter } from '../modules/intake-checklists';
 import { ticketTemplatesRouter } from '../modules/ticket-templates';
 import { kbArticlesRouter } from '../modules/kb-articles';
+import { repairArchiveRouter } from '../modules/repair-archive';
 import { leadsRouter } from '../modules/leads';
 import { warrantiesRouter } from '../modules/warranties';
 import { ticketKpRouter } from '../modules/kp-versions';
@@ -81,6 +82,8 @@ export const appRouter = router({
   ticketTemplates: ticketTemplatesRouter,
   /** База знаний — внутренняя «вики» по моделям техники + блок «Похожие случаи». */
   kbArticles: kbArticlesRouter,
+  /** Архив ремонтов — AI-диагностика по симптому: похожие прошлые ремонты (без ПДн). */
+  repairArchive: repairArchiveRouter,
   /** Stage 10'.H — кабинет клиента. */
   clientAuth: clientAuthRouter,
   clientCabinet: clientCabinetRouter,

@@ -59,6 +59,7 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0062_enable_rls_user_device_skills.sql': 'user_device_skills',
   '0063_enable_rls_user_availability.sql': 'user_availability',
   '0064_enable_rls_ai_daily_summaries.sql': 'ai_daily_summaries',
+  '0066_enable_rls_repair_archive.sql': 'repair_archive',
 };
 
 async function main() {

@@ -36,6 +36,7 @@ export * from './client-cabinet';
 export * from './intake-checklists';
 export * from './ticket-templates';
 export * from './kb-articles';
+export * from './repair-archive';
 export * from './leads';
 export * from './warranties';
 export * from './kp-versions';
