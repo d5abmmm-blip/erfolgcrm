@@ -31,8 +31,11 @@ import { maskEmail } from '../lib/mask';
 import { sendMailForTenant } from '../modules/email/auto-send';
 import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
+import { getOrCreateTrackToken } from '../modules/tickets/repository';
+import { buildTrackUrl } from '../lib/public-url';
 import {
   renderTicketStatusEmail,
+  shouldIncludeTrackLink,
   shouldNotifyClient,
 } from '../lib/email-templates/ticket-status';
 
@@ -222,6 +225,24 @@ export async function processTicketStatusNotify(
   }
 
   const tenantName = await loadTenantDisplayName(payload.tenantId);
+
+  // Фича №1 (трек-ссылка в письме) — только для ключевых статусов
+  // (принята / ремонт / готова к выдаче). Токен идемпотентный: если менеджер уже
+  // выдавал ссылку клиенту — тот же токен; иначе создаётся здесь. Любой сбой
+  // (или ненастроенный API_PUBLIC_URL) деградирует до письма БЕЗ ссылки — не роняем уведомление.
+  let trackUrl: string | null = null;
+  if (shouldIncludeTrackLink(payload.newStatus)) {
+    try {
+      const token = await getOrCreateTrackToken(getDb(), payload.tenantId, payload.ticketId);
+      trackUrl = buildTrackUrl(token);
+    } catch (err) {
+      logger.warn(
+        { err, ticketId: payload.ticketId, ticketNumber: loaded.ticketNumber },
+        'ticket-status-notify: track token failed, sending without link',
+      );
+    }
+  }
+
   const rendered = renderTicketStatusEmail({
     ticketNumber: loaded.ticketNumber,
     newStatus: payload.newStatus,
@@ -231,6 +252,7 @@ export async function processTicketStatusNotify(
     engineerFullName: loaded.engineerFullName,
     cancelReason: loaded.cancelReason,
     tenantDisplayName: tenantName,
+    trackUrl,
   });
 
   try {
