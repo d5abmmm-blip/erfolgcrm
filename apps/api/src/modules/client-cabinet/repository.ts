@@ -693,6 +693,8 @@ export async function getMyTicketById(
   ticketId: string,
 ): Promise<
   | (MyTicketRow & {
+      cancelledAt: Date | null;
+      waitingForPart: boolean;
       events: Array<{ id: string; type: string; createdAt: Date; payload: unknown }>;
     })
   | null
@@ -707,6 +709,8 @@ export async function getMyTicketById(
         symptom: tickets.symptom,
         receivedAt: tickets.receivedAt,
         closedAt: tickets.closedAt,
+        cancelledAt: tickets.cancelledAt,
+        waitingForPart: tickets.waitingForPart,
         assetId: tickets.assetId,
         assetModel: assets.model,
         engineerName: users.fullName,
@@ -724,6 +728,9 @@ export async function getMyTicketById(
       .limit(1);
     if (!row) return null;
 
+    // Только смены статуса: из них строится трек-таймлайн. Прочие события (note с
+    // внутренним комментарием менеджера, assignment_change с UUID инженеров и т.п.)
+    // клиенту не нужны и НЕ должны уходить в его браузер даже в сыром ответе.
     const events = await tx
       .select({
         id: ticketEvents.id,
@@ -732,7 +739,7 @@ export async function getMyTicketById(
         payload: ticketEvents.payload,
       })
       .from(ticketEvents)
-      .where(eq(ticketEvents.ticketId, ticketId))
+      .where(and(eq(ticketEvents.ticketId, ticketId), eq(ticketEvents.type, 'status_change')))
       .orderBy(ticketEvents.createdAt);
 
     return { ...row, events };

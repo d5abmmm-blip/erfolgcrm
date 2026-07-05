@@ -32,6 +32,8 @@ import {
   createTicketCmd,
   engineerReactCmd,
   getTicketQuery,
+  getTrackShareCmd,
+  revokeTrackShareCmd,
   listEventsQuery,
   listTicketsQuery,
   myTicketsQuery,
@@ -220,6 +222,16 @@ export const ticketsRouter = router({
     .mutation(({ ctx, input }) =>
       setWaitingForPartCmd(buildCmdCtx(ctx), input.ticketId, input.waiting, input.note ?? null),
     ),
+
+  /** Фича №3 — выдать/создать публичную ссылку отслеживания для клиента (staff). */
+  getShareLink: staffProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => getTrackShareCmd(buildCmdCtx(ctx), input.ticketId)),
+
+  /** Фича №3 — отозвать публичную ссылку отслеживания (staff). */
+  revokeShareLink: staffProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => revokeTrackShareCmd(buildCmdCtx(ctx), input.ticketId)),
 
   /** Доска — все активные заявки с причиной простоя и светофором (staff). */
   board: staffProcedure.query(({ ctx }) => boardQuery(ctx.db, ctx.tenant)),

@@ -73,6 +73,7 @@ import { ClientAssetsPage } from './pages/client/ClientAssetsPage';
 import { ClientInvoicesPage } from './pages/client/ClientInvoicesPage';
 import { ClientContractsPage } from './pages/client/ClientContractsPage';
 import { ClientProfilePage } from './pages/client/ClientProfilePage';
+import { PublicTrackPage } from './pages/PublicTrackPage';
 import { ClientCabinetUsersPage } from './pages/ClientCabinetUsersPage';
 import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
@@ -80,8 +81,13 @@ import { isPathDisabled } from './lib/modules';
 
 export default function App() {
   const [location] = useLocation();
-  const isClientRoute = location === '/client' || location.startsWith('/client/');
 
+  // Публичный трек «как посылка» — без логина и без оболочки (фича №3).
+  if (location.startsWith('/track/')) {
+    return <PublicTrackPage />;
+  }
+
+  const isClientRoute = location === '/client' || location.startsWith('/client/');
   if (isClientRoute) {
     return <ClientCabinet />;
   }

@@ -40,6 +40,7 @@ import { salesRouter } from '../modules/sales';
 import { backupRouter } from '../modules/backup';
 import { aiAssistantRouter } from '../modules/ai-assistant';
 import { engineerProfileRouter } from '../modules/engineer-profile';
+import { trackRouter } from '../modules/track';
 import {
   clientAuthRouter,
   clientCabinetRouter,
@@ -116,6 +117,8 @@ export const appRouter = router({
   /** AI-ассистент: чат с tool-use поверх процедур (LLM провайдеро-независимый). */
   aiAssistant: aiAssistantRouter,
   engineerProfile: engineerProfileRouter,
+  /** Фича №3 «Трек как посылку» — публичное отслеживание стадии ремонта по токену. */
+  track: trackRouter,
 });
 
 export type AppRouter = typeof appRouter;

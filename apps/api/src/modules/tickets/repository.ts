@@ -25,6 +25,7 @@ import {
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
+import { randomUUID } from 'node:crypto';
 import { uuidv7 } from 'uuidv7';
 import {
   clients,
@@ -730,6 +731,52 @@ export async function setWaitingForPart(
     }
 
     return { id: ticketId, waitingForPart: waiting, waitingForPartNote: nextNote };
+  });
+}
+
+/* ─────────── Фича №3 «Трек как посылку» — публичный токен ─────────── */
+
+/**
+ * Вернуть публичный трек-токен заявки, создав его при первом обращении (идемпотентно).
+ * Токен — случайный UUIDv4 (непредсказуемый bearer, ~122 бита энтропии). Заявка чужого
+ * tenant не видна (RLS в withTenantTx) → NOT_FOUND. Повторный вызов отдаёт тот же токен.
+ */
+export async function getOrCreateTrackToken(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<string> {
+  const candidate = randomUUID();
+  return withTenantTx(db, tenantId, async (tx) => {
+    // Атомарно, без окна гонки SELECT-then-UPDATE: COALESCE сохраняет уже выданный токен.
+    // Два одновременных запроса по одной заявке сериализуются на row-lock — второй UPDATE
+    // переоценит COALESCE против уже проставленного токена и оставит его, а не перезапишет.
+    // Иначе один из двух разосланных клиенту линков оказался бы мёртвым.
+    const rows = await tx
+      .update(tickets)
+      .set({ publicTrackToken: sql`coalesce(${tickets.publicTrackToken}, ${candidate}::uuid)` })
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+      .returning({ token: tickets.publicTrackToken });
+    const token = rows[0]?.token;
+    if (!token) throw new TicketNotFoundError();
+    return token;
+  });
+}
+
+/** Отозвать публичную ссылку (обнулить токен). Старая ссылка перестаёт работать. */
+export async function revokeTrackToken(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+      .limit(1);
+    if (!row) throw new TicketNotFoundError();
+    await tx.update(tickets).set({ publicTrackToken: null }).where(eq(tickets.id, ticketId));
   });
 }
 

@@ -216,6 +216,15 @@ export const tickets = pgTable(
      */
     readyNotifiedAt: timestamp('ready_notified_at', { withTimezone: true }),
 
+    /**
+     * Фича №3 «Трек как посылку» — публичный токен отслеживания.
+     * Случайный UUID, генерируется по кнопке «Ссылка для клиента» (не при создании:
+     * ссылка появляется, только когда менеджер решил поделиться). NULL — ссылка не
+     * выдана или отозвана. По этому токену публичная страница /track/:token без логина
+     * показывает клиенту стадию ремонта (PII-free). Отзывается обнулением.
+     */
+    publicTrackToken: uuid('public_track_token'),
+
     ...timestamps,
   },
   (t) => [
@@ -241,6 +250,13 @@ export const tickets = pgTable(
     index('tickets_schedule_window_idx')
       .on(t.tenantId, t.scheduledStartAt)
       .where(sql`scheduled_start_at IS NOT NULL`),
+    /**
+     * Фича №3 — быстрый (и уникальный) поиск заявки по публичному трек-токену.
+     * Частичный UNIQUE: NULL-токены не занимают индекс и не конфликтуют между собой.
+     */
+    uniqueIndex('tickets_track_token_uniq')
+      .on(t.publicTrackToken)
+      .where(sql`public_track_token IS NOT NULL`),
     /** closed_at заполнен ⟺ status='closed'; cancelled_at — для status='cancelled' */
     check(
       'tickets_closed_consistency',

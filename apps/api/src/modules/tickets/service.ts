@@ -24,8 +24,10 @@ import {
   clientSubtype,
   createTicket as repoCreateTicket,
   getAssetRequiredAttestation,
+  getOrCreateTrackToken as repoGetOrCreateTrackToken,
   getTicket as repoGetTicket,
   listEvents as repoListEvents,
+  revokeTrackToken as repoRevokeTrackToken,
   listTickets as repoListTickets,
   recordPrintEvent as repoRecordPrint,
   setBlockedReason as repoSetBlockedReason,
@@ -524,6 +526,56 @@ export async function setBlockedReasonCmd(
     userAgent: ctx.audit.userAgent ?? null,
   });
   return result;
+}
+
+/* ─────────── Фича №3 «Трек как посылку» — публичная ссылка (staff) ─────────── */
+
+/**
+ * Выдать (создав при первом обращении) публичную ссылку отслеживания заявки.
+ * RBAC (staff) — в роутере. Идемпотентно: повторный вызов отдаёт тот же токен.
+ */
+export async function getTrackShareCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+): Promise<{ token: string }> {
+  let token: string;
+  try {
+    token = await repoGetOrCreateTrackToken(ctx.db, ctx.tenant.id, ticketId);
+  } catch (err) {
+    throw toTRPCError(err);
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'update',
+    entityType: 'ticket',
+    entityId: ticketId,
+    after: { trackShare: 'enabled' },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+  return { token };
+}
+
+/** Отозвать публичную ссылку отслеживания (старая ссылка перестаёт работать). */
+export async function revokeTrackShareCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+): Promise<{ ok: true }> {
+  try {
+    await repoRevokeTrackToken(ctx.db, ctx.tenant.id, ticketId);
+  } catch (err) {
+    throw toTRPCError(err);
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'update',
+    entityType: 'ticket',
+    entityId: ticketId,
+    after: { trackShare: 'revoked' },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+  return { ok: true };
 }
 
 /** Доска «кто чем занят / почему стоит» — все активные заявки одним запросом (staff). */
