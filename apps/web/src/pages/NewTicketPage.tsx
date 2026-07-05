@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useForm, type SubmitHandler } from 'react-hook-form';
-import { CheckCircle2, ChevronLeft, Sparkles, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  Loader2,
+  Mail,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import type {
   IntakeMethod,
   RepairType,
@@ -92,6 +100,16 @@ export function NewTicketPage() {
   const [naInventory, setNaInventory] = useState('');
   const createAsset = trpc.assets.create.useMutation();
 
+  // «Заявка из письма»: если пришли из Почты (?fromEmail=<id>), сервер отдаёт ИИ-черновик
+  // (клиент по адресу + техника/симптом из ИИ), которым мы разово префиллим форму.
+  const emailId = new URLSearchParams(window.location.search).get('fromEmail');
+  const emailDraft = trpc.email.draftTicketFromEmail.useQuery(
+    { emailId: emailId ?? '' },
+    { enabled: !!emailId, staleTime: Infinity, retry: false },
+  );
+  const linkTicket = trpc.email.linkTicket.useMutation();
+  const prefilledRef = useRef(false);
+
   const clientId = form.watch('clientId');
   const assetId = form.watch('assetId');
 
@@ -149,6 +167,28 @@ export function NewTicketPage() {
     // intentionally not depending on form
   }, [clientId]);
 
+  // При переходе к другому письму (смена ?fromEmail без размонтирования) — разрешить префилл заново.
+  useEffect(() => {
+    prefilledRef.current = false;
+  }, [emailId]);
+
+  // Разовый префилл формы из ИИ-черновика письма (клиент/симптом/источник/тип/приоритет).
+  // Технику менеджер выбирает сам — ИИ-подсказка показана в баннере выше.
+  // Клиента и симптом подставляем только в пустые поля — чтобы не затереть ручной выбор,
+  // если менеджер успел что-то заполнить, пока грузился черновик.
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    const d = emailDraft.data;
+    if (!d) return;
+    prefilledRef.current = true;
+    if (d.client && !form.getValues('clientId')) form.setValue('clientId', d.client.id);
+    form.setValue('source', 'email');
+    form.setValue('repairType', d.repairType);
+    form.setValue('priority', d.priority);
+    if (d.symptom && !form.getValues('symptom')) form.setValue('symptom', d.symptom);
+    // intentionally not depending on form
+  }, [emailDraft.data, emailId]);
+
   const create = trpc.tickets.create.useMutation({
     onSuccess: async (res) => {
       await utils.tickets.list.invalidate();
@@ -167,6 +207,14 @@ export function NewTicketPage() {
               e instanceof Error ? e.message : String(e)
             }`,
           );
+        }
+      }
+      // Заявка создана из письма — привяжем письмо к ней (best-effort, не блокируем переход).
+      if (emailId) {
+        try {
+          await linkTicket.mutateAsync({ emailId, ticketId: res.id });
+        } catch {
+          /* не критично: заявка создана, связь можно проставить позже */
         }
       }
       navigate(`/tickets/${res.id}`);
@@ -300,6 +348,63 @@ export function NewTicketPage() {
           >
             <X className="h-3 w-3" /> убрать
           </button>
+        </div>
+      )}
+
+      {emailId && (
+        <div className="bg-primary/5 border-primary/30 space-y-2 rounded-md border p-3 text-xs">
+          {emailDraft.isLoading ? (
+            <div className="text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> ИИ читает письмо…
+            </div>
+          ) : emailDraft.error ? (
+            <div className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Не удалось разобрать письмо: {emailDraft.error.message}
+            </div>
+          ) : emailDraft.data ? (
+            <>
+              <div className="text-primary flex items-center gap-2 font-medium">
+                <Sparkles className="h-4 w-4" /> Черновик из письма
+              </div>
+              <div className="text-muted-foreground flex items-start gap-1.5">
+                <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {emailDraft.data.from ?? 'отправитель'} · «
+                  {emailDraft.data.subject ?? '(без темы)'}»
+                </span>
+              </div>
+              {!emailDraft.data.client && (
+                <div className="text-warning flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>Клиент по адресу не найден — выберите существующего или создайте нового.</span>
+                </div>
+              )}
+              {emailDraft.data.deviceHint && (
+                <div className="text-foreground">
+                  Техника (подсказка ИИ): <strong>{emailDraft.data.deviceHint}</strong> — выберите
+                  аппарат ниже.
+                </div>
+              )}
+              {emailDraft.data.linkedTicket && (
+                <div className="text-muted-foreground">
+                  Письмо уже связано с заявкой{' '}
+                  <Link
+                    href={`/tickets/${emailDraft.data.linkedTicket.id}`}
+                    className="text-primary underline"
+                  >
+                    {emailDraft.data.linkedTicket.number}
+                  </Link>
+                  .
+                </div>
+              )}
+              <div className="text-muted-foreground border-primary/20 border-t pt-1.5">
+                {emailDraft.data.aiUsed
+                  ? 'Текст письма отправлялся в ИИ для разбора (152-ФЗ). Проверьте поля перед созданием.'
+                  : 'ИИ недоступен — черновик собран из письма без ИИ. Проверьте поля перед созданием.'}
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

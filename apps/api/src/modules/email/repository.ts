@@ -7,10 +7,13 @@
  */
 import { and, asc, count, desc, eq, sql, type SQL } from 'drizzle-orm';
 import {
+  clients,
+  contacts,
   decryptSql,
   emailAttachments,
   emailConfigs,
   emailMessages,
+  tickets,
   withTenantTx,
   type Db,
 } from '@erfolg/db';
@@ -574,6 +577,96 @@ export async function insertEmailAttachment(
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
     });
+  });
+}
+
+/* ───────────────────── Заявка из письма (draft) ───────────────────── */
+
+/** Клиент для черновика заявки: id + отображаемое имя (без расшифровки ПДн). */
+export interface ClientBriefRow {
+  id: string;
+  displayName: string;
+}
+
+/**
+ * Найти активного клиента по e-mail: сперва по адресу самой организации (clients.email),
+ * затем по адресу контактного лица (contacts.email). Обе колонки — B2B-контакты, plain text.
+ * Регистронезависимо. RLS ограничивает поиск текущим tenant'ом.
+ */
+export async function findClientByEmail(
+  db: Db,
+  tenantId: string,
+  email: string,
+): Promise<ClientBriefRow | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const direct = await tx
+      .select({ id: clients.id, displayName: clients.displayName })
+      .from(clients)
+      .where(and(eq(clients.status, 'active'), sql`lower(${clients.email}) = lower(${email})`))
+      .limit(1);
+    if (direct[0]) return direct[0];
+
+    const viaContact = await tx
+      .select({ id: clients.id, displayName: clients.displayName })
+      .from(contacts)
+      .innerJoin(clients, eq(contacts.clientId, clients.id))
+      .where(and(eq(clients.status, 'active'), sql`lower(${contacts.email}) = lower(${email})`))
+      .limit(1);
+    return viaContact[0] ?? null;
+  });
+}
+
+/** Отображаемое имя клиента по id (для показа уже привязанного клиента письма). */
+export async function getClientBrief(
+  db: Db,
+  tenantId: string,
+  clientId: string,
+): Promise<ClientBriefRow | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ id: clients.id, displayName: clients.displayName })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .limit(1);
+    return rows[0] ?? null;
+  });
+}
+
+/** Номер заявки по id (для показа связи письма с заявкой). */
+export async function getTicketNumberById(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<string | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ ticketNumber: tickets.ticketNumber })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+    return rows[0]?.ticketNumber ?? null;
+  });
+}
+
+/**
+ * Привязать письмо к заявке (и, опц., к клиенту). Возвращает true, если строка обновлена.
+ * Используется после создания заявки из письма — чтобы письмо показывало «✓ Заявка T-…».
+ */
+export async function linkMessageToTicket(
+  db: Db,
+  tenantId: string,
+  input: { messageId: string; ticketId: string; clientId?: string | null },
+): Promise<boolean> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const res = await tx
+      .update(emailMessages)
+      .set({
+        relatedTicketId: input.ticketId,
+        ...(input.clientId ? { relatedClientId: input.clientId } : {}),
+      })
+      .where(eq(emailMessages.id, input.messageId))
+      .returning({ id: emailMessages.id });
+    return res.length > 0;
   });
 }
 

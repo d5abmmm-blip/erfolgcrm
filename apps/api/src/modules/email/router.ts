@@ -7,11 +7,14 @@ import { directorProcedure, router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   cancelScheduleCmd,
+  draftReplyQuery,
+  draftTicketFromEmailQuery,
   fetchInboxNow,
   getConfigQuery,
   getMessageQuery,
   getSignatureQuery,
   getThreadQuery,
+  linkTicketCmd,
   listMessagesQuery,
   markReadCmd,
   purgeCmd,
@@ -178,4 +181,19 @@ export const emailRouter = router({
 
   /** Ручной приём входящих с ящика (IMAP). */
   fetchNow: staffProcedure.mutation(({ ctx }) => fetchInboxNow(ctx.db, ctx.tenant)),
+
+  /** Черновик заявки из письма: ИИ-разбор техники/симптома + клиент по адресу (для префилла формы). */
+  draftTicketFromEmail: staffProcedure
+    .input(z.object({ emailId: z.string().uuid() }))
+    .query(({ ctx, input }) => draftTicketFromEmailQuery(ctx.db, ctx.tenant, input.emailId)),
+
+  /** ИИ-черновик ответа клиенту на письмо (деградирует до шаблона без LLM). */
+  draftReply: staffProcedure
+    .input(z.object({ emailId: z.string().uuid() }))
+    .query(({ ctx, input }) => draftReplyQuery(ctx.db, ctx.tenant, input.emailId)),
+
+  /** Привязать письмо к созданной из него заявке. */
+  linkTicket: staffProcedure
+    .input(z.object({ emailId: z.string().uuid(), ticketId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => linkTicketCmd(buildCmdCtx(ctx), input)),
 });
