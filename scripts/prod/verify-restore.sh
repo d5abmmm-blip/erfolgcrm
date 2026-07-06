@@ -37,17 +37,31 @@ if ! docker exec -i "$CONTAINER" pg_restore --list < "$LATEST" >/dev/null 2>&1; 
   exit 1
 fi
 
-# Чистая одноразовая база; убираем её при любом выходе.
+# Чистая одноразовая база; убираем её при любом выходе, включая сигналы (иначе временная
+# база утечёт в боевой контейнер, если прогон убьют по TERM/INT при рестарте/shutdown).
 cleanup() { docker exec "$CONTAINER" dropdb -U "$PGUSER_" --if-exists "$TESTDB" >/dev/null 2>&1; }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM HUP
 docker exec "$CONTAINER" dropdb -U "$PGUSER_" --if-exists "$TESTDB" >/dev/null 2>&1
 if ! docker exec "$CONTAINER" createdb -U "$PGUSER_" "$TESTDB" >/dev/null 2>&1; then
   log "FAIL: не удалось создать временную базу $TESTDB" >&2
   exit 1
 fi
 
-# Восстановление (предупреждения про роли/политики безвредны — гасим их вывод).
-docker exec -i "$CONTAINER" pg_restore -U "$PGUSER_" -d "$TESTDB" --no-owner --no-privileges < "$LATEST" >/dev/null 2>&1
+# Восстановление. Предупреждения про роли/политики безвредны (мы с --no-owner/--no-privileges),
+# но НАСТОЯЩИЕ ошибки (битый data-блок таблицы, нет места, OOM) pg_restore отражает ненулевым
+# кодом — ловим их, не полагаясь только на счётчики ниже (иначе битый дамп, где основные
+# таблицы восстановились, а другие — нет, прошёл бы как «OK»).
+RESTORE_ERR="$(docker exec -i "$CONTAINER" pg_restore -U "$PGUSER_" -d "$TESTDB" --no-owner --no-privileges < "$LATEST" 2>&1 >/dev/null)"
+rrc=$?
+if [ "$rrc" -ne 0 ]; then
+  # pg_restore возвращает !=0 и на безвредных варнингах — оставляем только реальные ошибки.
+  real_err="$(printf '%s\n' "$RESTORE_ERR" | grep -iE 'error:|could not|out of memory|no space|permission denied' | grep -viE 'role .* does not exist|already exists' | head -5)"
+  if [ -n "$real_err" ]; then
+    log "FAIL: pg_restore вернул ошибки восстановления для $LATEST:" >&2
+    printf '%s\n' "$real_err" >&2
+    exit 1
+  fi
+fi
 
 FAILED=0
 check() {

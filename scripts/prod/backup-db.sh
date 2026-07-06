@@ -64,28 +64,47 @@ fi
 # ли api). Пустой том даёт валидный крошечный архив — это норма (вложений ещё нет).
 FILES_OUT="$DIR/erfolg_prod_files_${TS}.tar.gz"
 FILES_TMP="$FILES_OUT.partial"
+# Имя тома: сначала спрашиваем api-контейнер (точно тот том, что смонтирован в /data/storage).
+# Если api в этот момент недоступен (пересоздаётся на деплое / переименован) — фолбэк на том
+# по имени, чтобы файлы не остались без бэкапа из-за гонки с деплоем.
 VOL="$(docker inspect "$API_CONTAINER" \
   -f "{{range .Mounts}}{{if eq .Destination \"$STORAGE_DEST\"}}{{.Name}}{{end}}{{end}}" 2>/dev/null)"
+if [ -z "$VOL" ]; then
+  VOL="$(docker volume ls -q --filter "name=${BACKUP_STORAGE_VOLUME:-storage_data}" 2>/dev/null | head -1)"
+  [ -n "$VOL" ] && log "WARN: $API_CONTAINER недоступен, том определён по имени: $VOL" >&2
+fi
 if [ -n "$VOL" ]; then
   VOL_PATH="$(docker volume inspect "$VOL" -f '{{ .Mountpoint }}' 2>/dev/null)"
   if [ -n "$VOL_PATH" ] && [ -d "$VOL_PATH" ]; then
-    if tar czf "$FILES_TMP" -C "$VOL_PATH" . 2>>"$DIR/backup.err"; then
+    # tar по ЖИВОМУ тому может вернуть код 1 («file changed as we read it» — параллельная
+    # загрузка вложения/входящего письма во время архивации); архив при этом ВАЛИДЕН.
+    # Фатально только >=2. --warning=no-file-changed глушит шум в stderr.
+    tar --warning=no-file-changed -czf "$FILES_TMP" -C "$VOL_PATH" . 2>>"$DIR/backup.err"
+    trc=$?
+    if [ "$trc" -le 1 ] && [ -s "$FILES_TMP" ]; then
       mv "$FILES_TMP" "$FILES_OUT"
       log "OK files: $FILES_OUT ($(du -h "$FILES_OUT" | cut -f1))"
     else
-      log "ERROR: архивация файлов не удалась, удаляю $FILES_TMP" >&2
+      log "ERROR: архивация файлов не удалась (tar rc=$trc), удаляю $FILES_TMP" >&2
       rm -f "$FILES_TMP"
     fi
   else
     log "WARN: путь тома '$VOL' не найден на хосте — пропускаю бэкап файлов" >&2
   fi
 else
-  log "WARN: том $STORAGE_DEST не смонтирован в $API_CONTAINER — пропускаю бэкап файлов" >&2
+  log "WARN: том $STORAGE_DEST не найден (ни в $API_CONTAINER, ни по имени) — пропускаю бэкап файлов" >&2
 fi
 
-# ───────── 3. Ротация: удаляем авто-копии старше KEEP_DAYS (ручные pre-deploy-* не трогаем) ─────────
-find "$DIR" -maxdepth 1 -name 'erfolg_prod_auto_*.dump' -mtime +"$KEEP_DAYS" -delete
-find "$DIR" -maxdepth 1 -name 'erfolg_prod_files_*.tar.gz' -mtime +"$KEEP_DAYS" -delete
+# ───────── 3. Ротация — ТОЛЬКО если сегодняшний дамп удался ─────────
+# Ротация по возрасту без этой проверки при затяжном сбое (контейнер лёг/переименован)
+# продолжала бы стирать последние ХОРОШИЕ копии, пока новые не пишутся → через KEEP_DAYS
+# дней аварии на диске 0 восстановимых бэкапов. Ручные pre-deploy-* не трогаем в любом случае.
+if [ "$db_ok" -eq 1 ]; then
+  find "$DIR" -maxdepth 1 -name 'erfolg_prod_auto_*.dump' -mtime +"$KEEP_DAYS" -delete
+  find "$DIR" -maxdepth 1 -name 'erfolg_prod_files_*.tar.gz' -mtime +"$KEEP_DAYS" -delete
+else
+  log "WARN: дамп не удался — ротацию пропускаю, старые копии сохраняю" >&2
+fi
 
 # Код возврата: провал именно дампа БД — это провал бэкапа (для алерта/крон-лога).
 [ "$db_ok" -eq 1 ] || exit 1

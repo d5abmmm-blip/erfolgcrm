@@ -49,34 +49,39 @@ export interface BackupExecConfig {
 export function resolveBackupExecConfig(): BackupExecConfig {
   const isProd = process.env.NODE_ENV === 'production';
   const ownerUrl = process.env.DATABASE_OWNER_URL;
-  const connUrl =
+
+  // host/port/имя базы могут прийти из любого URL (для docker-режима они вообще не важны).
+  const locUrl =
     ownerUrl ?? process.env.DATABASE_URL ?? 'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_dev';
 
   let host = 'localhost';
   let port = '5432';
   let database = isProd ? 'erfolg_prod' : 'erfolg_dev';
-  let password = '';
   try {
-    const u = new URL(connUrl);
+    const u = new URL(locUrl);
     host = u.hostname || host;
     port = u.port || port;
     const path = decodeURIComponent(u.pathname.replace(/^\//, ''));
     if (path) database = path;
-    password = decodeURIComponent(u.password || '');
   } catch {
     // Невалидный URL — остаёмся на дефолтах (dev).
   }
 
-  // Пользователь по умолчанию — owner `erfolg`. Если задан DATABASE_OWNER_URL, берём
-  // его username (он и есть owner); фолбэк на DATABASE_URL пользователя НЕ подхватываем,
-  // чтобы случайно не начать дампить под ограниченным app_runtime.
+  // КРЕДЫ (пользователь + пароль) берём строго ИЗ ОДНОГО источника — DATABASE_OWNER_URL
+  // (owner `erfolg`), чтобы не смешать пользователя одной роли с паролем другой. Если
+  // owner-URL не задан, остаёмся на user=erfolg с пустым паролем: в direct-режиме без
+  // BACKUP_PG_PASSWORD это осознанно упадёт с понятной ошибкой аутентификации, а НЕ
+  // подставит пароль ограниченного app_runtime (что дало бы либо auth-mismatch, либо
+  // неполный дамп под RLS).
   let user = 'erfolg';
+  let password = '';
   if (ownerUrl) {
     try {
       const uu = new URL(ownerUrl);
       if (uu.username) user = decodeURIComponent(uu.username);
+      password = decodeURIComponent(uu.password || '');
     } catch {
-      // невалидный owner-URL — остаёмся на 'erfolg'
+      // невалидный owner-URL — остаёмся на user=erfolg, пустой пароль
     }
   }
 
