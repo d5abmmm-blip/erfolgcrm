@@ -138,8 +138,17 @@ describe('RBAC: staff-only read-инструменты (финансы / зая�
       expect(names).not.toContain(name);
     }
     // обычные read/write остаются доступны инженеру
-    expect(names).toContain('search_clients');
+    expect(names).toContain('search_tickets');
     expect(names).toContain('create_ticket');
+  });
+
+  it('search_clients теперь staff-only (PII-2): инженеру не отдаётся и блокируется по правам', async () => {
+    // Инженер вызвать не может — requireStaff бросает FORBIDDEN до обращения к caller.
+    await expect(callTool('search_clients', 'engineer')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    // И модели инженера этот инструмент даже не предлагается.
+    expect(toolDefsForRole('engineer').map((d) => d.function.name)).not.toContain('search_clients');
+    // Staff по-прежнему видит его в списке.
+    expect(toolDefsForRole('director').map((d) => d.function.name)).toContain('search_clients');
   });
 
   it('staff (директор/диспетчер) получают полный список, включая staff-only', () => {

@@ -164,6 +164,10 @@ const TOOLS: Record<string, ToolHandler> = {
   // ===================== READ (выполняются сразу) =====================
   search_clients: {
     kind: 'read',
+    // PII-2: поиск клиентов — только staff (как clients.search=staffProcedure и как
+    // глобальный поиск, который скрывает клиентов от инженера). Инженеру инструмент не
+    // предлагается (toolDefsForRole) и жёстко блокируется в run (requireStaff).
+    staffOnly: true,
     def: {
       type: 'function',
       function: {
@@ -178,7 +182,10 @@ const TOOLS: Record<string, ToolHandler> = {
         },
       },
     },
-    run: (caller, args) => caller.clients.search({ q: reqString(args, 'q') }),
+    run: (caller, args, ctx) => {
+      requireStaff(reqCtx(ctx));
+      return caller.clients.search({ q: reqString(args, 'q') });
+    },
   },
 
   list_engineers: {
