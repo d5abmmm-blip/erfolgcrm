@@ -36,33 +36,59 @@ export interface BackupExecConfig {
 }
 
 /**
- * Собирает конфиг запуска из окружения. DATABASE_URL — источник правды про имя базы,
- * хост и пароль; имя контейнера и owner-пользователь задаются отдельно (под дамп нужен
- * привилегированный пользователь, которым приложение в обычной работе не подключается).
+ * Собирает конфиг запуска из окружения.
+ *
+ * Для ПОЛНОЙ копии дамп должен снимать owner/суперпользователь: на боевых таблицах
+ * включён FORCE ROW LEVEL SECURITY, поэтому ограниченный app_runtime (из DATABASE_URL)
+ * увидел бы лишь отфильтрованные RLS строки → НЕПОЛНЫЙ дамп. Owner-роль `erfolg`
+ * (superuser + bypassrls) обходит RLS и снимает всё. Её креды лежат в DATABASE_OWNER_URL —
+ * его и берём источником правды для host/port/базы/пользователя/пароля, а на DATABASE_URL
+ * падаем только как фолбэк (dev/тесты, где owner-URL может быть не задан). В режиме docker
+ * (dev) пароль не используется — там `docker exec` в контейнер с локальным trust.
  */
 export function resolveBackupExecConfig(): BackupExecConfig {
   const isProd = process.env.NODE_ENV === 'production';
-  const url = process.env.DATABASE_URL ?? 'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_dev';
+  const ownerUrl = process.env.DATABASE_OWNER_URL;
+
+  // host/port/имя базы могут прийти из любого URL (для docker-режима они вообще не важны).
+  const locUrl =
+    ownerUrl ?? process.env.DATABASE_URL ?? 'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_dev';
 
   let host = 'localhost';
   let port = '5432';
   let database = isProd ? 'erfolg_prod' : 'erfolg_dev';
-  let password = '';
   try {
-    const u = new URL(url);
+    const u = new URL(locUrl);
     host = u.hostname || host;
     port = u.port || port;
     const path = decodeURIComponent(u.pathname.replace(/^\//, ''));
     if (path) database = path;
-    password = decodeURIComponent(u.password || '');
   } catch {
     // Невалидный URL — остаёмся на дефолтах (dev).
+  }
+
+  // КРЕДЫ (пользователь + пароль) берём строго ИЗ ОДНОГО источника — DATABASE_OWNER_URL
+  // (owner `erfolg`), чтобы не смешать пользователя одной роли с паролем другой. Если
+  // owner-URL не задан, остаёмся на user=erfolg с пустым паролем: в direct-режиме без
+  // BACKUP_PG_PASSWORD это осознанно упадёт с понятной ошибкой аутентификации, а НЕ
+  // подставит пароль ограниченного app_runtime (что дало бы либо auth-mismatch, либо
+  // неполный дамп под RLS).
+  let user = 'erfolg';
+  let password = '';
+  if (ownerUrl) {
+    try {
+      const uu = new URL(ownerUrl);
+      if (uu.username) user = decodeURIComponent(uu.username);
+      password = decodeURIComponent(uu.password || '');
+    } catch {
+      // невалидный owner-URL — остаёмся на user=erfolg, пустой пароль
+    }
   }
 
   return {
     mode: (process.env.BACKUP_EXEC_MODE as 'docker' | 'direct' | undefined) ?? (isProd ? 'direct' : 'docker'),
     container: process.env.BACKUP_PG_CONTAINER ?? `erfolgcrm-postgres-${isProd ? 'prod' : 'dev'}`,
-    user: process.env.BACKUP_PG_SUPERUSER ?? 'erfolg',
+    user: process.env.BACKUP_PG_SUPERUSER ?? user,
     database: process.env.BACKUP_PG_DB ?? database,
     host,
     port,

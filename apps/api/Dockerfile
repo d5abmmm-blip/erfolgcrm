@@ -15,6 +15,13 @@ FROM node:24-alpine
 # RUN apk add --no-cache python3 make g++
 
 RUN corepack enable
+
+# postgresql16-client даёт pg_dump/pg_restore той же мажорной версии, что и боевой
+# сервер (PostgreSQL 16). Нужен разделу «Резервные копии»: кнопка «Скачать полную
+# копию базы» в production идёт режимом 'direct' и запускает pg_dump прямо из этого
+# контейнера (без него — spawn ENOENT → HTTP 500). Пакет лёгкий (~15 МБ).
+RUN apk add --no-cache postgresql16-client
+
 WORKDIR /app
 
 # Сначала только манифесты — слой с зависимостями кэшируется между сборками.
