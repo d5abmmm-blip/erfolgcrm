@@ -9,6 +9,8 @@ import {
   Clock,
   Coins,
   Receipt,
+  RefreshCw,
+  Sparkles,
   Target,
   TrendingUp,
   Users as UsersIcon,
@@ -18,9 +20,10 @@ import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
-type TabId = 'revenue' | 'engineers' | 'profitability' | 'sla' | 'leads' | 'receivables';
+type TabId = 'monthly' | 'revenue' | 'engineers' | 'profitability' | 'sla' | 'leads' | 'receivables';
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof TrendingUp; directorOnly?: boolean }> = [
+  { id: 'monthly', label: 'Итог месяца', icon: Sparkles, directorOnly: true },
   { id: 'revenue', label: 'Выручка по клиентам', icon: TrendingUp },
   { id: 'engineers', label: 'Загрузка инженеров', icon: UsersIcon },
   { id: 'profitability', label: 'Рентабельность', icon: Coins, directorOnly: true },
@@ -74,7 +77,8 @@ export function ReportsPage() {
         </p>
       </div>
 
-      {/* Период */}
+      {/* Период (на вкладке «Итог месяца» — свой выбор месяца) */}
+      {tab !== 'monthly' && (
       <div className="flex flex-wrap items-center gap-2">
         <div className="bg-secondary inline-flex rounded-md p-0.5">
           {(
@@ -120,6 +124,7 @@ export function ReportsPage() {
           aria-label="Период по"
         />
       </div>
+      )}
 
       {/* Вкладки */}
       <div className="flex flex-wrap gap-1 border-b">
@@ -144,6 +149,7 @@ export function ReportsPage() {
         })}
       </div>
 
+      {tab === 'monthly' && isDirector && <MonthlySummaryReport />}
       {tab === 'revenue' && <RevenueReport period={period} />}
       {tab === 'engineers' && <EngineersReport period={period} />}
       {tab === 'profitability' && isDirector && <ProfitabilityReport period={period} />}
@@ -152,6 +158,203 @@ export function ReportsPage() {
       {tab === 'receivables' && isDirector && <ReceivablesReport />}
     </div>
   );
+}
+
+/* ───────────────────────── Итог месяца (AI) ───────────────────────── */
+
+const MONTHS_RU_WEB = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+];
+
+/** Последние `count` месяцев (включая текущий), от свежего к старому. */
+function recentMonths(count: number): Array<{ value: string; label: string }> {
+  const out: Array<{ value: string; label: string }> = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    out.push({ value: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS_RU_WEB[m]} ${y}` });
+  }
+  return out;
+}
+
+function MonthlySummaryReport() {
+  const months = useMemo(() => recentMonths(12), []);
+  const [month, setMonth] = useState(() => months[0]?.value ?? '');
+  const q = trpc.reports.monthlySummary.useQuery(
+    { month },
+    { staleTime: 5 * 60_000, refetchOnWindowFocus: false },
+  );
+  const res = q.data;
+
+  return (
+    <div className="space-y-5">
+      {/* Выбор месяца + переген */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="ms-month" className="text-muted-foreground text-sm">
+          Месяц
+        </label>
+        <select
+          id="ms-month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
+        >
+          {months.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            void q.refetch();
+          }}
+          disabled={q.isFetching}
+          className="text-muted-foreground hover:text-foreground ml-auto inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} />
+          Сформировать заново
+        </button>
+      </div>
+
+      {q.isLoading && (
+        <p className="text-muted-foreground text-sm">Готовим итог месяца…</p>
+      )}
+      {q.error && <p className="text-destructive text-sm">{q.error.message}</p>}
+
+      {res && (
+        <>
+          {/* AI-текст или деградация до фактов */}
+          {res.text ? (
+            <div className="border-primary/30 bg-card rounded-lg border p-4">
+              <div className="text-primary mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="h-4 w-4" /> AI-итог · {res.monthLabel}
+              </div>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">{res.text}</div>
+            </div>
+          ) : (
+            <div className="bg-card text-muted-foreground flex items-start gap-2 rounded-lg border p-3 text-xs leading-relaxed">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                AI-ассистент не настроен или временно недоступен — текст-сводку не показываем, но
+                все цифры за {res.monthLabel} ниже актуальны. Подключить помощника можно в{' '}
+                <Link href="/settings/ai" className="text-primary hover:underline">
+                  Настройках → ИИ-ассистент
+                </Link>
+                .
+              </span>
+            </div>
+          )}
+
+          {/* Деньги (касса за месяц) */}
+          <div>
+            <h3 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-sm font-semibold">
+              <Coins className="h-4 w-4" /> Деньги (касса за {res.monthLabel})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi label="Приход" value={formatRub(res.data.cash.incomeKopecks)} />
+              <Kpi label="Расход" value={formatRub(res.data.cash.expenseKopecks)} />
+              <Kpi
+                label="Прибыль"
+                value={formatRub(res.data.cash.profitKopecks)}
+                tone={cashTone(res.data.cash.profitKopecks)}
+              />
+              <Kpi label="Остаток по счетам" value={formatRub(res.data.cash.balanceTotalKopecks)} />
+            </div>
+            {res.data.cash.topExpenses.length > 0 && (
+              <p className="text-muted-foreground mt-2 text-xs">
+                Крупнейшая статья расходов: {res.data.cash.topExpenses[0]!.name} —{' '}
+                {formatRub(res.data.cash.topExpenses[0]!.amountKopecks)}.
+              </p>
+            )}
+          </div>
+
+          {/* Рентабельность за месяц */}
+          <div>
+            <h3 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-sm font-semibold">
+              <TrendingUp className="h-4 w-4" /> Рентабельность (закрытые наряды)
+            </h3>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi label="Выручка" value={formatRub(res.data.profit.revenueKopecks)} />
+              <Kpi
+                label="Маржа"
+                value={formatRub(res.data.profit.marginKopecks)}
+                tone={cashTone(res.data.profit.marginKopecks)}
+              />
+              <Kpi
+                label="Маржа %"
+                value={fmtPct(res.data.profit.marginPercent)}
+                tone={cashTone(res.data.profit.marginKopecks)}
+              />
+              <Kpi label="Закрыто нарядов" value={String(res.data.profit.closedOrdersCount)} />
+            </div>
+            {(res.data.profit.topEngineer || res.data.profit.topEquipment) && (
+              <p className="text-muted-foreground mt-2 text-xs">
+                {res.data.profit.topEngineer && (
+                  <>
+                    Лучший инженер: {res.data.profit.topEngineer.name} (маржа{' '}
+                    {formatRub(res.data.profit.topEngineer.marginKopecks)}).
+                  </>
+                )}{' '}
+                {res.data.profit.topEquipment && (
+                  <>
+                    Самый прибыльный тип: {res.data.profit.topEquipment.name} (маржа{' '}
+                    {formatRub(res.data.profit.topEquipment.marginKopecks)}).
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+
+          {/* Дебиторка (сейчас) */}
+          <div>
+            <h3 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-sm font-semibold">
+              <Receipt className="h-4 w-4" /> Дебиторка (текущее состояние)
+            </h3>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              <Kpi label="Должны всего" value={formatRub(res.data.receivables.totalRemainingKopecks)} />
+              <Kpi
+                label="Из них просрочено"
+                value={formatRub(res.data.receivables.overdueRemainingKopecks)}
+                tone={res.data.receivables.overdueRemainingKopecks !== '0' ? 'danger' : undefined}
+              />
+              <Kpi label="Должников" value={String(res.data.receivables.debtorCount)} />
+            </div>
+          </div>
+
+          <p className="text-muted-foreground text-xs">
+            Деньги и маржа — за выбранный месяц (по дате закрытия наряда). Дебиторка — текущее
+            состояние долгов на сегодня. Виден только директору.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Цвет суммы по знаку: плюс — зелёный, минус — красный. */
+function cashTone(kopecks: string): 'danger' | 'success' | undefined {
+  let v: bigint;
+  try {
+    v = BigInt(kopecks);
+  } catch {
+    return undefined;
+  }
+  return v > 0n ? 'success' : v < 0n ? 'danger' : undefined;
 }
 
 /* ───────────────────────── Выручка по клиентам ───────────────────────── */
