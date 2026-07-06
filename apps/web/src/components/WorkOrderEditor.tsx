@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Wrench, Package, Coins, Boxes } from 'lucide-react';
+import { Plus, Trash2, Wrench, Package, Coins, Boxes, Sparkles } from 'lucide-react';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -84,6 +84,7 @@ export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
   return (
     <div className="space-y-5">
       <WorkOrderHeader
+        key={ticketId}
         ticketId={ticketId}
         diagnosis={wo.data.diagnosis}
         repairDescription={wo.data.repairDescription}
@@ -160,11 +161,13 @@ function WorkOrderHeader({
           disabled={!canEdit}
           onBlur={blurSave('diagnosis', diagnosis)}
         />
-        <Field
-          label="Описание ремонта"
-          defaultValue={repairDescription ?? ''}
-          disabled={!canEdit}
-          onBlur={blurSave('repairDescription', repairDescription)}
+        <RepairDescriptionField
+          ticketId={ticketId}
+          initial={repairDescription}
+          canEdit={canEdit}
+          onSave={(value) =>
+            updateHeader.mutate({ ticketId, patch: { repairDescription: value } })
+          }
         />
         <Field
           label="Рекомендации"
@@ -191,6 +194,77 @@ function WorkOrderHeader({
           <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Фича №13 — поле «Описание ремонта» с кнопкой «ИИ-черновик».
+ * Управляемое (чтобы вписать ИИ-текст), сохраняется по blur, как соседние поля.
+ * Кнопка зовёт workOrders.draftRepairDescription; при отсутствии ИИ приходит
+ * простой черновик из строк наряда (aiUsed=false) — деградация на стороне API.
+ */
+function RepairDescriptionField({
+  ticketId,
+  initial,
+  canEdit,
+  onSave,
+}: {
+  ticketId: string;
+  initial: string | null;
+  canEdit: boolean;
+  onSave: (value: string | null) => void;
+}) {
+  const [value, setValue] = useState(initial ?? '');
+  const [note, setNote] = useState<string | null>(null);
+  const draft = trpc.workOrders.draftRepairDescription.useMutation({
+    onSuccess: (res) => {
+      setValue(res.text);
+      setNote(
+        res.aiUsed
+          ? 'Черновик сгенерирован ИИ — проверьте перед сохранением'
+          : 'Черновик собран из строк наряда',
+      );
+    },
+  });
+
+  const save = () => {
+    const next = value.trim() || null;
+    if (next === (initial ?? null)) return;
+    onSave(next);
+  };
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-[11px] uppercase">Описание ремонта</span>
+        {canEdit && (
+          <button
+            type="button"
+            disabled={draft.isPending}
+            onClick={() => draft.mutate({ ticketId })}
+            className="text-primary hover:bg-primary/10 disabled:opacity-50 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium"
+          >
+            <Sparkles className="h-3 w-3" />
+            {draft.isPending ? 'ИИ пишет…' : 'ИИ-черновик'}
+          </button>
+        )}
+      </div>
+      <textarea
+        value={value}
+        disabled={!canEdit}
+        rows={3}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+      />
+      {draft.isError ? (
+        <div className="text-destructive mt-1 text-[11px]">
+          Не удалось получить черновик: {draft.error.message}
+        </div>
+      ) : (
+        note && <div className="text-muted-foreground mt-1 text-[11px]">{note}</div>
+      )}
     </div>
   );
 }

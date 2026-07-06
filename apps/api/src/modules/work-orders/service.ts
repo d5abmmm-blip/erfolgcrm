@@ -21,7 +21,10 @@ import {
   type UpdateHeaderInput,
   type UpsertLineInput,
   type WorkOrderDto,
+  type WorkOrderLineDto,
 } from './repository';
+import { getTicket } from '../tickets/repository';
+import { phraseWithLlm } from '../ai-assistant/proactive';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 
@@ -31,6 +34,86 @@ export async function getWorkOrderByTicketQuery(
   ticketId: string,
 ): Promise<WorkOrderDto | null> {
   return repoGetByTicket(db, tenant.id, ticketId);
+}
+
+/* ─────────── Фича №13 «AI-черновик акта» — текст «Выполненные работы» ─────────── */
+
+export interface DraftRepairDescriptionResult {
+  /** Готовый черновик текста «Выполненные работы» (можно править перед сохранением). */
+  text: string;
+  /** true — текст сгенерирован ИИ; false — простой черновик собран из строк наряда (деградация). */
+  aiUsed: boolean;
+}
+
+/** Черновик из строк наряда — фолбэк, если ИИ не настроен или недоступен. */
+function buildFallbackDescription(
+  works: WorkOrderLineDto[],
+  parts: WorkOrderLineDto[],
+  diagnosis: string | null,
+): string {
+  const names = (arr: WorkOrderLineDto[]) =>
+    arr.map((l) => l.name.trim()).filter(Boolean).join('; ');
+  const segments: string[] = [];
+  if (works.length > 0) segments.push(`Выполнены работы: ${names(works)}.`);
+  if (parts.length > 0) segments.push(`Установлены/заменены запчасти: ${names(parts)}.`);
+  if (segments.length === 0) {
+    // Строк нет — не теряем диагноз инженера, если он заполнен (важно в деградации без LLM).
+    const diag = diagnosis?.trim();
+    return diag
+      ? `По результатам диагностики: ${diag}`
+      : 'Работы по заявке выполнены в полном объёме.';
+  }
+  segments.push('Оборудование протестировано, работоспособность восстановлена.');
+  return segments.join(' ');
+}
+
+/**
+ * Собрать черновик текста «Выполненные работы» для акта из строк наряда
+ * (работы/запчасти) + диагноза наряда + симптома заявки. В ИИ уходят ТОЛЬКО
+ * технические поля — без имени/телефона/адреса клиента (152-ФЗ). Никогда не
+ * бросает из-за ИИ: `phraseWithLlm` при отсутствии/сбое LLM вернёт null → фолбэк.
+ */
+export async function draftRepairDescriptionQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  ticketId: string,
+): Promise<DraftRepairDescriptionResult> {
+  const wo = await repoGetByTicket(db, tenant.id, ticketId);
+  if (!wo) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Наряд для этой заявки ещё не создан',
+    });
+  }
+  const works = wo.lines.filter((l) => l.lineType === 'work');
+  const parts = wo.lines.filter((l) => l.lineType === 'part');
+  const fallback = buildFallbackDescription(works, parts, wo.diagnosis);
+
+  // Нечего описывать (ни строк, ни диагноза) — отдаём базовый текст без вызова ИИ.
+  if (works.length === 0 && parts.length === 0 && !wo.diagnosis?.trim()) {
+    return { text: fallback, aiUsed: false };
+  }
+
+  const ticket = await getTicket(db, tenant.id, ticketId);
+  const symptom = ticket?.symptom?.trim() || null;
+
+  const system =
+    'Ты помощник инженера сервисного центра медтехники. По данным наряда составь официальный текст ' +
+    '«Выполненные работы» для акта выполненных работ. Требования: русский язык, деловой стиль, прошедшее ' +
+    'время, 2–4 предложения. Опирайся ТОЛЬКО на приведённые данные — ничего не выдумывай (не добавляй цены, ' +
+    'сроки, гарантии, модели и детали, которых нет во входных данных). Не упоминай клиента, пациента и ' +
+    'персональные данные. Верни только сам текст, без заголовков и списков.';
+
+  const userLines: string[] = [];
+  if (symptom) userLines.push(`Симптом (со слов клиента): ${symptom}`);
+  if (wo.diagnosis?.trim()) userLines.push(`Диагноз инженера: ${wo.diagnosis.trim()}`);
+  if (works.length > 0)
+    userLines.push(`Выполненные работы (строки наряда): ${works.map((w) => w.name.trim()).filter(Boolean).join('; ')}`);
+  if (parts.length > 0)
+    userLines.push(`Использованные запчасти: ${parts.map((p) => p.name.trim()).filter(Boolean).join('; ')}`);
+
+  const ai = await phraseWithLlm(db, tenant, system, userLines.join('\n'));
+  return ai ? { text: ai.trim(), aiUsed: true } : { text: fallback, aiUsed: false };
 }
 
 export async function ensureWorkOrderCmd(
