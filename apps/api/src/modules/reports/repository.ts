@@ -112,6 +112,133 @@ export async function engineerPerformance(
   });
 }
 
+/* ─────────────── 2b. Рентабельность по инженеру / типу техники ─────────────── */
+
+export interface ProfitabilityRow {
+  /** engineerId или device_type; null = «Не назначен» / «Без типа». */
+  key: string | null;
+  name: string;
+  closedOrdersCount: number;
+  totalAmountKopecks: string;
+  costAmountKopecks: string;
+  marginAmountKopecks: string;
+  /** margin / total * 100, округл. до 2 знаков; null если выручка 0. */
+  marginPercent: number | null;
+}
+
+export interface ProfitabilityReport {
+  summary: {
+    closedOrdersCount: number;
+    totalAmountKopecks: string;
+    costAmountKopecks: string;
+    marginAmountKopecks: string;
+    marginPercent: number | null;
+  };
+  byEngineer: ProfitabilityRow[];
+  byEquipment: ProfitabilityRow[];
+}
+
+interface ProfitRawRow {
+  k: string | null;
+  name: string | null;
+  cnt: number;
+  total: string;
+  cost: string;
+  margin: string;
+}
+
+function marginPct(total: string, margin: string): number | null {
+  const t = BigInt(total);
+  if (t <= 0n) return null;
+  return Math.round((Number(BigInt(margin)) / Number(t)) * 10000) / 100;
+}
+
+function toProfitRow(r: ProfitRawRow, fallbackName: string): ProfitabilityRow {
+  return {
+    key: r.k,
+    name: r.name ?? fallbackName,
+    closedOrdersCount: r.cnt,
+    totalAmountKopecks: r.total,
+    costAmountKopecks: r.cost,
+    marginAmountKopecks: r.margin,
+    marginPercent: marginPct(r.total, r.margin),
+  };
+}
+
+function sumBigStr(values: string[]): string {
+  return values.reduce((acc, v) => acc + BigInt(v), 0n).toString();
+}
+
+/**
+ * Рентабельность по закрытым нарядам за период: разрез по инженеру и по типу техники.
+ * Суммы (выручка/себестоимость/маржа) уже материализованы на work_orders — просто GROUP BY.
+ * Период — по `tickets.closed_at` (как «Маржа · период» на дашборде, чтобы цифры сходились).
+ * Инженер = COALESCE(work_orders.engineer_id, tickets.assigned_engineer_id); NULL → «Не назначен».
+ * Тип = assets.device_type через tickets.asset_id; NULL/пусто → «Без типа».
+ * Сводка считается суммой по инженерам (тот же набор нарядов, что и по технике).
+ */
+export async function profitabilityReport(
+  db: Db,
+  tenantId: string,
+  period: Period,
+): Promise<ProfitabilityReport> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const fromCond = period.from ? sql` AND t.closed_at::date >= ${period.from}` : sql``;
+    const toCond = period.to ? sql` AND t.closed_at::date <= ${period.to}` : sql``;
+
+    const engRows = (await tx.execute(sql`
+      SELECT
+        COALESCE(wo.engineer_id, t.assigned_engineer_id)::text AS k,
+        u.full_name AS name,
+        COUNT(wo.id)::int AS cnt,
+        COALESCE(SUM(wo.total_amount_kopecks), 0)::bigint::text  AS total,
+        COALESCE(SUM(wo.cost_amount_kopecks), 0)::bigint::text   AS cost,
+        COALESCE(SUM(wo.margin_amount_kopecks), 0)::bigint::text AS margin
+      FROM work_orders wo
+      JOIN tickets t ON t.id = wo.ticket_id
+      LEFT JOIN users u ON u.id = COALESCE(wo.engineer_id, t.assigned_engineer_id)
+      WHERE t.deleted_at IS NULL AND t.status = 'closed'${fromCond}${toCond}
+      GROUP BY COALESCE(wo.engineer_id, t.assigned_engineer_id), u.full_name
+      ORDER BY SUM(wo.margin_amount_kopecks) DESC NULLS LAST
+    `)) as unknown as ProfitRawRow[];
+
+    const eqRows = (await tx.execute(sql`
+      SELECT
+        NULLIF(TRIM(a.device_type), '') AS k,
+        NULLIF(TRIM(a.device_type), '') AS name,
+        COUNT(wo.id)::int AS cnt,
+        COALESCE(SUM(wo.total_amount_kopecks), 0)::bigint::text  AS total,
+        COALESCE(SUM(wo.cost_amount_kopecks), 0)::bigint::text   AS cost,
+        COALESCE(SUM(wo.margin_amount_kopecks), 0)::bigint::text AS margin
+      FROM work_orders wo
+      JOIN tickets t ON t.id = wo.ticket_id
+      LEFT JOIN assets a ON a.id = t.asset_id
+      WHERE t.deleted_at IS NULL AND t.status = 'closed'${fromCond}${toCond}
+      GROUP BY NULLIF(TRIM(a.device_type), '')
+      ORDER BY SUM(wo.margin_amount_kopecks) DESC NULLS LAST
+    `)) as unknown as ProfitRawRow[];
+
+    const byEngineer = engRows.map((r) => toProfitRow(r, 'Не назначен'));
+    const byEquipment = eqRows.map((r) => toProfitRow(r, 'Без типа'));
+
+    const total = sumBigStr(byEngineer.map((r) => r.totalAmountKopecks));
+    const cost = sumBigStr(byEngineer.map((r) => r.costAmountKopecks));
+    const margin = sumBigStr(byEngineer.map((r) => r.marginAmountKopecks));
+
+    return {
+      summary: {
+        closedOrdersCount: byEngineer.reduce((a, r) => a + r.closedOrdersCount, 0),
+        totalAmountKopecks: total,
+        costAmountKopecks: cost,
+        marginAmountKopecks: margin,
+        marginPercent: marginPct(total, margin),
+      },
+      byEngineer,
+      byEquipment,
+    };
+  });
+}
+
 /* ───────────────────────── 3. SLA-комплаенс ─────────────────────────────── */
 
 export interface SlaComplianceReport {

@@ -7,6 +7,7 @@ import { Link } from 'wouter';
 import {
   BarChart3,
   Clock,
+  Coins,
   Receipt,
   Target,
   TrendingUp,
@@ -17,11 +18,12 @@ import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
-type TabId = 'revenue' | 'engineers' | 'sla' | 'leads' | 'receivables';
+type TabId = 'revenue' | 'engineers' | 'profitability' | 'sla' | 'leads' | 'receivables';
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof TrendingUp; directorOnly?: boolean }> = [
   { id: 'revenue', label: 'Выручка по клиентам', icon: TrendingUp },
   { id: 'engineers', label: 'Загрузка инженеров', icon: UsersIcon },
+  { id: 'profitability', label: 'Рентабельность', icon: Coins, directorOnly: true },
   { id: 'sla', label: 'SLA', icon: Clock },
   { id: 'leads', label: 'Воронка лидов', icon: Target },
   { id: 'receivables', label: 'Дебиторка', icon: Receipt, directorOnly: true },
@@ -144,6 +146,7 @@ export function ReportsPage() {
 
       {tab === 'revenue' && <RevenueReport period={period} />}
       {tab === 'engineers' && <EngineersReport period={period} />}
+      {tab === 'profitability' && isDirector && <ProfitabilityReport period={period} />}
       {tab === 'sla' && <SlaReport period={period} />}
       {tab === 'leads' && <LeadsReport period={period} />}
       {tab === 'receivables' && isDirector && <ReceivablesReport />}
@@ -248,6 +251,124 @@ function EngineersReport({ period }: { period: { from?: string; to?: string } })
       emptyText="Нет данных по инженерам за период"
       rowKey={(r) => r.engineerId ?? 'unassigned'}
     />
+  );
+}
+
+/* ───────────────────────── Рентабельность ───────────────────────── */
+
+interface ProfitRow {
+  key: string | null;
+  name: string;
+  closedOrdersCount: number;
+  totalAmountKopecks: string;
+  costAmountKopecks: string;
+  marginAmountKopecks: string;
+  marginPercent: number | null;
+}
+
+function fmtPct(p: number | null): string {
+  if (p === null) return '—';
+  return `${p.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %`;
+}
+
+/** Цвет маржи по знаку: прибыль — зелёная, убыток — красный, ноль — приглушённый. */
+function marginTextClass(marginKopecks: string): string {
+  let m: bigint;
+  try {
+    m = BigInt(marginKopecks);
+  } catch {
+    return 'text-muted-foreground';
+  }
+  return m > 0n ? 'text-success' : m < 0n ? 'text-destructive' : 'text-muted-foreground';
+}
+
+function ProfitTable({ rows, firstColLabel }: { rows: ProfitRow[]; firstColLabel: string }) {
+  const columns: Column<ProfitRow>[] = [
+    { key: 'name', label: firstColLabel, render: (r) => <span className="font-medium">{r.name}</span> },
+    {
+      key: 'closed',
+      label: 'Закрыто',
+      className: 'tabular-nums text-xs text-right',
+      headerClassName: 'text-right',
+      render: (r) => r.closedOrdersCount,
+    },
+    {
+      key: 'revenue',
+      label: 'Выручка',
+      className: 'tabular-nums text-xs font-medium text-right',
+      headerClassName: 'text-right',
+      render: (r) => formatRub(r.totalAmountKopecks),
+    },
+    {
+      key: 'margin',
+      label: 'Маржа',
+      className: 'tabular-nums text-xs text-right',
+      headerClassName: 'text-right',
+      render: (r) => (
+        <span className={marginTextClass(r.marginAmountKopecks)}>{formatRub(r.marginAmountKopecks)}</span>
+      ),
+    },
+    {
+      key: 'pct',
+      label: 'Маржа %',
+      className: 'tabular-nums text-xs text-right',
+      headerClassName: 'text-right',
+      render: (r) => fmtPct(r.marginPercent),
+    },
+  ];
+  // Сентинел для null-строки («Не назначен»/«Без типа»); не '—', чтобы не совпасть
+  // с реальным device_type, равным «—» (иначе дубль React key в таблице).
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      emptyText="Нет данных за период"
+      rowKey={(r) => r.key ?? '__none__'}
+    />
+  );
+}
+
+function ProfitabilityReport({ period }: { period: { from?: string; to?: string } }) {
+  const q = trpc.reports.profitability.useQuery(period);
+  if (q.isLoading) return <p className="text-muted-foreground text-sm">Загрузка…</p>;
+  if (q.error) return <p className="text-destructive text-sm">{q.error.message}</p>;
+  const d = q.data!;
+  const summaryMargin = (() => {
+    try {
+      return BigInt(d.summary.marginAmountKopecks);
+    } catch {
+      return 0n;
+    }
+  })();
+  const marginTone = summaryMargin > 0n ? 'success' : summaryMargin < 0n ? 'danger' : undefined;
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Выручка (закрытые)" value={formatRub(d.summary.totalAmountKopecks)} />
+        <Kpi label="Себестоимость" value={formatRub(d.summary.costAmountKopecks)} />
+        <Kpi label="Маржа (прибыль)" value={formatRub(d.summary.marginAmountKopecks)} tone={marginTone} />
+        <Kpi label="Маржа %" value={fmtPct(d.summary.marginPercent)} tone={marginTone} />
+      </div>
+
+      <div>
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          <UsersIcon className="h-4 w-4" /> По инженерам
+        </h3>
+        <ProfitTable rows={d.byEngineer} firstColLabel="Инженер" />
+      </div>
+
+      <div>
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          <Coins className="h-4 w-4" /> По типу техники
+        </h3>
+        <ProfitTable rows={d.byEquipment} firstColLabel="Тип оборудования" />
+      </div>
+
+      <p className="text-muted-foreground text-xs">
+        Рентабельность считается по дате закрытия наряда (сходится с «Маржа» на дашборде). «Не
+        назначен» / «Без типа» — наряды без инженера или без указанного типа аппарата.
+      </p>
+    </div>
   );
 }
 
@@ -454,15 +575,12 @@ function ReceivablesReport() {
   );
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
+function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'danger' | 'success' }) {
+  const toneCls = tone === 'danger' ? 'text-destructive' : tone === 'success' ? 'text-success' : '';
   return (
     <div className="bg-card rounded-lg border p-3">
       <div className="text-muted-foreground text-xs">{label}</div>
-      <div
-        className={`mt-1 text-lg font-semibold tabular-nums ${tone === 'danger' ? 'text-destructive' : ''}`}
-      >
-        {value}
-      </div>
+      <div className={`mt-1 text-lg font-semibold tabular-nums ${toneCls}`}>{value}</div>
     </div>
   );
 }
