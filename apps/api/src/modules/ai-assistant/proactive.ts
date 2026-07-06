@@ -13,7 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import { aiDailySummaries, withTenantTx, type Db } from '@erfolg/db';
 import type { ResolvedTenant } from '../../lib/tenant';
 import { logger } from '../../lib/logger';
-import { callLlm } from './llm';
+import { callLlm, type LlmCallOpts } from './llm';
 import { loadLlmRuntimeConfig } from './config';
 import {
   BLOCKED_REASON_LABEL_RU,
@@ -37,8 +37,17 @@ const STATUS_LABEL_RU: Record<string, string> = {
 };
 
 /**
+ * Бюджет НЕинтерактивного «формулирования»: короткий таймаут и одна доп. попытка,
+ * чтобы отчёт/сводка деградировали на детерминированные данные за ~секунды, а не
+ * висели до ~3 мин при тормозящем z.ai (OPS-2, аудит 2026-07-06). Интерактивный чат
+ * этот путь НЕ использует — там дефолт callLlm (60с×3).
+ */
+const PHRASE_LLM_OPTS: LlmCallOpts = { timeoutMs: 15_000, maxAttempts: 2 };
+
+/**
  * Сформулировать текст через LLM. НИКОГДА не бросает: не настроен/сбой → null.
  * tools=[] — простое текстовое дополнение (модель ничего не вызывает).
+ * Короткий бюджет (PHRASE_LLM_OPTS) — быстрый фолбэк, страница не «висит».
  */
 export async function phraseWithLlm(
   db: Db,
@@ -62,6 +71,7 @@ export async function phraseWithLlm(
       ],
       [],
       cfg,
+      PHRASE_LLM_OPTS,
     );
     const text = reply.content?.trim();
     return text ? text : null;

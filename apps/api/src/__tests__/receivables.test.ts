@@ -23,6 +23,7 @@ import {
   invoices,
   payments,
   tickets,
+  users,
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
@@ -36,11 +37,16 @@ import {
   transitionToIssued,
 } from '../modules/invoices/repository';
 import { sendInvoiceReminder } from '../modules/invoices/reminder';
+import { sendReminderCmd } from '../modules/invoices/service';
 import { addPayment } from '../modules/payments/repository';
 import { __setTransporterForTesting } from '../lib/mailer';
+import { getRedis } from '../lib/redis';
+import type { ResolvedTenant } from '../lib/tenant';
+import type { SessionData } from '../lib/session';
 
 let erfolgId = '';
 let encKey = '';
+let seedUserId = '';
 let clientSeq = 0;
 
 const TEST_PREFIX = 'TESTAR-';
@@ -51,6 +57,11 @@ beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
   encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
+  // Любой активный пользователь тенанта — для userId в CmdCtx (аудит ручного напоминания).
+  const [u] = await withTenantTx(getDb(), erfolgId, (tx) =>
+    tx.select({ id: users.id }).from(users).where(eq(users.tenantId, erfolgId)).limit(1),
+  );
+  seedUserId = u?.id ?? '';
 
   __setTransporterForTesting({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,6 +134,29 @@ async function makeInvoice(
 function big(v: string): bigint {
   return BigInt(v);
 }
+
+function makeCmdCtx(tenantId: string) {
+  const tenant: ResolvedTenant = {
+    id: tenantId,
+    subdomain: 'test',
+    displayName: 'test',
+    status: 'active',
+    timezone: 'Europe/Moscow',
+    kmsKeyId: null,
+  };
+  const session: SessionData = {
+    tenantId,
+    userId: seedUserId,
+    username: 'test',
+    role: 'dispatcher',
+    fullName: 'Test User',
+    expiresAt: Date.now() + 60_000,
+  };
+  return { db: getDb(), tenant, session, audit: { ip: null, userAgent: null } };
+}
+
+const reminderLockKey = (tenantId: string, invoiceId: string) =>
+  `erfolg:invoice-reminder-lock:${tenantId}:${invoiceId}`;
 
 describe('receivables — Дебиторка (фича №10)', () => {
   beforeEach(clearTestData);
@@ -239,5 +273,42 @@ describe('receivables — Дебиторка (фича №10)', () => {
       tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
     );
     expect(row?.count).toBe(0);
+  });
+});
+
+describe('sendReminderCmd — ручная кнопка (F1: cooldown + защита от гонки)', () => {
+  beforeEach(clearTestData);
+
+  it('последовательный повтор в окне cooldown не шлёт дубль (skippedCooldown)', async () => {
+    const clientId = await makeDebtorClient('cooldown@example.com');
+    await makeInvoice(clientId, -5);
+
+    const r1 = await sendReminderCmd(makeCmdCtx(erfolgId), clientId);
+    expect(r1.sent).toBe(1);
+    expect(r1.skippedCooldown).toBe(0);
+
+    // сразу повторно: lastReminderSentAt свежий → cooldown пропускает, второе письмо не уходит
+    const r2 = await sendReminderCmd(makeCmdCtx(erfolgId), clientId);
+    expect(r2.sent).toBe(0);
+    expect(r2.skippedCooldown).toBe(1);
+    expect(r2.total).toBe(1);
+    expect(sentMail.filter((m) => m.to === 'cooldown@example.com')).toHaveLength(1);
+  });
+
+  it('одновременный запрос: claim занят → счёт пропущен, письмо не дублируется', async () => {
+    const clientId = await makeDebtorClient('race@example.com');
+    const { invoiceId } = await makeInvoice(clientId, -5);
+
+    // эмулируем «другой запрос уже шлёт этот счёт»: занимаем claim-ключ заранее.
+    const key = reminderLockKey(erfolgId, invoiceId);
+    await getRedis().set(key, '1', 'EX', 120);
+    try {
+      const res = await sendReminderCmd(makeCmdCtx(erfolgId), clientId);
+      expect(res.sent).toBe(0);
+      expect(res.skippedCooldown).toBe(1);
+      expect(sentMail.some((m) => m.to === 'race@example.com')).toBe(false);
+    } finally {
+      await getRedis().del(key);
+    }
   });
 });

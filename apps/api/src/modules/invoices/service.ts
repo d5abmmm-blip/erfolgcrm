@@ -9,6 +9,7 @@ import type { Db } from '@erfolg/db';
 import type { VatRate } from '@erfolg/shared';
 import { writeAudit } from '../../lib/audit';
 import { logger } from '../../lib/logger';
+import { getRedis } from '../../lib/redis';
 import {
   createDraft as repoCreateDraft,
   getById as repoGetById,
@@ -86,14 +87,33 @@ export interface SendReminderResult {
   notConfigured: number;
   /** Сбой отправки (SMTP отдал ошибку) — в отличие от «почта не настроена». */
   failed: number;
+  /** Пропущено: напоминание по счёту отправляли недавно (cooldown против дублей). */
+  skippedCooldown: number;
   /** Всего просроченных счетов у клиента (по которым пытались напомнить). */
   total: number;
 }
 
 /**
+ * Короткий cooldown ручного напоминания (F1, аудит 2026-07-06): по одному счёту не шлём
+ * чаще, чем раз в MANUAL_REMINDER_COOLDOWN_HOURS. Защищает от дублей при двойном клике /
+ * повторном заходе в тот же день. ~20ч ≈ «не чаще раза в сутки», но всё ещё позволяет
+ * напомнить на следующий день. Ночной воркер использует свой (недельный) порог отдельно.
+ */
+const MANUAL_REMINDER_COOLDOWN_HOURS = 20;
+
+/**
+ * TTL атомарного claim'а в Redis против ОДНОВРЕМЕННОЙ отправки (F1-гонка): два клика/вкладки
+ * в один миг не должны оба уйти письмом по одному счёту. Достаточно перекрыть окно между
+ * началом отправки и записью lastReminderSentAt. Успех → ключ протухнет сам (cooldown уже
+ * держит DB); неуспех → снимаем ключ сразу (см. ниже), чтобы повтор не ждал TTL.
+ */
+const REMINDER_LOCK_TTL_SEC = 120;
+
+/**
  * Ручное напоминание клиенту: шлёт письмо по каждому его ПРОСРОЧЕННОМУ счёту
- * (по одному письму на счёт — как ночной воркер). Игнорирует недельный cooldown:
- * директор нажал сознательно. Возвращает разбивку исходов для тоста в UI.
+ * (по одному письму на счёт — как ночной воркер). Счета, по которым уже напоминали в
+ * последние ~20ч, пропускаются (skippedCooldown) — чтобы повторный клик не задваивал
+ * письма клиенту. Возвращает разбивку исходов для тоста в UI.
  */
 export async function sendReminderCmd(
   ctx: CmdCtx,
@@ -107,15 +127,39 @@ export async function sendReminderCmd(
       message: 'У клиента нет просроченных счетов',
     });
   }
+  const cooldownMs = MANUAL_REMINDER_COOLDOWN_HOURS * 60 * 60 * 1000;
+  const nowMs = Date.now();
   const tenantName = await getTenantDisplayName(ctx.db, ctx.tenant.id);
   const result: SendReminderResult = {
     sent: 0,
     skippedNoEmail: 0,
     notConfigured: 0,
     failed: 0,
+    skippedCooldown: 0,
     total: overdueInvoices.length,
   };
   for (const invoice of overdueInvoices) {
+    if (
+      invoice.lastReminderSentAt &&
+      nowMs - invoice.lastReminderSentAt.getTime() < cooldownMs
+    ) {
+      result.skippedCooldown++;
+      continue;
+    }
+    // F1-гонка: атомарный claim — кто первым взял ключ, тот шлёт; второй одновременный
+    // запрос пропускает счёт. lastReminderSentAt закрывает последовательный повтор, ключ —
+    // одновременный. Redis недоступен → best-effort: не блокируем ручную отправку.
+    const lockKey = `erfolg:invoice-reminder-lock:${ctx.tenant.id}:${invoice.id}`;
+    let claimed = true;
+    try {
+      claimed = (await getRedis().set(lockKey, '1', 'EX', REMINDER_LOCK_TTL_SEC, 'NX')) !== null;
+    } catch (err) {
+      logger.warn({ err, invoiceId: invoice.id }, 'sendReminder: redis claim unavailable, proceeding');
+    }
+    if (!claimed) {
+      result.skippedCooldown++;
+      continue;
+    }
     const res = await sendInvoiceReminder(
       ctx.db,
       { id: ctx.tenant.id, name: tenantName },
@@ -126,6 +170,16 @@ export async function sendReminderCmd(
     else if (res.outcome === 'skipped_no_email') result.skippedNoEmail++;
     else if (res.outcome === 'skipped_mail') result.notConfigured++;
     else result.failed++; // outcome === 'error'
+    // Не отправилось (нет email / почта не настроена / ошибка) → снимаем claim сразу,
+    // чтобы повторная попытка не ждала истечения TTL. lastReminderSentAt при неуспехе
+    // НЕ выставлен (markReminderSent зовётся только на 'sent'), поэтому повтор корректен.
+    if (res.outcome !== 'sent') {
+      try {
+        await getRedis().del(lockKey);
+      } catch {
+        /* best-effort: ключ протухнет по TTL */
+      }
+    }
   }
   // Аудит здесь best-effort: письма уже отправлены (необратимо), поэтому сбой записи
   // аудита НЕ должен ронять ответ ошибкой — иначе директор увидит ошибку и кликнет

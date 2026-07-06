@@ -22,6 +22,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { formatRub, formatRubWhole } from '../lib/money';
 import { FinanceTabs } from '../components/finance/FinanceTabs';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 /** BigInt без падения: пустое/кривое значение → 0n, а не краш страницы. */
 function safeBig(v: string | number | null | undefined): bigint {
@@ -71,6 +72,12 @@ export function ReceivablesPage() {
   const utils = trpc.useUtils();
   const [toast, setToast] = useState<Toast | null>(null);
   const [sendingClientId, setSendingClientId] = useState<string | null>(null);
+  // F1: подтверждение перед реальной отправкой письма клиенту (защита от случайного клика).
+  const [confirmTarget, setConfirmTarget] = useState<{
+    clientId: string;
+    clientName: string | null;
+    count: number;
+  } | null>(null);
 
   const remind = trpc.invoices.sendReminder.useMutation();
 
@@ -86,14 +93,19 @@ export function ReceivablesPage() {
     setSendingClientId(clientId);
     try {
       const res = await remind.mutateAsync({ clientId });
-      if (res.sent > 0 && res.sent === res.total) {
+      const problems = res.skippedNoEmail + res.notConfigured + res.failed;
+      if (res.sent > 0 && problems === 0) {
+        const cd = res.skippedCooldown > 0 ? `, ${res.skippedCooldown} пропущено (недавно)` : '';
         setToast({
           tone: 'success',
-          msg: `Отправлено ${res.sent} ${pluralTimes(res.sent)} — ${clientName ?? 'клиенту'}`,
+          msg: `Отправлено ${res.sent} ${pluralTimes(res.sent)} — ${clientName ?? 'клиенту'}${cd}`,
         });
       } else if (res.sent > 0) {
         // Часть писем не ушла — не выдаём это за полный успех.
         setToast({ tone: 'error', msg: `Отправлено ${res.sent} из ${res.total} — часть не ушла` });
+      } else if (res.skippedCooldown === res.total) {
+        // Все счета в cooldown — это нормальный исход, не ошибка (защита от дублей).
+        setToast({ tone: 'success', msg: 'Недавно уже напоминали — повтор не отправляли' });
       } else if (res.skippedNoEmail > 0) {
         setToast({ tone: 'error', msg: 'У клиента не указан email' });
       } else if (res.notConfigured > 0) {
@@ -270,7 +282,13 @@ export function ReceivablesPage() {
                               <button
                                 type="button"
                                 disabled={!hasEmail || sending}
-                                onClick={() => void onRemind(d.clientId, d.clientName)}
+                                onClick={() =>
+                                  setConfirmTarget({
+                                    clientId: d.clientId,
+                                    clientName: d.clientName,
+                                    count: d.overdueInvoiceCount,
+                                  })
+                                }
                                 title={hasEmail ? undefined : 'У клиента не указан email'}
                                 className={cn(
                                   'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition',
@@ -315,6 +333,28 @@ export function ReceivablesPage() {
           {toast.msg}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Отправить напоминание клиенту?"
+        description={
+          confirmTarget
+            ? `${confirmTarget.clientName ?? 'Клиенту'} уйдёт письмо по ${confirmTarget.count} ${pluralInvoices(
+                confirmTarget.count,
+              )}. Счета, по которым напоминали в последние ~20 часов, будут пропущены (без дублей).`
+            : undefined
+        }
+        confirmText="Отправить"
+        cancelText="Отмена"
+        loading={sendingClientId !== null}
+        onCancel={() => setConfirmTarget(null)}
+        onConfirm={() => {
+          if (!confirmTarget) return;
+          const { clientId, clientName } = confirmTarget;
+          setConfirmTarget(null);
+          void onRemind(clientId, clientName);
+        }}
+      />
     </div>
   );
 }

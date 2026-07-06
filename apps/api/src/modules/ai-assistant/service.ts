@@ -16,6 +16,7 @@ import type { Context } from '../../trpc/context';
 import { callLlm, type LlmContentPart, type LlmMessage } from './llm';
 import { loadLlmRuntimeConfig } from './config';
 import { getTool, isWriteTool, toolDefsForRole, type ToolRunCtx } from './tools';
+import { redactClientPii } from './redact';
 import { processAttachment, type IncomingAttachment } from './extract';
 
 export interface ChatTurn {
@@ -155,7 +156,8 @@ export async function runAssistant(
     let resultJson: string;
     try {
       const result = await tool.run(caller, confirm.args, toolCtx);
-      resultJson = JSON.stringify({ ok: true, result });
+      // PII-1: тот же фильтр ПДн, что и на read-пути — write-результат тоже уходит в LLM.
+      resultJson = JSON.stringify({ ok: true, result: redactClientPii(result) });
     } catch (err) {
       resultJson = JSON.stringify({
         ok: false,
@@ -226,7 +228,8 @@ export async function runAssistant(
         content = JSON.stringify({ error: `Неизвестный инструмент: ${tc.name}` });
       } else {
         try {
-          content = JSON.stringify(await tool.run(caller, args, toolCtx));
+          // PII-1: имя/контакты клиента из БД НЕ уходят во внешний LLM (z.ai/КНР).
+          content = JSON.stringify(redactClientPii(await tool.run(caller, args, toolCtx)));
         } catch (err) {
           content = JSON.stringify({
             error: err instanceof Error ? err.message : String(err),

@@ -59,6 +59,19 @@ export interface LlmReply {
 
 export type ApiStyle = 'openai' | 'anthropic';
 
+/**
+ * Параметры одного вызова: таймаут и число попыток. Нужны, чтобы НЕинтерактивные
+ * пути (сводки/отчёты через phraseWithLlm) не ждали до 60с×3≈3 мин при тормозящем
+ * провайдере, а быстро деградировали на детерминированные данные. Интерактивный чат
+ * оставляет дефолт (модель + tools могут думать дольше). См. OPS-2 (аудит 2026-07-06).
+ */
+export interface LlmCallOpts {
+  /** Таймаут одного сетевого запроса, мс (по умолчанию LLM_TIMEOUT_MS = 60000). */
+  timeoutMs?: number;
+  /** Максимум попыток при сетевом сбое/429/5xx (по умолчанию MAX_ATTEMPTS = 3). */
+  maxAttempts?: number;
+}
+
 /** Рабочий конфиг подключения к LLM. Загружается из БД/env (см. config.ts). */
 export interface LlmRuntimeConfig {
   baseUrl: string;
@@ -77,10 +90,11 @@ export async function callLlm(
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
   cfg: LlmRuntimeConfig,
+  opts?: LlmCallOpts,
 ): Promise<LlmReply> {
   return cfg.apiStyle === 'anthropic'
-    ? callAnthropic(cfg, messages, tools)
-    : callOpenAi(cfg, messages, tools);
+    ? callAnthropic(cfg, messages, tools, opts)
+    : callOpenAi(cfg, messages, tools, opts);
 }
 
 /* ───────────────────────────── сеть с ретраями ───────────────────────────── */
@@ -103,20 +117,26 @@ function redactSecret(text: string, secret: string): string {
  * не видел «fetch failed» из-за единичного сетевого блипа. 4xx (кроме 429) — реальные
  * ошибки (авторизация, валидация), их НЕ повторяем.
  */
-async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: LlmCallOpts,
+): Promise<Response> {
+  const timeoutMs = opts?.timeoutMs ?? LLM_TIMEOUT_MS;
+  const maxAttempts = Math.max(1, opts?.maxAttempts ?? MAX_ATTEMPTS);
   let lastErr: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(LLM_TIMEOUT_MS) });
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       const retryableStatus = res.status === 429 || res.status >= 500;
-      if (retryableStatus && attempt < MAX_ATTEMPTS - 1) {
+      if (retryableStatus && attempt < maxAttempts - 1) {
         await sleep(400 * 2 ** attempt);
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
-      if (attempt < MAX_ATTEMPTS - 1) {
+      if (attempt < maxAttempts - 1) {
         await sleep(400 * 2 ** attempt);
         continue;
       }
@@ -144,25 +164,30 @@ async function callOpenAi(
   cfg: LlmRuntimeConfig,
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
+  opts?: LlmCallOpts,
 ): Promise<LlmReply> {
   let res: Response;
   try {
-    res = await fetchWithRetry(`${cfg.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${cfg.apiKey}`,
-        // OpenRouter рекомендует (необязательно) идентифицировать приложение.
-        'X-Title': 'ErfolgCRM',
+    res = await fetchWithRetry(
+      `${cfg.baseUrl}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cfg.apiKey}`,
+          // OpenRouter рекомендует (необязательно) идентифицировать приложение.
+          'X-Title': 'ErfolgCRM',
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          messages,
+          tools: tools.length ? tools : undefined,
+          tool_choice: tools.length ? 'auto' : undefined,
+          temperature: 0.2,
+        }),
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages,
-        tools: tools.length ? tools : undefined,
-        tool_choice: tools.length ? 'auto' : undefined,
-        temperature: 0.2,
-      }),
-    });
+      opts,
+    );
   } catch (err) {
     throw new Error(
       `Не удалось связаться с LLM (${cfg.baseUrl}): ${
@@ -317,6 +342,7 @@ async function callAnthropic(
   cfg: LlmRuntimeConfig,
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
+  opts?: LlmCallOpts,
 ): Promise<LlmReply> {
   const { system, messages: amsgs, tools: atools } = toAnthropic(messages, tools);
   // base уже без хвостовых слэшей; путь Messages API — /v1/messages.
@@ -324,22 +350,26 @@ async function callAnthropic(
 
   let res: Response;
   try {
-    res = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cfg.apiKey,
-        'anthropic-version': '2023-06-01',
+    res = await fetchWithRetry(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cfg.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          max_tokens: 2048,
+          temperature: 0.2,
+          system: system || undefined,
+          messages: amsgs,
+          tools: atools.length ? atools : undefined,
+        }),
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        max_tokens: 2048,
-        temperature: 0.2,
-        system: system || undefined,
-        messages: amsgs,
-        tools: atools.length ? atools : undefined,
-      }),
-    });
+      opts,
+    );
   } catch (err) {
     throw new Error(
       `Не удалось связаться с LLM (${url}): ${err instanceof Error ? err.message : String(err)}`,
