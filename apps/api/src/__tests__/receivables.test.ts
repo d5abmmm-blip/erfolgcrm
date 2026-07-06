@@ -1,0 +1,243 @@
+/**
+ * Фича №10 «Дебиторка»:
+ *   • receivablesReport — разбивка по срокам (aging), сводка, группировка по клиентам;
+ *     считает по due_date (не по статусу-флагу), исключает оплаченные/черновики/отменённые.
+ *   • listClientOverdueInvoices — только просроченные счета клиента (для кнопки «Напомнить»).
+ *   • sendInvoiceReminder — общий код письма: шлёт, помечает reminderCount, игнорирует cooldown,
+ *     пропускает клиента без email.
+ *
+ * Изоляция под ПАРАЛЛЕЛЬНЫЙ прогон тест-файлов на общей БД (vitest гонит файлы параллельно):
+ *   • per-client проверки — по строке своего свежесозданного клиента (точные значения);
+ *   • tenant-wide aging/summary — АБСОЛЮТНЫЕ `>=` (свои счета дают гарантированный минимум,
+ *     их никто не удалит; before/after дельты были бы флаки — соседний файл добавляет/оплачивает).
+ * Клиентов НЕ удаляем в cleanup (граф FK вокруг clients большой) — это безвредно: после чистки
+ * счетов у них нет остатка, в дебиторку они не попадают.
+ *
+ * sendMail замокан через __setTransporterForTesting (как в invoice-reminder.test.ts).
+ */
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eq, like } from 'drizzle-orm';
+import {
+  getDb,
+  getTenantEncryptionKey,
+  invoices,
+  payments,
+  tickets,
+  withTenantTx,
+} from '@erfolg/db';
+import { ensureSeed } from './setup';
+import { createClient } from '../modules/clients/repository';
+import { createTicket } from '../modules/tickets/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import {
+  createDraft,
+  listClientOverdueInvoices,
+  receivablesReport,
+  transitionToIssued,
+} from '../modules/invoices/repository';
+import { sendInvoiceReminder } from '../modules/invoices/reminder';
+import { addPayment } from '../modules/payments/repository';
+import { __setTransporterForTesting } from '../lib/mailer';
+
+let erfolgId = '';
+let encKey = '';
+let clientSeq = 0;
+
+const TEST_PREFIX = 'TESTAR-';
+const PRICE = 100_000n; // 1000 ₽ на счёт
+const sentMail: Array<{ to: string; subject: string }> = [];
+
+beforeAll(async () => {
+  const seed = await ensureSeed();
+  erfolgId = seed.erfolgId;
+  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
+
+  __setTransporterForTesting({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sendMail: vi.fn(async (opts: any) => {
+      sentMail.push({ to: opts.to, subject: opts.subject });
+      return { messageId: `mock-${sentMail.length}` };
+    }),
+    close: () => undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+});
+
+afterAll(() => {
+  __setTransporterForTesting(null);
+});
+
+async function clearTestData(): Promise<void> {
+  sentMail.length = 0;
+  // Клиентов НЕ трогаем (FK-граф вокруг clients большой). Чистим только счета/тикеты/платежи
+  // по префиксу — этого достаточно, чтобы прошлые прогоны не оставляли остатков в дебиторке.
+  await withTenantTx(getDb(), erfolgId, async (tx) => {
+    await tx.delete(payments).where(like(payments.comment, `${TEST_PREFIX}%`));
+    await tx.delete(invoices).where(like(invoices.notes, `${TEST_PREFIX}%`));
+    await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
+  });
+}
+
+async function makeDebtorClient(email: string | null): Promise<string> {
+  clientSeq += 1;
+  const { id } = await createClient(getDb(), erfolgId, encKey, {
+    type: 'legal',
+    displayName: `${TEST_PREFIX}debtor-${Date.now()}-${clientSeq}`,
+    email,
+  });
+  return id;
+}
+
+/** Создаёт выставленный счёт клиенту с due_date = сегодня + offset дней (offset<0 = просрочен). */
+async function makeInvoice(
+  clientId: string,
+  dueDaysOffset: number,
+): Promise<{ invoiceId: string; ticketId: string }> {
+  const { id: ticketId } = await createTicket(getDb(), erfolgId, null, {
+    clientId,
+    symptom: `${TEST_PREFIX}flow`,
+  });
+  const wo = await getOrCreateWorkOrder(getDb(), erfolgId, ticketId);
+  await upsertLine(getDb(), erfolgId, wo.id, null, {
+    lineType: 'work',
+    name: `${TEST_PREFIX}work`,
+    unit: 'шт',
+    quantity: '1',
+    unitPriceKopecks: PRICE,
+  });
+  const draft = await createDraft(getDb(), erfolgId, {
+    workOrderId: wo.id,
+    notes: `${TEST_PREFIX}inv`,
+  });
+  const issued = await transitionToIssued(getDb(), erfolgId, draft.id, {});
+  if (!issued) throw new Error('issue failed');
+  const due = new Date(Date.now() + dueDaysOffset * 86_400_000).toISOString().slice(0, 10);
+  // issue_date заведомо раньше любого due (constraint due_date >= issue_date).
+  const issue = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
+  await withTenantTx(getDb(), erfolgId, async (tx) => {
+    await tx.update(invoices).set({ dueDate: due, issueDate: issue }).where(eq(invoices.id, issued.id));
+  });
+  return { invoiceId: issued.id, ticketId };
+}
+
+function big(v: string): bigint {
+  return BigInt(v);
+}
+
+describe('receivables — Дебиторка (фича №10)', () => {
+  beforeEach(clearTestData);
+
+  it('aging: мои счета попадают в корзины сроков, сводка их учитывает', async () => {
+    const clientId = await makeDebtorClient('debtor@example.com');
+    await makeInvoice(clientId, 10); // срок не наступил
+    await makeInvoice(clientId, -5); // 1–30 дней
+    await makeInvoice(clientId, -45); // 31–60 дней
+    await makeInvoice(clientId, -90); // 60+ дней
+
+    const r = await receivablesReport(getDb(), erfolgId);
+
+    // Абсолютные минимумы: в каждой корзине есть хотя бы мой счёт (свои счета никто не удалит).
+    expect(r.aging.notDue.count).toBeGreaterThanOrEqual(1);
+    expect(big(r.aging.notDue.sumKopecks) >= PRICE).toBe(true);
+    expect(r.aging.d1_30.count).toBeGreaterThanOrEqual(1);
+    expect(big(r.aging.d1_30.sumKopecks) >= PRICE).toBe(true);
+    expect(r.aging.d31_60.count).toBeGreaterThanOrEqual(1);
+    expect(big(r.aging.d31_60.sumKopecks) >= PRICE).toBe(true);
+    expect(r.aging.d60plus.count).toBeGreaterThanOrEqual(1);
+    expect(big(r.aging.d60plus.sumKopecks) >= PRICE).toBe(true);
+
+    // Сводка учитывает мои 4 счёта (всего) и 3 просроченных.
+    expect(big(r.summary.totalOutstandingKopecks) >= PRICE * 4n).toBe(true);
+    expect(big(r.summary.overdueOutstandingKopecks) >= PRICE * 3n).toBe(true);
+    expect(r.summary.debtorCount).toBeGreaterThanOrEqual(1);
+    expect(r.summary.invoiceCount).toBeGreaterThanOrEqual(4);
+    expect(r.summary.overdueInvoiceCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('группирует по клиенту: всего/просрочено/кол-во/макс.просрочка — точно', async () => {
+    const clientId = await makeDebtorClient('grouped@example.com');
+    await makeInvoice(clientId, 10);
+    await makeInvoice(clientId, -5);
+    await makeInvoice(clientId, -90);
+
+    const report = await receivablesReport(getDb(), erfolgId);
+    const row = report.debtors.find((d) => d.clientId === clientId);
+    expect(row).toBeDefined();
+    if (!row) return;
+    expect(big(row.totalOwedKopecks)).toBe(PRICE * 3n);
+    expect(big(row.overdueOwedKopecks)).toBe(PRICE * 2n);
+    expect(row.invoiceCount).toBe(3);
+    expect(row.overdueInvoiceCount).toBe(2);
+    expect(row.maxDaysOverdue).toBeGreaterThanOrEqual(60);
+    expect(row.clientEmail).toBe('grouped@example.com');
+  });
+
+  it('оплаченный счёт исчезает из дебиторки', async () => {
+    const clientId = await makeDebtorClient('paid@example.com');
+    const { invoiceId, ticketId } = await makeInvoice(clientId, -5);
+
+    let report = await receivablesReport(getDb(), erfolgId);
+    expect(report.debtors.some((d) => d.clientId === clientId)).toBe(true);
+
+    // Полная оплата → status paid, остаток 0 → не дебиторка.
+    await addPayment(getDb(), erfolgId, {
+      ticketId,
+      invoiceId,
+      amountKopecks: PRICE,
+      method: 'bank_transfer',
+      paidAt: new Date(),
+      comment: `${TEST_PREFIX}pay`,
+      userId: null,
+    });
+
+    report = await receivablesReport(getDb(), erfolgId);
+    expect(report.debtors.some((d) => d.clientId === clientId)).toBe(false);
+  });
+
+  it('listClientOverdueInvoices — только просроченные счета клиента', async () => {
+    const clientId = await makeDebtorClient('overdue-only@example.com');
+    await makeInvoice(clientId, 10); // не просрочен — не должен попасть
+    await makeInvoice(clientId, -5);
+    await makeInvoice(clientId, -20);
+
+    const list = await listClientOverdueInvoices(getDb(), erfolgId, clientId);
+    expect(list).toHaveLength(2);
+    expect(list.every((i) => new Date(i.dueDate) < new Date())).toBe(true);
+  });
+
+  it('sendInvoiceReminder шлёт письмо и инкрементирует reminderCount, игнорируя cooldown', async () => {
+    const clientId = await makeDebtorClient('remind@example.com');
+    await makeInvoice(clientId, -5);
+    const [inv] = await listClientOverdueInvoices(getDb(), erfolgId, clientId);
+    expect(inv).toBeDefined();
+    if (!inv) return;
+
+    const r1 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    expect(r1.outcome).toBe('sent');
+    expect(sentMail.some((m) => m.to === 'remind@example.com')).toBe(true);
+
+    // Повторный вызов сразу — cooldown НЕ мешает ручной кнопке.
+    const r2 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    expect(r2.outcome).toBe('sent');
+
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
+    );
+    expect(row?.count).toBe(2);
+  });
+
+  it('sendInvoiceReminder пропускает клиента без email', async () => {
+    const clientId = await makeDebtorClient(null);
+    await makeInvoice(clientId, -5);
+    const [inv] = await listClientOverdueInvoices(getDb(), erfolgId, clientId);
+    expect(inv).toBeDefined();
+    if (!inv) return;
+
+    const res = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    expect(res.outcome).toBe('skipped_no_email');
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
+    );
+    expect(row?.count).toBe(0);
+  });
+});

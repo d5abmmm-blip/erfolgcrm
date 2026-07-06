@@ -16,6 +16,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { href: '/finance', label: 'Обзор', exact: true },
+  { href: '/finance/receivables', label: 'Дебиторка' },
   { href: '/finance/transactions', label: 'Приход и расход' },
   { href: '/finance/invoices', label: 'Счета на оплату' },
   { href: '/finance/accounts', label: 'Счета и статьи', directorOnly: true },

@@ -16,6 +16,8 @@ import {
   listByClientQuery,
   listByTicketQuery,
   listForTenantQuery,
+  receivablesQuery,
+  sendReminderCmd,
   updateDraftCmd,
 } from './service';
 
@@ -72,6 +74,16 @@ export const invoicesRouter = router({
         offset,
       });
     }),
+
+  /** Отчёт «Дебиторка»: кто должен + разбивка по срокам + сводка. Staff (директор+диспетчер). */
+  receivables: staffProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+    .query(({ ctx, input }) => receivablesQuery(ctx.db, ctx.tenant, input?.limit)),
+
+  /** Ручное напоминание клиенту по его просроченным счетам (кнопка «Напомнить»). */
+  sendReminder: staffProcedure
+    .input(z.object({ clientId: z.string().uuid() }))
+    .mutation(({ ctx, input }) => sendReminderCmd(buildCmdCtx(ctx), input.clientId)),
 
   createDraft: staffProcedure
     .input(

@@ -27,6 +27,14 @@ import { WorkOrderNotFoundError } from '../../lib/errors';
 const INVOICE_COUNTER_KIND = 'invoice';
 const DEFAULT_DUE_DAYS = 14;
 
+/**
+ * Статусы «счёт с остатком» (дебиторка): выставлен / частично оплачен / просрочен.
+ * Единый источник для listClientOverdueInvoices и receivablesReport — чтобы экран
+ * «Дебиторка» и кнопка «Напомнить» всегда опирались на один набор статусов.
+ * Тот же набор используется на дашборде («Вам должны») и в частичном индексе invoices.
+ */
+const RECEIVABLE_INVOICE_STATUSES = sql`('issued', 'partially_paid', 'overdue')`;
+
 /** Vat-percent по справочнику ставок. */
 const VAT_PERCENT: Record<VatRate, number> = {
   '0': 0,
@@ -652,5 +660,218 @@ export async function markOnecSynced(
         ...(externalId ? { onecExternalId: externalId } : {}),
       })
       .where(eq(invoices.id, invoiceId));
+  });
+}
+
+/* ============================== ДЕБИТОРКА (receivables) ============================== */
+
+/**
+ * Просроченные счета конкретного клиента (для ручной кнопки «Напомнить»).
+ * «Просрочен» = due_date в прошлом + остаток > 0 (по дате, а не по статусу-флагу —
+ * так экран и кнопка согласованы даже если ночной cron ещё не переставил флаг).
+ */
+export async function listClientOverdueInvoices(
+  db: Db,
+  tenantId: string,
+  clientId: string,
+  limit = 100,
+): Promise<InvoiceDto[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          isNull(invoices.deletedAt),
+          eq(invoices.clientId, clientId),
+          sql`${invoices.status} IN ${RECEIVABLE_INVOICE_STATUSES}`,
+          sql`${invoices.dueDate}::date < CURRENT_DATE`,
+          sql`${invoices.totalAmountKopecks} > ${invoices.paidAmountKopecks}`,
+        ),
+      )
+      .orderBy(asc(invoices.dueDate))
+      .limit(limit);
+    return rows.map(toDto);
+  });
+}
+
+export interface ReceivablesAgingBucket {
+  /** Остаток по корзине в копейках (строка bigint). */
+  sumKopecks: string;
+  count: number;
+}
+
+export interface ReceivablesDebtor {
+  clientId: string;
+  clientName: string | null;
+  clientEmail: string | null;
+  /** Всего должен (остаток по всем неоплаченным счетам), копейки-строка. */
+  totalOwedKopecks: string;
+  /** Из них просрочено (due_date в прошлом), копейки-строка. */
+  overdueOwedKopecks: string;
+  /** Максимальная просрочка в днях среди счетов клиента (0, если просрочки нет). */
+  maxDaysOverdue: number;
+  invoiceCount: number;
+  overdueInvoiceCount: number;
+  /** Последнее авто/ручное напоминание по счетам клиента. ISO-строка или null. */
+  lastReminderSentAt: string | null;
+  /** Наибольшее число напоминаний среди счетов клиента. */
+  reminderCount: number;
+}
+
+export interface ReceivablesReport {
+  summary: {
+    totalOutstandingKopecks: string;
+    overdueOutstandingKopecks: string;
+    debtorCount: number;
+    invoiceCount: number;
+    overdueInvoiceCount: number;
+  };
+  aging: {
+    notDue: ReceivablesAgingBucket;
+    d1_30: ReceivablesAgingBucket;
+    d31_60: ReceivablesAgingBucket;
+    d60plus: ReceivablesAgingBucket;
+  };
+  debtors: ReceivablesDebtor[];
+}
+
+interface DebtorRow {
+  client_id: string;
+  client_name: string | null;
+  client_email: string | null;
+  total_owed: string;
+  overdue_owed: string;
+  max_days_overdue: number;
+  invoice_count: number;
+  overdue_invoice_count: number;
+  last_reminder_sent_at: string | null;
+  reminder_count: number;
+}
+
+interface AgingRow {
+  bucket: 'not_due' | 'd1_30' | 'd31_60' | 'd60plus';
+  sum_kopecks: string;
+  cnt: number;
+}
+
+function sumBig(values: string[]): string {
+  return values.reduce((acc, v) => acc + BigInt(v), 0n).toString();
+}
+
+/**
+ * Отчёт «Дебиторка»: кто и сколько должен, разбивка по срокам (aging) и сводка.
+ * База: живые счета в статусах issued/partially_paid/overdue с остатком > 0.
+ * «Просрочено» и корзины aging считаются по due_date относительно CURRENT_DATE
+ * (не по статусу-флагу — так цифры не «мигают» между тиками ночного cron).
+ */
+export async function receivablesReport(
+  db: Db,
+  tenantId: string,
+  limit = 200,
+): Promise<ReceivablesReport> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const debtorRows = (await tx.execute(sql`
+      SELECT
+        i.client_id,
+        c.display_name AS client_name,
+        c.email        AS client_email,
+        SUM(i.total_amount_kopecks - i.paid_amount_kopecks)::text AS total_owed,
+        SUM(CASE WHEN i.due_date::date < CURRENT_DATE
+                 THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END)::text AS overdue_owed,
+        COALESCE(MAX(CASE WHEN i.due_date::date < CURRENT_DATE
+                          THEN CURRENT_DATE - i.due_date::date ELSE 0 END), 0)::int AS max_days_overdue,
+        COUNT(*)::int AS invoice_count,
+        COUNT(*) FILTER (WHERE i.due_date::date < CURRENT_DATE)::int AS overdue_invoice_count,
+        MAX(i.last_reminder_sent_at)::text AS last_reminder_sent_at,
+        COALESCE(MAX(i.reminder_count), 0)::int AS reminder_count
+      FROM invoices i
+      LEFT JOIN clients c ON c.id = i.client_id
+      WHERE i.deleted_at IS NULL
+        AND i.status IN ${RECEIVABLE_INVOICE_STATUSES}
+        AND i.total_amount_kopecks > i.paid_amount_kopecks
+      GROUP BY i.client_id, c.display_name, c.email
+      ORDER BY
+        SUM(CASE WHEN i.due_date::date < CURRENT_DATE
+                 THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END) DESC,
+        SUM(i.total_amount_kopecks - i.paid_amount_kopecks) DESC
+      LIMIT ${limit}
+    `)) as unknown as DebtorRow[];
+
+    const agingRows = (await tx.execute(sql`
+      SELECT
+        CASE
+          WHEN i.due_date::date >= CURRENT_DATE THEN 'not_due'
+          WHEN CURRENT_DATE - i.due_date::date <= 30 THEN 'd1_30'
+          WHEN CURRENT_DATE - i.due_date::date <= 60 THEN 'd31_60'
+          ELSE 'd60plus'
+        END AS bucket,
+        SUM(i.total_amount_kopecks - i.paid_amount_kopecks)::text AS sum_kopecks,
+        COUNT(*)::int AS cnt
+      FROM invoices i
+      WHERE i.deleted_at IS NULL
+        AND i.status IN ${RECEIVABLE_INVOICE_STATUSES}
+        AND i.total_amount_kopecks > i.paid_amount_kopecks
+      GROUP BY bucket
+    `)) as unknown as AgingRow[];
+
+    // Число должников считаем БЕЗ лимита таблицы, чтобы заголовок был верным
+    // даже если список должников длиннее limit.
+    const debtorCountRows = (await tx.execute(sql`
+      SELECT COUNT(DISTINCT i.client_id)::int AS cnt
+      FROM invoices i
+      WHERE i.deleted_at IS NULL
+        AND i.status IN ${RECEIVABLE_INVOICE_STATUSES}
+        AND i.total_amount_kopecks > i.paid_amount_kopecks
+    `)) as unknown as Array<{ cnt: number }>;
+    const debtorCount = debtorCountRows[0]?.cnt ?? 0;
+
+    const debtors: ReceivablesDebtor[] = debtorRows.map((r) => ({
+      clientId: r.client_id,
+      clientName: r.client_name,
+      clientEmail: r.client_email,
+      totalOwedKopecks: r.total_owed,
+      overdueOwedKopecks: r.overdue_owed,
+      maxDaysOverdue: r.max_days_overdue,
+      invoiceCount: r.invoice_count,
+      overdueInvoiceCount: r.overdue_invoice_count,
+      lastReminderSentAt: r.last_reminder_sent_at,
+      reminderCount: r.reminder_count,
+    }));
+
+    const emptyBucket: ReceivablesAgingBucket = { sumKopecks: '0', count: 0 };
+    const aging = {
+      notDue: { ...emptyBucket },
+      d1_30: { ...emptyBucket },
+      d31_60: { ...emptyBucket },
+      d60plus: { ...emptyBucket },
+    };
+    const bucketKey: Record<AgingRow['bucket'], keyof typeof aging> = {
+      not_due: 'notDue',
+      d1_30: 'd1_30',
+      d31_60: 'd31_60',
+      d60plus: 'd60plus',
+    };
+    for (const row of agingRows) {
+      const key = bucketKey[row.bucket];
+      if (key) aging[key] = { sumKopecks: row.sum_kopecks, count: row.cnt };
+    }
+
+    // Сводка — по НЕограниченным aging-корзинам (не по обрезанному списку debtors).
+    const overdueBuckets = [aging.d1_30, aging.d31_60, aging.d60plus];
+    return {
+      summary: {
+        totalOutstandingKopecks: sumBig(
+          [aging.notDue, ...overdueBuckets].map((b) => b.sumKopecks),
+        ),
+        overdueOutstandingKopecks: sumBig(overdueBuckets.map((b) => b.sumKopecks)),
+        debtorCount,
+        invoiceCount:
+          aging.notDue.count + overdueBuckets.reduce((a, b) => a + b.count, 0),
+        overdueInvoiceCount: overdueBuckets.reduce((a, b) => a + b.count, 0),
+      },
+      aging,
+      debtors,
+    };
   });
 }

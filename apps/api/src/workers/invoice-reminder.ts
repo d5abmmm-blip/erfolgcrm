@@ -17,16 +17,13 @@
  * Добавление repeatable job: enqueueInvoiceReminderSchedule() — идемпотентно по jobId
  * (BullMQ сам деаплицирует repeat по pattern + jobId).
  */
-import { eq } from 'drizzle-orm';
-import { clients, getDb, tenants, withTenantTx } from '@erfolg/db';
+import { getDb, tenants } from '@erfolg/db';
 import {
   listOverdueForReminder,
   markOverdueAsOf,
-  markReminderSent,
+  sendInvoiceReminder,
 } from '../modules/invoices';
 import { logger } from '../lib/logger';
-import { sendMailForTenant } from '../modules/email/auto-send';
-import { tryJournalEmail } from '../lib/email-journal';
 import { getQueue, registerWorker } from '../lib/queue';
 
 const QUEUE_NAME = 'invoice-reminder';
@@ -44,37 +41,6 @@ function cooldownHours(): number {
 
 function dryRun(): boolean {
   return process.env.INVOICE_REMINDER_DRY_RUN === 'true';
-}
-
-function reminderSubject(invoiceNumber: string): string {
-  return `Просроченный счёт № ${invoiceNumber}`;
-}
-
-function reminderText(args: {
-  invoiceNumber: string;
-  totalRub: string;
-  paidRub: string;
-  dueDate: string;
-  tenantName: string;
-}): string {
-  return [
-    `Здравствуйте.`,
-    ``,
-    `Напоминаем, что счёт № ${args.invoiceNumber} от ${args.tenantName} на сумму ${args.totalRub} ₽`,
-    `(оплачено ${args.paidRub} ₽) просрочен. Срок оплаты — ${args.dueDate}.`,
-    ``,
-    `Просим оплатить в ближайшее время. Если оплата уже прошла — игнорируйте это письмо.`,
-    ``,
-    `С уважением,`,
-    `${args.tenantName}`,
-  ].join('\n');
-}
-
-function kopecksToRub(kopecks: string): string {
-  const n = BigInt(kopecks);
-  const rub = n / 100n;
-  const cop = (n % 100n).toString().padStart(2, '0');
-  return `${rub.toString()}.${cop}`;
 }
 
 interface TenantDetails {
@@ -98,20 +64,6 @@ async function listActiveTenants(): Promise<TenantDetails[]> {
     .map((r) => ({ id: r.id, name: r.legalName ?? r.displayName }));
 }
 
-async function getClientEmail(
-  tenantId: string,
-  clientId: string,
-): Promise<string | null> {
-  return withTenantTx(getDb(), tenantId, async (tx) => {
-    const rows = await tx
-      .select({ email: clients.email })
-      .from(clients)
-      .where(eq(clients.id, clientId))
-      .limit(1);
-    return rows[0]?.email ?? null;
-  });
-}
-
 interface TickStats {
   tenants: number;
   overdueMarked: number;
@@ -128,59 +80,18 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
     stats.overdueMarked += marked;
     const overdue = await listOverdueForReminder(getDb(), tenant.id, cooldownHours());
     for (const invoice of overdue) {
-      const email = await getClientEmail(tenant.id, invoice.clientId);
-      if (!email) {
-        stats.remindersSkipped++;
-        // Без email напомнить нельзя — но reminderCount тоже не трогаем,
-        // чтобы как только email появится — напоминание пошло.
-        continue;
-      }
-      const subject = reminderSubject(invoice.invoiceNumber);
-      const text = reminderText({
-        invoiceNumber: invoice.invoiceNumber,
-        totalRub: kopecksToRub(invoice.totalAmountKopecks),
-        paidRub: kopecksToRub(invoice.paidAmountKopecks),
-        dueDate: invoice.dueDate,
-        tenantName: tenant.name,
-      });
-      try {
-        const result = await sendMailForTenant(getDb(), tenant.id, {
-          to: email,
-          subject,
-          text,
-          dryRun: dryRun(),
-        });
-        if (result.skipped) {
-          stats.remindersSkipped++;
-          await tryJournalEmail(getDb(), tenant.id, {
-            direction: 'out',
-            status: 'skipped',
-            to: email,
-            subject,
-            bodyText: text,
-            relatedClientId: invoice.clientId,
-          });
-          continue;
-        }
-        await markReminderSent(getDb(), tenant.id, invoice.id);
+      const res = await sendInvoiceReminder(
+        getDb(),
+        { id: tenant.id, name: tenant.name },
+        invoice,
+        { dryRun: dryRun() },
+      );
+      if (res.outcome === 'sent') {
         stats.remindersSent++;
-        await tryJournalEmail(getDb(), tenant.id, {
-          direction: 'out',
-          status: 'sent',
-          to: email,
-          subject,
-          bodyText: text,
-          messageId: result.messageId ?? null,
-          relatedClientId: invoice.clientId,
-          sentAt: new Date(),
-        });
-      } catch (err) {
-        logger.warn(
-          { err, invoiceId: invoice.id, tenantId: tenant.id },
-          'invoice-reminder: send failed',
-        );
-        // Ошибка отправки — не помечаем lastReminderSentAt; повторим в следующий тик.
+      } else if (res.outcome === 'skipped_no_email' || res.outcome === 'skipped_mail') {
+        stats.remindersSkipped++;
       }
+      // outcome==='error' — не помечаем lastReminderSentAt; повторим в следующий тик.
     }
   }
   logger.info(stats, 'invoice-reminder tick complete');
