@@ -13,10 +13,15 @@ import {
   revenueByClient,
   slaCompliance,
 } from './repository';
+import { buildMonthlySummary } from './monthly-summary';
 
 const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Дата должна быть в формате YYYY-MM-DD' });
+
+const monthString = z
+  .string()
+  .regex(/^\d{4}-\d{2}$/, { message: 'Месяц должен быть в формате YYYY-MM' });
 
 const periodSchema = z.object({
   from: dateString.optional(),
@@ -46,4 +51,12 @@ export const reportsRouter = router({
     .query(({ ctx, input }) => leadsFunnel(ctx.db, ctx.tenant.id, input)),
 
   receivables: directorProcedure.query(({ ctx }) => receivables(ctx.db, ctx.tenant.id)),
+
+  /**
+   * AI-итог месяца директору: касса + рентабельность + дебиторка за месяц одним текстом.
+   * Финансы+маржа → только директор. Деградирует до фактов без LLM (text=null).
+   */
+  monthlySummary: directorProcedure
+    .input(z.object({ month: monthString.optional() }))
+    .query(({ ctx, input }) => buildMonthlySummary(ctx.db, ctx.tenant, input.month)),
 });
