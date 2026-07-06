@@ -373,6 +373,69 @@ export async function getTicket(
   });
 }
 
+/* ─────────── Фича №7 «Лист ожидания запчастей» ─────────── */
+
+export interface PartWaitingItem {
+  id: string;
+  ticketNumber: string;
+  clientDisplayName: string;
+  assetModel: string | null;
+  /** Что за деталь ждём (заметка к флагу «Ждём запчасть»). */
+  waitingForPartNote: string | null;
+  assignedEngineerName: string | null;
+  blockedSince: Date | null;
+  /** Полных суток простоя из-за детали — от blocked_since (фолбэк received_at). */
+  daysWaiting: number;
+}
+
+/** Заявки в работе (не закрытые/отменённые) — среди них ищем ждущие деталь. */
+const PARTS_ACTIVE_STATUSES: TicketStatus[] = [
+  'received',
+  'diagnostics',
+  'estimate',
+  'approval',
+  'in_progress',
+  'act_pending',
+];
+
+/**
+ * Фича №7 — активные заявки, стоящие из-за ожидания детали (waiting_for_part=true).
+ * daysWaiting считается от blocked_since (когда встал; фолбэк на received_at для
+ * старых записей). Сортировка: дольше всех — сверху. Клиент/техника/инженер — LEFT JOIN.
+ */
+export async function partsWaitingList(
+  db: Db,
+  tenantId: string,
+): Promise<PartWaitingItem[]> {
+  const engineerUser = alias(users, 'engineer_user');
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        clientDisplayName: clients.displayName,
+        assetModel: assets.model,
+        waitingForPartNote: tickets.waitingForPartNote,
+        assignedEngineerName: engineerUser.fullName,
+        blockedSince: tickets.blockedSince,
+        daysWaiting: sql<number>`floor(extract(epoch from (now() - coalesce(${tickets.blockedSince}, ${tickets.receivedAt}))) / 86400)::int`,
+      })
+      .from(tickets)
+      .leftJoin(clients, eq(tickets.clientId, clients.id))
+      .leftJoin(assets, eq(tickets.assetId, assets.id))
+      .leftJoin(engineerUser, eq(engineerUser.id, tickets.assignedEngineerId))
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          eq(tickets.waitingForPart, true),
+          inArray(tickets.status, PARTS_ACTIVE_STATUSES),
+        ),
+      )
+      .orderBy(asc(sql`coalesce(${tickets.blockedSince}, ${tickets.receivedAt})`));
+    return rows.map((r) => ({ ...r, clientDisplayName: r.clientDisplayName ?? '' }));
+  });
+}
+
 export async function searchTickets(
   db: Db,
   tenantId: string,

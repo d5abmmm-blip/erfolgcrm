@@ -38,6 +38,7 @@ import {
   listTicketsQuery,
   myTicketsQuery,
   myWeeklyScheduleQuery,
+  partsWaitingQuery,
   recordPrintEventCmd,
   reopenTicketCmd,
   scheduleCmd,
@@ -235,6 +236,9 @@ export const ticketsRouter = router({
 
   /** Доска — все активные заявки с причиной простоя и светофором (staff). */
   board: staffProcedure.query(({ ctx }) => boardQuery(ctx.db, ctx.tenant)),
+
+  /** Фича №7 — заявки, стоящие из-за ожидания детали (staff). Дольше всех — сверху. */
+  partsWaiting: staffProcedure.query(({ ctx }) => partsWaitingQuery(ctx.db, ctx.tenant)),
 
   /** Доска — установить/снять структурную причину простоя (reason=null снимает). */
   setBlockedReason: staffProcedure

@@ -29,6 +29,7 @@ import {
   listEvents as repoListEvents,
   revokeTrackToken as repoRevokeTrackToken,
   listTickets as repoListTickets,
+  partsWaitingList as repoPartsWaitingList,
   recordPrintEvent as repoRecordPrint,
   setBlockedReason as repoSetBlockedReason,
   setWaitingForPart as repoSetWaitingForPart,
@@ -42,6 +43,7 @@ import {
   type BoardTicketDto,
   type CreateTicketInput,
   type ListTicketsOpts,
+  type PartWaitingItem,
   type ScheduledTicketDto,
   type UpdateTicketInput,
 } from './repository';
@@ -584,6 +586,14 @@ export async function boardQuery(
   tenant: ResolvedTenant,
 ): Promise<BoardTicketDto[]> {
   return repoBoardTickets(db, tenant.id);
+}
+
+/** Фича №7 — заявки, стоящие из-за ожидания детали (staff). Дольше всех — сверху. */
+export async function partsWaitingQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+): Promise<PartWaitingItem[]> {
+  return repoPartsWaitingList(db, tenant.id);
 }
 
 /**

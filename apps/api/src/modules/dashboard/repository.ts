@@ -187,6 +187,8 @@ export interface NavBadgeCounts {
   maintenanceOverdue: number;
   /** Позиции склада с остатком ниже минимума. */
   inventoryLowStock: number;
+  /** Фича №7 — активные заявки, стоящие из-за ожидания детали. 0 для инженера. */
+  partsWaiting: number;
 }
 
 /**
@@ -219,7 +221,16 @@ export async function getNavBadgeCounts(
     let leadsNew = 0;
     let calendarToday = 0;
     let invoicesOverdue = 0;
+    let partsWaiting = 0;
     if (isStaff) {
+      // Фича №7 — активные заявки, стоящие из-за ожидания детали.
+      const partsRows = (await tx.execute(sql`
+        SELECT COUNT(*)::int AS cnt FROM tickets
+         WHERE deleted_at IS NULL AND waiting_for_part = true
+           AND status NOT IN ('closed', 'cancelled')
+      `)) as unknown as CountRow[];
+      partsWaiting = partsRows[0]?.cnt ?? 0;
+
       const leadRows = (await tx.execute(sql`
         SELECT COUNT(*)::int AS cnt FROM leads
          WHERE deleted_at IS NULL AND status = 'new'
@@ -263,6 +274,7 @@ export async function getNavBadgeCounts(
       invoicesOverdue,
       maintenanceOverdue,
       inventoryLowStock,
+      partsWaiting,
     };
   });
 }
