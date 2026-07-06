@@ -27,6 +27,7 @@ import {
   Search,
   BookOpen,
   Mail,
+  Hourglass,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { trpc } from '../lib/trpc';
@@ -78,6 +79,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
       { href: '/', label: 'Дашборд', icon: LayoutDashboard },
       { href: '/board', label: 'Доска', icon: LayoutGrid, roles: ['director', 'dispatcher'] },
       { href: '/tickets', label: 'Заявки', icon: Ticket },
+      { href: '/parts-waiting', label: 'Ожидание запчастей', icon: Hourglass, roles: ['director', 'dispatcher'] },
       { href: '/leads', label: 'Лиды', icon: Target, roles: ['director', 'dispatcher'], module: 'leads' },
       { href: '/schedule', label: 'График (детально)', icon: Calendar, roles: ['director', 'dispatcher'], module: 'schedule' },
       { href: '/calendar', label: 'Календарь', icon: CalendarDays, roles: ['director', 'dispatcher'], module: 'calendar' },
@@ -165,6 +167,7 @@ export function AppShell({ children, session }: AppShellProps) {
   const badgeByHref: Record<string, number> = {
     '/mail': mailEnabled ? (unreadMail.data ?? 0) : 0,
     '/tickets': nb?.ticketsAttention ?? 0,
+    '/parts-waiting': nb?.partsWaiting ?? 0,
     '/leads': nb?.leadsNew ?? 0,
     '/calendar': nb?.calendarToday ?? 0,
     '/finance': nb?.invoicesOverdue ?? 0,
@@ -234,7 +237,7 @@ export function AppShell({ children, session }: AppShellProps) {
                                 ? 'bg-primary-foreground/25 text-primary-foreground'
                                 : 'bg-primary text-primary-foreground',
                             )}
-                            aria-label={`непрочитанных писем: ${badge}`}
+                            aria-label={`${item.label}: ${badge}`}
                           >
                             {badge > 99 ? '99+' : badge}
                           </span>
