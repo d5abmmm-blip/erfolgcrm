@@ -16,6 +16,7 @@ import {
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   deleteLineCmd,
+  draftRepairDescriptionQuery,
   ensureWorkOrderCmd,
   getWorkOrderByTicketQuery,
   setVatRateCmd,
@@ -92,5 +93,12 @@ export const workOrdersRouter = router({
     .input(z.object({ ticketId: z.string().uuid(), vatRate: VatRate }))
     .mutation(({ ctx, input }) =>
       setVatRateCmd(buildCmdCtx(ctx), input.ticketId, input.vatRate),
+    ),
+
+  /** Фича №13 — ИИ-черновик текста «Выполненные работы» из строк наряда (engineer). */
+  draftRepairDescription: engineerProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      draftRepairDescriptionQuery(ctx.db, ctx.tenant, input.ticketId),
     ),
 });
