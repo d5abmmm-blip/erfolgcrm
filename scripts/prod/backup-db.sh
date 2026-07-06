@@ -106,5 +106,17 @@ else
   log "WARN: дамп не удался — ротацию пропускаю, старые копии сохраняю" >&2
 fi
 
+# ───────── 4. Dead-man switch (healthchecks.io), если задан BACKUP_HEALTHCHECK_URL ─────────
+# Успех → пинг базового URL; провал → пинг .../fail. URL задаётся в строке крона (в репо не
+# хранится). Если не задан — тихо пропускаем. healthchecks.io сам шлёт письмо, когда ожидаемого
+# ночного пинга нет (сервер лёг / крон не запустился) — то, что письмо-при-сбое поймать не может.
+if [ -n "${BACKUP_HEALTHCHECK_URL:-}" ]; then
+  if [ "$db_ok" -eq 1 ]; then
+    curl -fsS -m 10 --retry 3 "$BACKUP_HEALTHCHECK_URL" >/dev/null 2>&1 || true
+  else
+    curl -fsS -m 10 --retry 3 "${BACKUP_HEALTHCHECK_URL%/}/fail" >/dev/null 2>&1 || true
+  fi
+fi
+
 # Код возврата: провал именно дампа БД — это провал бэкапа (для алерта/крон-лога).
 [ "$db_ok" -eq 1 ] || exit 1
