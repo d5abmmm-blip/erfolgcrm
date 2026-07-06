@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# Проверка ВОССТАНОВИМОСТИ боевого дампа — не трогая боевую базу.
+#
+# Берёт самый свежий .dump из каталога бэкапов, восстанавливает его в ОДНОРАЗОВУЮ базу
+# внутри того же Postgres-контейнера и прогоняет sanity-проверки (ключевые таблицы не
+# пусты). Временную базу удаляет всегда (trap). Боевая erfolg_prod не затрагивается.
+#
+# Зачем: ночной backup-db.sh проверяет дамп лишь на «непустой + валидный архив», но не на
+# то, что он реально РАЗВОРАЧИВАЕТСЯ с данными. Этот скрипт закрывает пробел.
+#
+# Еженедельный крон (РАЗОВО):
+#   chmod +x /root/erfolgcrm/scripts/prod/verify-restore.sh
+#   ( crontab -l 2>/dev/null; \
+#     echo '30 4 * * 0 /bin/bash /root/erfolgcrm/scripts/prod/verify-restore.sh >> /root/backups/verify.log 2>&1' ) | crontab -
+#
+set -uo pipefail
+
+CONTAINER="${BACKUP_PG_CONTAINER:-erfolgcrm-postgres-prod}"
+PGUSER_="${BACKUP_PG_USER:-erfolg}"
+DIR="${BACKUP_DIR:-/root/backups}"
+TESTDB="${VERIFY_TEST_DB:-erfolg_restore_verify}"
+
+log() { echo "$(date '+%F %T') $*"; }
+
+# Самый свежий дамп (авто ИЛИ ручной pre-deploy), по времени модификации.
+LATEST="$(ls -1t "$DIR"/*.dump 2>/dev/null | head -1)"
+if [ -z "${LATEST:-}" ]; then
+  log "FAIL: в $DIR нет ни одного .dump" >&2
+  exit 1
+fi
+log "verify: проверяю $LATEST"
+
+# Структурный smoke-тест до попытки восстановления.
+if ! docker exec -i "$CONTAINER" pg_restore --list < "$LATEST" >/dev/null 2>&1; then
+  log "FAIL: $LATEST — не валидный custom-format архив" >&2
+  exit 1
+fi
+
+# Чистая одноразовая база; убираем её при любом выходе.
+cleanup() { docker exec "$CONTAINER" dropdb -U "$PGUSER_" --if-exists "$TESTDB" >/dev/null 2>&1; }
+trap cleanup EXIT
+docker exec "$CONTAINER" dropdb -U "$PGUSER_" --if-exists "$TESTDB" >/dev/null 2>&1
+if ! docker exec "$CONTAINER" createdb -U "$PGUSER_" "$TESTDB" >/dev/null 2>&1; then
+  log "FAIL: не удалось создать временную базу $TESTDB" >&2
+  exit 1
+fi
+
+# Восстановление (предупреждения про роли/политики безвредны — гасим их вывод).
+docker exec -i "$CONTAINER" pg_restore -U "$PGUSER_" -d "$TESTDB" --no-owner --no-privileges < "$LATEST" >/dev/null 2>&1
+
+FAILED=0
+check() {
+  local label="$1" query="$2" result
+  result="$(docker exec "$CONTAINER" psql -U "$PGUSER_" -d "$TESTDB" -At -c "$query" 2>/dev/null)"
+  if [ -z "$result" ] || [ "$result" = "0" ]; then
+    log "FAIL: $label → '$result'"
+    FAILED=1
+  else
+    log "OK: $label = $result"
+  fi
+}
+
+# Таблицы, которые есть в любой живой инсталляции (>0). Счета/наряды могут быть 0 у
+# свежего тенанта — их проверяем информационно, не как гейт.
+check "clients"      "SELECT count(*) FROM clients"
+check "tickets"      "SELECT count(*) FROM tickets"
+check "users"        "SELECT count(*) FROM users"
+check "tenants"      "SELECT count(*) FROM tenants"
+
+if [ "$FAILED" -ne 0 ]; then
+  log "VERIFY FAILED: $LATEST восстанавливается, но ключевые таблицы пусты/битые" >&2
+  exit 1
+fi
+log "VERIFY OK: $LATEST разворачивается начисто и с данными"

@@ -1,4 +1,9 @@
 #!/bin/bash
+# DEV/generic ONLY. Работает с ПЛОСКИМ форматом (erfolg-*.sql.gz от scripts/backup.sh),
+# восстанавливая через 'gunzip | psql'. Боевой ночной крон (scripts/prod/backup-db.sh)
+# делает custom-format 'erfolg_prod_auto_*.dump' в /root/backups — его psql не читает.
+# Для проверки боевых дампов используй scripts/prod/verify-restore.sh (pg_restore).
+#
 # Восстанавливает последний бэкап в TEST_PG_URL и прогоняет 3 sanity-SELECT'а.
 # Если хоть один SELECT упал ИЛИ вернул 0 — exit 1.
 #
