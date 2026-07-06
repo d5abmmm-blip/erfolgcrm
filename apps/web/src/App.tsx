@@ -43,6 +43,7 @@ import { BackupSettingsPage } from './pages/BackupSettingsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceCardPage } from './pages/InvoiceCardPage';
 import { FinanceOverviewPage } from './pages/FinanceOverviewPage';
+import { ReceivablesPage } from './pages/ReceivablesPage';
 import { SalesListPage } from './pages/SalesListPage';
 import { SalesFormPage } from './pages/SalesFormPage';
 import { CashJournalPage } from './pages/CashJournalPage';
@@ -196,6 +197,7 @@ function StaffApp() {
           <Route path="/contracts/:id/edit" component={ContractFormPage} />
           <Route path="/contracts/:id" component={ContractCardPage} />
           <Route path="/finance" component={FinanceOverviewPage} />
+          <Route path="/finance/receivables" component={ReceivablesPage} />
           <Route path="/finance/transactions" component={CashJournalPage} />
           <Route path="/finance/accounts" component={CashAccountsPage} />
           <Route path="/finance/invoices" component={InvoicesPage} />

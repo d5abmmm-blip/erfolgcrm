@@ -8,24 +8,29 @@ import { TRPCError } from '@trpc/server';
 import type { Db } from '@erfolg/db';
 import type { VatRate } from '@erfolg/shared';
 import { writeAudit } from '../../lib/audit';
+import { logger } from '../../lib/logger';
 import {
   createDraft as repoCreateDraft,
   getById as repoGetById,
   invoiceBelongsToTenant,
   listByClient as repoListByClient,
   listByTicket as repoListByTicket,
+  listClientOverdueInvoices,
   listForTenant as repoListForTenant,
+  receivablesReport,
   type CreateDraftInput,
   type InvoiceDto,
   type ListByClientOpts,
   type ListForTenantOpts,
   type ListForTenantResult,
+  type ReceivablesReport,
   softDeleteDraft as repoSoftDeleteDraft,
   transitionToCancelled as repoCancel,
   transitionToIssued as repoIssue,
   updateDraft as repoUpdateDraft,
   type UpdateDraftInput,
 } from './repository';
+import { getTenantDisplayName, sendInvoiceReminder } from './reminder';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import { toTRPCError, WorkOrderNotFoundError } from '../../lib/errors';
@@ -61,6 +66,89 @@ export async function listForTenantQuery(
   opts: ListForTenantOpts,
 ): Promise<ListForTenantResult> {
   return repoListForTenant(db, tenant.id, opts);
+}
+
+/** Отчёт «Дебиторка»: кто должен, разбивка по срокам, сводка. */
+export async function receivablesQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  limit?: number,
+): Promise<ReceivablesReport> {
+  return receivablesReport(db, tenant.id, limit);
+}
+
+export interface SendReminderResult {
+  /** Сколько писем реально ушло. */
+  sent: number;
+  /** Пропущено: у клиента не указан email. */
+  skippedNoEmail: number;
+  /** Пропущено: почта tenant'а не настроена (транспорт недоступен). */
+  notConfigured: number;
+  /** Сбой отправки (SMTP отдал ошибку) — в отличие от «почта не настроена». */
+  failed: number;
+  /** Всего просроченных счетов у клиента (по которым пытались напомнить). */
+  total: number;
+}
+
+/**
+ * Ручное напоминание клиенту: шлёт письмо по каждому его ПРОСРОЧЕННОМУ счёту
+ * (по одному письму на счёт — как ночной воркер). Игнорирует недельный cooldown:
+ * директор нажал сознательно. Возвращает разбивку исходов для тоста в UI.
+ */
+export async function sendReminderCmd(
+  ctx: CmdCtx,
+  clientId: string,
+): Promise<SendReminderResult> {
+  const overdueInvoices = await listClientOverdueInvoices(ctx.db, ctx.tenant.id, clientId);
+  const [firstInvoice] = overdueInvoices;
+  if (!firstInvoice) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'У клиента нет просроченных счетов',
+    });
+  }
+  const tenantName = await getTenantDisplayName(ctx.db, ctx.tenant.id);
+  const result: SendReminderResult = {
+    sent: 0,
+    skippedNoEmail: 0,
+    notConfigured: 0,
+    failed: 0,
+    total: overdueInvoices.length,
+  };
+  for (const invoice of overdueInvoices) {
+    const res = await sendInvoiceReminder(
+      ctx.db,
+      { id: ctx.tenant.id, name: tenantName },
+      invoice,
+      { dryRun: false },
+    );
+    if (res.outcome === 'sent') result.sent++;
+    else if (res.outcome === 'skipped_no_email') result.skippedNoEmail++;
+    else if (res.outcome === 'skipped_mail') result.notConfigured++;
+    else result.failed++; // outcome === 'error'
+  }
+  // Аудит здесь best-effort: письма уже отправлены (необратимо), поэтому сбой записи
+  // аудита НЕ должен ронять ответ ошибкой — иначе директор увидит ошибку и кликнет
+  // «Напомнить» повторно (ручной путь без cooldown) → клиент получит дубль писем.
+  try {
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'update',
+      entityType: 'invoice',
+      entityId: firstInvoice.id,
+      after: {
+        manualReminder: true,
+        clientId,
+        overdueInvoices: overdueInvoices.length,
+        sent: result.sent,
+      },
+      ip: ctx.audit.ip ?? null,
+      userAgent: ctx.audit.userAgent ?? null,
+    });
+  } catch (err) {
+    logger.warn({ err, clientId }, 'sendReminder: audit write failed after emails sent');
+  }
+  return result;
 }
 
 export async function createDraftCmd(
