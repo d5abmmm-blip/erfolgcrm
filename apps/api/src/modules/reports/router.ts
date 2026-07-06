@@ -8,6 +8,7 @@ import { directorProcedure, router, staffProcedure } from '../../trpc/trpc';
 import {
   engineerPerformance,
   leadsFunnel,
+  profitabilityReport,
   receivables,
   revenueByClient,
   slaCompliance,
@@ -30,6 +31,11 @@ export const reportsRouter = router({
   engineerPerformance: staffProcedure
     .input(periodSchema)
     .query(({ ctx, input }) => engineerPerformance(ctx.db, ctx.tenant.id, input)),
+
+  /** Рентабельность (выручка/маржа) по инженеру и типу техники. Маржа — только директору. */
+  profitability: directorProcedure
+    .input(periodSchema)
+    .query(({ ctx, input }) => profitabilityReport(ctx.db, ctx.tenant.id, input)),
 
   slaCompliance: staffProcedure
     .input(periodSchema)
