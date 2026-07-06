@@ -8,7 +8,7 @@
  *   await printWorkAct({ tenant, client, asset, ticket, workOrder });
  */
 
-import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import type * as pdfMakeNs from 'pdfmake/build/pdfmake';
 
 import { generateBarcodeDataUrl } from './barcode';
@@ -19,8 +19,13 @@ import { buildDefectActDoc, type PrintDefectActInput } from './defect-act';
 import { buildIntakeActDoc } from './intake-act';
 import { buildInvoiceDoc, type ExtendedPrintInvoiceInput } from './invoice';
 import type {
+  AssetData,
+  ClientData,
   PrintIntakeInput,
   PrintWorkActInput,
+  TenantData,
+  TicketData,
+  WorkOrderData,
 } from './shared';
 import { buildWorkActDoc } from './work-act';
 
@@ -203,6 +208,114 @@ export async function printAssetLabel(
   });
   const doc = buildAssetLabelDoc({ ...input, barcodeDataUrl });
   await openDoc(doc, win, 'Ярлык.pdf');
+}
+
+/* ─────────────── Фича №14 «Пакет документов одной кнопкой» ─────────────── */
+
+/** Тип документа пакета — совпадает с documentKind для записи события печати. */
+export type PackageDocKind = 'intake_act' | 'defect_act' | 'invoice' | 'work_act';
+
+export interface PrintPackageInput {
+  tenant: TenantData;
+  client: ClientData;
+  asset: AssetData | null;
+  ticket: TicketData;
+  /** Наряд. Без него в пакет войдёт только «Акт приёма». */
+  workOrder: WorkOrderData | null;
+}
+
+/**
+ * Объединить несколько pdfmake-документов в один: их `content` склеивается
+ * последовательно, перед каждым следующим — разрыв страницы. Чистая функция
+ * (без pdfmake/сети) — покрыта юнит-тестом. Все документы пакета имеют одинаковую
+ * раскладку (A4 portrait, поля 42), поэтому берём единый page setup.
+ */
+export function combineDocDefs(
+  docs: TDocumentDefinitions[],
+  title: string,
+): TDocumentDefinitions {
+  const content: Content[] = [];
+  docs.forEach((d, i) => {
+    if (i > 0) content.push({ text: '', pageBreak: 'before' });
+    const c = d.content;
+    if (Array.isArray(c)) content.push(...c);
+    else if (c != null) content.push(c);
+  });
+  return {
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [42, 42, 42, 42],
+    defaultStyle: { font: 'Roboto', fontSize: 10 },
+    info: { title },
+    content,
+  };
+}
+
+/**
+ * Пакет документов одной кнопкой: склеивает применимые документы заявки в ОДИН PDF
+ * (Акт приёма → Дефектный акт → Счёт → Акт выполненных работ) и открывает в одном окне.
+ * Без наряда пакет = только «Акт приёма». Возвращает список включённых документов —
+ * карточка по нему пишет события печати. Один PDF/одно окно — не упираемся в блокировку
+ * попапов (несколько вкладок браузер бы зарезал).
+ */
+export async function printDocumentPackage(
+  input: PrintPackageInput,
+  win?: Window | null,
+): Promise<{ included: PackageDocKind[] }> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  const docs: TDocumentDefinitions[] = [];
+  const included: PackageDocKind[] = [];
+
+  docs.push(
+    buildIntakeActDoc({
+      tenant: input.tenant,
+      client: input.client,
+      asset: input.asset,
+      ticket: input.ticket,
+      barcodeDataUrl,
+    }),
+  );
+  included.push('intake_act');
+
+  if (input.workOrder) {
+    docs.push(
+      buildDefectActDoc({
+        tenant: input.tenant,
+        client: input.client,
+        asset: input.asset,
+        ticket: input.ticket,
+        workOrder: input.workOrder,
+        barcodeDataUrl,
+      }),
+    );
+    included.push('defect_act');
+
+    docs.push(
+      buildInvoiceDoc({
+        tenant: input.tenant,
+        client: input.client,
+        ticket: input.ticket,
+        workOrder: input.workOrder,
+      }),
+    );
+    included.push('invoice');
+
+    docs.push(
+      buildWorkActDoc({
+        tenant: input.tenant,
+        client: input.client,
+        asset: input.asset,
+        ticket: input.ticket,
+        workOrder: input.workOrder,
+        barcodeDataUrl,
+      }),
+    );
+    included.push('work_act');
+  }
+
+  const combined = combineDocDefs(docs, `Пакет документов ${input.ticket.ticketNumber}`);
+  await openDoc(combined, win, `Пакет документов ${input.ticket.ticketNumber}.pdf`);
+  return { included };
 }
 
 // Re-export shared types so call sites import from a single entry point.

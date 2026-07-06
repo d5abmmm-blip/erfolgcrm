@@ -14,6 +14,7 @@ import {
   Copy,
   FileText,
   FileWarning,
+  Files,
   History,
   Link2,
   Loader2,
@@ -297,6 +298,38 @@ export function TicketCardPage() {
     }
   };
 
+  // Фича №14 — пакет документов одной кнопкой: все применимые документы в один PDF.
+  const printPackage = async () => {
+    setPrintError(null);
+    // Вкладку открываем СИНХРОННО в обработчике клика (иначе popup-блокировка → белая вкладка).
+    const win = openPrintWindow();
+    try {
+      const { printDocumentPackage } = await import('../lib/pdf');
+      const { tenantData, clientData, assetData, ticketData, workOrderData } =
+        await assemblePdfInputs();
+      const { included } = await printDocumentPackage(
+        {
+          tenant: tenantData,
+          client: clientData,
+          asset: assetData,
+          ticket: ticketData,
+          workOrder: workOrderData,
+        },
+        win,
+      );
+      // Событие печати по каждому включённому документу (тот же аудит, что у отдельных кнопок).
+      for (const kind of included) {
+        recordPrint.mutate({ ticketId: t.id, documentKind: kind });
+      }
+    } catch (err) {
+      win?.close();
+      console.error('[print-package]', err);
+      setPrintError(
+        `Не удалось сформировать пакет документов: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
   const clientEmail = clientFull.data?.email ?? '';
   const composeAttachments: AttachmentOption[] = [
     {
@@ -410,6 +443,7 @@ export function TicketCardPage() {
           <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
           <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
           <PrintBtn icon={Tag} label="Ярлык" onClick={() => void printDocument('asset_label', 'ярлык на технику')} />
+          <PrintBtn icon={Files} label="Пакет документов" emphasis onClick={() => void printPackage()} />
         </div>
       </div>
 
@@ -676,16 +710,24 @@ function PrintBtn({
   icon: Icon,
   label,
   onClick,
+  emphasis,
 }: {
   icon: typeof FileText;
   label: string;
   onClick: () => void;
+  /** Акцентная подача — для «Пакета документов» (главная кнопка панели). */
+  emphasis?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition',
+        emphasis
+          ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 font-medium'
+          : 'hover:bg-muted',
+      )}
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
