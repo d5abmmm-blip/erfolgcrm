@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>ErfolgCRM — памятки сотрудникам</title>
+<style>
+  :root{
+    --ink:#0E1B26; --ink-soft:#31465a; --muted:#5f7386; --faint:#8798a8;
+    --paper:#eef3f7; --card:#ffffff; --line:#dce5ec; --line-soft:#e9eff4;
+    --blue:#1a93cf; --blue-ink:#0d6a9c; --orange:#e85f22; --orange-ink:#c24a13;
+    --teal:#1f6f8b; --teal-ink:#155066;
+    --amber-bg:#fdf3e2; --amber-ink:#9a6a15; --amber-line:#e7cf9c;
+    --ok:#1f8a5b;
+    --role:var(--blue); --role-ink:var(--blue-ink);
+    --sans:"Segoe UI",system-ui,-apple-system,"Golos Text","PT Sans",Roboto,Arial,sans-serif;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(14,27,38,.05),0 8px 24px -14px rgba(14,27,38,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .wrap{font-family:var(--sans);color:var(--ink);background:
+      radial-gradient(1200px 500px at 100% -10%,rgba(26,147,207,.08),transparent 60%),
+      radial-gradient(900px 480px at -5% 0%,rgba(232,95,34,.06),transparent 55%),
+      var(--paper);
+    min-height:100vh;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .container{max-width:900px;margin:0 auto;padding:0 20px}
+
+  /* ── Top bar ── */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(238,243,247,.86);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  .topbar .container{display:flex;align-items:center;gap:16px;justify-content:space-between;
+    min-height:62px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px;}
+  .brand{display:flex;align-items:center;gap:11px;min-width:0}
+  .logo{width:34px;height:34px;border-radius:9px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--blue),var(--blue-ink));
+    display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;
+    box-shadow:0 4px 12px -4px rgba(13,106,156,.6);position:relative;overflow:hidden}
+  .logo::after{content:"";position:absolute;right:-6px;bottom:-6px;width:16px;height:16px;
+    background:var(--orange);border-radius:4px;transform:rotate(12deg)}
+  .brand b{font-weight:750;font-size:15.5px;letter-spacing:.1px;display:block;line-height:1.1}
+  .brand span{font-size:11.5px;color:var(--muted)}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+    padding:8px 13px;display:inline-flex;align-items:center;gap:7px;transition:.15s;white-space:nowrap}
+  .btn:hover{border-color:#c3d2de;color:var(--ink)}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .btn-word{background:linear-gradient(135deg,#1f6f8b,#155066);color:#fff;border-color:transparent;
+    box-shadow:0 6px 16px -8px rgba(21,80,102,.8)}
+  .btn-word:hover{color:#fff;filter:brightness(1.06)}
+  .btn svg{width:15px;height:15px;flex:0 0 auto}
+
+  /* ── Tabs ── */
+  .tabs{position:sticky;top:62px;z-index:19;background:rgba(238,243,247,.86);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .tabs .container{display:flex;gap:4px;overflow-x:auto;padding-top:7px;padding-bottom:7px}
+  .tab{font-family:inherit;font-size:13.5px;font-weight:600;color:var(--muted);
+    background:none;border:0;border-radius:8px 8px 0 0;padding:9px 15px 11px;cursor:pointer;
+    white-space:nowrap;border-bottom:2.5px solid transparent;transition:.15s}
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"]{color:var(--tab-ink,var(--blue-ink));border-bottom-color:var(--tab,var(--blue))}
+  .tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--tab,var(--blue))}
+
+  /* ── Hero ── */
+  .hero{padding:34px 0 8px}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-ink)}
+  .hero h1{font-size:clamp(26px,4.4vw,38px);line-height:1.08;margin:.35em 0 .3em;font-weight:800;
+    letter-spacing:-.5px;text-wrap:balance;max-width:20ch}
+  .hero p{font-size:16px;color:var(--ink-soft);max-width:60ch;margin:0}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:18px;font-size:12.5px;color:var(--muted)}
+  .legend b{color:var(--ink-soft);font-weight:650}
+  .chip-demo{display:inline-flex;align-items:center;gap:6px;background:var(--amber-bg);
+    color:var(--amber-ink);border:1px solid var(--amber-line);border-radius:20px;padding:2px 9px;font-weight:650;font-size:11.5px}
+  .chip-demo::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber-ink)}
+
+  /* ── Sections ── */
+  main{padding:14px 0 60px}
+  .role-sec{scroll-margin-top:120px}
+  .role-sec[hidden]{display:none}
+  .role-head{display:flex;align-items:flex-start;gap:16px;justify-content:space-between;
+    padding:26px 0 6px;flex-wrap:wrap}
+  .role-title{display:flex;align-items:center;gap:13px}
+  .role-badge{width:44px;height:44px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;
+    background:color-mix(in srgb,var(--role) 15%,#fff);color:var(--role-ink);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--role) 30%,transparent)}
+  .role-badge svg{width:23px;height:23px}
+  .role-title h2{margin:0;font-size:21px;font-weight:780;letter-spacing:-.2px}
+  .role-title .who{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+  .role-intro{font-size:14.5px;color:var(--ink-soft);max-width:66ch;margin:4px 0 0}
+
+  /* info cards (Начало) */
+  .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:8px}
+  .info{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 16px;box-shadow:var(--shadow)}
+  .info h3{margin:0 0 7px;font-size:15px;font-weight:720;display:flex;align-items:center;gap:8px}
+  .info h3 .b{width:26px;height:26px;border-radius:7px;background:color-mix(in srgb,var(--blue) 13%,#fff);
+    color:var(--blue-ink);display:grid;place-items:center;flex:0 0 auto}
+  .info h3 .b svg{width:15px;height:15px}
+  .info p{margin:0;font-size:13.5px;color:var(--ink-soft)}
+
+  /* task cards */
+  .tasks{display:flex;flex-direction:column;gap:14px;margin-top:16px;counter-reset:tk}
+  .task{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;border-left:4px solid var(--role)}
+  .task-h{display:flex;align-items:flex-start;gap:13px;padding:16px 18px 12px}
+  .task-n{counter-increment:tk;flex:0 0 auto;width:27px;height:27px;border-radius:8px;
+    background:var(--role);color:#fff;font-weight:750;font-size:13px;display:grid;place-items:center;
+    font-variant-numeric:tabular-nums;margin-top:1px}
+  .task-n::before{content:counter(tk)}
+  .task-tt{min-width:0;flex:1}
+  .task-tt h4{margin:0;font-size:16px;font-weight:720;letter-spacing:-.1px;text-wrap:balance}
+  .where{display:inline-flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;
+    background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:3px 9px;color:var(--ink-soft)}
+  .where .pin{color:var(--role-ink)}
+  .where code{font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--role-ink);background:none}
+  .task-body{padding:0 18px 16px 58px}
+  ol.steps{margin:0;padding:0;list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:8px}
+  ol.steps li{position:relative;padding-left:26px;font-size:14px;color:var(--ink-soft)}
+  ol.steps li::before{counter-increment:st;content:counter(st);position:absolute;left:0;top:1px;
+    width:18px;height:18px;border-radius:50%;background:color-mix(in srgb,var(--role) 14%,#fff);
+    color:var(--role-ink);font-size:10.5px;font-weight:750;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+  .note{margin-top:12px;font-size:13px;color:var(--ink-soft);background:color-mix(in srgb,var(--role) 6%,#fff);
+    border:1px solid color-mix(in srgb,var(--role) 20%,transparent);border-radius:9px;padding:9px 12px}
+  .note.warn{background:#fdf0e9;border-color:#f3c3a9;color:#a2401a}
+  .note b{color:inherit}
+  .badge-demo{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--amber-ink);
+    background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:20px;padding:2px 9px;margin-left:auto}
+  .badge-demo::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber-ink)}
+
+  .foot{border-top:1px solid var(--line);padding:22px 0 40px;color:var(--faint);font-size:12.5px;text-align:center}
+  .foot b{color:var(--muted)}
+
+  @media (max-width:560px){
+    .task-body{padding-left:18px}
+    .hero h1{font-size:27px}
+  }
+  @media print{
+    .topbar,.tabs,.legend,.badge-demo{position:static}
+    .btn,.tab{display:none!important}
+    .role-sec[hidden]{display:block!important}
+    .wrap{background:#fff}
+    .task,.info{box-shadow:none;break-inside:avoid}
+    .role-head{break-after:avoid}
+  }
+</style>
+
+<div class="wrap">
+  <header class="topbar">
+    <div class="container">
+      <div class="brand">
+        <div class="logo">Э</div>
+        <div><b>ErfolgCRM — памятки</b><span>Онбординг · ООО «Эрфольг»</span></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="printBtn" type="button" aria-label="Печать">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Печать
+        </button>
+        <button class="btn btn-word" id="wordAll" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Скачать всё в Word
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Разделы">
+    <div class="container" role="tablist" id="tabs"></div>
+  </nav>
+
+  <div class="container">
+    <section class="hero">
+      <div class="kicker">Как пользоваться системой</div>
+      <h1>Короткие памятки по ролям</h1>
+      <p>Три инструкции для тех, кто работает в ErfolgCRM каждый день: приёмщик-менеджер, инженер и директор. Внутри — только главные задачи, по шагам, простым языком. Раздел «Начало» — общее для всех.</p>
+      <div class="legend">
+        <span><span class="chip-demo">на демо пусто</span> — экран наполнится после загрузки реальной базы (435 клиентов).</span>
+        <span><b>Адрес системы:</b> crm.erfolgmt.ru</span>
+      </div>
+    </section>
+  </div>
+
+  <main class="container" id="content"></main>
+
+  <div class="container">
+    <div class="foot">
+      ErfolgCRM · внутренняя система сервисного центра <b>ООО «Эрфольг»</b> · памятки для сотрудников.<br>
+      Кнопка «Скачать в Word» сохраняет памятку файлом, который открывается в Microsoft Word.
+    </div>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  manager:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
+  engineer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  director:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>',
+  start:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 10l6 2-6 2z" fill="currentColor" stroke="none"/></svg>'
+};
+const PIN = '<svg class="pin" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+const COMMON = {
+  name:'Начало', color:'var(--blue)', ink:'var(--blue-ink)', hex:'#1a93cf',
+  cards:[
+    {t:'Как войти', d:'Откройте в браузере (Chrome, Яндекс.Браузер) адрес crm.erfolgmt.ru. Введите логин (латиницей) и пароль, которые выдал директор, и нажмите «Войти». Логин у каждого свой и не меняется. Забыли пароль — директор сбросит его в «Настройки → Пользователи».'},
+    {t:'Как устроено меню', d:'Слева тёмная колонка-меню, пункты сгруппированы: «Дашборд», «Работа» (Заявки, Расписание…), «Картотека» (Клиенты, Техника), «Деньги» (Финансы, Отчёты, Зарплата), «Настройки». Каждый видит только своё: у инженера меню короткое, у директора — полное. Часть экранов открывается кнопкой из другого экрана.'},
+    {t:'Инженер работает с телефона', d:'Тот же адрес crm.erfolgmt.ru: после входа инженера система сама открывает мобильную версию. Внизу 4 вкладки: «Очередь», «Сканер», «Склад», «Профиль». Приложение можно «Добавить на главный экран» — откроется как обычное приложение.'},
+    {t:'Пароль, выход, защита (2FA)', d:'Сменить пароль и включить двухфакторную защиту — в «Настройки → Безопасность аккаунта». Выйти: на компьютере — «Выйти» внизу меню; на телефоне — вкладка «Профиль» → «Выйти». Директору 2FA обязательна по 152-ФЗ (при входе — 6-значный код из приложения-аутентификатора).'}
+  ]
+};
+
+const ROLES = [
+  {
+    id:'manager', name:'Менеджер', who:'Приёмщик · диспетчер', icon:'manager',
+    color:'var(--blue)', ink:'var(--blue-ink)', hex:'#1a93cf',
+    intro:'Вы принимаете технику, ведёте заявки, собираете наряд, выставляете счета, отмечаете оплаты, печатаете документы клиенту и следите, чтобы платили вовремя. Главный экран — карточка заявки, деньги и долги — в разделе «Финансы».',
+    tasks:[
+      {title:'Завести нового клиента', where:'Клиенты · <code>/clients</code> → «Добавить клиента»', needsData:false,
+        steps:[
+          'Откройте «Клиенты» в меню и нажмите «Добавить клиента» (синяя кнопка вверху справа).',
+          'Вверху выберите тип: «Юр. лицо» или «Физ. лицо».',
+          'Юрлицо — название, ИНН/КПП, адрес, телефон, email; для бюджетной организации отметьте признак «бюджет» и реквизиты казначейства.',
+          'Физлицо — ФИО, телефон, адрес. Данные физлица хранятся в зашифрованном виде (152-ФЗ), в списке видны как «Фамилия И.О.».',
+          'Нажмите «Создать». Технику этому клиенту удобно завести прямо при создании заявки (см. следующий шаг).'
+        ],
+        note:'Контактное лицо у юрлица добавляется отдельно — в карточке клиента.'},
+      {title:'Принять технику и создать заявку', where:'Заявки · <code>/tickets</code> → «Новая заявка»', needsData:false,
+        steps:[
+          'На экране «Заявки» нажмите «Новая заявка». Для типовой операции — «По шаблону» (подставит строки наряда).',
+          'Выберите «Клиента» (обязательно).',
+          '«Техника»: выберите аппарат из парка клиента, либо нажмите «➕ Новый аппарат» — выберите модель из каталога и впишите серийный/инвентарный № (аппарат добавится в парк клиента).',
+          'При необходимости — «Контактное лицо» и «Договор» (для бюджетной организации договор обязателен, 44-ФЗ).',
+          'Отметьте «Откуда заявка», «Где техника» (Привезли/Выезд/Забрать), «Тип ремонта» и «Приоритет».',
+          'В «Симптом со слов клиента» опишите жалобу (обязательно). Ниже появится подсказка «похожие прошлые ремонты» из архива.',
+          'При желании «Назначить инженера» и «Дедлайн», затем «Создать заявку».'
+        ],
+        note:'Под выбором инженера видно его загрузку, навык и аттестацию — помогает выбрать. Назначить можно и позже, на карточке заявки или в расписании — тогда заявка попадёт инженеру в «Мой день».'},
+      {title:'Собрать наряд: работы, запчасти, расходы', where:'Заявка · <code>/tickets/:id</code> · вкладка «Детали», блок «Наряд»', needsData:false,
+        steps:[
+          'Откройте заявку из списка «Заявки» — откроется вкладка «Детали».',
+          'В блоке «Наряд» нажмите «Создать наряд» (если его ещё нет).',
+          'Заполните «Диагноз», «Описание ремонта» (можно нажать «ИИ-черновик» — соберёт текст сам) и «Рекомендации».',
+          'Проверьте «Ставку НДС» (по умолчанию из настроек; менять её может только директор/диспетчер).',
+          'В «Работы» нажмите «Добавить строку», впишите название, количество и цену в рублях — сумма посчитается сама. Строка сохраняется, когда уводите курсор из поля.',
+          '«Запчасти» — добавьте вручную или «Списать со склада» (спишется с остатков; вернуть — «Вернуть на склад»). «Прочие расходы» — доставка, выезд.',
+          'Внизу в блоке «ВСЕГО» проверьте итог — та же сумма видна в шапке заявки справа.'
+        ],
+        note:'Цену вводите целым числом в рублях. Инженер тоже может править наряд со своего телефона.'},
+      {title:'Выставить счёт клиенту', where:'Заявка · блок «Счёт» → карточка счёта <code>/invoices/:id</code>', needsData:false,
+        steps:[
+          'Убедитесь, что наряд создан и в нём есть строки (иначе счёт не собрать).',
+          'В блоке «Счёт» нажмите «Выставить счёт» — создастся черновик, вас перекинет на карточку счёта.',
+          'При желании «Редактировать» у «Заметки», добавьте текст и «Сохранить».',
+          'Нажмите синюю «Выставить счёт» — статус станет «Выставлен», сумма и НДС зафиксируются.',
+          'Чтобы отдать клиенту — «Печать PDF».',
+          'Ошибка в черновике — «Удалить черновик»; счёт уже выставлен, но неверен — «Отменить счёт».'
+        ],
+        note:'После выставления сумма «замораживается» — правки наряда на выставленный счёт не влияют. Один счёт на заявку.'},
+      {title:'Отметить оплату (наличные / карта / безнал)', where:'Заявка · <code>/tickets/:id</code> · вкладка «Платежи»', needsData:false,
+        steps:[
+          'На карточке заявки переключитесь на вкладку «Платежи».',
+          'Сверху видно «Итого по наряду», «Оплачено», «К доплате».',
+          'В форме «Внести платёж» впишите сумму в рублях, выберите метод (Наличные / Карта / Безнал), при желании комментарий.',
+          'Нажмите «Внести» — платёж попадёт в «Историю платежей», «К доплате» пересчитается.',
+          'Ошибочный платёж удалите иконкой корзины в строке (подтвердите в окне).'
+        ],
+        note:'Оплата автоматически становится доходом в кассе (помечена «из заявки») и падает на счёт по умолчанию для этого метода. Удаление платежа возвращает деньги в «К доплате».'},
+      {title:'Напечатать документы клиенту', where:'Заявка · <code>/tickets/:id</code> · кнопки печати вверху справа', needsData:false,
+        steps:[
+          'Вверху справа — кнопки: «Акт приёма» (по клиенту и технике, наряд не нужен), «Счёт», «Акт работ», «Дефектный акт» (нужен наряд), «Ярлык» (бирка на технику).',
+          'Нажмите нужную — откроется вкладка с готовым PDF для печати или сохранения.',
+          'Чтобы собрать всё сразу — нажмите выделенную «Пакет документов»: Акт приёма + (при наличии наряда) Дефектный акт, Счёт, Акт работ в одном PDF.',
+          'Факт печати фиксируется в «Истории» заявки.'
+        ],
+        note:'<b>Если вкладка открылась пустой</b> — браузер заблокировал всплывающее окно. Разрешите popup для сайта и повторите.', warn:true},
+      {title:'Дебиторка: кто должен и напомнить', where:'Финансы → Дебиторка · <code>/finance/receivables</code>', needsData:true,
+        steps:[
+          'Откройте «Финансы» → вкладка «Дебиторка».',
+          'Вверху — «Вам должны всего» и «Из них просрочено»; ниже разбивка по срокам.',
+          'В таблице «Кто должен» кнопка «Напомнить» активна только по клиентам с просроченными счетами и с указанным email.',
+          'Нажмите «Напомнить» → в окне проверьте, сколько писем и по каким счетам уйдёт, и «Отправить».'
+        ],
+        note:'<b>«Напомнить» отправляет НАСТОЯЩЕЕ письмо клиенту — не жмите ради теста.</b> Раз в неделю авто-письмо о просрочке уходит само. Счета, по которым напоминали за последние ~20 часов, пропускаются.', warn:true},
+      {title:'Касса: внести доход, расход, перевод', where:'Финансы → Приход и расход · <code>/finance/transactions</code>', needsData:false,
+        steps:[
+          'Откройте «Финансы» → вкладка «Приход и расход».',
+          'Нажмите «Расход» (или «Доход», или «Перевод» между счетами) — откроется окно операции.',
+          'Укажите сумму, счёт, статью, дату и комментарий, сохраните.',
+          'Операция появится в журнале; фильтруйте по типу/счёту/статье/периоду. Ошибочную удалите иконкой корзины.'
+        ],
+        note:'Доходы от оплат по заявкам появляются здесь сами с пометкой «из заявки». Вручную заводите аренду, зарплату, закупки.'}
+    ]
+  },
+  {
+    id:'engineer', name:'Инженер', who:'Ремонт · выезды', icon:'engineer',
+    color:'var(--orange)', ink:'var(--orange-ink)', hex:'#e85f22',
+    intro:'Вы работаете с телефона. После входа сразу видите план на день, двигаете статусы ремонта, ведёте журнал работ (что нашли, что сделали, какие детали), сканируете штрих-коды и смотрите остатки на складе. Всё живёт в 4 вкладках внизу приложения.',
+    tasks:[
+      {title:'Войти и посмотреть план на день', where:'Вкладка «Очередь» · <code>/m/queue</code>', needsData:true,
+        steps:[
+          'Откройте приложение и войдите под своим логином и паролем.',
+          'Приложение само откроет вкладку «Очередь» (внизу слева).',
+          'Наверху — серая сводка «Сегодня: выездов…, в работе…».',
+          'Ниже в блоке «Сегодня по графику» видно время выезда и клиента по каждой заявке.',
+          'Нажмите на строку, чтобы открыть заявку.'
+        ],
+        note:'На демо график может быть пустым — он появится, когда диспетчер назначит вас и поставит время.'},
+      {title:'Ответить по «провисшей» заявке одной кнопкой', where:'Вкладка «Очередь» · красный блок «Провисло»', needsData:true,
+        steps:[
+          'На вкладке «Очередь» найдите красный блок «Провисло — ответьте одной кнопкой».',
+          'По каждой карточке видно номер и «стоит N дн».',
+          'Нажмите: «Ещё в работе», «Готово к выдаче» (диспетчер позвонит клиенту) или «Жду запчасть».',
+          'Другая причина — «Другое — открыть заявку». Внизу появится зелёное подтверждение.'
+        ],
+        note:'Кнопка «Жду запчасть» именно отсюда ставит флаг ожидания детали — отдельного экрана не нужно.'},
+      {title:'Открыть заявку и посмотреть технику', where:'Заявка · <code>/m/tickets/:id</code>', needsData:false,
+        steps:[
+          'На вкладке «Очередь» нажмите нужную заявку.',
+          'Вверху — номер и статус; если назначен выезд, крупно показано время.',
+          'Найдите строки «Клиент», «Техника» (с серийным № S/N) и «Штрих-код».',
+          'Прочитайте блок «Жалоба клиента» — с чем сдали технику.'
+        ],
+        note:'Подсказка «похожие прошлые ремонты» есть в полной версии на компьютере; на телефоне видна только жалоба.'},
+      {title:'Двигать статус ремонта', where:'Заявка · крупные кнопки под карточкой', needsData:false,
+        steps:[
+          'Откройте заявку.',
+          '«Начать диагностику» — когда взяли заявку в работу.',
+          '«В работу» — когда приступили к ремонту.',
+          '«Готов к акту» — когда ремонт закончен и можно оформлять акт.',
+          'Внизу появится подтверждение «Статус изменён».'
+        ],
+        note:'Кнопки появляются по одной — только разрешённые переходы. Нет связи — действие сохранится и отправится само.'},
+      {title:'Вести журнал работ', where:'Журнал работ · <code>/m/tickets/:id/work-log</code>', needsData:false,
+        steps:[
+          'На карточке заявки нажмите «Журнал работ».',
+          'Нет наряда — «Создать наряд». Заполните «Диагноз» (что нашли).',
+          'В «Работы» — «Добавить строку»: что сделано, количество, цена.',
+          'В «Запчасти» — добавьте детали или «Списать со склада».',
+          'Проверьте итоги внизу. Всё сохраняется само, когда убираете курсор с поля.'
+        ],
+        note:'Ставку НДС инженер не меняет (это диспетчер/директор).'},
+      {title:'«ИИ-черновик» описания ремонта', where:'Журнал работ · поле «Описание ремонта»', needsData:false,
+        steps:[
+          'Сначала заполните диагноз и добавьте строки работ/запчастей — чтобы ИИ было из чего собрать текст.',
+          'Найдите поле «Описание ремонта», нажмите рядом кнопку «ИИ-черновик» (значок-искорка).',
+          'Дождитесь — на кнопке появится «ИИ пишет…».',
+          'Прочитайте текст, при необходимости поправьте руками. Уберите курсор — сохранится.'
+        ],
+        note:'Если ИИ недоступен, черновик всё равно соберётся из строк наряда. Текст ИИ всегда проверяйте.'},
+      {title:'Найти заявку сканером штрих-кода', where:'Вкладка «Сканер» · <code>/m/scan</code>', needsData:false,
+        steps:[
+          'Внизу нажмите вкладку «Сканер».',
+          '«Включить камеру» и разрешите доступ, если спросит.',
+          'Наведите рамку на штрих-код на технике или ярлыке — приложение само откроет заявку.',
+          'Камеры нет или не читает — введите код в поле «ввести вручную» и «Найти».'
+        ],
+        note:'Камера работает только по защищённому адресу (https) — на боевом домене всё в порядке.'},
+      {title:'Посмотреть остаток запчасти', where:'Вкладка «Склад» · <code>/m/inventory</code>', needsData:true,
+        steps:[
+          'Внизу нажмите вкладку «Склад».',
+          'В поиске введите название или артикул детали.',
+          'Посмотрите остаток справа от названия (красным — если мало).',
+          'Само списание делайте в «Журнале работ» кнопкой «Списать со склада».'
+        ],
+        note:'Вкладка «Склад» может быть скрыта, если модуль склада выключен в настройках.'},
+      {title:'Включить уведомления (push и Telegram)', where:'«Очередь» (push) и «Профиль» (Telegram)', needsData:false,
+        steps:[
+          'На вкладке «Очередь» в плашке «Получать push о новых заявках?» нажмите «Включить» и разрешите уведомления — работает сразу.',
+          'Для Telegram откройте вкладку «Профиль».',
+          'В блоке «Telegram-напоминания» — «Привязать Telegram», откройте ссылку, «Start» в Telegram, затем «Проверить привязку».'
+        ],
+        note:'<b>Telegram-бот на проде пока НЕ подключён</b> — вместо «Привязать» будет текст, что бот не подключён (его включает директор). Push и «Мой день» работают и без бота.', warn:true}
+    ]
+  },
+  {
+    id:'director', name:'Директор', who:'Управление · настройки', icon:'director',
+    color:'var(--teal)', ink:'var(--teal-ink)', hex:'#1f6f8b',
+    intro:'Вы видите весь бизнес целиком. Ваша памятка — про управление: обзор на дашборде, отчёты и деньги, зарплата, люди и настройки. Приём заявок и сбор нарядов ведут менеджеры — вам туда заглядывать не обязательно.',
+    tasks:[
+      {title:'Утренний обзор на дашборде', where:'Дашборд · <code>/</code> · переключатель периода вверху справа', needsData:true,
+        steps:[
+          'Откройте «Дашборд» (первый пункт меню) — «Сводка по сервисному центру».',
+          'Вверху справа выберите период: День / Неделя / Месяц / Квартал (по умолчанию «Месяц»).',
+          'Плитки: «Выручка», «Маржа», «Дебиторка», «Активные заявки», «Дефицит запчастей», «ТО на сегодня», «ЗП к выплате», «Просроченных счетов». Клик по плитке открывает раздел.',
+          'Вверху — AI-сводка дня; ниже — «Просроченные счета» и «SLA в зоне риска».',
+          'Кнопки «Сводка дня · PDF» и «Excel» вверху справа выгружают сводку файлом.'
+        ],
+        note:'На демо многие плитки будут пустыми (8 клиентов). Совет: переключите период на «Квартал» или «Год».'},
+      {title:'AI-итог месяца', where:'Отчёты · <code>/reports</code> · вкладка «Итог месяца»', needsData:true,
+        steps:[
+          'Откройте «Отчёты» (группа «Деньги») и первую вкладку «Итог месяца».',
+          'В списке «Месяц» выберите нужный (доступны последние 12).',
+          'Прочитайте AI-текст сводки, ниже — цифры блоками: «Деньги», «Рентабельность», «Дебиторка».',
+          'Нужно пересобрать — «Сформировать заново».'
+        ],
+        note:'AI-текст появляется, только если подключён ИИ-ассистент; иначе показывается плашка, но цифры всё равно верны. Виден только директору.'},
+      {title:'Рентабельность: кто и что приносит прибыль', where:'Отчёты · вкладка «Рентабельность»', needsData:true,
+        steps:[
+          'Откройте «Отчёты» → «Рентабельность».',
+          'Задайте период («Месяц»/«Квартал»/«Год»/«Всё время») или даты «с — по».',
+          'Сверху — Выручка, Себестоимость, Маржа, Маржа %.',
+          'Таблицы «По инженерам» и «По типу техники» (прибыль зелёная, убыток красный).'
+        ],
+        note:'Считается по дате закрытия наряда. На демо будет пусто — переключите на «Всё время».'},
+      {title:'Рассчитать и выплатить зарплату', where:'Зарплата · <code>/payroll</code>', needsData:true,
+        steps:[
+          'Откройте «Зарплата». Под заголовком — текущее правило (сделка % или оклад+бонус).',
+          'Выберите период вверху справа.',
+          'Смотрите «Итого к выплате» и таблицу по инженерам.',
+          'В колонке «Выплата» нажмите «Выплатить» у инженера, проверьте сумму/дату/счёт и подтвердите.',
+          'Выплату можно изменить (карандаш) или отменить (крестик — расход вернётся в кассу).'
+        ],
+        note:'Кнопка «Выплатить» неактивна без денежного счёта — сначала заведите счёт в кассе.'},
+      {title:'Касса: сколько собрано и остатки', where:'Финансы → Обзор · <code>/finance</code>', needsData:true,
+        steps:[
+          'Откройте «Финансы» — попадёте на «Обзор» (Касса).',
+          'Вверху справа выберите период: Сегодня / Неделя / Месяц / Квартал / Год.',
+          '«Собрано» — выручка с разбивкой Наличными / Картой / Безнал; «Всего денег» и карточки — остатки по счетам.',
+          'Ниже — «Расход», «Разница», графики, «Последние операции». «Все операции» ведёт в журнал.'
+        ],
+        note:'На демо суммы и графики почти пустые до импорта.'},
+      {title:'Завести счёт и статьи доходов/расходов', where:'Финансы → Счета и статьи · <code>/finance/accounts</code>', needsData:false,
+        steps:[
+          'Откройте «Финансы» → «Счета и статьи».',
+          '«Счёт»: название, тип (Наличные / Расчётный / Карта), стартовый остаток, при необходимости «Зачислять сюда оплаты по заявкам».',
+          'Сохраните — счёт появится с остатком.',
+          'Ниже добавьте «Статьи доходов» и «Статьи расходов».'
+        ],
+        note:'«Зачислять сюда оплаты по заявкам» определяет, на какой счёт падают авто-доходы — задайте до начала работы.'},
+      {title:'Сотрудники: создать, роль, пароль, блокировка', where:'Настройки → Пользователи · <code>/settings/users</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → «Пользователи».',
+          'Новый: «Создать» → Логин (латиница, мин. 3), Пароль (мин. 8), ФИО, Роль (Директор / Диспетчер / Инженер) → «Создать».',
+          'Изменить данные/роль — карандаш (логин поменять нельзя).',
+          'Сбросить пароль — значок ключа (все сессии сотрудника завершатся).',
+          'Заблокировать/разблокировать — значок замка (себя нельзя).'
+        ],
+        note:'Чтобы инженера можно было назначать на заявки — дайте роль «Инженер». Навыки инженера правятся в том же окне.'},
+      {title:'Подключить ИИ-ассистента', where:'Настройки → ИИ-ассистент · <code>/settings/ai</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → карточка «ИИ-ассистент», включите тумблер «Ассистент включён».',
+          '«Тип API» — оставьте «Anthropic-совместимый (z.ai GLM Coding Plan)», URL и модель подставятся сами.',
+          'Вставьте «API-ключ» от провайдера (z.ai). Ключ хранится зашифрованным и обратно не показывается.',
+          '«Сохранить», затем «Проверить связь» — должно появиться «Связь есть».'
+        ],
+        note:'На проде ИИ уже живой (z.ai). Заполните форму, чтобы управлять ключом из настроек, а не из серверных переменных.'},
+      {title:'Подключить Telegram-бота', where:'Настройки → Telegram-бот · <code>/settings/telegram</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → «Telegram-бот», разверните подсказку «Как создать бота в @BotFather».',
+          'В Telegram откройте @BotFather, отправьте /newbot, задайте имя и username бота.',
+          'Скопируйте токен вида 123456789:ABC…',
+          'Вставьте в поле «Токен бота от @BotFather» и «Сохранить и подключить» — появится «Бот включён».'
+        ],
+        note:'<b>Сейчас бот на проде НЕ подключён — это разовое действие директора.</b> Пока бота нет, клиенты не пишут заявки через Telegram (push и «Мой день» работают и без бота).', warn:true},
+      {title:'Скачать резервную копию базы', where:'Настройки → Резервные копии · <code>/settings/backup</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → «Резервные копии и архив».',
+          'В блоке «Полная копия всей базы» нажмите «Скачать полную копию».',
+          'Дождитесь (для большой базы — до минуты); браузер скачает файл-дамп.',
+          'Сохраните файл в надёжном месте — это страховка и способ перенести систему.'
+        ],
+        note:'Ночной автобэкап на проде уже настроен отдельно — эта кнопка для копии по требованию. Раз в неделю полезно скачивать копию на свой компьютер.'},
+      {title:'Включить 2FA (требование 152-ФЗ)', where:'Настройки → Безопасность аккаунта · <code>/settings/security</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → «Безопасность аккаунта», нажмите «Включить 2FA».',
+          'Установите приложение-аутентификатор (Google Authenticator, Aegis), отсканируйте QR-код, «Дальше».',
+          'Введите 6-значный код из приложения и «Подтвердить».',
+          'Сохраните recovery-коды («Скачать .txt» — показываются один раз), отметьте «Я сохранил коды» и «Готово».'
+        ],
+        note:'Для директора 2FA обязательна по 152-ФЗ. Recovery-коды нужны для входа при потере телефона.'},
+      {title:'Настроить почтовый ящик компании', where:'Почта · <code>/mail</code> → «Настройки ящика»', needsData:false,
+        steps:[
+          'Откройте «Почта», затем «Настройки ящика».',
+          '«Отправитель»: имя (ООО «Эрфольг») и адрес (info@erfolgmt.ru).',
+          'SMTP (отправка): сервер mail.hosting.reg.ru, порт 465, логин = адрес ящика, пароль; SSL/TLS включён.',
+          'Включите «Отправлять через этот ящик», «Сохранить», затем «Отправить тест».'
+        ],
+        note:'На проде почта уже настроена (info@erfolgmt.ru, хост mail.hosting.reg.ru).'},
+      {title:'Журнал действий: кто что менял', where:'Настройки → Журнал действий · <code>/settings/audit</code>', needsData:false,
+        steps:[
+          'Откройте «Настройки» → «Журнал действий».',
+          'Наверху — счётчики за 24 часа / 7 дней / неуспешных входов.',
+          'Отфильтруйте: «Действие», «Объект», «Пользователь», даты.',
+          'Кликните строку события — раскроются детали «До / После».'
+        ],
+        note:'Только чтение — записи нельзя менять или удалять, хранятся 5 лет (152-ФЗ).'}
+    ]
+  }
+];
+
+// ---------- render on-page ----------
+const content = document.getElementById('content');
+const tabsEl = document.getElementById('tabs');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function taskHtml(t){
+  const badge = t.needsData ? '<span class="badge-demo">на демо пусто</span>' : '';
+  const steps = t.steps.map(s=>'<li>'+s+'</li>').join('');
+  const note = t.note ? '<div class="note'+(t.warn?' warn':'')+'">'+t.note+'</div>' : '';
+  return '<article class="task"><div class="task-h"><div class="task-n"></div>'
+    +'<div class="task-tt"><h4>'+t.title+'</h4>'
+    +'<span class="where">'+PIN+'<span>'+t.where+'</span></span></div>'+badge+'</div>'
+    +'<div class="task-body"><ol class="steps">'+steps+'</ol>'+note+'</div></article>';
+}
+
+function commonHtml(){
+  const cards = COMMON.cards.map(c=>'<div class="info"><h3><span class="b">'+ICON.start+'</span>'+c.t+'</h3><p>'+c.d+'</p></div>').join('');
+  return '<section class="role-sec" id="sec-start" style="--role:'+COMMON.color+';--role-ink:'+COMMON.ink+'">'
+    +'<div class="role-head"><div class="role-title"><span class="role-badge">'+ICON.start+'</span>'
+    +'<div><div class="who">для всех</div><h2>Начало работы</h2></div></div></div>'
+    +'<p class="role-intro">Общее для всех сотрудников — вход, меню, мобильная версия и защита аккаунта.</p>'
+    +'<div class="info-grid">'+cards+'</div></section>';
+}
+
+function roleHtml(r){
+  const tasks = r.tasks.map(taskHtml).join('');
+  return '<section class="role-sec" id="sec-'+r.id+'" hidden style="--role:'+r.color+';--role-ink:'+r.ink+'">'
+    +'<div class="role-head"><div class="role-title"><span class="role-badge">'+ICON[r.icon]+'</span>'
+    +'<div><div class="who">'+r.who+'</div><h2>Памятка: '+r.name.toLowerCase()+'</h2></div></div>'
+    +'<button class="btn" data-word="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Скачать эту памятку</button></div>'
+    +'<p class="role-intro">'+r.intro+'</p>'
+    +'<div class="tasks">'+tasks+'</div></section>';
+}
+
+content.innerHTML = commonHtml() + ROLES.map(roleHtml).join('');
+
+// ---------- tabs ----------
+const TABS = [{id:'start',name:'Начало',hex:'#1a93cf',ink:'#0d6a9c'}].concat(
+  ROLES.map(r=>({id:r.id,name:r.name,hex:r.hex,ink:r.ink})));
+tabsEl.innerHTML = TABS.map((t,i)=>'<button class="tab" role="tab" data-tab="'+t.id
+  +'" aria-selected="'+(i===0)+'" style="--tab:'+t.hex+';--tab-ink:'+t.ink+'"><span class="dot"></span>'+t.name+'</button>').join('');
+
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab===id));
+  document.querySelectorAll('.role-sec').forEach(s=>{ s.hidden = (s.id !== 'sec-'+id); });
+  window.scrollTo({top:0,behavior:'instant'});
+}
+tabsEl.addEventListener('click', e=>{ const b=e.target.closest('.tab'); if(b) showTab(b.dataset.tab); });
+showTab('start');
+
+// ---------- Word export ----------
+function wordDoc(title, bodyHtml){
+  return "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>"
+    +"<head><meta charset='utf-8'><title>"+esc(title)+"</title>"
+    +"<style>"
+    +"@page{size:A4;margin:2cm 2cm;} body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#16232e;line-height:1.4;}"
+    +"h1{font-size:20pt;color:#0d6a9c;margin:0 0 4pt;} h2{font-size:15pt;color:#155066;border-bottom:1.5pt solid #cfe0ea;padding-bottom:3pt;margin:20pt 0 8pt;}"
+    +"h3{font-size:12.5pt;margin:14pt 0 2pt;color:#16232e;} .who{color:#5f7386;font-size:9.5pt;text-transform:uppercase;letter-spacing:1pt;}"
+    +".intro{color:#31465a;font-size:11pt;margin:2pt 0 8pt;} .where{color:#0d6a9c;font-size:9.5pt;margin:0 0 4pt;} .where code{font-family:Consolas,monospace;}"
+    +"ol{margin:2pt 0 4pt 16pt;padding:0;} li{margin:2pt 0;} .note{background:#f2f6f9;border-left:3pt solid #9fb6c6;padding:5pt 8pt;font-size:10pt;color:#31465a;margin:4pt 0 0;}"
+    +".note.warn{background:#fdf0e9;border-left-color:#e85f22;color:#a2401a;} .demo{color:#9a6a15;font-size:9pt;font-weight:bold;} .lead{color:#5f7386;font-size:10.5pt;margin:0 0 10pt;}"
+    +"</style></head><body>"+bodyHtml+"</body></html>";
+}
+function commonDocHtml(){
+  return "<h2>Начало работы — для всех</h2>"
+    + COMMON.cards.map(c=>"<h3>"+esc(c.t)+"</h3><p>"+esc(c.d)+"</p>").join("");
+}
+function roleDocHtml(r){
+  let h = "<h2>Памятка: "+esc(r.name.toLowerCase())+"</h2><p class='who'>"+esc(r.who)+"</p><p class='intro'>"+esc(r.intro)+"</p>";
+  r.tasks.forEach((t,i)=>{
+    h += "<h3>"+(i+1)+". "+esc(t.title)+(t.needsData?" <span class='demo'>(на демо пусто)</span>":"")+"</h3>";
+    h += "<p class='where'>"+t.where+"</p>";
+    h += "<ol>"+t.steps.map(s=>"<li>"+s+"</li>").join("")+"</ol>";
+    if(t.note) h += "<p class='note"+(t.warn?" warn":"")+"'>"+t.note+"</p>";
+  });
+  return h;
+}
+function downloadWord(title, bodyHtml, filename){
+  const blob = new Blob(['﻿'+wordDoc(title, bodyHtml)], {type:'application/msword'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+document.getElementById('wordAll').addEventListener('click', ()=>{
+  const body = "<h1>ErfolgCRM — памятки сотрудникам</h1><p class='lead'>ООО «Эрфольг» · внутренняя система сервисного центра · адрес: crm.erfolgmt.ru</p>"
+    + commonDocHtml() + ROLES.map(roleDocHtml).join("");
+  downloadWord("ErfolgCRM — памятки сотрудникам", body, "ErfolgCRM-pamyatki.doc");
+});
+document.querySelectorAll('[data-word]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const r = ROLES.find(x=>x.id===btn.dataset.word);
+    const body = "<h1>ErfolgCRM — памятка: "+esc(r.name.toLowerCase())+"</h1><p class='lead'>ООО «Эрфольг» · crm.erfolgmt.ru</p>"
+      + commonDocHtml() + roleDocHtml(r);
+    downloadWord("ErfolgCRM — памятка "+r.name, body, "ErfolgCRM-pamyatka-"+r.id+".doc");
+  });
+});
+document.getElementById('printBtn').addEventListener('click', ()=>window.print());
+</script>
+
+<noscript><div style="padding:40px;font-family:sans-serif;text-align:center;color:#31465a">Для просмотра памяток включите JavaScript в браузере.</div></noscript>
+
+</body>
+</html>
