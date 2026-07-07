@@ -1,6 +1,6 @@
 /**
  * /invoices — список всех счетов tenant'а с фильтром по статусу.
- * RBAC: чтение — engineer+; создание — через карточку заявки.
+ * RBAC: чтение (invoices.listForTenant) — staff (директор+диспетчер); создание — через карточку заявки.
  */
 import { useState } from 'react';
 import { Link } from 'wouter';

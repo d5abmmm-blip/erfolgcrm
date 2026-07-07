@@ -25,6 +25,7 @@ import { hash as argonHash } from 'argon2';
 import { eq, sql } from 'drizzle-orm';
 import { makeDb } from './client';
 import { getTenantEncryptionKey } from './crypto';
+import { classifyClientType, initialsDisplayName } from './import-winservice-classify';
 import {
   assetEvents,
   assets,
@@ -123,26 +124,8 @@ function translit(s: string): string {
     .slice(0, 50);
 }
 
-// ФИО физлица → инициалы для display_name: «Иванов Иван Иванович» → «Иванов И.И.».
-// Полное ФИО хранится ТОЛЬКО в зашифрованной колонке full_name_encrypted; display_name
-// (plaintext, индексируется) обязан быть инициалами — иначе ПДн физлица утекают открытым
-// текстом мимо шифрования (см. schema clients.ts) и попадают в бэкапы. Формат совпадает с
-// buildDisplayNameFromFio в apps/api clients/router.ts (источник правды при создании через UI).
-function initialsDisplayName(fio: string): string {
-  const parts = fio.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return (parts[0] ?? '').slice(0, 200);
-  const surname = parts[0]!;
-  const initials = parts
-    .slice(1)
-    .map((p) => `${p[0]!.toUpperCase()}.`)
-    .join('');
-  return `${surname} ${initials}`.slice(0, 200);
-}
-
-// Юрлицо / бюджетник по названию.
+// Бюджетник по названию (subtype). Юрлицо-признаки и инициалы — в import-winservice-classify.ts.
 // ВАЖНО: \b в JS не работает с кириллицей, поэтому границу слова задаём через (?<!\p{L})…(?!\p{L}) с флагом u.
-const LEGAL_RE =
-  /(?<!\p{L})(ООО|ОАО|ЗАО|ПАО|АО|ИП|ГБУ|ФГБУ|ФГКУ|ГАУ|ГКУ|ГУП|МУП|НКО|ЧУЗ|НУЗ|ЧОУ|ФКУ|ФБУ|МБУ|ГБОУ|ФГБОУ|МБОУ|ОГБУ|КГБУ|МБДОУ|ДОУ|УБ|ГБ|РБ|РКБ|ЦРБ|РДКБ|ДКБ|РКЦ|ПЦ|ФАП|СББЖ)(?!\p{L})|больниц|поликлин|диспансер|госпит|клиник|медицин|медцентр|аптек|лаборатор|санатор|роддом|перинатал|стоматолог|ветеринар|комиссариат|салон|центр/iu;
 const BUDGET_RE =
   /(?<!\p{L})(ГБУ|ФГБУ|ФГКУ|ГАУ|ГКУ|ГУП|МУП|ФКУ|ФБУ|МБУ|ГБОУ|ФГБОУ|МБОУ|ОГБУ|КГБУ|МБДОУ|ДОУ|УБ|ГБ|РБ|РКБ|ЦРБ|РДКБ|ДКБ|РКЦ|ПЦ|ФАП)(?!\p{L})|бюджетн|казённ|казенн|государствен|муниципальн|комиссариат/iu;
 
@@ -331,12 +314,9 @@ async function main(): Promise<void> {
     const root = rootGroup(c);
     const inn = clip(c.INN, 12);
     const clientTypeOld = int(c.CLIENTTYPE);
-    const nameLegal = LEGAL_RE.test(name);
-    // Приоритет сигналов: название юрлица (надёжнее всего) → CLIENTTYPE=1 → ИНН → папка «Бюджетные».
-    // Папка «Частные лица» делает физлицом только если название НЕ похоже на организацию.
-    let type: 'legal' | 'individual';
-    if (nameLegal || clientTypeOld === 1 || inn || root === 4) type = 'legal';
-    else type = 'individual';
+    // Классификация вынесена в чистую classifyClientType (тестируется отдельно).
+    // ИНН-признак юрлица — только при длине 10 (см. IMP-1 там же).
+    const type: 'legal' | 'individual' = classifyClientType({ name, clientTypeOld, inn, root });
 
     const subtype: 'commercial' | 'budget' | null =
       type === 'legal' ? (root === 4 || BUDGET_RE.test(name) ? 'budget' : 'commercial') : null;

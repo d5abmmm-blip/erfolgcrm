@@ -1,7 +1,11 @@
 /**
  * tRPC роутер invoices.
  *
- * Чтение — engineerProcedure (инженер видит счета своих заявок).
+ * Чтение по СВОЕЙ заявке — engineerProcedure (getById, listByTicket): инженеру нужны счета
+ * заявки, которую он ведёт.
+ * Перечисление по клиенту/по всему тенанту (listByClient, listForTenant) — staffProcedure
+ * (директор + диспетчер): это весь «инвойс-бук» тенанта (суммы/долги всех клиентов), инженеру
+ * он не положен (least-privilege, паритет с кассой/дебиторкой — они тоже staff/director).
  * Создание/issue/cancel/update/delete — staffProcedure (директор + диспетчер).
  */
 import { z } from 'zod';
@@ -41,7 +45,7 @@ export const invoicesRouter = router({
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => listByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
-  listByClient: engineerProcedure
+  listByClient: staffProcedure
     .input(
       z.object({
         clientId: z.string().uuid(),
@@ -56,7 +60,7 @@ export const invoicesRouter = router({
       }),
     ),
 
-  listForTenant: engineerProcedure
+  listForTenant: staffProcedure
     .input(
       z.object({
         status: invoiceStatusEnum.optional(),

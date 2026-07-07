@@ -149,6 +149,26 @@ describe('permissions matrix: engineer не имеет доступа к directo
       'FORBIDDEN',
     );
   });
+
+  it('invoices.listForTenant → FORBIDDEN для engineer (весь инвойс-бук тенанта — staff)', async () => {
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+    await expectForbiddenOrUnauthorized(caller.invoices.listForTenant({}), 'FORBIDDEN');
+  });
+
+  it('invoices.listByClient → FORBIDDEN для engineer (счета клиента — staff)', async () => {
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+    await expectForbiddenOrUnauthorized(
+      caller.invoices.listByClient({ clientId: '00000000-0000-0000-0000-000000000000' }),
+      'FORBIDDEN',
+    );
+  });
+});
+
+describe('permissions matrix: staff сохраняет доступ к инвойс-буку (не пере-ограничили)', () => {
+  it('invoices.listForTenant → ОК для dispatcher', async () => {
+    const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher', userId: dispatcherId }));
+    await expect(caller.invoices.listForTenant({})).resolves.toBeDefined();
+  });
 });
 
 describe('permissions matrix: dispatcher не имеет доступа к director-only', () => {
