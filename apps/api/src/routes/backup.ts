@@ -123,7 +123,7 @@ export function makeBackupRouter(): Router {
       return res.status(500).json({ error: 'Не удалось принять файл.' });
     }
 
-    const child = spawnWinServiceImport(tmpFile, { dryRun });
+    const child = spawnWinServiceImport(tmpFile, { dryRun, tenantId });
     let out = '';
     let errOut = '';
     const cap = (s: string, chunk: Buffer) => (s.length < 64_000 ? s + chunk.toString('utf8') : s);

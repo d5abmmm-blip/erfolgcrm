@@ -50,7 +50,13 @@ const DATABASE_URL =
   process.env.DATABASE_URL ??
   'postgresql://erfolg:dev_only_password@localhost:5432/erfolg_dev';
 
-/** Временный пароль для всех перенесённых сотрудников. Директор меняет при первом входе. */
+/**
+ * Пароль-заглушка для перенесённых сотрудников. Аккаунты создаются НЕАКТИВНЫМИ
+ * (isActive:false): они нужны как ссылки «кто делал наряд/менял статус», но войти нельзя,
+ * пока директор явно не активирует нужного человека и не задаст ему нормальный пароль.
+ * Так на боевой базе не появляется пачка живых логинов с общим паролем (в старой базе
+ * несколько «Администраторов» → роль director с полным доступом к финансам и ПДн).
+ */
 const TEMP_PASSWORD = 'Erfolg-Import-2026';
 
 // ───────────────────────── helpers ─────────────────────────
@@ -115,6 +121,22 @@ function translit(s: string): string {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 50);
+}
+
+// ФИО физлица → инициалы для display_name: «Иванов Иван Иванович» → «Иванов И.И.».
+// Полное ФИО хранится ТОЛЬКО в зашифрованной колонке full_name_encrypted; display_name
+// (plaintext, индексируется) обязан быть инициалами — иначе ПДн физлица утекают открытым
+// текстом мимо шифрования (см. schema clients.ts) и попадают в бэкапы. Формат совпадает с
+// buildDisplayNameFromFio в apps/api clients/router.ts (источник правды при создании через UI).
+function initialsDisplayName(fio: string): string {
+  const parts = fio.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return (parts[0] ?? '').slice(0, 200);
+  const surname = parts[0]!;
+  const initials = parts
+    .slice(1)
+    .map((p) => `${p[0]!.toUpperCase()}.`)
+    .join('');
+  return `${surname} ${initials}`.slice(0, 200);
 }
 
 // Юрлицо / бюджетник по названию.
@@ -185,12 +207,25 @@ async function main(): Promise<void> {
 
   const db = DRY_RUN ? null : makeDb(DATABASE_URL);
 
-  // tenant erfolg
+  // Целевой tenant. In-app путь (кнопка «Загрузка старой базы») пробрасывает
+  // IMPORT_TENANT_ID из HMAC-токена (на проде это 'crm'); CLI на dev без этой env
+  // по-прежнему целится в 'erfolg' (создаётся seed). Ключ шифрования ПДн от выбора
+  // tenant НЕ зависит (crypto.ts берёт app-wide PII_ENCRYPTION_KEY), но tenant_id
+  // должен быть верным — иначе данные уедут в чужой/несуществующий tenant.
+  const IMPORT_TENANT_ID = process.env.IMPORT_TENANT_ID?.trim() || null;
   let tenantIdValue = 'DRYRUN-TENANT';
   let key = getTenantEncryptionKey({ id: tenantIdValue, kmsKeyId: null });
   if (db) {
-    const t = await db.select().from(tenants).where(eq(tenants.subdomain, 'erfolg')).limit(1);
-    if (!t[0]) throw new Error('tenant "erfolg" не найден — сначала прогоните seed.');
+    const t = IMPORT_TENANT_ID
+      ? await db.select().from(tenants).where(eq(tenants.id, IMPORT_TENANT_ID)).limit(1)
+      : await db.select().from(tenants).where(eq(tenants.subdomain, 'erfolg')).limit(1);
+    if (!t[0]) {
+      throw new Error(
+        IMPORT_TENANT_ID
+          ? `tenant с id=${IMPORT_TENANT_ID} не найден — проверьте IMPORT_TENANT_ID.`
+          : 'tenant "erfolg" не найден — прогоните seed или задайте IMPORT_TENANT_ID.',
+      );
+    }
     tenantIdValue = t[0].id;
     key = getTenantEncryptionKey({ id: tenantIdValue, kmsKeyId: t[0].kmsKeyId });
   }
@@ -230,7 +265,8 @@ async function main(): Promise<void> {
       position: positionOf(role),
       role,
       passwordHash,
-      isActive: true,
+      // Неактивны: только как исторические ссылки-исполнители. Директор активирует вручную.
+      isActive: false,
     });
   }
   const userIdFor = (oldId: unknown): string | null => {
@@ -326,13 +362,17 @@ async function main(): Promise<void> {
       id: newId,
       type,
       subtype,
-      displayName: name,
+      // Физлицо: в display_name только инициалы (полное ФИО — в indFullName → шифруется).
+      // Юрлицо: название организации (не ПДн физлица).
+      displayName: type === 'individual' ? initialsDisplayName(name) : name,
       inn: type === 'legal' ? inn : null,
       kpp: type === 'legal' ? clip(c.KPP, 9) : null,
       ogrn: type === 'legal' ? clip(c.OGRN, 15) : null,
       legalAddress: type === 'legal' ? address : null,
       phone: type === 'legal' ? phone : null,
-      email: clip(c.EMAIL, 200),
+      // email — plaintext-колонка. Для физлица это ПДн (в UI-форме физлица поля email нет
+      // вовсе), поэтому пишем email только для юрлиц (рабочий B2B-контакт организации).
+      email: type === 'legal' ? clip(c.EMAIL, 200) : null,
       indFullName: type === 'individual' ? name : null,
       indPhone: type === 'individual' ? phone : null,
       indAddress: type === 'individual' ? address : null,
