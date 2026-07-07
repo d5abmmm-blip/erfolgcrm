@@ -408,7 +408,14 @@ async function main(): Promise<void> {
     if (!model && !manuf && !serial && !devType) continue; // нет инфы о технике
     const ownerClientId = clientIdFor(o.CLIENTID);
     const modelName = model ?? devType ?? 'Оборудование';
-    const dedupeKey = `${int(o.CLIENTID) ?? 'x'}|${serial ?? ''}|${modelName}|${manuf ?? ''}`;
+    // Склейка техники: серийник уникален для аппарата → при его наличии он и есть identity
+    // (производителя в ключ НЕ берём — иначе один аппарат с по-разному записанным производителем
+    // в разных заявках даёт дубли-карточки). Без серийника — различаем ещё и по производителю,
+    // чтобы не слить разные аппараты одной модели.
+    const clientKey = int(o.CLIENTID) ?? 'x';
+    const dedupeKey = serial
+      ? `${clientKey}|S|${serial}|${modelName}`
+      : `${clientKey}|N|${modelName}|${manuf ?? ''}`;
     let plan = assetPlans.get(dedupeKey);
     if (!plan) {
       plan = {
