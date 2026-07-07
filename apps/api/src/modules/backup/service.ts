@@ -214,9 +214,13 @@ export function verifyImportToken(args: { tenantId: string; exp: number; sig: st
  * Запускает импортёр старой базы под tsx (node --import tsx). Файл-экспорт передаётся
  * первым аргументом, режим — флагом --dry-run. Отдаёт дочерний процесс; вызывающий
  * собирает stdout (отчёт импортёра) и stderr. Импортёр сам берёт DATABASE_OWNER_URL.
+ * Целевой tenant передаётся через env IMPORT_TENANT_ID (из HMAC-токена директора).
  */
-export function spawnWinServiceImport(filePath: string, opts: { dryRun: boolean }) {
+export function spawnWinServiceImport(filePath: string, opts: { dryRun: boolean; tenantId?: string }) {
   const args = ['--import', 'tsx', IMPORT_WINSERVICE_PATH, filePath];
   if (opts.dryRun) args.push('--dry-run');
-  return spawn(process.execPath, args, { env: process.env, windowsHide: true });
+  // Пробрасываем целевой tenant импортёру: без этого он падает на захардкоженный
+  // subdomain='erfolg', которого на проде нет (там tenant 'crm') — дефект BK-1.
+  const env = opts.tenantId ? { ...process.env, IMPORT_TENANT_ID: opts.tenantId } : process.env;
+  return spawn(process.execPath, args, { env, windowsHide: true });
 }
