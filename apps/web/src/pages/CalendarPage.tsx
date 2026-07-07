@@ -131,7 +131,7 @@ export function CalendarPage() {
   const selectedEvents = selected ? (eventsByDate.get(selected) ?? []) : [];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold md:text-2xl">{monthLabel}</h2>

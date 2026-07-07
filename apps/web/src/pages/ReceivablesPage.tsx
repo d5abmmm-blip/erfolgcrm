@@ -125,7 +125,7 @@ export function ReceivablesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
       <FinanceTabs />
 
       <div>

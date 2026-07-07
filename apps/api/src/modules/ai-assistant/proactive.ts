@@ -89,13 +89,14 @@ export interface DailySummaryData {
   readyCount: number;
   unspecifiedCount: number;
   topStuck: Array<{
+    ticketId: string;
     ticketNumber: string;
     assetModel: string | null;
     stuckDays: number;
     engineerName: string | null;
     reason: string;
   }>;
-  ready: Array<{ ticketNumber: string; assetModel: string | null }>;
+  ready: Array<{ ticketId: string; ticketNumber: string; assetModel: string | null }>;
   overloaded: Array<{ name: string; count: number }>;
 }
 
@@ -135,14 +136,18 @@ export async function buildDailySummaryData(
     stuckCount: stuck.length,
     readyCount: ready.length,
     unspecifiedCount: unspecified.length,
-    topStuck: stuck.slice(0, 8).map((c) => ({
+    // Возвращаем расширенный список (до 100) — карточка на дашборде показывает топ-5,
+    // а модалка «Подробнее» — весь список. Промпт LLM режется до 8 отдельно (renderSummaryPrompt).
+    topStuck: stuck.slice(0, 100).map((c) => ({
+      ticketId: c.id,
       ticketNumber: c.ticketNumber,
       assetModel: c.assetModel,
       stuckDays: c.stuckDays,
       engineerName: c.assignedEngineerName,
       reason: c.effectiveReason ? BLOCKED_REASON_LABEL_RU[c.effectiveReason] : 'причина не указана',
     })),
-    ready: ready.slice(0, 10).map((c) => ({
+    ready: ready.slice(0, 100).map((c) => ({
+      ticketId: c.id,
       ticketNumber: c.ticketNumber,
       assetModel: c.assetModel,
     })),
@@ -164,7 +169,8 @@ function renderSummaryPrompt(d: DailySummaryData): string {
   lines.push(`Готово к выдаче (позвонить клиенту): ${d.readyCount}.`);
   if (d.topStuck.length) {
     lines.push('Самые застоявшиеся:');
-    for (const s of d.topStuck) {
+    // В промпт LLM — только топ-8 (данные для UI-модалки шире, но токены беречь).
+    for (const s of d.topStuck.slice(0, 8)) {
       lines.push(
         `  • ${s.ticketNumber} ${s.assetModel ?? ''} — стоит ${s.stuckDays} дн, ` +
           `${s.reason}${s.engineerName ? `, инженер ${s.engineerName}` : ', инженер не назначен'}.`,

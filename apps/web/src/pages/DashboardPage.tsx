@@ -129,7 +129,7 @@ function DirectorDashboard() {
   });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold md:text-2xl">Сводка по сервисному центру</h2>
@@ -559,7 +559,7 @@ function SimpleDashboard({ role }: { role: 'director' | 'dispatcher' | 'engineer
   if (role === 'dispatcher') return <DispatcherDashboard />;
   // Инженер работает с мобильного интерфейса — здесь только подсказка-переход.
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold md:text-2xl">Рабочий стол</h2>
         <p className="text-muted-foreground text-sm">
@@ -585,7 +585,7 @@ function DispatcherDashboard() {
   const nb = trpc.dashboard.navBadges.useQuery(undefined, { refetchInterval: 60_000 });
   const b = nb.data;
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold md:text-2xl">Рабочий стол</h2>
         <p className="text-muted-foreground text-sm">Что требует внимания сегодня</p>

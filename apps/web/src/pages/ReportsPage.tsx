@@ -65,7 +65,7 @@ export function ReportsPage() {
   const visibleTabs = TABS.filter((t) => !t.directorOnly || isDirector);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
       <div>
         <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
           <BarChart3 className="h-3.5 w-3.5" />

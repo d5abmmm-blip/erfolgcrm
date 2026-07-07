@@ -63,7 +63,7 @@ export function ClientCardPage() {
   const isLegal = c.type === 'legal';
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
         <Link
           href="/clients"
