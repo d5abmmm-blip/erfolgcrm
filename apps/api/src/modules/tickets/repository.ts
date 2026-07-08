@@ -34,6 +34,9 @@ import {
   users,
   tickets,
   ticketEvents,
+  workOrders,
+  invoices,
+  payments,
   withTenantTx,
   type Db,
   type TicketEventPayload,
@@ -205,6 +208,8 @@ export function generateBarcode(): string {
 /** Хелпер: построение WHERE для listTickets. Вынесен чтобы не раздувать функцию. */
 function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
   const filters: SQL[] = [];
+  // Мягко удалённые заявки (deleted_at) не показываем никогда.
+  filters.push(isNull(tickets.deletedAt));
   if (opts.statuses && opts.statuses.length > 0) {
     filters.push(inArray(tickets.status, opts.statuses));
   }
@@ -362,7 +367,8 @@ export async function getTicket(
         contracts,
         and(eq(contracts.id, tickets.contractId), isNull(contracts.deletedAt)),
       )
-      .where(eq(tickets.id, id))
+      // Удалённая заявка не открывается — это же чтение гейтит update/changeStatus/reopen.
+      .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -461,11 +467,14 @@ export async function searchTickets(
       .leftJoin(clients, eq(tickets.clientId, clients.id))
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .where(
-        or(
-          ruIlike(tickets.ticketNumber, query),
-          ruIlike(clients.displayName, query),
-          ruIlike(assets.model, query),
-          ruIlike(assets.serialNumber, query),
+        and(
+          isNull(tickets.deletedAt),
+          or(
+            ruIlike(tickets.ticketNumber, query),
+            ruIlike(clients.displayName, query),
+            ruIlike(assets.model, query),
+            ruIlike(assets.serialNumber, query),
+          ),
         ),
       )
       .orderBy(desc(tickets.receivedAt))
@@ -711,7 +720,7 @@ export async function addNote(
     const exists = await tx
       .select({ id: tickets.id })
       .from(tickets)
-      .where(eq(tickets.id, ticketId))
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
       .limit(1);
     if (!exists[0]) throw new Error('Ticket not found');
     const inserted = await tx
@@ -752,7 +761,7 @@ export async function setWaitingForPart(
         blockedSince: tickets.blockedSince,
       })
       .from(tickets)
-      .where(eq(tickets.id, ticketId))
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
       .limit(1);
     const before = rows[0];
     if (!before) throw new TicketNotFoundError();
@@ -843,6 +852,88 @@ export async function revokeTrackToken(
   });
 }
 
+/** Денежный след заявки, блокирующий удаление. */
+export interface TicketDeleteBlockers {
+  /** Число внесённых оплат по заявке. */
+  payments: number;
+  /** Число выставленных (не-черновик) счетов. */
+  issuedInvoices: number;
+}
+
+export type SoftDeleteTicketResult =
+  | { status: 'not_found' }
+  | { status: 'blocked'; blockers: TicketDeleteBlockers }
+  | { status: 'deleted'; ticketNumber: string };
+
+/**
+ * Мягкое удаление заявки. Заявка получает deleted_at и исчезает из всех списков,
+ * поиска, доски и отчётов (запросы фильтруют deleted_at IS NULL). Физически ничего
+ * не стирается, касса и склад не трогаются — операция ОБРАТИМА.
+ *
+ * Защита целостности: если у заявки есть оплаты или выставленные счета (issued/
+ * partially_paid/paid/overdue) — удаление запрещено (иначе скрытая заявка «унесла» бы
+ * реальную выручку из кассы и отчётов). Такие заявки нужно отменять, а не удалять.
+ *
+ * Каскад в той же транзакции: наряд заявки и черновики её счетов тоже помечаются
+ * deleted_at — чтобы не «висели» в отчётах/книге счетов без заявки.
+ */
+export async function softDeleteTicket(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<SoftDeleteTicketResult> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const [before] = await tx
+      .select({ ticketNumber: tickets.ticketNumber })
+      .from(tickets)
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+      .limit(1);
+    if (!before) return { status: 'not_found' };
+
+    const [pay] = await tx
+      .select({ n: count() })
+      .from(payments)
+      .where(eq(payments.ticketId, ticketId));
+    const [inv] = await tx
+      .select({ n: count() })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.ticketId, ticketId),
+          isNull(invoices.deletedAt),
+          inArray(invoices.status, ['issued', 'partially_paid', 'paid', 'overdue']),
+        ),
+      );
+    const blockers: TicketDeleteBlockers = {
+      payments: Number(pay?.n ?? 0),
+      issuedInvoices: Number(inv?.n ?? 0),
+    };
+    if (blockers.payments > 0 || blockers.issuedInvoices > 0) {
+      return { status: 'blocked', blockers };
+    }
+
+    const now = new Date();
+    await tx.update(tickets).set({ deletedAt: now }).where(eq(tickets.id, ticketId));
+    // Наряд (1:1) — чтобы не попадал в отчёты/зарплату через join по work_orders.
+    await tx
+      .update(workOrders)
+      .set({ deletedAt: now })
+      .where(and(eq(workOrders.ticketId, ticketId), isNull(workOrders.deletedAt)));
+    // Черновики счетов заявки — прячем из книги счетов (issued/paid уже отсеяны guard'ом).
+    await tx
+      .update(invoices)
+      .set({ deletedAt: now })
+      .where(
+        and(
+          eq(invoices.ticketId, ticketId),
+          eq(invoices.status, 'draft'),
+          isNull(invoices.deletedAt),
+        ),
+      );
+    return { status: 'deleted', ticketNumber: before.ticketNumber };
+  });
+}
+
 /** Русские подписи причин простоя (для события в журнале). Фронт имеет свою карту. */
 export const BLOCKED_REASON_LABEL_RU: Record<TicketBlockedReason, string> = {
   waiting_part: 'ждём запчасть',
@@ -884,7 +975,7 @@ export async function setBlockedReason(
         waitingForPartNote: tickets.waitingForPartNote,
       })
       .from(tickets)
-      .where(eq(tickets.id, ticketId))
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
       .limit(1);
     const before = rows[0];
     if (!before) throw new TicketNotFoundError();
@@ -948,7 +1039,7 @@ export async function recordPrintEvent(
     const exists = await tx
       .select({ id: tickets.id })
       .from(tickets)
-      .where(eq(tickets.id, ticketId))
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
       .limit(1);
     if (!exists[0]) throw new Error('Ticket not found');
     const inserted = await tx
@@ -1092,7 +1183,7 @@ export async function repoSchedule(
       estimatedMinutes: tickets.estimatedMinutes,
     })
     .from(tickets)
-    .where(eq(tickets.id, input.ticketId))
+    .where(and(eq(tickets.id, input.ticketId), isNull(tickets.deletedAt)))
     .limit(1);
   const before = current[0];
   if (!before) throw new TicketNotFoundError();
@@ -1156,7 +1247,7 @@ export async function repoUnschedule(
       estimatedMinutes: tickets.estimatedMinutes,
     })
     .from(tickets)
-    .where(eq(tickets.id, input.ticketId))
+    .where(and(eq(tickets.id, input.ticketId), isNull(tickets.deletedAt)))
     .limit(1);
   const before = current[0];
   if (!before) throw new TicketNotFoundError();
@@ -1228,6 +1319,7 @@ export async function repoWeeklySchedule(
     .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
     .where(
       and(
+        isNull(tickets.deletedAt),
         isNotNull(tickets.scheduledStartAt),
         gte(tickets.scheduledStartAt, input.weekStart),
         lt(tickets.scheduledStartAt, input.weekEnd),
@@ -1282,6 +1374,7 @@ export async function repoMyWeeklySchedule(
     .where(
       and(
         eq(tickets.assignedEngineerId, input.engineerId),
+        isNull(tickets.deletedAt),
         isNotNull(tickets.scheduledStartAt),
         gte(tickets.scheduledStartAt, input.weekStart),
         lt(tickets.scheduledStartAt, input.weekEnd),
@@ -1458,7 +1551,7 @@ export async function boardTickets(db: Db, tenantId: string): Promise<BoardTicke
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .leftJoin(engineerUser, eq(engineerUser.id, tickets.assignedEngineerId))
       .leftJoin(dispatcherUser, eq(dispatcherUser.id, tickets.assignedDispatcherId))
-      .where(inArray(tickets.status, BOARD_ACTIVE_STATUSES));
+      .where(and(isNull(tickets.deletedAt), inArray(tickets.status, BOARD_ACTIVE_STATUSES)));
 
     const nowMs = Date.now();
     const mapped: BoardTicketDto[] = rows.map((r) => {

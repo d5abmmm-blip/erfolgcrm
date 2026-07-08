@@ -91,6 +91,7 @@ export async function listMonthEvents(
       .leftJoin(clients, eq(clients.id, tickets.clientId))
       .where(
         and(
+          isNull(tickets.deletedAt),
           isNotNull(tickets.scheduledStartAt),
           ne(tickets.status, 'cancelled'),
           inMonth(tickets.scheduledStartAt),
@@ -122,6 +123,7 @@ export async function listMonthEvents(
       .leftJoin(clients, eq(clients.id, tickets.clientId))
       .where(
         and(
+          isNull(tickets.deletedAt),
           isNotNull(tickets.deadlineAt),
           notInArray(tickets.status, ['closed', 'cancelled']),
           inMonth(tickets.deadlineAt),

@@ -31,6 +31,7 @@ import {
   UserCog,
   Wrench,
   XCircle,
+  Trash2,
 } from 'lucide-react';
 import type {
   TicketEventType,
@@ -41,6 +42,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
 import { PromptDialog } from '../components/ui/PromptDialog';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { WorkOrderEditor, kopecksToRub } from '../components/WorkOrderEditor';
 import { TicketPayments } from '../components/TicketPayments';
 import { PhotoUploader } from '../components/PhotoUploader';
@@ -103,6 +105,7 @@ type Tab = 'details' | 'history' | 'payments' | 'docs' | 'checklists';
 export function TicketCardPage() {
   const [, params] = useRoute<{ id: string }>('/tickets/:id');
   const id = params?.id ?? '';
+  const [, navigate] = useLocation();
   const me = trpc.auth.me.useQuery();
   const role = me.data?.user.role;
   const isDirector = role === 'director';
@@ -152,6 +155,12 @@ export function TicketCardPage() {
   const setWaitingForPart = trpc.tickets.setWaitingForPart.useMutation({ onSuccess: invalidateAll });
   const cancel = trpc.tickets.cancel.useMutation({ onSuccess: invalidateAll });
   const reopen = trpc.tickets.reopen.useMutation({ onSuccess: invalidateAll });
+  const del = trpc.tickets.delete.useMutation({
+    onSuccess: async () => {
+      await utils.tickets.list.invalidate();
+      navigate('/tickets');
+    },
+  });
   const recordPrint = trpc.tickets.recordPrint.useMutation({ onSuccess: invalidateAll });
 
   if (ticket.isLoading) {
@@ -660,6 +669,9 @@ export function TicketCardPage() {
             onAddNote={(comment) => addNote.mutate({ ticketId: t.id, comment })}
             onCancel={(reason) => cancel.mutate({ id: t.id, reason })}
             onReopen={() => reopen.mutate({ id: t.id })}
+            onDelete={() => del.mutate({ id: t.id })}
+            deletePending={del.isPending}
+            deleteError={del.error?.message ?? null}
             pending={
               changeStatus.isPending ||
               update.isPending ||
@@ -1049,6 +1061,9 @@ function ActionsPanel({
   onAddNote,
   onCancel,
   onReopen,
+  onDelete,
+  deletePending,
+  deleteError,
   pending,
 }: {
   t: {
@@ -1070,12 +1085,16 @@ function ActionsPanel({
   onAddNote: (c: string) => void;
   onCancel: (reason?: string) => void;
   onReopen: () => void;
+  onDelete: () => void;
+  deletePending: boolean;
+  deleteError: string | null;
   pending: boolean;
 }) {
   const [statusDraft, setStatusDraft] = useState<TicketStatus | null>(null);
   const [priorityDraft, setPriorityDraft] = useState<TicketPriority | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Список сотрудников для назначений: включаем заблокированных, чтобы
   // уже назначенный, но заблокированный сотрудник не «исчезал» из селекта.
@@ -1256,6 +1275,15 @@ function ActionsPanel({
               Переоткрыть
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            disabled={pending || deletePending}
+            className="text-destructive/80 hover:bg-destructive/10 disabled:opacity-50 mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Удалить заявку
+          </button>
         </div>
       )}
 
@@ -1275,6 +1303,22 @@ function ActionsPanel({
           setCancelOpen(false);
         }}
         onCancel={() => setCancelOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить заявку?"
+        description={
+          'Заявка исчезнет из всех списков, поиска, доски и отчётов. Данные физически сохранятся ' +
+          '(восстановить сможет разработчик по запросу). Заявки с оплатами или выставленными счетами удалить нельзя.'
+        }
+        variant="danger"
+        confirmText="Удалить"
+        cancelText="Не удалять"
+        loading={deletePending}
+        error={deleteError}
+        onConfirm={onDelete}
+        onCancel={() => setDeleteOpen(false)}
       />
     </section>
   );

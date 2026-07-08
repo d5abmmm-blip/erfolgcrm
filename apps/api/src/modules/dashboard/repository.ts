@@ -84,6 +84,7 @@ export async function getMetrics(
         FROM work_orders wo
         JOIN tickets t ON t.id = wo.ticket_id
        WHERE t.status = 'closed'
+         AND t.deleted_at IS NULL
          AND t.closed_at >= ${startIso}::timestamptz
          AND t.closed_at <  ${endIso}::timestamptz
     `)) as unknown as Array<{ total: string; margin: string }>;
@@ -571,6 +572,7 @@ export async function getDailySummary(
         JOIN work_orders wo ON wo.ticket_id = t.id
         LEFT JOIN clients c ON c.id = t.client_id
        WHERE t.status = 'closed'
+         AND t.deleted_at IS NULL
          AND t.closed_at >= ${startIso}::timestamptz
          AND t.closed_at <  ${endIso}::timestamptz
        ORDER BY t.closed_at DESC

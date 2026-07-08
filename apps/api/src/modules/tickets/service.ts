@@ -38,6 +38,7 @@ import {
   repoUnschedule,
   repoWeeklySchedule,
   searchTickets as repoSearchTickets,
+  softDeleteTicket as repoSoftDeleteTicket,
   updateTicket as repoUpdateTicket,
   userBelongsToTenant,
   type BoardTicketDto,
@@ -435,6 +436,46 @@ export async function reopenTicketCmd(
   return changeStatusCmd(ctx, id, 'received', null);
 }
 
+/**
+ * Удаление заявки (мягкое). Директор-only (RBAC в роутере). Заявка исчезает из всех
+ * списков/отчётов, данные физически остаются (обратимо). Заявки с оплатами или
+ * выставленными счетами удалить нельзя — репозиторий вернёт status='blocked'.
+ * Чувствительный текст (причина) в audit не пишем — только факт удаления.
+ */
+export async function deleteTicketCmd(
+  ctx: CmdCtx,
+  id: string,
+  reason?: string | null,
+): Promise<{ id: string }> {
+  const res = await repoSoftDeleteTicket(ctx.db, ctx.tenant.id, id);
+  if (res.status === 'not_found') {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  }
+  if (res.status === 'blocked') {
+    const parts: string[] = [];
+    if (res.blockers.payments > 0) parts.push(`оплаты (${res.blockers.payments})`);
+    if (res.blockers.issuedInvoices > 0) {
+      parts.push(`выставленные счета (${res.blockers.issuedInvoices})`);
+    }
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        `Нельзя удалить заявку: у неё есть ${parts.join(' и ')}. ` +
+        'Сначала отмените заявку или разберитесь с деньгами — иначе пострадают касса и отчёты.',
+    });
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'delete',
+    entityType: 'ticket',
+    entityId: id,
+    after: { ticketNumber: res.ticketNumber, hadReason: Boolean(reason) },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+  return { id };
+}
+
 export async function addTicketNoteCmd(
   ctx: CmdCtx,
   ticketId: string,
@@ -748,6 +789,9 @@ export async function listEventsQuery(
   ticketId: string,
   limit?: number,
 ) {
+  // ticket_events не джойнит tickets → отдельно проверяем, что заявка жива (не удалена).
+  const ticket = await repoGetTicket(db, tenant.id, ticketId);
+  if (!ticket) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
   return repoListEvents(db, tenant.id, ticketId, limit);
 }
 
