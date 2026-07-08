@@ -28,6 +28,7 @@ import {
   addTicketNoteCmd,
   boardQuery,
   cancelTicketCmd,
+  deleteTicketCmd,
   changeStatusCmd,
   createTicketCmd,
   engineerReactCmd,
@@ -296,6 +297,22 @@ export const ticketsRouter = router({
   reopen: directorProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) => reopenTicketCmd(buildCmdCtx(ctx), input.id)),
+
+  /**
+   * Удаление заявки — только директор. Мягкое (deleted_at): заявка исчезает из всех
+   * списков и отчётов, данные остаются (обратимо). Заявки с оплатами/выставленными
+   * счетами вернут BAD_REQUEST — их нужно отменять, а не удалять.
+   */
+  delete: directorProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        reason: z.string().trim().max(2000).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      deleteTicketCmd(buildCmdCtx(ctx), input.id, input.reason ?? null),
+    ),
 
   /* ──────────────────── Stage 11: Schedule ──────────────────── */
 

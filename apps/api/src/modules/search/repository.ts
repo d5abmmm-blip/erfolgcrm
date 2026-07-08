@@ -11,7 +11,7 @@
  *   • Пустой/слишком короткий query → возвращаем пусто без удара по БД.
  *   • % и _ в pattern экранируем (иначе клиент может подставить wildcard).
  */
-import { asc, desc, eq, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
 import { alias } from 'drizzle-orm/pg-core';
 import {
@@ -105,10 +105,13 @@ async function searchTicketsHits(
       .from(tickets)
       .leftJoin(clients, eq(tickets.clientId, clients.id))
       .where(
-        or(
-          ruIlike(tickets.ticketNumber, pattern),
-          ruIlike(tickets.symptom, pattern),
-          ruIlike(tickets.barcode, pattern),
+        and(
+          isNull(tickets.deletedAt),
+          or(
+            ruIlike(tickets.ticketNumber, pattern),
+            ruIlike(tickets.symptom, pattern),
+            ruIlike(tickets.barcode, pattern),
+          ),
         ),
       )
       .orderBy(desc(tickets.createdAt))

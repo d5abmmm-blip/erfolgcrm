@@ -162,6 +162,14 @@ describe('permissions matrix: engineer не имеет доступа к directo
       'FORBIDDEN',
     );
   });
+
+  it('tickets.delete → FORBIDDEN для engineer (удаление заявки — только директор)', async () => {
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+    await expectForbiddenOrUnauthorized(
+      caller.tickets.delete({ id: '00000000-0000-0000-0000-000000000000' }),
+      'FORBIDDEN',
+    );
+  });
 });
 
 describe('permissions matrix: staff сохраняет доступ к инвойс-буку (не пере-ограничили)', () => {
@@ -206,6 +214,14 @@ describe('permissions matrix: dispatcher не имеет доступа к direc
         category: 'medical_devices',
         issuedAt: '2026-01-01',
       }),
+      'FORBIDDEN',
+    );
+  });
+
+  it('tickets.delete → FORBIDDEN для dispatcher (удаление заявки — только директор)', async () => {
+    const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
+    await expectForbiddenOrUnauthorized(
+      caller.tickets.delete({ id: '00000000-0000-0000-0000-000000000000' }),
       'FORBIDDEN',
     );
   });

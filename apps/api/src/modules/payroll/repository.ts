@@ -166,6 +166,7 @@ async function loadAggregates(
       JOIN tickets t      ON t.id = wo.ticket_id
       LEFT JOIN users u   ON u.id = COALESCE(wol.engineer_id, wo.engineer_id)
      WHERE t.status = 'closed'
+       AND t.deleted_at IS NULL
        AND t.closed_at >= ${startIso}::timestamptz
        AND t.closed_at <  ${endIso}::timestamptz
        AND wol.line_type = 'work'
@@ -190,6 +191,7 @@ async function loadAggregates(
       JOIN tickets t ON t.id = wo.ticket_id
       LEFT JOIN users u ON u.id = wo.engineer_id
      WHERE t.status = 'closed'
+       AND t.deleted_at IS NULL
        AND t.closed_at >= ${startIso}::timestamptz
        AND t.closed_at <  ${endIso}::timestamptz
        AND wo.engineer_id IS NOT NULL

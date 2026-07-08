@@ -146,6 +146,7 @@ export async function listAgedTickets(
         FROM tickets t
         LEFT JOIN clients cl ON cl.id = t.client_id
         WHERE t.status IN ${OPEN_STATUSES_SQL}
+          AND t.deleted_at IS NULL
       )
       SELECT ticket_number AS "ticketNumber",
              COALESCE(client_name, '') AS "clientName",
@@ -192,7 +193,8 @@ export async function getTicketsStats(
     const rows = (await tx.execute(sql`
       SELECT status AS "status", COUNT(*)::int AS "count"
       FROM tickets
-      WHERE (received_at AT TIME ZONE ${tz})::date >= ${from}::date
+      WHERE deleted_at IS NULL
+        AND (received_at AT TIME ZONE ${tz})::date >= ${from}::date
         AND (received_at AT TIME ZONE ${tz})::date <  ${toExcl}::date
       GROUP BY status
       ORDER BY COUNT(*) DESC
