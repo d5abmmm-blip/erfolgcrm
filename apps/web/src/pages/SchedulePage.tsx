@@ -211,7 +211,7 @@ export function SchedulePage() {
           />
         </aside>
 
-        <section>
+        <section className="min-w-0">
           {scheduleQ.isLoading || engineersQ.isLoading ? (
             <div className="text-muted-foreground bg-card rounded-lg border p-8 text-center text-sm">
               Загрузка…
