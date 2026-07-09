@@ -258,6 +258,12 @@ function EngineerView({
       });
     }
   }
+  // Порядок колонок — по загрузке: самый занятой инженер первым, дальше по убыванию.
+  // При равенстве — по алфавиту, чтобы порядок не «прыгал» между автообновлениями.
+  columns.sort(
+    (a, b) => b.cards.length - a.cards.length || a.name.localeCompare(b.name, 'ru'),
+  );
+  // «Не назначен» всегда в конце — это не инженер, а очередь на распределение.
   columns.push({ key: UNASSIGNED, name: 'Не назначен', cards: unassigned });
 
   return (
