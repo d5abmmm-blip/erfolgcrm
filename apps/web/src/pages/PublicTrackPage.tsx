@@ -18,7 +18,7 @@ export function PublicTrackPage() {
   );
 
   return (
-    <div className="bg-muted/30 min-h-screen w-full px-4 py-8">
+    <div className="bg-muted/30 h-full w-full overflow-y-auto px-4 py-8">
       <div className="mx-auto w-full max-w-lg">
         {q.isLoading && (
           <div className="flex h-64 items-center justify-center">
