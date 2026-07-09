@@ -72,7 +72,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid h-full md:grid-cols-2">
+    <div className="grid h-full overflow-y-auto md:grid-cols-2">
       {/* Левая панель: брендинг */}
       <aside className="from-primary to-accent relative hidden flex-col justify-between bg-gradient-to-br p-8 text-white md:flex md:p-12">
         <div className="flex items-center gap-3">
