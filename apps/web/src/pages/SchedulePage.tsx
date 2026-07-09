@@ -153,8 +153,8 @@ export function SchedulePage() {
     weekStart.getTime() === getMondayOfWeek(today).getTime();
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto flex max-w-[100rem] flex-col gap-4 p-4 md:p-6 lg:h-full">
+      <div className="flex flex-shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
             <CalendarDays className="h-3.5 w-3.5" />
@@ -204,14 +204,14 @@ export function SchedulePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]">
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_1fr]">
+        <aside className="lg:min-h-0">
           <UnscheduledTicketsList
             onTicketClick={(id) => navigate(`/tickets/${id}`)}
           />
         </aside>
 
-        <section className="min-w-0">
+        <section className="min-w-0 lg:min-h-0 lg:overflow-auto">
           {scheduleQ.isLoading || engineersQ.isLoading ? (
             <div className="text-muted-foreground bg-card rounded-lg border p-8 text-center text-sm">
               Загрузка…
