@@ -29,12 +29,15 @@ export function MobileProfilePage() {
   // Заработок показываем инженеру (myEarnings — только для роли engineer) и только
   // если раздел «Зарплата» не отключён в компании. Тот же запрос переиспользует
   // экран /m/earnings (кэш react-query по одному ключу).
-  const showEarnings =
+  const canQueryEarnings =
     me.data?.user.role === 'engineer' && !me.data.tenant.disabledModules.includes('payroll');
   const earningsQ = trpc.payroll.myEarnings.useQuery(
     { preset: 'month' },
-    { enabled: showEarnings },
+    { enabled: canQueryEarnings },
   );
+  const earnings = earningsQ.data?.enabled ? earningsQ.data : null;
+  // Прячем карточку, если директор отключил показ (сервер вернул enabled: false).
+  const showEarnings = canQueryEarnings && earningsQ.data?.enabled !== false;
 
   if (!me.data) return null;
   const { user, tenant } = me.data;
@@ -81,7 +84,7 @@ export function MobileProfilePage() {
               <div className="text-muted-foreground text-xs">
                 За месяц ·{' '}
                 <span className="text-success font-semibold tabular-nums">
-                  {earningsQ.data ? formatRubWhole(earningsQ.data.grandTotalKopecks) : '—'}
+                  {earnings ? formatRubWhole(earnings.grandTotalKopecks) : '—'}
                 </span>
               </div>
             </div>

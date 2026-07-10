@@ -35,11 +35,14 @@ export function MobileEarningsPage() {
   const [period, setPeriod] = useState<Period>('month');
   const q = trpc.payroll.myEarnings.useQuery({ preset: period });
 
-  const row = q.data?.rows[0];
+  // Директор мог отключить показ заработка — тогда сервер отдаёт { enabled: false }.
+  const data = q.data?.enabled ? q.data : null;
+  const disabled = q.data?.enabled === false;
+  const row = data?.rows[0];
   const works = row ? BigInt(row.worksAmountKopecks) : 0n;
   const piece = row ? BigInt(row.pieceworkPartKopecks) : 0n;
   const base = row ? BigInt(row.baseSalaryKopecks) : 0n;
-  const total = q.data ? BigInt(q.data.grandTotalKopecks) : 0n;
+  const total = data ? BigInt(data.grandTotalKopecks) : 0n;
   const effectivePercent =
     works > 0n && piece > 0n ? Math.round((Number(piece) / Number(works)) * 100) : null;
 
@@ -74,7 +77,14 @@ export function MobileEarningsPage() {
         </div>
       )}
 
-      {q.data && (
+      {disabled && (
+        <div className="bg-card text-muted-foreground flex items-start gap-2 rounded-lg border p-4 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Показ заработка сейчас отключён директором.</span>
+        </div>
+      )}
+
+      {data && (
         <>
           {/* Итог к выплате за период */}
           <div className="bg-card rounded-xl border p-5">

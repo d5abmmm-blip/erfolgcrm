@@ -437,6 +437,17 @@ function EngineerEarnings() {
   const [period, setPeriod] = useState<Period>('month');
   const myEarningsQ = trpc.payroll.myEarnings.useQuery({ preset: period });
 
+  // Директор мог отключить показ — тогда сервер отдаёт { enabled: false } без сумм.
+  const data = myEarningsQ.data?.enabled ? myEarningsQ.data : null;
+  const disabled = myEarningsQ.data?.enabled === false;
+  const row = data?.rows[0];
+  const works = row ? BigInt(row.worksAmountKopecks) : 0n;
+  const piece = row ? BigInt(row.pieceworkPartKopecks) : 0n;
+  const base = row ? BigInt(row.baseSalaryKopecks) : 0n;
+  // Эффективный % — из фактической суммы (уважает персональную ставку), не из глоб. правила.
+  const effectivePercent =
+    works > 0n && piece > 0n ? Math.round((Number(piece) / Number(works)) * 100) : null;
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
       <div className="flex items-end justify-between">
@@ -456,37 +467,61 @@ function EngineerEarnings() {
         </div>
       )}
 
-      {myEarningsQ.data && (
+      {disabled && (
+        <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">
+          Показ заработка сейчас отключён директором.
+        </div>
+      )}
+
+      {data && (
         <div className="space-y-4">
           <div className="bg-card rounded-lg border p-6">
-            <div className="text-muted-foreground text-xs uppercase">К выплате</div>
+            <div className="text-muted-foreground text-xs uppercase">К выплате · {PERIOD_LABEL[period]}</div>
             <div className="text-success mt-1 text-4xl font-semibold tabular-nums">
-              {formatRubFromKopecks(myEarningsQ.data.grandTotalKopecks)}
-            </div>
-            <div className="text-muted-foreground mt-2 text-sm">
-              {PERIOD_LABEL[period]} ·{' '}
-              {myEarningsQ.data.rule.mode === 'piecework'
-                ? `${myEarningsQ.data.rule.pieceworkPercent}% сделка`
-                : `оклад + ${myEarningsQ.data.rule.bonusPercent}% бонус`}
+              {formatRubFromKopecks(data.grandTotalKopecks)}
             </div>
           </div>
 
-          {myEarningsQ.data.rows[0] && (
-            <div className="bg-card grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm">
-              <div>
-                <div className="text-muted-foreground text-xs uppercase">Закрыто нарядов</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums">
-                  {myEarningsQ.data.rows[0].closedOrdersCount}
-                </div>
+          {/* Проценты за ремонт — рублями (главная цифра для инженера) */}
+          <div className="bg-primary/5 border-primary/20 rounded-lg border p-5">
+            <div className="text-primary text-xs font-medium uppercase">Проценты за ремонт</div>
+            <div className="mt-1 text-3xl font-semibold tabular-nums">
+              {formatRubFromKopecks(piece.toString())}
+            </div>
+            <div className="text-muted-foreground mt-1 text-sm">
+              {effectivePercent !== null
+                ? `${effectivePercent}% от суммы работ ${formatRubFromKopecks(works.toString())}`
+                : `от суммы работ ${formatRubFromKopecks(works.toString())}`}
+            </div>
+          </div>
+
+          {base > 0n && (
+            <div className="bg-card rounded-lg border p-5">
+              <div className="text-muted-foreground text-xs uppercase">Оклад</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">
+                {formatRubFromKopecks(base.toString())}
               </div>
-              <div>
-                <div className="text-muted-foreground text-xs uppercase">Сумма работ</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums">
-                  {formatRubFromKopecks(myEarningsQ.data.rows[0].worksAmountKopecks)}
-                </div>
+              <div className="text-muted-foreground mt-1 text-sm">
+                начисляется помесячно
+                {period !== 'month' && ' · показан за месяц целиком'}
               </div>
             </div>
           )}
+
+          <div className="bg-card grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm">
+            <div>
+              <div className="text-muted-foreground text-xs uppercase">Закрыто нарядов</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {row?.closedOrdersCount ?? 0}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-xs uppercase">Сумма работ</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {formatRubFromKopecks(works.toString())}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -509,6 +544,9 @@ export function PayrollSettingsPage() {
   });
   const setUserPayoutM = trpc.users.setUserPayout.useMutation({
     onSuccess: () => utils.users.list.invalidate(),
+  });
+  const setSeeEarningsM = trpc.payroll.setEngineersSeeEarnings.useMutation({
+    onSuccess: () => utils.payroll.getRule.invalidate(),
   });
 
   const [mode, setMode] = useState<PayrollMode>('piecework');
@@ -631,6 +669,40 @@ export function PayrollSettingsPage() {
           {setRuleM.isSuccess && (
             <span className="text-success text-xs">Сохранено</span>
           )}
+        </div>
+      </section>
+
+      <section className="bg-card rounded-lg border p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-semibold">Инженеры видят свой заработок в кабинете</h3>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Когда включено — инженер видит у себя (на телефоне и в полной версии) начисленные
+              проценты за ремонт в рублях, оклад и сумму к выплате за период. Выключите, если не
+              хотите показывать заработок инженерам — расчёт ЗП у директора при этом сохранится.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={ruleQ.data?.engineersSeeEarnings ?? true}
+            aria-label="Показывать инженерам их заработок"
+            disabled={ruleQ.isLoading || setSeeEarningsM.isPending}
+            onClick={() =>
+              setSeeEarningsM.mutate({ enabled: !(ruleQ.data?.engineersSeeEarnings ?? true) })
+            }
+            className={cn(
+              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50',
+              (ruleQ.data?.engineersSeeEarnings ?? true) ? 'bg-primary' : 'bg-muted-foreground/30',
+            )}
+          >
+            <span
+              className={cn(
+                'bg-background inline-block h-5 w-5 transform rounded-full shadow transition',
+                (ruleQ.data?.engineersSeeEarnings ?? true) ? 'translate-x-[22px]' : 'translate-x-0.5',
+              )}
+            />
+          </button>
         </div>
       </section>
 
