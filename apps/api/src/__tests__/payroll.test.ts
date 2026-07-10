@@ -31,6 +31,7 @@ import {
 import {
   computePayouts,
   getRule,
+  setEngineersSeeEarnings,
   setRule,
 } from '../modules/payroll/repository';
 import { updateUserPayout } from '../modules/users/repository';
@@ -371,6 +372,25 @@ describe('payroll персональные правила', () => {
     // Персональный оклад НЕ применён (уволен) → глобальная сделка 30% от 100_000 = 30_000
     expect(row!.baseSalaryKopecks).toBe('0');
     expect(row!.totalEarningsKopecks).toBe('30000');
+  });
+
+  it('видимость заработка: по умолчанию true, переключается, setRule не сбрасывает', async () => {
+    // По умолчанию (нет записи rule) — включено.
+    expect((await getRule(getDb(), erfolgId)).engineersSeeEarnings).toBe(true);
+
+    // Выключаем.
+    await setEngineersSeeEarnings(getDb(), erfolgId, false);
+    expect((await getRule(getDb(), erfolgId)).engineersSeeEarnings).toBe(false);
+
+    // Правка режима расчёта НЕ трогает флаг.
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 40 });
+    const afterSetRule = await getRule(getDb(), erfolgId);
+    expect(afterSetRule.engineersSeeEarnings).toBe(false);
+    expect(afterSetRule.pieceworkPercent).toBe(40);
+
+    // Включаем обратно.
+    await setEngineersSeeEarnings(getDb(), erfolgId, true);
+    expect((await getRule(getDb(), erfolgId)).engineersSeeEarnings).toBe(true);
   });
 
   it('сброс персонального правила (null) возвращает к глобальному', async () => {

@@ -14,6 +14,7 @@ import {
   deletePayoutCmd,
   getRuleQuery,
   listPayoutsQuery,
+  setEngineersSeeEarningsCmd,
   setRuleCmd,
   updatePayoutCmd,
 } from './service';
@@ -66,10 +67,14 @@ export const payrollRouter = router({
       computePayoutsQuery(ctx.db, ctx.tenant.id, input),
     ),
 
-  /** Расчёт своей ЗП (инженер). */
+  /**
+   * Расчёт своей ЗП (инженер). Если директор отключил показ заработка инженерам,
+   * возвращаем { enabled: false } БЕЗ финансовых данных — инженер не сможет
+   * обойти запрет через прямой вызов API.
+   */
   myEarnings: engineerProcedure
     .input(periodPresetSchema)
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
       if (ctx.session.role !== 'engineer') {
         // Директор/диспетчер вызывают computePayouts — у них есть видимость по всем
         throw new TRPCError({
@@ -77,11 +82,23 @@ export const payrollRouter = router({
           message: 'myEarnings — только для роли engineer',
         });
       }
-      return computePayoutsQuery(ctx.db, ctx.tenant.id, {
+      const rule = await getRuleQuery(ctx.db, ctx.tenant.id);
+      if (!rule.engineersSeeEarnings) {
+        return { enabled: false as const };
+      }
+      const result = await computePayoutsQuery(ctx.db, ctx.tenant.id, {
         ...input,
         engineerId: ctx.session.userId,
       });
+      return { enabled: true as const, ...result };
     }),
+
+  /** Тумблер: показывать инженерам их заработок в кабинете (директор). */
+  setEngineersSeeEarnings: directorProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      setEngineersSeeEarningsCmd(ctx.db, ctx.tenant.id, input.enabled),
+    ),
 
   /* ── Выплаты ЗП (директор) ── */
 

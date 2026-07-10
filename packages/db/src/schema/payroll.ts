@@ -10,6 +10,7 @@
  */
 import {
   bigint,
+  boolean,
   check,
   date,
   index,
@@ -44,6 +45,12 @@ export const engineerPayoutRules = pgTable(
       .default(0n),
     /** % бонуса от работ (для salary_bonus). */
     bonusPercent: integer('bonus_percent').notNull().default(0),
+    /**
+     * Видят ли инженеры свой заработок в личном кабинете (`/m/earnings` и десктоп
+     * `/payroll`). Директор может выключить в «Настройки → Правила расчёта ЗП».
+     * По умолчанию true — сохраняем прежнее поведение.
+     */
+    engineersSeeEarnings: boolean('engineers_see_earnings').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

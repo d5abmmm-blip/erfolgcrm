@@ -36,6 +36,14 @@ export async function setRuleCmd(
   return repo.setRule(db, tenantId, input);
 }
 
+export async function setEngineersSeeEarningsCmd(
+  db: Db,
+  tenantId: string,
+  value: boolean,
+) {
+  return repo.setEngineersSeeEarnings(db, tenantId, value);
+}
+
 export async function computePayoutsQuery(
   db: Db,
   tenantId: string,

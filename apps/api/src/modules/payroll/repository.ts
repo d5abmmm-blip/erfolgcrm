@@ -30,6 +30,8 @@ export interface PayrollRule {
   pieceworkPercent: number;
   baseSalaryKopecks: string;
   bonusPercent: number;
+  /** Видят ли инженеры свой заработок в личном кабинете. */
+  engineersSeeEarnings: boolean;
   updatedAt: Date;
 }
 
@@ -38,6 +40,7 @@ const DEFAULT_RULE: Omit<PayrollRule, 'tenantId' | 'updatedAt'> = {
   pieceworkPercent: 30,
   baseSalaryKopecks: '0',
   bonusPercent: 0,
+  engineersSeeEarnings: true,
 };
 
 function toRuleDto(row: typeof engineerPayoutRules.$inferSelect): PayrollRule {
@@ -47,6 +50,7 @@ function toRuleDto(row: typeof engineerPayoutRules.$inferSelect): PayrollRule {
     pieceworkPercent: row.pieceworkPercent,
     baseSalaryKopecks: row.baseSalaryKopecks.toString(),
     bonusPercent: row.bonusPercent,
+    engineersSeeEarnings: row.engineersSeeEarnings,
     updatedAt: row.updatedAt,
   };
 }
@@ -106,6 +110,30 @@ export async function setRule(
       .returning();
     const row = inserted[0];
     if (!row) throw new Error('setRule: insert returned nothing');
+    return toRuleDto(row);
+  });
+}
+
+/**
+ * Переключить видимость заработка для инженеров. Отдельный upsert, чтобы флаг
+ * можно было менять независимо от режима расчёта (setRule его не трогает).
+ */
+export async function setEngineersSeeEarnings(
+  db: Db,
+  tenantId: string,
+  value: boolean,
+): Promise<PayrollRule> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const inserted = await tx
+      .insert(engineerPayoutRules)
+      .values({ tenantId, engineersSeeEarnings: value })
+      .onConflictDoUpdate({
+        target: engineerPayoutRules.tenantId,
+        set: { engineersSeeEarnings: value, updatedAt: new Date() },
+      })
+      .returning();
+    const row = inserted[0];
+    if (!row) throw new Error('setEngineersSeeEarnings: insert returned nothing');
     return toRuleDto(row);
   });
 }
