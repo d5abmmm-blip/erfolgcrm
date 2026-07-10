@@ -1096,12 +1096,18 @@ function ActionsPanel({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // Список сотрудников для назначений: включаем заблокированных, чтобы
-  // уже назначенный, но заблокированный сотрудник не «исчезал» из селекта.
+  // Список сотрудников для назначений. Заблокированных (в т.ч. историч. аккаунты
+  // из миграции WinServisePro — «призраки» с инициалами) в выбор НЕ показываем,
+  // чтобы не засорять список. Исключение — тот, кто уже назначен на ЭТУ заявку:
+  // его оставляем, чтобы он не «исчез» из селекта (иначе не видно текущего значения).
   const usersQ = trpc.users.list.useQuery({ includeBlocked: true });
-  const engineerOptions = (usersQ.data ?? []).filter((u) => u.role === 'engineer');
+  const engineerOptions = (usersQ.data ?? []).filter(
+    (u) => u.role === 'engineer' && (u.isActive || u.id === t.assignedEngineerId),
+  );
   const dispatcherOptions = (usersQ.data ?? []).filter(
-    (u) => u.role === 'dispatcher' || u.role === 'director',
+    (u) =>
+      (u.role === 'dispatcher' || u.role === 'director') &&
+      (u.isActive || u.id === t.assignedDispatcherId),
   );
 
   const isClosed = t.status === 'closed' || t.status === 'cancelled';
