@@ -289,7 +289,7 @@ export function AppShell({ children, session }: AppShellProps) {
             </span>
           </div>
           <HeaderNudges role={session.user.role} />
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
