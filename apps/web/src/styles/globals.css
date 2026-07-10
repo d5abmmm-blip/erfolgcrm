@@ -135,6 +135,28 @@ body {
   overflow: hidden;
 }
 
+/* «Замок приложения» для мобильной оболочки инженера (/m/*). Класс навешивает
+   MobileShell через useAppViewportLock, поэтому десктоп и публичные экраны
+   (логин, трек-ссылка клиента) НЕ затронуты — там зум остаётся доступным, это
+   важно для доступности слабовидящих. */
+html.app-locked,
+html.app-locked body {
+  /* Нет «резинового» отскока по краям и pull-to-refresh. */
+  overscroll-behavior: none;
+  /* iOS не «раздувает» текст при повороте экрана. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* touch-action действует на элементе, где НАЧАЛСЯ жест, поэтому нужен на всех:
+   иначе пинч, начатый на вложенном блоке, отработает по умолчанию.
+   `pan-x pan-y` оставляет обычную прокрутку (в т.ч. горизонтальные таблицы),
+   но запрещает пинч-зум и зум двойным тапом. */
+html.app-locked * {
+  touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

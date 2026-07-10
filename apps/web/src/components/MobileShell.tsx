@@ -3,6 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { ListChecks, Package, ScanLine, User, LogOut, CloudOff, Cloud } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { useOutbox } from '../lib/offline/useOutbox';
+import { useAppViewportLock } from '../lib/use-app-viewport-lock';
 import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
 
@@ -40,6 +41,10 @@ export function MobileShell({ children, session }: Props) {
   const utils = trpc.useUtils();
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
   const outbox = useOutbox();
+
+  // Экран ведёт себя как приложение: без зума пальцами и «резинового» отскока.
+  // Снимается автоматически при уходе с /m/* (размонтировании оболочки).
+  useAppViewportLock();
 
   // Hint Telegram-like UX: длинные имена ужимаем
   const initials = session.user.fullName
@@ -92,7 +97,8 @@ export function MobileShell({ children, session }: Props) {
         />
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-20">{children}</main>
+      {/* overscroll-contain — прокрутка не «перетекает» на документ (нет отскока). */}
+      <main className="flex-1 overflow-y-auto overscroll-contain pb-20">{children}</main>
 
       <nav
         className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 border-t"
