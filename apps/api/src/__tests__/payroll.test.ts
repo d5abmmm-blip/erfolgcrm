@@ -74,9 +74,9 @@ async function clearTestData(): Promise<void> {
       `);
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
       await tx.delete(engineerPayoutRules);
-      // Сбросить персональные ЗП-настройки, чтобы тесты не влияли друг на друга.
+      // Сбросить персональные ЗП-настройки и активность, чтобы тесты не влияли друг на друга.
       await tx.execute(
-        sql`UPDATE users SET payout_base_salary_kopecks = NULL, payout_bonus_percent = NULL`,
+        sql`UPDATE users SET payout_base_salary_kopecks = NULL, payout_bonus_percent = NULL, is_active = true`,
       );
     });
   }
@@ -340,6 +340,37 @@ describe('payroll персональные правила', () => {
     expect(row).toBeDefined();
     expect(row!.worksAmountKopecks).toBe('0');
     expect(row!.totalEarningsKopecks).toBe('500000');
+  });
+
+  it('уволенный с персональным окладом НЕ получает оклад; за работы — по глобальному правилу', async () => {
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
+      baseSalaryKopecks: 9_999_999n,
+      bonusPercent: 50,
+    });
+    // Увольняем сотрудника (is_active=false), но у него есть работа в периоде.
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`UPDATE users SET is_active = false WHERE id = ${erfolgEngineerId}::uuid`),
+    );
+    const closedAt = new Date();
+    await createClosedTicketWithWorks(
+      erfolgId,
+      erfolgClientId,
+      erfolgEngineerId,
+      [100_000n],
+      closedAt,
+    );
+    const start = new Date(closedAt);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    const result = await computePayouts(getDb(), erfolgId, { start, end });
+    const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
+    expect(row).toBeDefined();
+    // Персональный оклад НЕ применён (уволен) → глобальная сделка 30% от 100_000 = 30_000
+    expect(row!.baseSalaryKopecks).toBe('0');
+    expect(row!.totalEarningsKopecks).toBe('30000');
   });
 
   it('сброс персонального правила (null) возвращает к глобальному', async () => {

@@ -250,6 +250,12 @@ function hasPersonalRule(cfg: UserPayoutConfig | undefined): cfg is UserPayoutCo
  * Расчёт строки. Если у сотрудника задано ПЕРСОНАЛЬНОЕ правило (оклад/бонус) —
  * считаем «оклад + бонус% от работ» по его цифрам. Иначе — по глобальному rule.
  */
+/**
+ * Оклад — МЕСЯЧНЫЙ и прибавляется как есть (не масштабируется по длине периода) —
+ * так же, как работало глобальное правило salary_bonus. Поэтому ведомость по окладам
+ * корректна на вкладке «Месяц» (дефолт); на «День»/«Неделя» оклад покажется целиком.
+ * Бонус/сделка (от работ) период-корректны (работы закрыты в окне периода).
+ */
 function computeRow(
   rule: PayrollRule,
   agg: PerEngineerAggregate,
@@ -291,6 +297,9 @@ async function loadUserPayoutConfigs(
   tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
   filterUserId: string | null,
 ): Promise<Map<string, UserPayoutConfig>> {
+  // ТОЛЬКО активные: персональный оклад/бонус — свойство работающего сотрудника.
+  // Уволенный (is_active=false) не должен получать оклад — за работы в периоде,
+  // если они есть, он оплачивается по глобальному правилу (см. computePayouts).
   const rows = (await tx.execute(sql`
     SELECT id,
            full_name,
@@ -299,6 +308,7 @@ async function loadUserPayoutConfigs(
            payout_bonus_percent AS bonus
       FROM users
      WHERE deleted_at IS NULL
+       AND is_active = true
        AND (payout_base_salary_kopecks IS NOT NULL OR payout_bonus_percent IS NOT NULL)
        ${filterUserId ? sql`AND id = ${filterUserId}::uuid` : sql``}
   `)) as unknown as Array<{

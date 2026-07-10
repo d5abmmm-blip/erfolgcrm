@@ -90,10 +90,15 @@ export const usersRouter = router({
         onlyEngineers: input?.onlyEngineers,
         includeBlocked: input?.includeBlocked,
       });
-      // Почасовая ставка — зарплатные данные: видны только директору.
+      // Ставка и персональная ЗП (оклад/бонус) — зарплатные данные: видны только директору.
       // Остальным список нужен лишь для выпадающих назначений (id + ФИО).
       if (ctx.session?.role === 'director') return rows;
-      return rows.map((r) => ({ ...r, hourlyCostRateKopecks: '0' }));
+      return rows.map((r) => ({
+        ...r,
+        hourlyCostRateKopecks: '0',
+        payoutBaseSalaryKopecks: null,
+        payoutBonusPercent: null,
+      }));
     }),
 
   getById: directorProcedure

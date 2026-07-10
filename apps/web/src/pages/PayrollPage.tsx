@@ -837,11 +837,19 @@ function UserPayoutRow({
   const dirty = salary !== initialSalary || bonus !== initialBonus;
   const usesDefault = initialSalary === '' && initialBonus === '';
 
-  const save = () =>
-    void onSave(
-      salary.trim() === '' ? null : rubToKopecksString(salary),
-      bonus.trim() === '' ? null : Math.max(0, Math.min(100, Math.round(Number(bonus) || 0))),
-    );
+  const save = () => {
+    const baseNum = parseRubNumber(salary); // 0 при пусто/мусоре/отрицательном
+    const bonusNum = Math.max(0, Math.min(100, Math.round(Number(bonus) || 0)));
+    const hasBase = baseNum > 0;
+    const hasBonus = bonus.trim() !== '' && bonusNum > 0;
+    // Обе ячейки пусты/нулевые → вернуть сотрудника на правило по умолчанию,
+    // а НЕ обнулять его ЗП (иначе ввод «0» молча снимал бы с глобальной сделки).
+    if (!hasBase && !hasBonus) {
+      void onSave(null, null);
+      return;
+    }
+    void onSave(hasBase ? rubToKopecksString(salary) : '0', bonusNum);
+  };
 
   return (
     <tr className="hover:bg-muted/30">
