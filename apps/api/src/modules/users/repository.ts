@@ -30,6 +30,10 @@ export interface UserListRow {
   role: UserRole;
   isActive: boolean;
   hourlyCostRateKopecks: string;
+  /** Персональный оклад (копейки) — null ⇒ действует глобальное правило ЗП. */
+  payoutBaseSalaryKopecks: string | null;
+  /** Персональный бонус % от работ — null ⇒ действует глобальное правило ЗП. */
+  payoutBonusPercent: number | null;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -64,6 +68,9 @@ function toRow(u: typeof users.$inferSelect): UserListRow {
     role: u.role,
     isActive: u.isActive,
     hourlyCostRateKopecks: u.hourlyCostRateKopecks.toString(),
+    payoutBaseSalaryKopecks:
+      u.payoutBaseSalaryKopecks !== null ? u.payoutBaseSalaryKopecks.toString() : null,
+    payoutBonusPercent: u.payoutBonusPercent,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
   };
@@ -381,6 +388,29 @@ export async function updateHourlyCostRate(
     const updated = await tx
       .update(users)
       .set({ hourlyCostRateKopecks: newRateKopecks })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+      .returning();
+    return updated[0] ? toRow(updated[0]) : null;
+  });
+}
+
+/**
+ * Персональная ЗП сотрудника: оклад (копейки) + бонус %. null в поле ⇒ сбросить
+ * (вернуть к глобальному правилу). Оба null ⇒ сотрудник снова на глобальном правиле.
+ */
+export async function updateUserPayout(
+  db: Db,
+  tenantId: string,
+  userId: string,
+  input: { baseSalaryKopecks: bigint | null; bonusPercent: number | null },
+): Promise<UserListRow | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const updated = await tx
+      .update(users)
+      .set({
+        payoutBaseSalaryKopecks: input.baseSalaryKopecks,
+        payoutBonusPercent: input.bonusPercent,
+      })
       .where(and(eq(users.id, userId), isNull(users.deletedAt)))
       .returning();
     return updated[0] ? toRow(updated[0]) : null;

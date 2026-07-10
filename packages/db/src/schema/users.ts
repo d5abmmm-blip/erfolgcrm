@@ -4,7 +4,7 @@
  * email опционален (для восстановления пароля + приглашений).
  */
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, jsonb, pgEnum, pgTable, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import { bigint, boolean, integer, jsonb, pgEnum, pgTable, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { encryptedText, fkUuid, pk, tenantId, timestamps } from './_shared';
 
 export const userRoleEnum = pgEnum('user_role', ['director', 'dispatcher', 'engineer']);
@@ -51,6 +51,15 @@ export const users = pgTable(
      * Для не-engineer ролей значение игнорируется (хранится 0 по умолчанию).
      */
     hourlyCostRateKopecks: bigint('hourly_cost_rate_kopecks', { mode: 'bigint' }).notNull().default(0n),
+
+    /**
+     * Индивидуальная ЗП сотрудника: персональный оклад (копейки) + бонус % от работ.
+     * Оба NULL ⇒ действует глобальное правило engineer_payout_rules (обратная совместимость).
+     * Задав хотя бы одно, сотрудник переходит на схему «оклад + бонус» со своими цифрами.
+     * Работает для любой роли (диспетчер/директор на чистом окладе — bonus 0, работ нет).
+     */
+    payoutBaseSalaryKopecks: bigint('payout_base_salary_kopecks', { mode: 'bigint' }),
+    payoutBonusPercent: integer('payout_bonus_percent'),
 
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     lastLoginIp: varchar('last_login_ip', { length: 45 }),

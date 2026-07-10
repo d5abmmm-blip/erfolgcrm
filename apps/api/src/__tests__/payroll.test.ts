@@ -33,6 +33,7 @@ import {
   getRule,
   setRule,
 } from '../modules/payroll/repository';
+import { updateUserPayout } from '../modules/users/repository';
 
 let erfolgId = '';
 let demoId = '';
@@ -73,6 +74,10 @@ async function clearTestData(): Promise<void> {
       `);
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
       await tx.delete(engineerPayoutRules);
+      // Сбросить персональные ЗП-настройки, чтобы тесты не влияли друг на друга.
+      await tx.execute(
+        sql`UPDATE users SET payout_base_salary_kopecks = NULL, payout_bonus_percent = NULL`,
+      );
     });
   }
 }
@@ -286,5 +291,85 @@ describe('payroll compute', () => {
 
     const demoResult = await computePayouts(getDb(), demoId, { start, end });
     expect(demoResult.rows.find((r) => r.engineerId === erfolgEngineerId)).toBeUndefined();
+  });
+});
+
+describe('payroll персональные правила', () => {
+  beforeEach(clearTestData);
+
+  it('персональный оклад+бонус перекрывает глобальное правило', async () => {
+    // Глобально — сделка 30%, но у сотрудника личное: оклад 100_000 + бонус 10%.
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
+      baseSalaryKopecks: 100_000n,
+      bonusPercent: 10,
+    });
+    const closedAt = new Date();
+    await createClosedTicketWithWorks(
+      erfolgId,
+      erfolgClientId,
+      erfolgEngineerId,
+      [200_000n],
+      closedAt,
+    );
+    const start = new Date(closedAt);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    const result = await computePayouts(getDb(), erfolgId, { start, end });
+    const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
+    expect(row).toBeDefined();
+    // 100_000 оклад + 10% от 200_000 = 120_000 (а НЕ 30% глобальной сделки)
+    expect(row!.baseSalaryKopecks).toBe('100000');
+    expect(row!.pieceworkPartKopecks).toBe('20000');
+    expect(row!.totalEarningsKopecks).toBe('120000');
+  });
+
+  it('окладник без работ за период попадает в расчёт со своим окладом', async () => {
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
+      baseSalaryKopecks: 500_000n,
+      bonusPercent: 0,
+    });
+    // Пустое будущее окно — работ нет вообще.
+    const start = new Date('2027-01-01T00:00:00Z');
+    const end = new Date('2027-02-01T00:00:00Z');
+    const result = await computePayouts(getDb(), erfolgId, { start, end });
+    const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
+    expect(row).toBeDefined();
+    expect(row!.worksAmountKopecks).toBe('0');
+    expect(row!.totalEarningsKopecks).toBe('500000');
+  });
+
+  it('сброс персонального правила (null) возвращает к глобальному', async () => {
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
+      baseSalaryKopecks: 999_999n,
+      bonusPercent: 50,
+    });
+    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
+      baseSalaryKopecks: null,
+      bonusPercent: null,
+    });
+    const closedAt = new Date();
+    await createClosedTicketWithWorks(
+      erfolgId,
+      erfolgClientId,
+      erfolgEngineerId,
+      [100_000n],
+      closedAt,
+    );
+    const start = new Date(closedAt);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    const result = await computePayouts(getDb(), erfolgId, { start, end });
+    const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
+    expect(row).toBeDefined();
+    // Глобальная сделка 30% от 100_000 = 30_000
+    expect(row!.totalEarningsKopecks).toBe('30000');
+    expect(row!.baseSalaryKopecks).toBe('0');
   });
 });

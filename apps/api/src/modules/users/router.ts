@@ -22,6 +22,7 @@ import {
   setUserActive,
   updateHourlyCostRate,
   updateUser,
+  updateUserPayout,
   UserConflictError,
   WrongPasswordError,
 } from './repository';
@@ -322,6 +323,35 @@ export const usersRouter = router({
       if (!result) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
       }
+      return result;
+    }),
+
+  /** Персональная ЗП сотрудника: оклад (копейки) + бонус %. null ⇒ вернуть на глобальное правило. */
+  setUserPayout: directorProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        baseSalaryKopecks: z.string().regex(/^\d+$/, 'Должно быть число копеек ≥ 0').nullable(),
+        bonusPercent: z.number().int().min(0).max(100).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await updateUserPayout(ctx.db, ctx.tenant.id, input.userId, {
+        baseSalaryKopecks: input.baseSalaryKopecks !== null ? BigInt(input.baseSalaryKopecks) : null,
+        bonusPercent: input.bonusPercent,
+      });
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
+      }
+      await writeAudit(ctx.db, ctx.tenant.id, {
+        userId: ctx.session.userId,
+        action: 'update',
+        entityType: 'user_payout',
+        entityId: input.userId,
+        after: { baseSalaryKopecks: input.baseSalaryKopecks, bonusPercent: input.bonusPercent },
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+      });
       return result;
     }),
 });

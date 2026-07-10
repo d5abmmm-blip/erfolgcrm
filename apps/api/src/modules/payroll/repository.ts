@@ -233,19 +233,41 @@ async function loadAggregates(
   return Array.from(map.values());
 }
 
+/** Персональная настройка ЗП сотрудника (оба поля NULL ⇒ нет персонального правила). */
+export interface UserPayoutConfig {
+  userId: string;
+  fullName: string;
+  isActive: boolean;
+  baseSalaryKopecks: bigint | null;
+  bonusPercent: number | null;
+}
+
+function hasPersonalRule(cfg: UserPayoutConfig | undefined): cfg is UserPayoutConfig {
+  return !!cfg && (cfg.baseSalaryKopecks !== null || cfg.bonusPercent !== null);
+}
+
+/**
+ * Расчёт строки. Если у сотрудника задано ПЕРСОНАЛЬНОЕ правило (оклад/бонус) —
+ * считаем «оклад + бонус% от работ» по его цифрам. Иначе — по глобальному rule.
+ */
 function computeRow(
   rule: PayrollRule,
   agg: PerEngineerAggregate,
+  cfg?: UserPayoutConfig,
 ): PayoutBreakdown {
   const works = agg.worksAmount;
-  const piecePercent = BigInt(
-    rule.mode === 'piecework' ? rule.pieceworkPercent : rule.bonusPercent,
-  );
-  const piecework = (works * piecePercent) / 100n;
-  const base =
-    rule.mode === 'salary_bonus'
-      ? BigInt(rule.baseSalaryKopecks)
-      : 0n;
+  let base: bigint;
+  let piecework: bigint;
+  if (hasPersonalRule(cfg)) {
+    base = cfg.baseSalaryKopecks ?? 0n;
+    piecework = (works * BigInt(cfg.bonusPercent ?? 0)) / 100n;
+  } else {
+    const piecePercent = BigInt(
+      rule.mode === 'piecework' ? rule.pieceworkPercent : rule.bonusPercent,
+    );
+    piecework = (works * piecePercent) / 100n;
+    base = rule.mode === 'salary_bonus' ? BigInt(rule.baseSalaryKopecks) : 0n;
+  }
   const total = base + piecework;
   return {
     engineerId: agg.engineerId,
@@ -259,6 +281,46 @@ function computeRow(
   };
 }
 
+/**
+ * Персональные правила ЗП сотрудников (у кого задан оклад или бонус).
+ * Используется двояко: (1) применить персональное правило к тем, у кого есть работы;
+ * (2) добавить в расчёт «окладников» без работ за период (диспетчер/директор) —
+ * но только АКТИВНЫХ, чтобы не начислять оклад уволенным без выработки.
+ */
+async function loadUserPayoutConfigs(
+  tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
+  filterUserId: string | null,
+): Promise<Map<string, UserPayoutConfig>> {
+  const rows = (await tx.execute(sql`
+    SELECT id,
+           full_name,
+           is_active,
+           payout_base_salary_kopecks::text AS base,
+           payout_bonus_percent AS bonus
+      FROM users
+     WHERE deleted_at IS NULL
+       AND (payout_base_salary_kopecks IS NOT NULL OR payout_bonus_percent IS NOT NULL)
+       ${filterUserId ? sql`AND id = ${filterUserId}::uuid` : sql``}
+  `)) as unknown as Array<{
+    id: string;
+    full_name: string;
+    is_active: boolean;
+    base: string | null;
+    bonus: number | null;
+  }>;
+  const map = new Map<string, UserPayoutConfig>();
+  for (const r of rows) {
+    map.set(r.id, {
+      userId: r.id,
+      fullName: r.full_name,
+      isActive: r.is_active,
+      baseSalaryKopecks: r.base !== null ? BigInt(r.base) : null,
+      bonusPercent: r.bonus,
+    });
+  }
+  return map;
+}
+
 export async function computePayouts(
   db: Db,
   tenantId: string,
@@ -266,11 +328,35 @@ export async function computePayouts(
   opts: { engineerId?: string | null } = {},
 ): Promise<PayoutComputeResult> {
   const rule = await getRule(db, tenantId);
-  const aggregates = await withTenantTx(db, tenantId, (tx) =>
-    loadAggregates(tx, period.start, period.end, opts.engineerId ?? null),
-  );
-  const rows = aggregates
-    .map((agg) => computeRow(rule, agg))
+  const filterId = opts.engineerId ?? null;
+  const { aggregates, configs } = await withTenantTx(db, tenantId, async (tx) => ({
+    aggregates: await loadAggregates(tx, period.start, period.end, filterId),
+    configs: await loadUserPayoutConfigs(tx, filterId),
+  }));
+
+  // Плательщики = у кого есть работы ∪ активные окладники (персональное правило) без работ.
+  const byId = new Map<string, { agg: PerEngineerAggregate; cfg?: UserPayoutConfig }>();
+  for (const agg of aggregates) byId.set(agg.engineerId, { agg });
+  for (const cfg of configs.values()) {
+    const existing = byId.get(cfg.userId);
+    if (existing) {
+      existing.cfg = cfg;
+    } else if (cfg.isActive) {
+      byId.set(cfg.userId, {
+        agg: {
+          engineerId: cfg.userId,
+          engineerName: cfg.fullName,
+          worksAmount: 0n,
+          ordersTotal: 0n,
+          ordersCount: 0,
+        },
+        cfg,
+      });
+    }
+  }
+
+  const rows = [...byId.values()]
+    .map(({ agg, cfg }) => computeRow(rule, agg, cfg))
     .sort((a, b) => Number(BigInt(b.totalEarningsKopecks) - BigInt(a.totalEarningsKopecks)));
   const grandTotal = rows.reduce(
     (acc, r) => acc + BigInt(r.totalEarningsKopecks),
