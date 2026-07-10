@@ -35,6 +35,7 @@ import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { ChatPanel } from './ChatPanel';
+import { HeaderNudges } from './HeaderNudges';
 
 interface SessionInfo {
   user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
@@ -276,8 +277,8 @@ export function AppShell({ children, session }: AppShellProps) {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="bg-card flex h-14 items-center justify-between border-b px-4 md:px-6">
-          <div className="flex items-center gap-3">
+        <header className="bg-card flex h-14 items-center border-b px-4 md:px-6">
+          <div className="flex shrink-0 items-center gap-3">
             <span className="bg-primary h-5 w-1 rounded-full" aria-hidden />
             <h1 className="text-base font-semibold md:text-lg">
               {NAV_ITEMS.find((n) => (n.href === '/' ? location === '/' : location.startsWith(n.href)))
@@ -287,7 +288,8 @@ export function AppShell({ children, session }: AppShellProps) {
               {session.tenant.displayName}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <HeaderNudges role={session.user.role} />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
