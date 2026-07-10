@@ -66,6 +66,7 @@ import { MobileTicketPage } from './pages/mobile/MobileTicketPage';
 import { MobileWorkLogPage } from './pages/mobile/MobileWorkLogPage';
 import { MobileScanPage } from './pages/mobile/MobileScanPage';
 import { MobileProfilePage } from './pages/mobile/MobileProfilePage';
+import { MobileEarningsPage } from './pages/mobile/MobileEarningsPage';
 import { ClientLoginPage } from './pages/client/ClientLoginPage';
 import { ClientDashboardPage } from './pages/client/ClientDashboardPage';
 import { ClientTicketsPage } from './pages/client/ClientTicketsPage';
@@ -135,6 +136,7 @@ function StaffApp() {
             </Route>
             <Route path="/m/scan" component={MobileScanPage} />
             <Route path="/m/profile" component={MobileProfilePage} />
+            <Route path="/m/earnings" component={MobileEarningsPage} />
             <Route path="/m/inventory" component={MobileInventoryPage} />
             <Route path="/m/tickets/:id/work-log" component={MobileWorkLogPage} />
             <Route path="/m/tickets/:id" component={MobileTicketPage} />

@@ -1,6 +1,16 @@
 import { Link } from 'wouter';
-import { ExternalLink, LogOut, ListChecks, Mail, Building2, BadgeCheck } from 'lucide-react';
+import {
+  ExternalLink,
+  LogOut,
+  ListChecks,
+  Mail,
+  Building2,
+  BadgeCheck,
+  ChevronRight,
+  Wallet,
+} from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { formatRubWhole } from '../../lib/money';
 import { useOutbox } from '../../lib/offline/useOutbox';
 import { TelegramLinkSection } from '../../components/TelegramLinkSection';
 
@@ -15,6 +25,16 @@ export function MobileProfilePage() {
   const utils = trpc.useUtils();
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
   const outbox = useOutbox();
+
+  // Заработок показываем инженеру (myEarnings — только для роли engineer) и только
+  // если раздел «Зарплата» не отключён в компании. Тот же запрос переиспользует
+  // экран /m/earnings (кэш react-query по одному ключу).
+  const showEarnings =
+    me.data?.user.role === 'engineer' && !me.data.tenant.disabledModules.includes('payroll');
+  const earningsQ = trpc.payroll.myEarnings.useQuery(
+    { preset: 'month' },
+    { enabled: showEarnings },
+  );
 
   if (!me.data) return null;
   const { user, tenant } = me.data;
@@ -46,6 +66,29 @@ export function MobileProfilePage() {
           </div>
         </div>
       </div>
+
+      {showEarnings && (
+        <Link
+          href="/m/earnings"
+          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-success/10 text-success grid h-10 w-10 place-items-center rounded-full">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Мой заработок</div>
+              <div className="text-muted-foreground text-xs">
+                За месяц ·{' '}
+                <span className="text-success font-semibold tabular-nums">
+                  {earningsQ.data ? formatRubWhole(earningsQ.data.grandTotalKopecks) : '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
+        </Link>
+      )}
 
       <div className="bg-card space-y-2 rounded-lg border p-4">
         <div className="text-muted-foreground text-[11px] font-medium uppercase">
