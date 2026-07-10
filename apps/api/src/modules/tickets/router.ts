@@ -40,6 +40,7 @@ import {
   myTicketsQuery,
   myWeeklyScheduleQuery,
   partsWaitingQuery,
+  documentClientQuery,
   recordPrintEventCmd,
   reopenTicketCmd,
   scheduleCmd,
@@ -254,7 +255,8 @@ export const ticketsRouter = router({
       setBlockedReasonCmd(buildCmdCtx(ctx), input.ticketId, input.reason, input.note ?? null),
     ),
 
-  recordPrint: staffProcedure
+  /** Фиксация печати документа. Инженер — только по своим заявкам (проверка в cmd). */
+  recordPrint: engineerProcedure
     .input(
       z.object({
         ticketId: z.string().uuid(),
@@ -263,6 +265,17 @@ export const ticketsRouter = router({
     )
     .mutation(({ ctx, input }) =>
       recordPrintEventCmd(buildCmdCtx(ctx), input.ticketId, input.documentKind),
+    ),
+
+  /**
+   * Реквизиты клиента для печати акта по заявке (минимум полей: ИНН/КПП/ОГРН/
+   * юр.адрес/телефон/контакт). Позволяет инженеру самому сформировать полноценный
+   * акт, не открывая ему карточку клиента. Инженер — только по своим заявкам.
+   */
+  documentClient: engineerProcedure
+    .input(z.object({ ticketId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      documentClientQuery(ctx.db, ctx.tenant, ctx.session, input.ticketId),
     ),
 
   changeStatus: engineerProcedure.input(changeStatusSchema).mutation(({ ctx, input }) => {

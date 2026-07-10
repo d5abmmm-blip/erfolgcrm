@@ -11,6 +11,7 @@ import { withTenantTx, type Db } from '@erfolg/db';
 import { writeAudit, writeAuditInTx } from '../../lib/audit';
 import { toTRPCError } from '../../lib/errors';
 import { assertContractInTenant } from '../contracts';
+import { getClientQuery } from '../clients/service';
 import { checkAttestationForAssignment } from '../attestations';
 import { enqueuePushToUser } from '../notifications';
 import { logger } from '../../lib/logger';
@@ -750,6 +751,11 @@ export async function recordPrintEventCmd(
   ticketId: string,
   documentKind: 'intake_act' | 'invoice' | 'work_act' | 'defect_act',
 ): Promise<{ id: string }> {
+  // Инженер фиксирует печать только по своим заявкам (см. assertEngineerOwnsTicket).
+  const ticket = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
+  if (!ticket) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  assertEngineerOwnsTicket(ctx.session, ticket);
+
   const result = await repoRecordPrint(
     ctx.db,
     ctx.tenant.id,
@@ -773,6 +779,60 @@ export async function getTicketQuery(db: Db, tenant: ResolvedTenant, id: string)
   const t = await repoGetTicket(db, tenant.id, id);
   if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
   return t;
+}
+
+/** Роль+пользователь, достаточные для проверки «своя ли заявка». */
+type ActorSession = { role: 'director' | 'dispatcher' | 'engineer'; userId: string };
+
+/**
+ * Инженер работает с документами только СВОИХ заявок (директор/диспетчер — любых).
+ * Акт печатает тот, кто выполнял ремонт.
+ */
+export function assertEngineerOwnsTicket(
+  session: ActorSession,
+  ticket: { assignedEngineerId: string | null },
+): void {
+  if (session.role !== 'engineer') return;
+  if (ticket.assignedEngineerId !== session.userId) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Документы по заявке доступны только назначенному инженеру',
+    });
+  }
+}
+
+/**
+ * Реквизиты клиента, необходимые для печати документов по заявке (акт работ,
+ * дефектный акт). Отдаём МИНИМУМ полей — без email, прочих контактов и всей
+ * карточки клиента, — чтобы инженер мог сам сформировать полноценный акт,
+ * не получая доступ к карточке клиента (`clients.get` остаётся staff-only).
+ */
+export async function documentClientQuery(
+  db: Db,
+  tenant: ResolvedTenant,
+  session: ActorSession,
+  ticketId: string,
+) {
+  const t = await repoGetTicket(db, tenant.id, ticketId);
+  if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  assertEngineerOwnsTicket(session, t);
+
+  const client = await getClientQuery(db, tenant, t.clientId);
+  const contact =
+    (t.contactId ? client.contacts.find((c) => c.id === t.contactId) : undefined) ??
+    client.contacts.find((c) => c.isPrimary) ??
+    client.contacts[0];
+
+  return {
+    displayName: client.displayName,
+    inn: client.inn,
+    kpp: client.kpp,
+    ogrn: client.ogrn,
+    legalAddress: client.legalAddress,
+    phone: client.phone,
+    contactName: contact?.fullName ?? null,
+    contactPosition: contact?.position ?? null,
+  };
 }
 
 export async function listTicketsQuery(
