@@ -116,13 +116,22 @@ export function TicketCardPage() {
   const ticket = trpc.tickets.get.useQuery({ id }, { enabled: !!id });
   const events = trpc.tickets.events.useQuery({ ticketId: id }, { enabled: !!id });
   const wo = trpc.workOrders.getByTicket.useQuery({ ticketId: id }, { enabled: !!id });
+  // Карточка клиента — только staff (clients.get = staffProcedure).
   const clientFull = trpc.clients.get.useQuery(
     { id: ticket.data?.clientId ?? '' },
-    { enabled: !!ticket.data?.clientId },
+    { enabled: isStaff && !!ticket.data?.clientId },
   );
   const assetFull = trpc.assets.get.useQuery(
     { id: ticket.data?.assetId ?? '' },
     { enabled: !!ticket.data?.assetId },
+  );
+  /** Инженер печатает документы только по своим заявкам; staff — по любым. */
+  const canPrintDocs =
+    isStaff || (!!ticket.data && ticket.data.assignedEngineerId === me.data?.user.id);
+  // Реквизиты клиента для акта (минимум полей) — доступны и инженеру по своей заявке.
+  const clientDoc = trpc.tickets.documentClient.useQuery(
+    { ticketId: id },
+    { enabled: !!id && canPrintDocs },
   );
 
   const [tab, setTab] = useState<Tab>('details');
@@ -186,23 +195,24 @@ export function TicketCardPage() {
   // Сборка данных для PDF (акты/счёт). Используется и печатью, и вложениями писем.
   const assemblePdfInputs = async () => {
     const { ERFOLG_FALLBACK } = await import('../lib/pdf/branding');
-    const cli = clientFull.data;
     const ass = assetFull.data;
     const woData = wo.data;
-    const primaryContact = cli?.contacts.find((c) => c.isPrimary) ?? cli?.contacts[0];
     const tenantData = {
       ...ERFOLG_FALLBACK,
       // TODO: брать из tenant settings когда появится trpc endpoint
     };
+    // Реквизиты берём из tickets.documentClient — он доступен и инженеру (по своей
+    // заявке), поэтому акт печатается полным для любой роли.
+    const doc = clientDoc.data;
     const clientData = {
-      displayName: cli?.displayName ?? t.clientDisplayName,
-      inn: cli?.inn ?? null,
-      kpp: cli?.kpp ?? null,
-      ogrn: cli?.ogrn ?? null,
-      legalAddress: cli?.legalAddress ?? null,
-      phone: cli?.phone ?? null,
-      contactName: primaryContact?.fullName ?? null,
-      contactPosition: primaryContact?.position ?? null,
+      displayName: doc?.displayName ?? t.clientDisplayName,
+      inn: doc?.inn ?? null,
+      kpp: doc?.kpp ?? null,
+      ogrn: doc?.ogrn ?? null,
+      legalAddress: doc?.legalAddress ?? null,
+      phone: doc?.phone ?? null,
+      contactName: doc?.contactName ?? null,
+      contactPosition: doc?.contactPosition ?? null,
     };
     const assetData = ass
       ? {
@@ -447,12 +457,23 @@ export function TicketCardPage() {
             </button>
           )}
           {isStaff && <TrackShareButton ticketId={t.id} />}
-          <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
-          <PrintBtn icon={FileWarning} label="Дефектный акт" onClick={() => void printDocument('defect_act', 'дефектный акт')} />
-          <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
-          <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
+          {/* Инженеру — акты только по своим заявкам. Счёт/пакет/приём — дело staff. */}
+          {isStaff && (
+            <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
+          )}
+          {canPrintDocs && (
+            <PrintBtn icon={FileWarning} label="Дефектный акт" onClick={() => void printDocument('defect_act', 'дефектный акт')} />
+          )}
+          {isStaff && (
+            <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
+          )}
+          {canPrintDocs && (
+            <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
+          )}
           <PrintBtn icon={Tag} label="Ярлык" onClick={() => void printDocument('asset_label', 'ярлык на технику')} />
-          <PrintBtn icon={Files} label="Пакет документов" emphasis onClick={() => void printPackage()} />
+          {isStaff && (
+            <PrintBtn icon={Files} label="Пакет документов" emphasis onClick={() => void printPackage()} />
+          )}
         </div>
       </div>
 

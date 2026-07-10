@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Tag,
+  Printer,
+  FileWarning,
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
@@ -88,6 +90,22 @@ export function MobileTicketPage() {
   const utils = trpc.useUtils();
   const changeStatusM = trpc.tickets.changeStatus.useMutation();
   const addNoteM = trpc.tickets.addNote.useMutation();
+
+  // Печать актов инженером прямо с телефона. Инженеру — только по своим заявкам
+  // (то же правило продублировано на сервере в tickets.documentClient/recordPrint).
+  const canPrintActs =
+    !!ticket.data &&
+    (me.data?.user.role !== 'engineer' || ticket.data.assignedEngineerId === me.data.user.id);
+  const assetFull = trpc.assets.get.useQuery(
+    { id: ticket.data?.assetId ?? '' },
+    { enabled: !!ticket.data?.assetId },
+  );
+  const clientDoc = trpc.tickets.documentClient.useQuery(
+    { ticketId: id },
+    { enabled: !!id && canPrintActs },
+  );
+  const recordPrintM = trpc.tickets.recordPrint.useMutation();
+
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(null);
@@ -111,6 +129,86 @@ export function MobileTicketPage() {
   }
   const t = ticket.data;
   const tenantSubdomain = getTenantSubdomain();
+
+  /**
+   * Сформировать акт (выполненных работ / дефектный) в PDF прямо с телефона.
+   * На мобильных браузерах это открывается как «сохранить/поделиться PDF».
+   */
+  const printAct = async (kind: 'work_act' | 'defect_act') => {
+    const woData = wo.data;
+    if (!woData) {
+      setToast({ kind: 'error', text: 'Наряд ещё не создан — акт сформировать нельзя' });
+      return;
+    }
+    const win = openPrintWindow();
+    try {
+      const [{ printWorkAct, printDefectAct }, { ERFOLG_FALLBACK }] = await Promise.all([
+        import('../../lib/pdf'),
+        import('../../lib/pdf/branding'),
+      ]);
+      const doc = clientDoc.data;
+      const ass = assetFull.data;
+      const payload = {
+        tenant: { ...ERFOLG_FALLBACK },
+        client: {
+          displayName: doc?.displayName ?? t.clientDisplayName,
+          inn: doc?.inn ?? null,
+          kpp: doc?.kpp ?? null,
+          ogrn: doc?.ogrn ?? null,
+          legalAddress: doc?.legalAddress ?? null,
+          phone: doc?.phone ?? null,
+          contactName: doc?.contactName ?? null,
+          contactPosition: doc?.contactPosition ?? null,
+        },
+        asset: ass
+          ? {
+              model: ass.model,
+              manufacturer: ass.manufacturer ?? null,
+              serialNumber: ass.serialNumber ?? null,
+              inventoryNumber: ass.inventoryNumber ?? null,
+              riskClass: ass.riskClass ?? null,
+              commissionedAt: ass.commissionedAt ? String(ass.commissionedAt) : null,
+            }
+          : null,
+        ticket: {
+          ticketNumber: t.ticketNumber,
+          receivedAt:
+            t.receivedAt instanceof Date ? t.receivedAt.toISOString() : String(t.receivedAt),
+          repairType: t.repairType,
+          symptom: t.symptom ?? null,
+          barcode: t.barcode,
+        },
+        workOrder: {
+          vatRate: woData.vatRate,
+          worksAmountKopecks: Number(woData.worksAmountKopecks),
+          partsAmountKopecks: Number(woData.partsAmountKopecks),
+          expensesAmountKopecks: Number(woData.expensesAmountKopecks),
+          totalAmountKopecks: Number(woData.totalAmountKopecks),
+          diagnosis: woData.diagnosis ?? null,
+          repairDescription: woData.repairDescription ?? null,
+          recommendation: woData.recommendation ?? null,
+          lines: woData.lines.map((l) => ({
+            lineType: l.lineType,
+            name: l.name,
+            unit: l.unit,
+            quantity: Number(l.quantity),
+            unitPriceKopecks: Number(l.unitPriceKopecks),
+            amountKopecks: Number(l.amountKopecks),
+          })),
+        },
+      };
+      if (kind === 'work_act') {
+        await printWorkAct(payload, win);
+      } else {
+        await printDefectAct(payload, win);
+      }
+      recordPrintM.mutate({ ticketId: t.id, documentKind: kind });
+    } catch (err) {
+      win?.close();
+      console.error('[print]', err);
+      setToast({ kind: 'error', text: 'Не удалось сформировать PDF' });
+    }
+  };
 
   const showToast = (toastData: NonNullable<typeof toast>) => {
     setToast(toastData);
@@ -255,6 +353,29 @@ export function MobileTicketPage() {
             <Tag className="h-4 w-4" />
             Печать ярлыка
           </button>
+        )}
+
+        {canPrintActs && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={!wo.data}
+              onClick={() => void printAct('work_act')}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+            >
+              <Printer className="h-4 w-4" />
+              Акт работ
+            </button>
+            <button
+              type="button"
+              disabled={!wo.data}
+              onClick={() => void printAct('defect_act')}
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+            >
+              <FileWarning className="h-4 w-4" />
+              Дефектный акт
+            </button>
+          </div>
         )}
 
         {t.symptom && (
