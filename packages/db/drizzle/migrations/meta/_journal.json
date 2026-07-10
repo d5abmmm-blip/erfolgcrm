@@ -414,6 +414,13 @@
       "when": 1778500600000,
       "tag": "0067_ticket_public_track_token",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1778500700000,
+      "tag": "0068_users_personal_payout",
+      "breakpoints": true
     }
   ]
 }

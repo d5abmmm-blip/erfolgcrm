@@ -22,6 +22,7 @@ import {
   setUserActive,
   updateHourlyCostRate,
   updateUser,
+  updateUserPayout,
   UserConflictError,
   WrongPasswordError,
 } from './repository';
@@ -89,10 +90,15 @@ export const usersRouter = router({
         onlyEngineers: input?.onlyEngineers,
         includeBlocked: input?.includeBlocked,
       });
-      // Почасовая ставка — зарплатные данные: видны только директору.
+      // Ставка и персональная ЗП (оклад/бонус) — зарплатные данные: видны только директору.
       // Остальным список нужен лишь для выпадающих назначений (id + ФИО).
       if (ctx.session?.role === 'director') return rows;
-      return rows.map((r) => ({ ...r, hourlyCostRateKopecks: '0' }));
+      return rows.map((r) => ({
+        ...r,
+        hourlyCostRateKopecks: '0',
+        payoutBaseSalaryKopecks: null,
+        payoutBonusPercent: null,
+      }));
     }),
 
   getById: directorProcedure
@@ -322,6 +328,35 @@ export const usersRouter = router({
       if (!result) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
       }
+      return result;
+    }),
+
+  /** Персональная ЗП сотрудника: оклад (копейки) + бонус %. null ⇒ вернуть на глобальное правило. */
+  setUserPayout: directorProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        baseSalaryKopecks: z.string().regex(/^\d+$/, 'Должно быть число копеек ≥ 0').nullable(),
+        bonusPercent: z.number().int().min(0).max(100).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await updateUserPayout(ctx.db, ctx.tenant.id, input.userId, {
+        baseSalaryKopecks: input.baseSalaryKopecks !== null ? BigInt(input.baseSalaryKopecks) : null,
+        bonusPercent: input.bonusPercent,
+      });
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
+      }
+      await writeAudit(ctx.db, ctx.tenant.id, {
+        userId: ctx.session.userId,
+        action: 'update',
+        entityType: 'user_payout',
+        entityId: input.userId,
+        after: { baseSalaryKopecks: input.baseSalaryKopecks, bonusPercent: input.bonusPercent },
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+      });
       return result;
     }),
 });

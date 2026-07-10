@@ -499,11 +499,15 @@ export function PayrollSettingsPage() {
   const utils = trpc.useUtils();
   const ruleQ = trpc.payroll.getRule.useQuery();
   const usersQ = trpc.users.list.useQuery({ onlyEngineers: true });
+  const staffQ = trpc.users.list.useQuery();
 
   const setRuleM = trpc.payroll.setRule.useMutation({
     onSuccess: () => utils.payroll.getRule.invalidate(),
   });
   const setRateM = trpc.users.setHourlyCostRate.useMutation({
+    onSuccess: () => utils.users.list.invalidate(),
+  });
+  const setUserPayoutM = trpc.users.setUserPayout.useMutation({
     onSuccess: () => utils.users.list.invalidate(),
   });
 
@@ -543,12 +547,16 @@ export function PayrollSettingsPage() {
         </Link>
         <h2 className="mt-2 text-xl font-semibold md:text-2xl">Правила расчёта ЗП</h2>
         <p className="text-muted-foreground text-sm">
-          Действует для всех инженеров. Расчёт on-the-fly по закрытым нарядам.
+          Правило по умолчанию + персональная зарплата по каждому сотруднику ниже.
+          Расчёт on-the-fly по закрытым нарядам.
         </p>
       </div>
 
       <section className="bg-card space-y-4 rounded-lg border p-5">
         <div>
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Правило по умолчанию (для тех, кому не задана персональная зарплата ниже)
+          </div>
           <label className="text-sm font-medium">Режим расчёта</label>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <ModeOption
@@ -623,6 +631,55 @@ export function PayrollSettingsPage() {
           {setRuleM.isSuccess && (
             <span className="text-success text-xs">Сохранено</span>
           )}
+        </div>
+      </section>
+
+      <section className="bg-card rounded-lg border">
+        <div className="border-b p-4">
+          <h3 className="font-semibold">Зарплата по сотрудникам (оклад + бонус)</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            У каждого — свой оклад (₽/мес) и бонус % от выполненных работ. Пусто в обеих
+            ячейках — действует правило по умолчанию выше.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
+              <tr>
+                <th className="p-3 text-left font-medium">Сотрудник</th>
+                <th className="p-3 text-left font-medium">Роль</th>
+                <th className="p-3 text-right font-medium">Оклад, ₽/мес</th>
+                <th className="p-3 text-right font-medium">Бонус, %</th>
+                <th className="p-3 text-right font-medium" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {staffQ.data?.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-muted-foreground p-6 text-center">
+                    Сотрудники не заведены
+                  </td>
+                </tr>
+              )}
+              {staffQ.data?.map((u) => (
+                <UserPayoutRow
+                  key={u.id}
+                  fullName={u.fullName}
+                  role={u.role}
+                  baseSalaryKopecks={u.payoutBaseSalaryKopecks}
+                  bonusPercent={u.payoutBonusPercent}
+                  onSave={(baseKopecks, bonus) =>
+                    setUserPayoutM.mutateAsync({
+                      userId: u.id,
+                      baseSalaryKopecks: baseKopecks,
+                      bonusPercent: bonus,
+                    })
+                  }
+                  isSaving={setUserPayoutM.isPending && setUserPayoutM.variables?.userId === u.id}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -745,6 +802,95 @@ function UserRateRow({
           ) : (
             <Save className="h-3 w-3" />
           )}
+          Сохранить
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+const ROLE_RU: Record<'director' | 'dispatcher' | 'engineer', string> = {
+  director: 'Директор',
+  dispatcher: 'Диспетчер',
+  engineer: 'Инженер',
+};
+
+function UserPayoutRow({
+  fullName,
+  role,
+  baseSalaryKopecks,
+  bonusPercent,
+  onSave,
+  isSaving,
+}: {
+  fullName: string;
+  role: 'director' | 'dispatcher' | 'engineer';
+  baseSalaryKopecks: string | null;
+  bonusPercent: number | null;
+  onSave: (baseKopecks: string | null, bonus: number | null) => Promise<unknown>;
+  isSaving: boolean;
+}) {
+  const initialSalary = baseSalaryKopecks !== null ? (Number(baseSalaryKopecks) / 100).toString() : '';
+  const initialBonus = bonusPercent !== null ? String(bonusPercent) : '';
+  const [salary, setSalary] = useState(initialSalary);
+  const [bonus, setBonus] = useState(initialBonus);
+  const dirty = salary !== initialSalary || bonus !== initialBonus;
+  const usesDefault = initialSalary === '' && initialBonus === '';
+
+  const save = () => {
+    const baseNum = parseRubNumber(salary); // 0 при пусто/мусоре/отрицательном
+    const bonusNum = Math.max(0, Math.min(100, Math.round(Number(bonus) || 0)));
+    const hasBase = baseNum > 0;
+    const hasBonus = bonus.trim() !== '' && bonusNum > 0;
+    // Обе ячейки пусты/нулевые → вернуть сотрудника на правило по умолчанию,
+    // а НЕ обнулять его ЗП (иначе ввод «0» молча снимал бы с глобальной сделки).
+    if (!hasBase && !hasBonus) {
+      void onSave(null, null);
+      return;
+    }
+    void onSave(hasBase ? rubToKopecksString(salary) : '0', bonusNum);
+  };
+
+  return (
+    <tr className="hover:bg-muted/30">
+      <td className="p-3 font-medium">
+        {fullName}
+        {usesDefault && (
+          <span className="bg-muted text-muted-foreground ml-2 rounded px-1.5 py-0.5 text-[10px] align-middle">
+            по умолчанию
+          </span>
+        )}
+      </td>
+      <td className="text-muted-foreground p-3 text-xs">{ROLE_RU[role]}</td>
+      <td className="p-3 text-right">
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="—"
+          value={salary}
+          onChange={(e) => setSalary(e.target.value)}
+          className="border-input bg-background w-28 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+      </td>
+      <td className="p-3 text-right">
+        <input
+          type="number"
+          min={0}
+          max={100}
+          placeholder="—"
+          value={bonus}
+          onChange={(e) => setBonus(e.target.value)}
+          className="border-input bg-background w-20 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+      </td>
+      <td className="p-3 text-right">
+        <button
+          type="button"
+          disabled={!dirty || isSaving}
+          onClick={save}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
           Сохранить
         </button>
       </td>
