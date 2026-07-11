@@ -14,7 +14,7 @@ import { TicketPriority, TicketStatus } from '@erfolg/shared';
 import type { Db } from '@erfolg/db';
 import type { appRouter } from '../../trpc/router';
 import type { ResolvedTenant } from '../../lib/tenant';
-import type { LlmFunctionTool } from './llm';
+import type { AssistantMode, LlmFunctionTool } from './llm';
 import {
   getFinanceSummary,
   getTicketsStats,
@@ -840,14 +840,18 @@ const TOOLS: Record<string, ToolHandler> = {
 export const TOOL_DEFS_FOR_LLM: LlmFunctionTool[] = Object.values(TOOLS).map((t) => t.def);
 
 /**
- * Инструменты, доступные конкретной роли. staff-only инструменты (финансы/заявки
- * с ПДн) не отдаём инженеру вовсе — чтобы модель их даже не предлагала. Это в
- * дополнение к жёсткому гейту requireStaff в run (а не вместо него).
+ * Инструменты, доступные конкретной роли и режиму. staff-only инструменты
+ * (финансы/заявки с ПДн) не отдаём инженеру вовсе. В режиме 'read_only' не отдаём
+ * инструменты-изменения (kind='write') — модель их даже не предложит. Это в
+ * дополнение к жёстким гейтам в run (requireStaff + серверная проверка режима).
  */
-export function toolDefsForRole(role: SessionRole): LlmFunctionTool[] {
-  if (isStaffRole(role)) return TOOL_DEFS_FOR_LLM;
+export function toolDefsForRole(
+  role: SessionRole,
+  mode: AssistantMode = 'full',
+): LlmFunctionTool[] {
   return Object.values(TOOLS)
-    .filter((t) => !t.staffOnly)
+    .filter((t) => isStaffRole(role) || !t.staffOnly)
+    .filter((t) => mode === 'full' || t.kind === 'read')
     .map((t) => t.def);
 }
 
