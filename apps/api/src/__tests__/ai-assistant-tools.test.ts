@@ -159,6 +159,23 @@ describe('RBAC: staff-only read-инструменты (финансы / зая�
       }
     }
   });
+
+  it('режим read_only: write-инструменты не отдаются, read — остаются', () => {
+    const readOnly = toolDefsForRole('director', 'read_only').map((d) => d.function.name);
+    // Ни одного write-инструмента.
+    for (const name of readOnly) {
+      expect(isWriteTool(name)).toBe(false);
+    }
+    for (const w of ['create_ticket', 'change_ticket_status', 'assign_engineer']) {
+      expect(readOnly).not.toContain(w);
+    }
+    // Read-инструменты по-прежнему доступны.
+    expect(readOnly).toContain('search_tickets');
+    expect(readOnly).toContain('search_kb');
+    // В полном режиме write-инструменты есть.
+    const full = toolDefsForRole('director', 'full').map((d) => d.function.name);
+    expect(full).toContain('create_ticket');
+  });
 });
 
 describe('create_client', () => {

@@ -13,7 +13,7 @@
  * входит в appRouter — статический import создал бы цикл.
  */
 import type { Context } from '../../trpc/context';
-import { callLlm, type LlmContentPart, type LlmMessage } from './llm';
+import { callLlm, type AssistantMode, type LlmContentPart, type LlmMessage } from './llm';
 import { loadLlmRuntimeConfig } from './config';
 import { getTool, isWriteTool, toolDefsForRole, type ToolRunCtx } from './tools';
 import { redactClientPii } from './redact';
@@ -57,9 +57,16 @@ const SYSTEM_PROMPT = `Ты — встроенный помощник CRM сер
 /** Ограничение длины инструкции в промпте — защита от раздувания контекста/токенов. */
 const MAX_CUSTOM_INSTRUCTIONS = 20_000;
 
-function buildBaseMessages(history: ChatTurn[], customInstructions?: string | null): LlmMessage[] {
+function buildBaseMessages(
+  history: ChatTurn[],
+  opts: { customInstructions?: string | null; mode?: AssistantMode } = {},
+): LlmMessage[] {
   let system = SYSTEM_PROMPT;
-  const extra = customInstructions?.trim();
+  if (opts.mode === 'read_only') {
+    system +=
+      '\n\nРЕЖИМ «ТОЛЬКО ЧТЕНИЕ»: тебе доступны лишь инструменты просмотра. Ты НЕ можешь создавать или изменять данные — только находить, показывать и советовать. Если просят что-то сделать (создать/назначить/сменить статус и т.п.) — объясни, что сейчас включён режим «только чтение», и подскажи, как это сделать вручную.';
+  }
+  const extra = opts.customInstructions?.trim();
   if (extra) {
     system += `\n\nИнструкция компании (как принято работать именно в этом сервисном центре — приоритетнее общих правил выше):\n${extra.slice(0, MAX_CUSTOM_INSTRUCTIONS)}`;
   }
@@ -144,11 +151,13 @@ export async function runAssistant(
   // которые обходят tRPC-caller и потому теряли бы проверку staffProcedure.
   const role = ctx.session.role;
   const toolCtx: ToolRunCtx = { db: ctx.db, tenant: ctx.tenant, role };
+  // Режим ассистента: 'full' — с действиями (по подтверждению), 'read_only' — только чтение.
+  const mode: AssistantMode = llmCfg.mode ?? 'full';
 
-  // Инженеру не показываем staff-only инструменты — модель их даже не предложит.
-  const toolDefs = toolDefsForRole(role);
+  // Инженеру не показываем staff-only инструменты; в read_only — не показываем write-инструменты.
+  const toolDefs = toolDefsForRole(role, mode);
 
-  const messages = buildBaseMessages(history, llmCfg.customInstructions);
+  const messages = buildBaseMessages(history, { customInstructions: llmCfg.customInstructions, mode });
 
   // Вложения относятся к последнему ходу пользователя (приходят только с обычным
   // send, не с confirm). Разбираем и вклеиваем перед прогоном через модель.
@@ -161,6 +170,10 @@ export async function runAssistant(
     const tool = getTool(confirm.tool);
     if (!tool || tool.kind !== 'write') {
       throw new Error(`Неизвестное действие для подтверждения: ${confirm.tool}`);
+    }
+    // Защита: в режиме «только чтение» изменения запрещены даже по прямому confirm.
+    if (mode === 'read_only') {
+      throw new Error('Ассистент в режиме «только чтение»: изменения недоступны.');
     }
     let resultJson: string;
     try {
@@ -210,8 +223,9 @@ export async function runAssistant(
       })),
     });
 
-    // Первый WRITE-вызов → стоп и запрос подтверждения.
-    const writeCall = reply.toolCalls.find((tc) => isWriteTool(tc.name));
+    // Первый WRITE-вызов → стоп и запрос подтверждения. В read_only write-инструментов
+    // модели не давали, но на всякий случай ловим write-вызовы в цикле ниже.
+    const writeCall = mode === 'full' ? reply.toolCalls.find((tc) => isWriteTool(tc.name)) : undefined;
     if (writeCall) {
       const tool = getTool(writeCall.name);
       const args = safeParseArgs(writeCall.argumentsJson);
@@ -235,6 +249,11 @@ export async function runAssistant(
       let content: string;
       if (!tool) {
         content = JSON.stringify({ error: `Неизвестный инструмент: ${tc.name}` });
+      } else if (tool.kind === 'write') {
+        // Возможно только в read_only (в full write перехватывается выше как confirm).
+        content = JSON.stringify({
+          error: 'Ассистент в режиме «только чтение»: изменения недоступны. Могу показать данные и посоветовать.',
+        });
       } else {
         try {
           // PII-1: имя/контакты клиента из БД НЕ уходят во внешний LLM (z.ai/КНР).

@@ -59,6 +59,9 @@ export interface LlmReply {
 
 export type ApiStyle = 'openai' | 'anthropic';
 
+/** Режим ассистента: полный (с действиями) или только чтение (смотрит и советует). */
+export type AssistantMode = 'read_only' | 'full';
+
 /**
  * Параметры одного вызова: таймаут и число попыток. Нужны, чтобы НЕинтерактивные
  * пути (сводки/отчёты через phraseWithLlm) не ждали до 60с×3≈3 мин при тормозящем
@@ -80,6 +83,8 @@ export interface LlmRuntimeConfig {
   apiStyle: ApiStyle;
   /** Доп. инструкция-памятка от директора (регламенты СЦ) для системного промпта. */
   customInstructions?: string | null;
+  /** Режим работы: 'full' (действия по запросу) | 'read_only' (только смотрит/советует). */
+  mode?: AssistantMode;
 }
 
 /**

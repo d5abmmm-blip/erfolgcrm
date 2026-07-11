@@ -32,6 +32,12 @@ export const llmConfigs = pgTable('llm_configs', {
    * когда какой статус и т.п.). Подмешивается в системный промпт. НЕ секрет.
    */
   customInstructions: text('custom_instructions'),
+  /**
+   * Режим: 'full' — может выполнять действия по запросу (с подтверждением);
+   * 'read_only' — только смотрит и советует (инструменты-изменения не даются).
+   * Полное отключение — флагом enabled.
+   */
+  assistantMode: varchar('assistant_mode', { length: 16 }).notNull().default('full'),
   ...timestamps,
 });
 

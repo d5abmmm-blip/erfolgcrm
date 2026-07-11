@@ -10,6 +10,9 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
 type ApiStyle = 'openai' | 'anthropic';
+type AssistantMode = 'read_only' | 'full';
+/** Единый выбор состояния ассистента для UI (маппится в enabled + mode). */
+type AssistantState = 'off' | 'read_only' | 'full';
 
 const PRESETS: Record<ApiStyle, { baseUrl: string; model: string; hint: string }> = {
   anthropic: {
@@ -29,6 +32,7 @@ export function AiSettingsPage() {
   const utils = trpc.useUtils();
 
   const [enabled, setEnabled] = useState(false);
+  const [mode, setMode] = useState<AssistantMode>('full');
   const [apiStyle, setApiStyle] = useState<ApiStyle>('anthropic');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
@@ -42,6 +46,7 @@ export function AiSettingsPage() {
     const c = cfg.data;
     if (!c) return;
     setEnabled(c.enabled);
+    setMode(c.mode ?? 'full');
     setApiStyle(c.apiStyle);
     setBaseUrl(c.baseUrl ?? '');
     setModel(c.model ?? '');
@@ -80,6 +85,7 @@ export function AiSettingsPage() {
     setError(null);
     setConfig.mutate({
       enabled,
+      mode,
       apiStyle,
       baseUrl: baseUrl.trim() || null,
       model: model.trim() || null,
@@ -124,31 +130,57 @@ export function AiSettingsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Включение */}
-          <div className="bg-card flex items-center justify-between rounded-lg border p-4">
-            <div>
-              <div className="font-medium">Ассистент включён</div>
-              <div className="text-muted-foreground text-xs">
-                Если выключено — кнопка-бот доступна, но запросы к модели не идут
-              </div>
+          {/* Режим работы: Выключен / Только смотрит / Полный */}
+          <div className="bg-card space-y-3 rounded-lg border p-4">
+            <div className="font-medium">Режим работы</div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  {
+                    key: 'off',
+                    title: 'Выключен',
+                    desc: 'Кнопка-бот есть, но запросы к модели не идут',
+                  },
+                  {
+                    key: 'read_only',
+                    title: 'Только смотрит',
+                    desc: 'Отвечает и советует, но ничего не меняет',
+                  },
+                  {
+                    key: 'full',
+                    title: 'Полный',
+                    desc: 'Может выполнять действия по запросу (с подтверждением)',
+                  },
+                ] as { key: AssistantState; title: string; desc: string }[]
+              ).map((opt) => {
+                const current: AssistantState = !enabled ? 'off' : mode;
+                const active = current === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      if (opt.key === 'off') {
+                        setEnabled(false);
+                      } else {
+                        setEnabled(true);
+                        setMode(opt.key);
+                      }
+                    }}
+                    className={cn(
+                      'rounded-md border p-3 text-left transition',
+                      active
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
+                        : 'border-input hover:border-primary/40',
+                    )}
+                  >
+                    <div className="text-sm font-medium">{opt.title}</div>
+                    <div className="text-muted-foreground mt-0.5 text-xs">{opt.desc}</div>
+                  </button>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={() => setEnabled((v) => !v)}
-              className={cn(
-                'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                enabled ? 'bg-primary' : 'bg-muted',
-              )}
-              role="switch"
-              aria-checked={enabled}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform',
-                  enabled ? 'translate-x-5' : 'translate-x-0',
-                )}
-              />
-            </button>
           </div>
 
           {/* Провайдер */}

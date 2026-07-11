@@ -14,7 +14,7 @@ import {
   withTenantTx,
   type Db,
 } from '@erfolg/db';
-import type { ApiStyle, LlmRuntimeConfig } from './llm';
+import type { ApiStyle, AssistantMode, LlmRuntimeConfig } from './llm';
 
 interface TenantKeyCtx {
   id: string;
@@ -24,6 +24,11 @@ interface TenantKeyCtx {
 /** Default — 'openai' (обратная совместимость с env); 'anthropic' только если задан явно. */
 function normalizeStyle(v: string | null | undefined): ApiStyle {
   return v?.trim().toLowerCase() === 'anthropic' ? 'anthropic' : 'openai';
+}
+
+/** Default — 'full' (текущее поведение); 'read_only' только если задан явно. */
+function normalizeMode(v: string | null | undefined): AssistantMode {
+  return v?.trim().toLowerCase() === 'read_only' ? 'read_only' : 'full';
 }
 
 /** Рантайм-конфиг из переменных окружения (LLM_*), или null если не заданы все обязательные. */
@@ -60,6 +65,7 @@ export async function loadLlmRuntimeConfig(
         baseUrl: llmConfigs.baseUrl,
         model: llmConfigs.model,
         customInstructions: llmConfigs.customInstructions,
+        assistantMode: llmConfigs.assistantMode,
         apiKey: decryptSql(llmConfigs.apiKeyEnc, key).as('api_key_dec'),
       })
       .from(llmConfigs)
@@ -76,6 +82,7 @@ export async function loadLlmRuntimeConfig(
       apiKey,
       model: row.model,
       customInstructions: row.customInstructions ?? null,
+      mode: normalizeMode(row.assistantMode),
     };
   }
   // БД не настроена/выключена → пробуем env (текущий прод).
@@ -91,6 +98,8 @@ export interface LlmConfigDto {
   hasApiKey: boolean;
   /** Инструкция-памятка для ассистента (не секрет — отдаётся в UI как есть). */
   customInstructions: string | null;
+  /** Режим: 'full' | 'read_only'. */
+  mode: AssistantMode;
   /** true, если строки в БД нет/она неполна, но ассистент работает из env (LLM_*). */
   usingEnvFallback: boolean;
   updatedAt: Date | null;
@@ -105,6 +114,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
         baseUrl: llmConfigs.baseUrl,
         model: llmConfigs.model,
         customInstructions: llmConfigs.customInstructions,
+        assistantMode: llmConfigs.assistantMode,
         hasApiKey: sql<boolean>`${llmConfigs.apiKeyEnc} IS NOT NULL`.as('has_api_key'),
         updatedAt: llmConfigs.updatedAt,
       })
@@ -123,6 +133,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
       model: null,
       hasApiKey: false,
       customInstructions: null,
+      mode: 'full',
       usingEnvFallback: envCfg != null,
       updatedAt: null,
     };
@@ -135,6 +146,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
     model: row.model,
     hasApiKey: Boolean(row.hasApiKey),
     customInstructions: row.customInstructions ?? null,
+    mode: normalizeMode(row.assistantMode),
     usingEnvFallback: !dbComplete && envCfg != null,
     updatedAt: row.updatedAt,
   };
@@ -149,6 +161,8 @@ export interface UpsertLlmConfigInput {
   apiKey?: string;
   /** Инструкция-памятка для ассистента (null — очистить). */
   customInstructions?: string | null;
+  /** Режим работы ассистента. */
+  mode?: AssistantMode;
 }
 
 /** Сохраняет конфиг. Ключ шифруется; пустой apiKey не затирает сохранённый (COALESCE). */
@@ -160,10 +174,11 @@ export async function upsertLlmConfig(
   const key = getTenantEncryptionKey(tenant);
   const encKey = input.apiKey ? sql`pgp_sym_encrypt(${input.apiKey}::text, ${key})` : sql`NULL`;
   const instructions = input.customInstructions?.trim() || null;
+  const mode = normalizeMode(input.mode);
   await withTenantTx(db, tenant.id, async (tx) => {
     await tx.execute(sql`
-      INSERT INTO llm_configs (tenant_id, enabled, api_style, base_url, model, api_key_encrypted, custom_instructions, updated_at)
-      VALUES (${tenant.id}, ${input.enabled}, ${input.apiStyle}, ${input.baseUrl ?? null}, ${input.model ?? null}, ${encKey}, ${instructions}, now())
+      INSERT INTO llm_configs (tenant_id, enabled, api_style, base_url, model, api_key_encrypted, custom_instructions, assistant_mode, updated_at)
+      VALUES (${tenant.id}, ${input.enabled}, ${input.apiStyle}, ${input.baseUrl ?? null}, ${input.model ?? null}, ${encKey}, ${instructions}, ${mode}, now())
       ON CONFLICT (tenant_id) DO UPDATE SET
         enabled = EXCLUDED.enabled,
         api_style = EXCLUDED.api_style,
@@ -171,6 +186,7 @@ export async function upsertLlmConfig(
         model = EXCLUDED.model,
         api_key_encrypted = COALESCE(EXCLUDED.api_key_encrypted, llm_configs.api_key_encrypted),
         custom_instructions = EXCLUDED.custom_instructions,
+        assistant_mode = EXCLUDED.assistant_mode,
         updated_at = now()
     `);
   });
