@@ -435,6 +435,13 @@
       "when": 1778500900000,
       "tag": "0070_llm_custom_instructions",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1778501000000,
+      "tag": "0071_llm_assistant_mode",
+      "breakpoints": true
     }
   ]
 }
