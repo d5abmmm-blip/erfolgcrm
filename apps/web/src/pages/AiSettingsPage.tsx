@@ -33,6 +33,7 @@ export function AiSettingsPage() {
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function AiSettingsPage() {
     setApiStyle(c.apiStyle);
     setBaseUrl(c.baseUrl ?? '');
     setModel(c.model ?? '');
+    setCustomInstructions(c.customInstructions ?? '');
   }, [cfg.data]);
 
   const setConfig = trpc.aiAssistant.setConfig.useMutation({
@@ -82,6 +84,7 @@ export function AiSettingsPage() {
       baseUrl: baseUrl.trim() || null,
       model: model.trim() || null,
       apiKey: apiKey || undefined,
+      customInstructions: customInstructions.trim() || null,
     });
   };
 
@@ -197,6 +200,35 @@ export function AiSettingsPage() {
                 className={inputCls}
               />
             </label>
+          </div>
+
+          {/* Инструкция для ассистента (регламенты/процессы СЦ) */}
+          <div className="bg-card space-y-3 rounded-lg border p-4">
+            <div>
+              <div className="font-medium">Инструкция для ассистента</div>
+              <div className="text-muted-foreground text-xs">
+                Опишите, как у вас принято работать: порядок ведения заявки, когда какой статус,
+                как оформить гарантию/акт/счёт, ваши правила и особенности. Ассистент будет это
+                учитывать и подсказывать сотрудникам «что и куда». Персональные данные сюда не
+                вписывайте — это общая памятка.
+              </div>
+            </div>
+            <textarea
+              value={customInstructions}
+              onChange={(e) => setCustomInstructions(e.target.value)}
+              rows={10}
+              maxLength={20000}
+              placeholder={
+                'Например:\n' +
+                '• Новую заявку сначала переводим в «Диагностику», потом в «В работе».\n' +
+                '• Гарантийный ремонт оформляем без счёта; при платном — сначала счёт, потом акт.\n' +
+                '• Медтехнику госбольниц не удаляем, только переназначаем инженера.'
+              }
+              className={cn(inputCls, 'font-mono leading-relaxed')}
+            />
+            <div className="text-muted-foreground text-right text-xs tabular-nums">
+              {customInstructions.length} / 20000
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

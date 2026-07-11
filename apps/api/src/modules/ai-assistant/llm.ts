@@ -78,6 +78,8 @@ export interface LlmRuntimeConfig {
   apiKey: string;
   model: string;
   apiStyle: ApiStyle;
+  /** Доп. инструкция-памятка от директора (регламенты СЦ) для системного промпта. */
+  customInstructions?: string | null;
 }
 
 /**

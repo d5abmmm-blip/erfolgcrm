@@ -27,6 +27,11 @@ export const llmConfigs = pgTable('llm_configs', {
   model: varchar('model', { length: 120 }),
   /** API-ключ провайдера — зашифрован (bytea). */
   apiKeyEnc: encryptedText('api_key_encrypted'),
+  /**
+   * Свободная «инструкция для ассистента» — регламенты/процессы СЦ (как оформить X,
+   * когда какой статус и т.п.). Подмешивается в системный промпт. НЕ секрет.
+   */
+  customInstructions: text('custom_instructions'),
   ...timestamps,
 });
 
