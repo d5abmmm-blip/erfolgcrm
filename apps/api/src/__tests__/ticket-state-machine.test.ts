@@ -313,14 +313,21 @@ describe('ticket state machine: валидация переходов на servi
     expect(r.to).toBe('cancelled');
   });
 
-  it('estimate → in_progress через service: BAD_REQUEST (нужно сначала approval)', async () => {
+  it('diagnostics → estimate через service: BAD_REQUEST (стадия «Смета» убрана из потока)', async () => {
     const id = await createBaseTicket();
     await changeStatus(getDb(), erfolgId, null, id, 'diagnostics');
-    await changeStatus(getDb(), erfolgId, null, id, 'estimate');
     const caller = appRouter.createCaller(makeCtx('dispatcher'));
     await expect(
-      caller.tickets.changeStatus({ id, status: 'in_progress' }),
+      caller.tickets.changeStatus({ id, status: 'estimate' }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('diagnostics → in_progress через service: OK (новый поток без сметы/согласования)', async () => {
+    const id = await createBaseTicket();
+    await changeStatus(getDb(), erfolgId, null, id, 'diagnostics');
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    const r = await caller.tickets.changeStatus({ id, status: 'in_progress' });
+    expect(r.to).toBe('in_progress');
   });
 
   it('reopen из closed бывает только через директора и обходит таблицу переходов', async () => {

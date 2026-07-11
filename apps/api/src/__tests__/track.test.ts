@@ -79,9 +79,10 @@ describe('track: публичная ссылка отслеживания', () =
     expect(dto).not.toBeNull();
     expect(dto!.companyName).toBe('ООО Эрфольг');
     expect(dto!.ticketNumber).toMatch(/^T-/);
-    // Стадия «Ремонт» (in_progress) — текущая; диагностика/согласование — пройдены.
-    expect(dto!.timeline.currentIndex).toBe(3);
-    expect(dto!.timeline.stages[3]!.state).toBe('current');
+    // Стадия «Ремонт» (in_progress) — текущая (индекс 2 из 5); диагностика — пройдена.
+    // Стадии «Смета/Согласование» убраны из потока.
+    expect(dto!.timeline.currentIndex).toBe(2);
+    expect(dto!.timeline.stages[2]!.state).toBe('current');
     expect(dto!.timeline.stages[1]!.state).toBe('done');
     expect(dto!.timeline.cancelled).toBe(false);
     // Наружу уходят ТОЛЬКО эти ключи — никаких ФИО/адреса/телефона/цен/инженера.

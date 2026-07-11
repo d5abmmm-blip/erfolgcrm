@@ -21,12 +21,14 @@ export const TICKET_STATUS_META: Record<TicketStatus, MetaEntry> = {
   cancelled: { label: 'Отменена', variant: 'danger' },
 };
 
-/** Активные статусы — заявки в работе (не closed/cancelled). */
+/**
+ * Активные статусы — заявки в работе (не closed/cancelled). Задают колонки канбана
+ * и фильтр списка. Стадии «Смета»/«Согласование» убраны из потока (значения enum
+ * сохранены в TICKET_STATUS_META для истории, но в рабочих списках не показываются).
+ */
 export const ACTIVE_TICKET_STATUSES: readonly TicketStatus[] = [
   'received',
   'diagnostics',
-  'estimate',
-  'approval',
   'in_progress',
   'act_pending',
 ] as const;

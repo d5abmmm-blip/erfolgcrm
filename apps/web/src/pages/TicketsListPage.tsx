@@ -16,7 +16,19 @@ import { useDebounce } from '../lib/hooks/useDebounce';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
-import { TICKET_STATUS_META, TICKET_PRIORITY_META, isTicketStale } from '../lib/dictionaries';
+import {
+  TICKET_STATUS_META,
+  TICKET_PRIORITY_META,
+  ACTIVE_TICKET_STATUSES,
+  isTicketStale,
+} from '../lib/dictionaries';
+
+/** Статусы в фильтре списка: рабочие + завершённые. Устаревшие «Смета»/«Согласование» скрыты. */
+const FILTER_STATUSES: readonly TicketStatus[] = [
+  ...ACTIVE_TICKET_STATUSES,
+  'closed',
+  'cancelled',
+];
 
 interface TicketRow {
   id: string;
@@ -193,7 +205,7 @@ export function TicketsListPage() {
       </div>
 
       <div className="flex flex-wrap gap-1">
-        {(Object.keys(TICKET_STATUS_META) as TicketStatus[]).map((s) => {
+        {FILTER_STATUSES.map((s) => {
           const active = statuses.includes(s);
           return (
             <button

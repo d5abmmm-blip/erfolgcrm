@@ -291,21 +291,23 @@ const REOPEN_STATUSES: ReadonlySet<TicketStatus> = new Set([
 /**
  * Разрешённые переходы между статусами заявки.
  *   received    → diagnostics | cancelled
- *   diagnostics → estimate | in_progress | cancelled  (мелкий ремонт может пропустить estimate)
- *   estimate    → approval | cancelled
- *   approval    → in_progress | cancelled
+ *   diagnostics → in_progress | cancelled
  *   in_progress → act_pending | cancelled
  *   act_pending → closed | in_progress                (отозвать на доделку)
  *   closed      → ∅                                   (только директор через reopen)
  *   cancelled   → ∅                                   (только директор через reopen)
  *
+ * Стадии «Смета» (estimate) и «Согласование» (approval) убраны из потока. Значения
+ * enum сохранены (устаревшие) ради истории и типобезопасности; если легаси-заявка
+ * вдруг окажется в них — разрешаем только выход в работу/отмену, чтобы не застряла.
+ *
  * Идемпотентность: from === to — это no-op, не ошибка.
  */
 const ALLOWED_TRANSITIONS: Record<TicketStatus, ReadonlyArray<TicketStatus>> = {
   received: ['diagnostics', 'cancelled'],
-  diagnostics: ['estimate', 'in_progress', 'cancelled'],
-  estimate: ['approval', 'cancelled'],
-  approval: ['in_progress', 'cancelled'],
+  diagnostics: ['in_progress', 'cancelled'],
+  estimate: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
+  approval: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
   in_progress: ['act_pending', 'cancelled'],
   act_pending: ['closed', 'in_progress'],
   closed: [],
@@ -707,15 +709,20 @@ export async function engineerReactCmd(
         message: `${before.ticketNumber} уже отмечена готовой к выдаче.`,
       };
     }
-    // Из «Диагностики»/«Согласования» идём через in_progress — та же пара нажатий,
-    // что инженер сделал бы в карточке. Из received/estimate «готово» не пускаем.
-    if (before.status === 'received' || before.status === 'estimate') {
+    // Из «Диагностики» идём через in_progress — та же пара нажатий, что инженер
+    // сделал бы в карточке. Из received «готово» не пускаем (ещё не в работе).
+    if (before.status === 'received') {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: `${before.ticketNumber} ещё не в работе — откройте заявку и начните диагностику.`,
       });
     }
-    if (before.status === 'diagnostics' || before.status === 'approval') {
+    // diagnostics — основной путь; estimate/approval — устаревшие статусы (легаси-заявки).
+    if (
+      before.status === 'diagnostics' ||
+      before.status === 'estimate' ||
+      before.status === 'approval'
+    ) {
       await changeStatusCmd(ctx, ticketId, 'in_progress');
     }
     await changeStatusCmd(ctx, ticketId, 'act_pending');

@@ -2,7 +2,7 @@
  * Stage 10'.J — Канбан-доска заявок.
  *
  * Дает диспетчеру обзор «где затык» одним взглядом и drag-and-drop между статусами.
- * Каждая колонка — статус (received → diagnostics → estimate → approval → in_progress → act_pending).
+ * Каждая колонка — статус (received → diagnostics → in_progress → act_pending).
  * closed/cancelled скрыты по умолчанию (опциональный чекбокс).
  *
  * Реализация:

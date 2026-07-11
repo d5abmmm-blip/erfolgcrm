@@ -22,8 +22,6 @@ import { PushToggle } from '../../components/PushToggle';
 const ACTIVE_STATUSES: TicketStatus[] = [
   'received',
   'diagnostics',
-  'estimate',
-  'approval',
   'in_progress',
   'act_pending',
 ];
