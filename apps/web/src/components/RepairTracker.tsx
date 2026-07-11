@@ -1,6 +1,5 @@
 import {
   Check,
-  ClipboardCheck,
   Flag,
   PackageCheck,
   PackageSearch,
@@ -20,7 +19,6 @@ import { cn } from '../lib/utils';
 const STAGE_ICON: Record<TrackStageKey, typeof Wrench> = {
   received: PackageCheck,
   diagnostics: Stethoscope,
-  approval: ClipboardCheck,
   repair: Wrench,
   ready: PackageSearch,
   issued: Flag,

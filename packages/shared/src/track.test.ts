@@ -7,17 +7,17 @@ import {
 } from './index';
 
 describe('ticketStatusToTrackIndex', () => {
-  it('складывает estimate и approval в одну стадию «Согласование»', () => {
-    expect(ticketStatusToTrackIndex('estimate')).toBe(2);
-    expect(ticketStatusToTrackIndex('approval')).toBe(2);
+  it('устаревшие estimate/approval показываются как «Диагностика» (стадия 1)', () => {
+    expect(ticketStatusToTrackIndex('estimate')).toBe(1);
+    expect(ticketStatusToTrackIndex('approval')).toBe(1);
   });
 
-  it('маппит остальные статусы по порядку', () => {
+  it('маппит остальные статусы по порядку (5 стадий)', () => {
     expect(ticketStatusToTrackIndex('received')).toBe(0);
     expect(ticketStatusToTrackIndex('diagnostics')).toBe(1);
-    expect(ticketStatusToTrackIndex('in_progress')).toBe(3);
-    expect(ticketStatusToTrackIndex('act_pending')).toBe(4);
-    expect(ticketStatusToTrackIndex('closed')).toBe(5);
+    expect(ticketStatusToTrackIndex('in_progress')).toBe(2);
+    expect(ticketStatusToTrackIndex('act_pending')).toBe(3);
+    expect(ticketStatusToTrackIndex('closed')).toBe(4);
   });
 
   it('cancelled → null', () => {
@@ -33,6 +33,7 @@ describe('buildTrackTimeline', () => {
     expect(tl.cancelled).toBe(false);
     expect(tl.currentIndex).toBe(0);
     expect(tl.stages).toHaveLength(TRACK_STAGES.length);
+    expect(tl.stages).toHaveLength(5);
     expect(tl.stages[0]!.state).toBe('current');
     expect(tl.stages[0]!.at).toBe(received.toISOString());
     expect(tl.stages.slice(1).every((s) => s.state === 'upcoming')).toBe(true);
@@ -42,38 +43,35 @@ describe('buildTrackTimeline', () => {
     const events: TrackTimelineEventInput[] = [
       { type: 'created', createdAt: received, payload: {} },
       { type: 'status_change', createdAt: new Date('2026-07-02T14:10:00Z'), payload: { to: 'diagnostics' } },
-      { type: 'status_change', createdAt: new Date('2026-07-03T09:00:00Z'), payload: { to: 'estimate' } },
       { type: 'status_change', createdAt: new Date('2026-07-03T11:20:00Z'), payload: { to: 'in_progress' } },
     ];
     const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, events });
-    expect(tl.currentIndex).toBe(3);
+    expect(tl.currentIndex).toBe(2);
     expect(tl.stages.map((s) => s.state)).toEqual([
       'done', // received
       'done', // diagnostics
-      'done', // approval (из estimate)
       'current', // repair
       'upcoming', // ready
       'upcoming', // issued
     ]);
     expect(tl.stages[1]!.at).toBe('2026-07-02T14:10:00.000Z');
-    expect(tl.stages[2]!.at).toBe('2026-07-03T09:00:00.000Z'); // estimate → стадия approval
-    expect(tl.stages[3]!.at).toBe('2026-07-03T11:20:00.000Z');
+    expect(tl.stages[2]!.at).toBe('2026-07-03T11:20:00.000Z');
   });
 
-  it('estimate и approval пишут дату в одну и ту же стадию — берётся первое достижение', () => {
+  it('устаревшие estimate/approval пишут дату в стадию «Диагностика» — берётся первое достижение', () => {
     const events: TrackTimelineEventInput[] = [
       { type: 'status_change', createdAt: new Date('2026-07-03T09:00:00Z'), payload: { to: 'estimate' } },
       { type: 'status_change', createdAt: new Date('2026-07-03T15:00:00Z'), payload: { to: 'approval' } },
     ];
     const tl = buildTrackTimeline({ status: 'approval', receivedAt: received, events });
-    expect(tl.stages[2]!.at).toBe('2026-07-03T09:00:00.000Z');
+    expect(tl.stages[1]!.at).toBe('2026-07-03T09:00:00.000Z');
   });
 
   it('закрытая заявка: все стадии done, «выдана» с датой закрытия', () => {
     const closedAt = new Date('2026-07-05T16:00:00Z');
     const tl = buildTrackTimeline({ status: 'closed', receivedAt: received, closedAt });
     expect(tl.stages.every((s) => s.state === 'done')).toBe(true);
-    expect(tl.stages[5]!.at).toBe(closedAt.toISOString());
+    expect(tl.stages[4]!.at).toBe(closedAt.toISOString());
   });
 
   it('отменённая заявка: cancelled=true, currentIndex=−1, пройденные из событий — done', () => {
@@ -87,7 +85,7 @@ describe('buildTrackTimeline', () => {
     expect(tl.cancelledAt).toBe(cancelledAt.toISOString());
     expect(tl.stages[0]!.state).toBe('done'); // received (есть receivedAt)
     expect(tl.stages[1]!.state).toBe('done'); // diagnostics (есть событие)
-    expect(tl.stages[3]!.state).toBe('upcoming'); // repair не достигнут
+    expect(tl.stages[2]!.state).toBe('upcoming'); // repair не достигнут
   });
 
   it('«ждём запчасть»: наружу отдаётся только ФАКТ, без текста внутренней заметки', () => {
@@ -112,10 +110,10 @@ describe('buildTrackTimeline', () => {
       { type: 'status_change', createdAt: new Date('2026-07-04T09:00:00Z'), payload: { to: 'act_pending' } },
     ];
     const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, events });
-    expect(tl.currentIndex).toBe(3); // repair
-    expect(tl.stages[4]!.state).toBe('upcoming'); // ready
-    expect(tl.stages[4]!.at).toBeNull(); // прошедшая дата act_pending НЕ показывается на будущей стадии
-    expect(tl.stages[3]!.state).toBe('current');
+    expect(tl.currentIndex).toBe(2); // repair
+    expect(tl.stages[3]!.state).toBe('upcoming'); // ready
+    expect(tl.stages[3]!.at).toBeNull(); // прошедшая дата act_pending НЕ показывается на будущей стадии
+    expect(tl.stages[2]!.state).toBe('current');
   });
 
   it('reopen (closed→in_progress): «выдана» снова впереди и без даты закрытия', () => {
@@ -126,9 +124,9 @@ describe('buildTrackTimeline', () => {
     ];
     // closedAt в БД сброшен в null при reopen, но событие to:'closed' остаётся в истории.
     const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, closedAt: null, events });
-    expect(tl.stages[5]!.state).toBe('upcoming'); // issued
-    expect(tl.stages[5]!.at).toBeNull();
-    expect(tl.stages[4]!.at).toBeNull(); // ready тоже впереди
+    expect(tl.stages[4]!.state).toBe('upcoming'); // issued
+    expect(tl.stages[4]!.at).toBeNull();
+    expect(tl.stages[3]!.at).toBeNull(); // ready тоже впереди
   });
 
   it('игнорирует мусорные/непонятные события и невалидные даты', () => {

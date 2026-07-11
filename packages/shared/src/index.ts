@@ -231,13 +231,13 @@ export type RoadmapPriority = z.infer<typeof RoadmapPriority>;
 
 /**
  * Клиентские стадии трека — понятная клиенту «дорожка» ремонта (как этапы доставки
- * посылки). 8 внутренних статусов заявки «складываются» в 6 стадий: estimate+approval
- * = одна стадия «Согласование сметы», cancelled — отдельная концовка (не стадия).
+ * посылки). Внутренние статусы «складываются» в 5 стадий; cancelled — отдельная
+ * концовка (не стадия). Стадии «Смета/Согласование» убраны из потока — устаревшие
+ * статусы estimate/approval (если попадутся в истории) показываются как «Диагностика».
  */
 export type TrackStageKey =
   | 'received'
   | 'diagnostics'
-  | 'approval'
   | 'repair'
   | 'ready'
   | 'issued';
@@ -254,7 +254,6 @@ export interface TrackStageDef {
 export const TRACK_STAGES: readonly TrackStageDef[] = [
   { key: 'received', label: 'Приняли технику', description: 'Заявка зарегистрирована' },
   { key: 'diagnostics', label: 'Диагностика', description: 'Ищем причину неисправности' },
-  { key: 'approval', label: 'Согласование сметы', description: 'Согласовываем стоимость работ' },
   { key: 'repair', label: 'Ремонт', description: 'Инженер выполняет работы' },
   { key: 'ready', label: 'Готово к выдаче', description: 'Можно забирать' },
   { key: 'issued', label: 'Техника выдана', description: 'Ремонт завершён' },
@@ -268,17 +267,17 @@ export function ticketStatusToTrackIndex(status: TicketStatus): number | null {
   switch (status) {
     case 'received':
       return 0;
+    // diagnostics + устаревшие estimate/approval (убраны из потока) → стадия «Диагностика».
     case 'diagnostics':
-      return 1;
     case 'estimate':
     case 'approval':
-      return 2;
+      return 1;
     case 'in_progress':
-      return 3;
+      return 2;
     case 'act_pending':
-      return 4;
+      return 3;
     case 'closed':
-      return 5;
+      return 4;
     case 'cancelled':
       return null;
     default:
@@ -333,8 +332,9 @@ function trackToIso(v: string | Date | null | undefined): string | null {
 const TRACK_STATUS_TO_KEY: Record<string, TrackStageKey> = {
   received: 'received',
   diagnostics: 'diagnostics',
-  estimate: 'approval',
-  approval: 'approval',
+  // estimate/approval убраны из потока — историю относим к «Диагностике».
+  estimate: 'diagnostics',
+  approval: 'diagnostics',
   in_progress: 'repair',
   act_pending: 'ready',
   closed: 'issued',
@@ -355,7 +355,6 @@ export function buildTrackTimeline(input: BuildTrackTimelineInput): TrackTimelin
   const stageAt: Record<TrackStageKey, string | null> = {
     received: trackToIso(input.receivedAt),
     diagnostics: null,
-    approval: null,
     repair: null,
     ready: null,
     issued: trackToIso(input.closedAt ?? null),

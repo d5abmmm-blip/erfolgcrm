@@ -57,8 +57,6 @@ import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
   { value: 'diagnostics', label: 'Диагностика' },
-  { value: 'estimate', label: 'Смета' },
-  { value: 'approval', label: 'Согласование' },
   { value: 'in_progress', label: 'Ремонт' },
   { value: 'act_pending', label: 'Акт' },
   { value: 'closed', label: 'Закрыта' },
@@ -93,8 +91,6 @@ const ENGINEER_STATUSES: TicketStatus[] = ['diagnostics', 'in_progress', 'act_pe
 const STAFF_STATUSES: TicketStatus[] = [
   'received',
   'diagnostics',
-  'estimate',
-  'approval',
   'in_progress',
   'act_pending',
   'closed',
@@ -952,7 +948,7 @@ function TrackShareButton({ ticketId }: { ticketId: string }) {
 function StagesTimeline({ status }: { status: TicketStatus }) {
   const currentIdx = STAGES.findIndex((s) => s.value === status);
   return (
-    <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+    <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {STAGES.map((s, i) => {
         const state: 'done' | 'current' | 'pending' =
           status === 'cancelled'

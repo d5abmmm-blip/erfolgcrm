@@ -68,7 +68,7 @@ const ACTIONS: ActionDef[] = [
     target: 'in_progress',
     label: 'В работу',
     icon: PlayCircle,
-    from: ['diagnostics', 'estimate', 'approval'],
+    from: ['diagnostics'],
     variant: 'primary',
   },
   {
