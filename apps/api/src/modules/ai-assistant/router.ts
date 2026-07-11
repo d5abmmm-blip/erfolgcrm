@@ -52,6 +52,8 @@ const setConfigInput = z.object({
   model: z.string().trim().max(120).nullable(),
   /** Новый ключ. Пусто/не задан — не менять сохранённый. */
   apiKey: z.string().max(500).optional(),
+  /** Инструкция-памятка для ассистента (регламенты СЦ). null/пусто — очистить. */
+  customInstructions: z.string().max(20_000).nullable().optional(),
 });
 
 export const aiAssistantRouter = router({
@@ -79,6 +81,7 @@ export const aiAssistantRouter = router({
       baseUrl: input.baseUrl?.trim() || null,
       model: input.model?.trim() || null,
       apiKey: input.apiKey?.trim() || undefined,
+      customInstructions: input.customInstructions ?? null,
     });
     await writeAudit(ctx.db, ctx.tenant.id, {
       userId: ctx.session.userId,

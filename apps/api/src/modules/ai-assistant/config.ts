@@ -59,6 +59,7 @@ export async function loadLlmRuntimeConfig(
         apiStyle: llmConfigs.apiStyle,
         baseUrl: llmConfigs.baseUrl,
         model: llmConfigs.model,
+        customInstructions: llmConfigs.customInstructions,
         apiKey: decryptSql(llmConfigs.apiKeyEnc, key).as('api_key_dec'),
       })
       .from(llmConfigs)
@@ -74,6 +75,7 @@ export async function loadLlmRuntimeConfig(
       baseUrl: row.baseUrl.replace(/\/+$/, ''),
       apiKey,
       model: row.model,
+      customInstructions: row.customInstructions ?? null,
     };
   }
   // БД не настроена/выключена → пробуем env (текущий прод).
@@ -87,6 +89,8 @@ export interface LlmConfigDto {
   baseUrl: string | null;
   model: string | null;
   hasApiKey: boolean;
+  /** Инструкция-памятка для ассистента (не секрет — отдаётся в UI как есть). */
+  customInstructions: string | null;
   /** true, если строки в БД нет/она неполна, но ассистент работает из env (LLM_*). */
   usingEnvFallback: boolean;
   updatedAt: Date | null;
@@ -100,6 +104,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
         apiStyle: llmConfigs.apiStyle,
         baseUrl: llmConfigs.baseUrl,
         model: llmConfigs.model,
+        customInstructions: llmConfigs.customInstructions,
         hasApiKey: sql<boolean>`${llmConfigs.apiKeyEnc} IS NOT NULL`.as('has_api_key'),
         updatedAt: llmConfigs.updatedAt,
       })
@@ -117,6 +122,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
       baseUrl: null,
       model: null,
       hasApiKey: false,
+      customInstructions: null,
       usingEnvFallback: envCfg != null,
       updatedAt: null,
     };
@@ -128,6 +134,7 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
     baseUrl: row.baseUrl,
     model: row.model,
     hasApiKey: Boolean(row.hasApiKey),
+    customInstructions: row.customInstructions ?? null,
     usingEnvFallback: !dbComplete && envCfg != null,
     updatedAt: row.updatedAt,
   };
@@ -140,6 +147,8 @@ export interface UpsertLlmConfigInput {
   model: string | null;
   /** Новый ключ. undefined/пусто — не менять (сохранить прежний). */
   apiKey?: string;
+  /** Инструкция-памятка для ассистента (null — очистить). */
+  customInstructions?: string | null;
 }
 
 /** Сохраняет конфиг. Ключ шифруется; пустой apiKey не затирает сохранённый (COALESCE). */
@@ -150,16 +159,18 @@ export async function upsertLlmConfig(
 ): Promise<void> {
   const key = getTenantEncryptionKey(tenant);
   const encKey = input.apiKey ? sql`pgp_sym_encrypt(${input.apiKey}::text, ${key})` : sql`NULL`;
+  const instructions = input.customInstructions?.trim() || null;
   await withTenantTx(db, tenant.id, async (tx) => {
     await tx.execute(sql`
-      INSERT INTO llm_configs (tenant_id, enabled, api_style, base_url, model, api_key_encrypted, updated_at)
-      VALUES (${tenant.id}, ${input.enabled}, ${input.apiStyle}, ${input.baseUrl ?? null}, ${input.model ?? null}, ${encKey}, now())
+      INSERT INTO llm_configs (tenant_id, enabled, api_style, base_url, model, api_key_encrypted, custom_instructions, updated_at)
+      VALUES (${tenant.id}, ${input.enabled}, ${input.apiStyle}, ${input.baseUrl ?? null}, ${input.model ?? null}, ${encKey}, ${instructions}, now())
       ON CONFLICT (tenant_id) DO UPDATE SET
         enabled = EXCLUDED.enabled,
         api_style = EXCLUDED.api_style,
         base_url = EXCLUDED.base_url,
         model = EXCLUDED.model,
         api_key_encrypted = COALESCE(EXCLUDED.api_key_encrypted, llm_configs.api_key_encrypted),
+        custom_instructions = EXCLUDED.custom_instructions,
         updated_at = now()
     `);
   });

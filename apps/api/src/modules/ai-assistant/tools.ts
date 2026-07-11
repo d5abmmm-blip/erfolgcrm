@@ -220,6 +220,25 @@ const TOOLS: Record<string, ToolHandler> = {
     run: (caller, args) => caller.assets.search({ q: reqString(args, 'q') }),
   },
 
+  search_kb: {
+    kind: 'read',
+    def: {
+      type: 'function',
+      function: {
+        name: 'search_kb',
+        description:
+          'Поиск по внутренней базе знаний (вики сервисного центра: инструкции, регламенты, «как оформить/сделать X»). Возвращает подходящие статьи (заголовок + фрагмент). Используй для вопросов «как это делается в CRM / как у нас принято».',
+        parameters: {
+          type: 'object',
+          properties: { q: { type: 'string', description: 'Тема или ключевые слова запроса' } },
+          required: ['q'],
+          additionalProperties: false,
+        },
+      },
+    },
+    run: (caller, args) => caller.kbArticles.list({ query: reqString(args, 'q'), limit: 5 }),
+  },
+
   search_tickets: {
     kind: 'read',
     def: {
