@@ -25,6 +25,9 @@ import { withDbRetry } from '../../lib/db-retry';
 
 export type PayrollMode = 'piecework' | 'salary_bonus';
 
+/** Тип выплаты: аванс / окончательный расчёт / премия. */
+export type PayoutKind = 'advance' | 'final' | 'bonus';
+
 export interface PayrollRule {
   tenantId: string;
   mode: PayrollMode;
@@ -419,6 +422,7 @@ type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
 export interface PayoutDto {
   id: string;
   engineerId: string;
+  kind: PayoutKind;
   periodStart: string;
   periodEnd: string;
   periodLabel: string;
@@ -435,6 +439,7 @@ function toPayoutDto(row: typeof payrollPayouts.$inferSelect): PayoutDto {
   return {
     id: row.id,
     engineerId: row.engineerId,
+    kind: row.kind,
     periodStart: row.periodStart,
     periodEnd: row.periodEnd,
     periodLabel: row.periodLabel,
@@ -448,8 +453,8 @@ function toPayoutDto(row: typeof payrollPayouts.$inferSelect): PayoutDto {
   };
 }
 
-/** Статья расхода «Зарплата» — найти по имени или создать (переиспользуем seed'овую). */
-async function ensureSalaryCategory(tx: Tx, tenantId: string): Promise<string> {
+/** Статья расхода по имени — найти или создать (переиспользуем seed'овую). */
+async function ensureExpenseCategory(tx: Tx, tenantId: string, name: string): Promise<string> {
   const existing = await tx
     .select({ id: cashCategories.id })
     .from(cashCategories)
@@ -457,7 +462,7 @@ async function ensureSalaryCategory(tx: Tx, tenantId: string): Promise<string> {
       and(
         eq(cashCategories.tenantId, tenantId),
         eq(cashCategories.direction, 'expense'),
-        eq(cashCategories.name, 'Зарплата'),
+        eq(cashCategories.name, name),
         isNull(cashCategories.deletedAt),
       ),
     )
@@ -465,13 +470,19 @@ async function ensureSalaryCategory(tx: Tx, tenantId: string): Promise<string> {
   if (existing[0]) return existing[0].id;
   const inserted = await tx
     .insert(cashCategories)
-    .values({ tenantId, name: 'Зарплата', direction: 'expense', isSystem: true })
+    .values({ tenantId, name, direction: 'expense', isSystem: true })
     .returning({ id: cashCategories.id });
   return inserted[0]!.id;
 }
 
+/** Статья расхода в кассе для выплаты данного типа: премия — «Премии», иначе «Зарплата». */
+function categoryNameForKind(kind: PayoutKind): string {
+  return kind === 'bonus' ? 'Премии' : 'Зарплата';
+}
+
 export interface CreatePayoutInput {
   engineerId: string;
+  kind: PayoutKind;
   periodStart: string;
   periodEnd: string;
   periodLabel: string;
@@ -482,6 +493,12 @@ export interface CreatePayoutInput {
   comment: string | null;
   createdBy: string | null;
 }
+
+const KIND_LABEL: Record<PayoutKind, string> = {
+  advance: 'аванс',
+  final: 'окончательный расчёт',
+  bonus: 'премия',
+};
 
 /**
  * Провести выплату: создать расход в кассе (статья «Зарплата») + запись выплаты,
@@ -507,22 +524,33 @@ export async function createPayout(
         .limit(1);
       if (!acc[0]) throw new Error('Денежный счёт не найден');
 
-      const dup = await tx
-        .select({ id: payrollPayouts.id })
-        .from(payrollPayouts)
-        .where(
-          and(
-            eq(payrollPayouts.tenantId, tenantId),
-            eq(payrollPayouts.engineerId, input.engineerId),
-            eq(payrollPayouts.periodStart, input.periodStart),
-            isNull(payrollPayouts.deletedAt),
-          ),
-        )
-        .limit(1);
-      if (dup[0]) throw new Error('За этот период инженеру уже проведена выплата');
+      // Дубль ловим только для аванса/расчёта (по типу): один advance и один final на
+      // период. Премий ('bonus') может быть несколько — их не дедуплицируем.
+      if (input.kind !== 'bonus') {
+        const dup = await tx
+          .select({ id: payrollPayouts.id })
+          .from(payrollPayouts)
+          .where(
+            and(
+              eq(payrollPayouts.tenantId, tenantId),
+              eq(payrollPayouts.engineerId, input.engineerId),
+              eq(payrollPayouts.periodStart, input.periodStart),
+              eq(payrollPayouts.kind, input.kind),
+              isNull(payrollPayouts.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (dup[0]) {
+          throw new Error(`За этот период инженеру уже проведён ${KIND_LABEL[input.kind]}`);
+        }
+      }
 
-      const categoryId = await ensureSalaryCategory(tx, tenantId);
-      const comment = input.comment?.trim() || 'Выплата ЗП';
+      const categoryId = await ensureExpenseCategory(
+        tx,
+        tenantId,
+        categoryNameForKind(input.kind),
+      );
+      const comment = input.comment?.trim() || (input.kind === 'bonus' ? 'Премия' : 'Выплата ЗП');
 
       const cashRow = await tx
         .insert(cashTransactions)
@@ -546,6 +574,7 @@ export async function createPayout(
         .values({
           tenantId,
           engineerId: input.engineerId,
+          kind: input.kind,
           periodStart: input.periodStart,
           periodEnd: input.periodEnd,
           periodLabel: input.periodLabel,
@@ -622,7 +651,11 @@ export async function updatePayout(
           .set({ deletedAt: new Date() })
           .where(eq(cashTransactions.id, cur.cashTransactionId));
       }
-      const categoryId = await ensureSalaryCategory(tx, tenantId);
+      const categoryId = await ensureExpenseCategory(
+        tx,
+        tenantId,
+        categoryNameForKind(cur.kind),
+      );
       const cashRow = await tx
         .insert(cashTransactions)
         .values({

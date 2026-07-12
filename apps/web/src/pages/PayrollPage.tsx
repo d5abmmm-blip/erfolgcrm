@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
-import { Check, Loader2, Pencil, Save, Settings as SettingsIcon, Wallet, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Settings as SettingsIcon,
+  Wallet,
+  X,
+} from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -14,9 +24,11 @@ type PayoutRow = {
   totalEarningsKopecks: string;
   baseSalaryKopecks: string;
 };
+type PayoutKind = 'advance' | 'final' | 'bonus';
 type Payout = {
   id: string;
   engineerId: string;
+  kind: PayoutKind;
   amountKopecks: string;
   computedKopecks: string;
   paidOn: string;
@@ -24,6 +36,28 @@ type Payout = {
   comment: string | null;
 };
 type CashAccount = { id: string; name: string; kind: 'cash' | 'bank' | 'card' };
+
+const KIND_LABEL: Record<PayoutKind, string> = {
+  advance: 'Аванс',
+  final: 'Окончательный расчёт',
+  bonus: 'Премия',
+};
+const KIND_SHORT: Record<PayoutKind, string> = {
+  advance: 'Аванс',
+  final: 'Расчёт',
+  bonus: 'Премия',
+};
+const KIND_BADGE: Record<PayoutKind, string> = {
+  advance: 'bg-primary/10 text-primary',
+  final: 'bg-success/10 text-success',
+  bonus: 'bg-warning/10 text-warning',
+};
+
+function defaultPayoutComment(kind: PayoutKind, name: string): string {
+  if (kind === 'advance') return `Аванс · ${name}`;
+  if (kind === 'bonus') return `Премия · ${name}`;
+  return `ЗП · ${name}`;
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -77,21 +111,20 @@ function DirectorPayroll() {
   const paidQ = trpc.payroll.listPayouts.useQuery({ preset: period });
   const accountsQ = trpc.cash.accounts.list.useQuery();
 
-  const [modal, setModal] = useState<{ row: PayoutRow; existing: Payout | null } | null>(null);
-  const [toCancel, setToCancel] = useState<Payout | null>(null);
+  const [manager, setManager] = useState<PayoutRow | null>(null);
 
-  const deletePayoutM = trpc.payroll.deletePayout.useMutation({
-    onSuccess: () => {
-      void utils.payroll.listPayouts.invalidate();
-      void utils.cash.invalidate();
-      setToCancel(null);
-    },
-  });
-
-  const paidByEngineer = new Map<string, Payout>(
-    (paidQ.data ?? []).map((p) => [p.engineerId, p]),
-  );
+  const paidByEngineer = new Map<string, Payout[]>();
+  for (const p of (paidQ.data ?? []) as Payout[]) {
+    const arr = paidByEngineer.get(p.engineerId);
+    if (arr) arr.push(p);
+    else paidByEngineer.set(p.engineerId, [p]);
+  }
   const accounts: CashAccount[] = accountsQ.data ?? [];
+
+  const refresh = () => {
+    void utils.payroll.listPayouts.invalidate();
+    void utils.cash.invalidate();
+  };
 
   // Оклад — МЕСЯЧНЫЙ и на не-месячных периодах показывается целиком (не пропорционально).
   // Если в ведомости есть окладники и выбран не «Месяц» — предупреждаем директора, чтобы
@@ -180,8 +213,8 @@ function DirectorPayroll() {
                   <th className="p-3 text-right font-medium">Сумма работ</th>
                   <th className="p-3 text-right font-medium">Оклад</th>
                   <th className="p-3 text-right font-medium">Сделка/бонус</th>
-                  <th className="p-3 text-right font-medium">К выплате</th>
-                  <th className="p-3 text-right font-medium">Выплата</th>
+                  <th className="p-3 text-right font-medium">Начислено</th>
+                  <th className="p-3 text-right font-medium">Выплаты</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -209,12 +242,11 @@ function DirectorPayroll() {
                       {formatRubFromKopecks(r.totalEarningsKopecks)}
                     </td>
                     <td className="p-3 text-right">
-                      <PayoutCell
-                        existing={paidByEngineer.get(r.engineerId) ?? null}
-                        canPay={accounts.length > 0 && BigInt(r.totalEarningsKopecks) > 0n}
-                        onPay={() => setModal({ row: r, existing: null })}
-                        onEdit={(p) => setModal({ row: r, existing: p })}
-                        onCancel={(p) => setToCancel(p)}
+                      <PayoutSummaryCell
+                        computedKopecks={r.totalEarningsKopecks}
+                        payouts={paidByEngineer.get(r.engineerId) ?? []}
+                        canPay={accounts.length > 0}
+                        onOpen={() => setManager(r)}
                       />
                     </td>
                   </tr>
@@ -235,20 +267,283 @@ function DirectorPayroll() {
         </div>
       )}
 
-      {modal && (
-        <PayoutModal
-          row={modal.row}
-          existing={modal.existing}
+      {manager && (
+        <PayoutManagerModal
+          row={manager}
           period={period}
           accounts={accounts}
-          onClose={() => setModal(null)}
-          onSaved={() => {
-            void utils.payroll.listPayouts.invalidate();
-            void utils.cash.invalidate();
-            setModal(null);
-          }}
+          payouts={paidByEngineer.get(manager.engineerId) ?? []}
+          onClose={() => setManager(null)}
+          onChanged={refresh}
         />
       )}
+    </div>
+  );
+}
+
+/* ===================== Выплаты: ячейка + окно управления ===================== */
+
+function PayoutSummaryCell({
+  computedKopecks,
+  payouts,
+  canPay,
+  onOpen,
+}: {
+  computedKopecks: string;
+  payouts: Payout[];
+  canPay: boolean;
+  onOpen: () => void;
+}) {
+  const paid = payouts
+    .filter((p) => p.kind !== 'bonus')
+    .reduce((a, p) => a + BigInt(p.amountKopecks), 0n);
+  const bonus = payouts
+    .filter((p) => p.kind === 'bonus')
+    .reduce((a, p) => a + BigInt(p.amountKopecks), 0n);
+  const remaining = BigInt(computedKopecks) - paid;
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      {payouts.length > 0 && (
+        <div className="text-muted-foreground text-right text-xs leading-tight">
+          {paid > 0n && (
+            <div>
+              Выплачено{' '}
+              <span className="text-foreground tabular-nums">
+                {formatRubFromKopecks(paid.toString())}
+              </span>
+            </div>
+          )}
+          {remaining > 0n ? (
+            <div>
+              Осталось{' '}
+              <span className="text-warning tabular-nums">
+                {formatRubFromKopecks(remaining.toString())}
+              </span>
+            </div>
+          ) : paid > 0n ? (
+            <div className="text-success">Расчёт закрыт</div>
+          ) : null}
+          {bonus > 0n && (
+            <div>
+              Премии{' '}
+              <span className="text-foreground tabular-nums">
+                {formatRubFromKopecks(bonus.toString())}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={!canPay}
+        onClick={onOpen}
+        className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40"
+      >
+        <Wallet className="h-3.5 w-3.5" />
+        {payouts.length > 0 ? 'Выплаты' : 'Выплатить'}
+      </button>
+    </div>
+  );
+}
+
+function AddPayoutButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-40"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
+}
+
+function PayoutRowItem({
+  payout: p,
+  onEdit,
+  onCancel,
+}: {
+  payout: Payout;
+  onEdit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border p-2">
+      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', KIND_BADGE[p.kind])}>
+        {KIND_SHORT[p.kind]}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold tabular-nums">{formatRubFromKopecks(p.amountKopecks)}</div>
+        <div className="text-muted-foreground truncate text-xs">
+          {new Date(p.paidOn).toLocaleDateString('ru-RU')}
+          {p.comment ? ` · ${p.comment}` : ''}
+        </div>
+      </div>
+      <button
+        type="button"
+        title="Изменить выплату"
+        onClick={onEdit}
+        className="hover:bg-muted text-muted-foreground rounded p-1 transition"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Отменить выплату"
+        onClick={onCancel}
+        className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded p-1 transition"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function PayoutManagerModal({
+  row,
+  period,
+  accounts,
+  payouts,
+  onClose,
+  onChanged,
+}: {
+  row: PayoutRow;
+  period: Period;
+  accounts: CashAccount[];
+  payouts: Payout[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [form, setForm] = useState<{ kind: PayoutKind; editing: Payout | null } | null>(null);
+  const [toCancel, setToCancel] = useState<Payout | null>(null);
+
+  const deleteM = trpc.payroll.deletePayout.useMutation({
+    onSuccess: () => {
+      onChanged();
+      setToCancel(null);
+    },
+  });
+
+  const advance = payouts.find((p) => p.kind === 'advance') ?? null;
+  const finalPayout = payouts.find((p) => p.kind === 'final') ?? null;
+  const computed = BigInt(row.totalEarningsKopecks);
+  const paid =
+    (advance ? BigInt(advance.amountKopecks) : 0n) +
+    (finalPayout ? BigInt(finalPayout.amountKopecks) : 0n);
+  const remaining = computed - paid;
+  const noAccounts = accounts.length === 0;
+
+  if (form) {
+    return (
+      <PayoutForm
+        row={row}
+        period={period}
+        accounts={accounts}
+        kind={form.kind}
+        editing={form.editing}
+        remainingKopecks={remaining > 0n ? remaining.toString() : '0'}
+        onBack={() => setForm(null)}
+        onSaved={() => {
+          onChanged();
+          setForm(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
+      <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 bg-black/40" />
+      <div className="bg-card relative z-10 w-full max-w-md rounded-lg border p-5 shadow-xl">
+        <div className="flex items-start justify-between">
+          <h3 className="text-base font-semibold">Выплаты · {row.engineerName}</h3>
+          <button
+            type="button"
+            aria-label="Закрыть"
+            onClick={onClose}
+            className="hover:bg-muted text-muted-foreground -mr-1 rounded p-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="bg-muted/40 mt-3 grid grid-cols-3 gap-2 rounded-md p-3 text-center text-xs">
+          <div>
+            <div className="text-muted-foreground uppercase">Начислено</div>
+            <div className="mt-0.5 font-semibold tabular-nums">
+              {formatRubFromKopecks(computed.toString())}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground uppercase">Выплачено</div>
+            <div className="mt-0.5 font-semibold tabular-nums">
+              {formatRubFromKopecks(paid.toString())}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground uppercase">Осталось</div>
+            <div
+              className={cn(
+                'mt-0.5 font-semibold tabular-nums',
+                remaining > 0n ? 'text-warning' : 'text-success',
+              )}
+            >
+              {formatRubFromKopecks((remaining > 0n ? remaining : 0n).toString())}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          {payouts.length === 0 ? (
+            <div className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">
+              Выплат ещё не было
+            </div>
+          ) : (
+            payouts.map((p) => (
+              <PayoutRowItem
+                key={p.id}
+                payout={p}
+                onEdit={() => setForm({ kind: p.kind, editing: p })}
+                onCancel={() => setToCancel(p)}
+              />
+            ))
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <AddPayoutButton
+            label="Аванс"
+            disabled={noAccounts || !!advance}
+            onClick={() => setForm({ kind: 'advance', editing: null })}
+          />
+          <AddPayoutButton
+            label="Окончательный расчёт"
+            disabled={noAccounts || !!finalPayout}
+            onClick={() => setForm({ kind: 'final', editing: null })}
+          />
+          <AddPayoutButton
+            label="Премия"
+            disabled={noAccounts}
+            onClick={() => setForm({ kind: 'bonus', editing: null })}
+          />
+        </div>
+        {noAccounts && (
+          <p className="text-muted-foreground mt-2 text-xs">
+            Заведите денежный счёт в кассе, чтобы проводить выплаты.
+          </p>
+        )}
+      </div>
 
       <ConfirmDialog
         open={!!toCancel}
@@ -256,91 +551,44 @@ function DirectorPayroll() {
         description="Запись о выплате будет удалена, а связанный расход — убран из кассы (остаток счёта вернётся)."
         confirmText="Отменить выплату"
         variant="danger"
-        loading={deletePayoutM.isPending}
-        onConfirm={() => toCancel && deletePayoutM.mutate({ id: toCancel.id })}
+        loading={deleteM.isPending}
+        onConfirm={() => toCancel && deleteM.mutate({ id: toCancel.id })}
         onCancel={() => setToCancel(null)}
       />
     </div>
   );
 }
 
-/* ===================== Выплата: ячейка + окно ===================== */
-
-function PayoutCell({
-  existing,
-  canPay,
-  onPay,
-  onEdit,
-  onCancel,
-}: {
-  existing: Payout | null;
-  canPay: boolean;
-  onPay: () => void;
-  onEdit: (p: Payout) => void;
-  onCancel: (p: Payout) => void;
-}) {
-  if (existing) {
-    return (
-      <div className="flex items-center justify-end gap-2">
-        <span className="text-success inline-flex items-center gap-1 text-xs font-medium">
-          <Check className="h-3.5 w-3.5" />
-          {new Date(existing.paidOn).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
-        </span>
-        <button
-          type="button"
-          title="Изменить выплату"
-          onClick={() => onEdit(existing)}
-          className="hover:bg-muted text-muted-foreground rounded p-1 transition"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          title="Отменить выплату"
-          onClick={() => onCancel(existing)}
-          className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded p-1 transition"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      disabled={!canPay}
-      onClick={onPay}
-      className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40"
-    >
-      <Wallet className="h-3.5 w-3.5" />
-      Выплатить
-    </button>
-  );
-}
-
-function PayoutModal({
+function PayoutForm({
   row,
-  existing,
   period,
   accounts,
-  onClose,
+  kind,
+  editing,
+  remainingKopecks,
+  onBack,
   onSaved,
 }: {
   row: PayoutRow;
-  existing: Payout | null;
   period: Period;
   accounts: CashAccount[];
-  onClose: () => void;
+  kind: PayoutKind;
+  editing: Payout | null;
+  remainingKopecks: string;
+  onBack: () => void;
   onSaved: () => void;
 }) {
-  const isEdit = !!existing;
-  const [amountRub, setAmountRub] = useState(() =>
-    kopecksToRubInput(existing?.amountKopecks ?? row.totalEarningsKopecks),
-  );
-  const [paidOn, setPaidOn] = useState(() => existing?.paidOn ?? todayIso());
-  const [accountId, setAccountId] = useState(() => existing?.accountId ?? accounts[0]?.id ?? '');
+  const isEdit = !!editing;
+  const isBonus = kind === 'bonus';
+  const [amountRub, setAmountRub] = useState(() => {
+    if (editing) return kopecksToRubInput(editing.amountKopecks);
+    if (kind === 'final') return kopecksToRubInput(remainingKopecks);
+    return '';
+  });
+  const [paidOn, setPaidOn] = useState(() => editing?.paidOn ?? todayIso());
+  const [accountId, setAccountId] = useState(() => editing?.accountId ?? accounts[0]?.id ?? '');
   const [comment, setComment] = useState(
-    () => existing?.comment ?? `ЗП · ${row.engineerName}`,
+    () => editing?.comment ?? defaultPayoutComment(kind, row.engineerName),
   );
 
   const createM = trpc.payroll.createPayout.useMutation({ onSuccess: onSaved });
@@ -350,30 +598,48 @@ function PayoutModal({
 
   const amountNum = parseRubNumber(amountRub);
   const valid = amountNum > 0 && !!accountId && !!paidOn;
-  const computedRub = kopecksToRubInput(existing?.computedKopecks ?? row.totalEarningsKopecks);
-  // Оклад месячный: на не-месячном периоде расчёт включает полный оклад — предупреждаем.
-  const salaryWarning = !isEdit && period !== 'month' && BigInt(row.baseSalaryKopecks) > 0n;
+  // Оклад месячный: на не-месячном периоде расчёт включает полный оклад — предупреждаем
+  // (к премии не относится — она вне расчёта).
+  const salaryWarning = !isBonus && period !== 'month' && BigInt(row.baseSalaryKopecks) > 0n;
 
   const submit = () => {
     if (!valid) return;
-    if (isEdit && existing) {
-      updateM.mutate({ id: existing.id, amountRub: amountNum, paidOn, accountId, comment });
+    if (isEdit && editing) {
+      updateM.mutate({ id: editing.id, amountRub: amountNum, paidOn, accountId, comment });
     } else {
-      createM.mutate({ preset: period, engineerId: row.engineerId, amountRub: amountNum, paidOn, accountId, comment });
+      createM.mutate({
+        preset: period,
+        engineerId: row.engineerId,
+        kind,
+        amountRub: amountNum,
+        paidOn,
+        accountId,
+        comment,
+      });
     }
   };
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
-      <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 bg-black/40" />
+      <button type="button" aria-label="Закрыть" onClick={onBack} className="absolute inset-0 bg-black/40" />
       <div className="bg-card relative z-10 w-full max-w-md rounded-lg border p-5 shadow-xl">
-        <h3 className="text-base font-semibold">
-          {isEdit ? 'Изменить выплату' : 'Выплатить ЗП'} · {row.engineerName}
-        </h3>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Назад"
+            onClick={onBack}
+            className="hover:bg-muted text-muted-foreground -ml-1 rounded p-1"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h3 className="text-base font-semibold">
+            {isEdit ? 'Изменить выплату' : KIND_LABEL[kind]} · {row.engineerName}
+          </h3>
+        </div>
 
         <div className="mt-4 space-y-3">
           <div>
-            <label className="text-sm font-medium">Сумма к выплате, ₽</label>
+            <label className="text-sm font-medium">Сумма, ₽</label>
             <input
               type="text"
               inputMode="decimal"
@@ -382,13 +648,21 @@ function PayoutModal({
               autoFocus
               className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
             />
-            <p className="text-muted-foreground mt-1 text-xs">
-              Посчитано системой: {computedRub} ₽ · можно изменить вручную
-            </p>
+            {isBonus ? (
+              <p className="text-muted-foreground mt-1 text-xs">
+                Премия не входит в расчёт ЗП за период — отдельная статья «Премии» в кассе.
+              </p>
+            ) : (
+              <p className="text-muted-foreground mt-1 text-xs">
+                Начислено за период: {kopecksToRubInput(row.totalEarningsKopecks)} ₽
+                {kind === 'final' && <> · осталось доплатить: {kopecksToRubInput(remainingKopecks)} ₽</>}
+              </p>
+            )}
             {salaryWarning && (
               <p className="text-warning bg-warning/10 border-warning/30 mt-2 rounded-md border p-2 text-xs">
-                Внимание: сюда включён <span className="font-medium">полный месячный оклад</span> (период
-                «{PERIOD_LABEL[period]}»). Проверьте сумму — за неполный период оклад платить не нужно.
+                Внимание: расчёт за период включает{' '}
+                <span className="font-medium">полный месячный оклад</span> (период «{PERIOD_LABEL[period]}
+                »). Проверьте сумму — за неполный период оклад платить не нужно.
               </p>
             )}
           </div>
@@ -439,11 +713,11 @@ function PayoutModal({
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={onBack}
             disabled={pending}
             className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           >
-            Отмена
+            Назад
           </button>
           <button
             type="button"

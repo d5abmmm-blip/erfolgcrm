@@ -64,6 +64,7 @@ export async function listPayoutsQuery(db: Db, tenantId: string, period: PeriodP
 
 export interface CreatePayoutCmdInput {
   engineerId: string;
+  kind: repo.PayoutKind;
   period: PeriodPreset;
   /** Сумма к выплате (с учётом ручной правки). */
   amountKopecks: bigint;
@@ -74,16 +75,21 @@ export interface CreatePayoutCmdInput {
 
 export async function createPayoutCmd(ctx: CmdCtx, input: CreatePayoutCmdInput) {
   const { start, end } = resolvePeriod(input.period);
-  // Расчётную сумму считаем на сервере (для прозрачности ручной правки), не доверяя клиенту.
-  const computed = await repo.computePayouts(ctx.db, ctx.tenant.id, { start, end }, {
-    engineerId: input.engineerId,
-  });
-  const computedKopecks = BigInt(computed.rows[0]?.totalEarningsKopecks ?? '0');
+  // Премия — отдельное поощрение, не из расчёта за период ⇒ computed = 0. Для аванса и
+  // окончательного расчёта считаем начисление на сервере (для прозрачности ручной правки).
+  let computedKopecks = 0n;
+  if (input.kind !== 'bonus') {
+    const computed = await repo.computePayouts(ctx.db, ctx.tenant.id, { start, end }, {
+      engineerId: input.engineerId,
+    });
+    computedKopecks = BigInt(computed.rows[0]?.totalEarningsKopecks ?? '0');
+  }
 
   let payout;
   try {
     payout = await repo.createPayout(ctx.db, ctx.tenant.id, {
       engineerId: input.engineerId,
+      kind: input.kind,
       periodStart: dateOnly(start),
       periodEnd: dateOnly(end),
       periodLabel: PRESET_LABEL[input.period.preset],
@@ -104,6 +110,7 @@ export async function createPayoutCmd(ctx: CmdCtx, input: CreatePayoutCmdInput) 
     entityId: payout.id,
     after: {
       engineerId: payout.engineerId,
+      kind: payout.kind,
       periodLabel: payout.periodLabel,
       amountKopecks: payout.amountKopecks,
       accountId: payout.accountId,
