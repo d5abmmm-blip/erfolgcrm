@@ -8,7 +8,12 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 type Period = 'today' | 'week' | 'month' | 'quarter';
 type PayrollMode = 'piecework' | 'salary_bonus';
 
-type PayoutRow = { engineerId: string; engineerName: string; totalEarningsKopecks: string };
+type PayoutRow = {
+  engineerId: string;
+  engineerName: string;
+  totalEarningsKopecks: string;
+  baseSalaryKopecks: string;
+};
 type Payout = {
   id: string;
   engineerId: string;
@@ -88,6 +93,14 @@ function DirectorPayroll() {
   );
   const accounts: CashAccount[] = accountsQ.data ?? [];
 
+  // Оклад — МЕСЯЧНЫЙ и на не-месячных периодах показывается целиком (не пропорционально).
+  // Если в ведомости есть окладники и выбран не «Месяц» — предупреждаем директора, чтобы
+  // он не выплатил полный оклад за неделю/квартал по ошибке.
+  const hasSalaryRows = (payoutsQ.data?.rows ?? []).some(
+    (r) => BigInt(r.baseSalaryKopecks) > 0n,
+  );
+  const salaryPeriodWarning = period !== 'month' && hasSalaryRows;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -149,6 +162,14 @@ function DirectorPayroll() {
             </div>
             <Wallet className="text-muted-foreground h-8 w-8" />
           </div>
+
+          {salaryPeriodWarning && (
+            <div className="bg-warning/10 text-warning border-warning/30 rounded-lg border p-3 text-sm">
+              Оклад начисляется <span className="font-medium">помесячно</span> и на периоде «
+              {PERIOD_LABEL[period]}» показан за полный месяц. Для выплаты оклада выбирайте период
+              «Месяц» — иначе сумма к выплате будет завышена.
+            </div>
+          )}
 
           <div className="bg-card overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
@@ -330,6 +351,8 @@ function PayoutModal({
   const amountNum = parseRubNumber(amountRub);
   const valid = amountNum > 0 && !!accountId && !!paidOn;
   const computedRub = kopecksToRubInput(existing?.computedKopecks ?? row.totalEarningsKopecks);
+  // Оклад месячный: на не-месячном периоде расчёт включает полный оклад — предупреждаем.
+  const salaryWarning = !isEdit && period !== 'month' && BigInt(row.baseSalaryKopecks) > 0n;
 
   const submit = () => {
     if (!valid) return;
@@ -362,6 +385,12 @@ function PayoutModal({
             <p className="text-muted-foreground mt-1 text-xs">
               Посчитано системой: {computedRub} ₽ · можно изменить вручную
             </p>
+            {salaryWarning && (
+              <p className="text-warning bg-warning/10 border-warning/30 mt-2 rounded-md border p-2 text-xs">
+                Внимание: сюда включён <span className="font-medium">полный месячный оклад</span> (период
+                «{PERIOD_LABEL[period]}»). Проверьте сумму — за неполный период оклад платить не нужно.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

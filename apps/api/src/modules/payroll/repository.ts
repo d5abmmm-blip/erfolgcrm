@@ -20,7 +20,8 @@ import {
   withTenantTx,
   type Db,
 } from '@erfolg/db';
-import { recalcAccountBalanceInTx } from '../cash/repository';
+import { recalcAccountsInTx } from '../cash/repository';
+import { withDbRetry } from '../../lib/db-retry';
 
 export type PayrollMode = 'piecework' | 'salary_bonus';
 
@@ -491,73 +492,75 @@ export async function createPayout(
   tenantId: string,
   input: CreatePayoutInput,
 ): Promise<PayoutDto> {
-  return withTenantTx(db, tenantId, async (tx) => {
-    const acc = await tx
-      .select({ id: cashAccounts.id })
-      .from(cashAccounts)
-      .where(
-        and(
-          eq(cashAccounts.tenantId, tenantId),
-          eq(cashAccounts.id, input.accountId),
-          isNull(cashAccounts.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!acc[0]) throw new Error('Денежный счёт не найден');
+  return withDbRetry('payroll.createPayout', () =>
+    withTenantTx(db, tenantId, async (tx) => {
+      const acc = await tx
+        .select({ id: cashAccounts.id })
+        .from(cashAccounts)
+        .where(
+          and(
+            eq(cashAccounts.tenantId, tenantId),
+            eq(cashAccounts.id, input.accountId),
+            isNull(cashAccounts.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!acc[0]) throw new Error('Денежный счёт не найден');
 
-    const dup = await tx
-      .select({ id: payrollPayouts.id })
-      .from(payrollPayouts)
-      .where(
-        and(
-          eq(payrollPayouts.tenantId, tenantId),
-          eq(payrollPayouts.engineerId, input.engineerId),
-          eq(payrollPayouts.periodStart, input.periodStart),
-          isNull(payrollPayouts.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (dup[0]) throw new Error('За этот период инженеру уже проведена выплата');
+      const dup = await tx
+        .select({ id: payrollPayouts.id })
+        .from(payrollPayouts)
+        .where(
+          and(
+            eq(payrollPayouts.tenantId, tenantId),
+            eq(payrollPayouts.engineerId, input.engineerId),
+            eq(payrollPayouts.periodStart, input.periodStart),
+            isNull(payrollPayouts.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (dup[0]) throw new Error('За этот период инженеру уже проведена выплата');
 
-    const categoryId = await ensureSalaryCategory(tx, tenantId);
-    const comment = input.comment?.trim() || 'Выплата ЗП';
+      const categoryId = await ensureSalaryCategory(tx, tenantId);
+      const comment = input.comment?.trim() || 'Выплата ЗП';
 
-    const cashRow = await tx
-      .insert(cashTransactions)
-      .values({
-        tenantId,
-        kind: 'expense',
-        accountId: input.accountId,
-        categoryId,
-        amountKopecks: input.amountKopecks,
-        occurredOn: input.paidOn,
-        comment,
-        userId: input.createdBy,
-        source: 'manual',
-      })
-      .returning({ id: cashTransactions.id });
-    const cashTxId = cashRow[0]!.id;
-    await recalcAccountBalanceInTx(tx, tenantId, input.accountId);
+      const cashRow = await tx
+        .insert(cashTransactions)
+        .values({
+          tenantId,
+          kind: 'expense',
+          accountId: input.accountId,
+          categoryId,
+          amountKopecks: input.amountKopecks,
+          occurredOn: input.paidOn,
+          comment,
+          userId: input.createdBy,
+          source: 'manual',
+        })
+        .returning({ id: cashTransactions.id });
+      const cashTxId = cashRow[0]!.id;
+      await recalcAccountsInTx(tx, tenantId, [input.accountId]);
 
-    const payoutRow = await tx
-      .insert(payrollPayouts)
-      .values({
-        tenantId,
-        engineerId: input.engineerId,
-        periodStart: input.periodStart,
-        periodEnd: input.periodEnd,
-        periodLabel: input.periodLabel,
-        computedKopecks: input.computedKopecks,
-        amountKopecks: input.amountKopecks,
-        paidOn: input.paidOn,
-        accountId: input.accountId,
-        cashTransactionId: cashTxId,
-        comment: input.comment,
-        createdBy: input.createdBy,
-      })
-      .returning();
-    return toPayoutDto(payoutRow[0]!);
-  });
+      const payoutRow = await tx
+        .insert(payrollPayouts)
+        .values({
+          tenantId,
+          engineerId: input.engineerId,
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          periodLabel: input.periodLabel,
+          computedKopecks: input.computedKopecks,
+          amountKopecks: input.amountKopecks,
+          paidOn: input.paidOn,
+          accountId: input.accountId,
+          cashTransactionId: cashTxId,
+          comment: input.comment,
+          createdBy: input.createdBy,
+        })
+        .returning();
+      return toPayoutDto(payoutRow[0]!);
+    }),
+  );
 }
 
 export interface UpdatePayoutInput {
@@ -577,117 +580,120 @@ export async function updatePayout(
   id: string,
   patch: UpdatePayoutInput,
 ): Promise<PayoutDto | null> {
-  return withTenantTx(db, tenantId, async (tx) => {
-    const rows = await tx
-      .select()
-      .from(payrollPayouts)
-      .where(
-        and(
-          eq(payrollPayouts.tenantId, tenantId),
-          eq(payrollPayouts.id, id),
-          isNull(payrollPayouts.deletedAt),
-        ),
-      )
-      .limit(1);
-    const cur = rows[0];
-    if (!cur) return null;
-
-    const newAmount = patch.amountKopecks ?? cur.amountKopecks;
-    const newPaidOn = patch.paidOn ?? cur.paidOn;
-    const newAccountId = patch.accountId ?? cur.accountId;
-    const newComment = patch.comment !== undefined ? patch.comment : cur.comment;
-
-    if (newAccountId !== cur.accountId) {
-      const acc = await tx
-        .select({ id: cashAccounts.id })
-        .from(cashAccounts)
+  return withDbRetry('payroll.updatePayout', () =>
+    withTenantTx(db, tenantId, async (tx) => {
+      const rows = await tx
+        .select()
+        .from(payrollPayouts)
         .where(
           and(
-            eq(cashAccounts.tenantId, tenantId),
-            eq(cashAccounts.id, newAccountId),
-            isNull(cashAccounts.deletedAt),
+            eq(payrollPayouts.tenantId, tenantId),
+            eq(payrollPayouts.id, id),
+            isNull(payrollPayouts.deletedAt),
           ),
         )
         .limit(1);
-      if (!acc[0]) throw new Error('Денежный счёт не найден');
-    }
+      const cur = rows[0];
+      if (!cur) return null;
 
-    if (cur.cashTransactionId) {
-      await tx
-        .update(cashTransactions)
-        .set({ deletedAt: new Date() })
-        .where(eq(cashTransactions.id, cur.cashTransactionId));
-    }
-    const categoryId = await ensureSalaryCategory(tx, tenantId);
-    const cashRow = await tx
-      .insert(cashTransactions)
-      .values({
-        tenantId,
-        kind: 'expense',
-        accountId: newAccountId,
-        categoryId,
-        amountKopecks: newAmount,
-        occurredOn: newPaidOn,
-        comment: newComment?.trim() || 'Выплата ЗП',
-        userId: cur.createdBy,
-        source: 'manual',
-      })
-      .returning({ id: cashTransactions.id });
-    const newCashTxId = cashRow[0]!.id;
+      const newAmount = patch.amountKopecks ?? cur.amountKopecks;
+      const newPaidOn = patch.paidOn ?? cur.paidOn;
+      const newAccountId = patch.accountId ?? cur.accountId;
+      const newComment = patch.comment !== undefined ? patch.comment : cur.comment;
 
-    await recalcAccountBalanceInTx(tx, tenantId, cur.accountId);
-    if (newAccountId !== cur.accountId) {
-      await recalcAccountBalanceInTx(tx, tenantId, newAccountId);
-    }
+      if (newAccountId !== cur.accountId) {
+        const acc = await tx
+          .select({ id: cashAccounts.id })
+          .from(cashAccounts)
+          .where(
+            and(
+              eq(cashAccounts.tenantId, tenantId),
+              eq(cashAccounts.id, newAccountId),
+              isNull(cashAccounts.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!acc[0]) throw new Error('Денежный счёт не найден');
+      }
 
-    const updated = await tx
-      .update(payrollPayouts)
-      .set({
-        amountKopecks: newAmount,
-        paidOn: newPaidOn,
-        accountId: newAccountId,
-        comment: newComment,
-        cashTransactionId: newCashTxId,
-      })
-      .where(eq(payrollPayouts.id, id))
-      .returning();
-    return toPayoutDto(updated[0]!);
-  });
+      if (cur.cashTransactionId) {
+        await tx
+          .update(cashTransactions)
+          .set({ deletedAt: new Date() })
+          .where(eq(cashTransactions.id, cur.cashTransactionId));
+      }
+      const categoryId = await ensureSalaryCategory(tx, tenantId);
+      const cashRow = await tx
+        .insert(cashTransactions)
+        .values({
+          tenantId,
+          kind: 'expense',
+          accountId: newAccountId,
+          categoryId,
+          amountKopecks: newAmount,
+          occurredOn: newPaidOn,
+          comment: newComment?.trim() || 'Выплата ЗП',
+          userId: cur.createdBy,
+          source: 'manual',
+        })
+        .returning({ id: cashTransactions.id });
+      const newCashTxId = cashRow[0]!.id;
+
+      // Пересчёт остатков затронутых счетов; recalcAccountsInTx лочит их по возрастанию
+      // id (детерминированно против deadlock со встречной операцией по тем же счетам).
+      await recalcAccountsInTx(tx, tenantId, [cur.accountId, newAccountId]);
+
+      const updated = await tx
+        .update(payrollPayouts)
+        .set({
+          amountKopecks: newAmount,
+          paidOn: newPaidOn,
+          accountId: newAccountId,
+          comment: newComment,
+          cashTransactionId: newCashTxId,
+        })
+        .where(eq(payrollPayouts.id, id))
+        .returning();
+      return toPayoutDto(updated[0]!);
+    }),
+  );
 }
 
 /** Отмена выплаты: мягко удаляем расход в кассе + пересчёт + мягко удаляем выплату. */
 export async function deletePayout(db: Db, tenantId: string, id: string): Promise<boolean> {
-  return withTenantTx(db, tenantId, async (tx) => {
-    const rows = await tx
-      .select({
-        id: payrollPayouts.id,
-        cashTransactionId: payrollPayouts.cashTransactionId,
-        accountId: payrollPayouts.accountId,
-      })
-      .from(payrollPayouts)
-      .where(
-        and(
-          eq(payrollPayouts.tenantId, tenantId),
-          eq(payrollPayouts.id, id),
-          isNull(payrollPayouts.deletedAt),
-        ),
-      )
-      .limit(1);
-    const cur = rows[0];
-    if (!cur) return false;
-    if (cur.cashTransactionId) {
+  return withDbRetry('payroll.deletePayout', () =>
+    withTenantTx(db, tenantId, async (tx) => {
+      const rows = await tx
+        .select({
+          id: payrollPayouts.id,
+          cashTransactionId: payrollPayouts.cashTransactionId,
+          accountId: payrollPayouts.accountId,
+        })
+        .from(payrollPayouts)
+        .where(
+          and(
+            eq(payrollPayouts.tenantId, tenantId),
+            eq(payrollPayouts.id, id),
+            isNull(payrollPayouts.deletedAt),
+          ),
+        )
+        .limit(1);
+      const cur = rows[0];
+      if (!cur) return false;
+      if (cur.cashTransactionId) {
+        await tx
+          .update(cashTransactions)
+          .set({ deletedAt: new Date() })
+          .where(eq(cashTransactions.id, cur.cashTransactionId));
+        await recalcAccountsInTx(tx, tenantId, [cur.accountId]);
+      }
       await tx
-        .update(cashTransactions)
+        .update(payrollPayouts)
         .set({ deletedAt: new Date() })
-        .where(eq(cashTransactions.id, cur.cashTransactionId));
-      await recalcAccountBalanceInTx(tx, tenantId, cur.accountId);
-    }
-    await tx
-      .update(payrollPayouts)
-      .set({ deletedAt: new Date() })
-      .where(eq(payrollPayouts.id, id));
-    return true;
-  });
+        .where(eq(payrollPayouts.id, id));
+      return true;
+    }),
+  );
 }
 
 /** Выплаты за период (по period_start) — чтобы показать «Выплачено» в таблице. */

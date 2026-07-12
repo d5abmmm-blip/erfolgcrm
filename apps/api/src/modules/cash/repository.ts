@@ -141,7 +141,13 @@ export async function recalcAccountBalanceInTx(
 }
 
 /** Пересчёт нескольких счетов в детерминированном порядке (против deadlock). */
-async function recalcAccountsInTx(
+/**
+ * Пересчёт нескольких счетов в ОДНОЙ транзакции. Счета лочатся (FOR UPDATE внутри
+ * recalcAccountBalanceInTx) в порядке возрастания id — детерминированно против deadlock
+ * встречных операций по тем же двум счетам. Экспортируется для переиспользования
+ * (напр. выплаты ЗП в payroll затрагивают до двух счетов).
+ */
+export async function recalcAccountsInTx(
   tx: Tx,
   tenantId: string,
   accountIds: Array<string | null | undefined>,

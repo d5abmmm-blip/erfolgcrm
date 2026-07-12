@@ -411,6 +411,10 @@ function KbEditor({
               {showPreview ? 'Скрыть превью' : 'Показать превью'}
             </button>
           </div>
+          <p className="text-muted-foreground mb-1.5 text-xs">
+            Не указывайте персональные данные клиентов (ФИО, телефон, адрес): статьи попадают в
+            поиск ИИ-ассистента и могут уйти во внешнюю модель.
+          </p>
           <div
             className={
               showPreview
