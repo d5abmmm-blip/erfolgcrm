@@ -203,6 +203,11 @@ async function loadAggregates(
        AND t.closed_at <  ${endIso}::timestamptz
        AND wol.line_type = 'work'
        AND COALESCE(wol.engineer_id, wo.engineer_id) IS NOT NULL
+       -- Только действующие сотрудники: заблокированных/уволенных (is_active=false) и
+       -- удалённых в ведомость ЗП не показываем (в т.ч. служебные/легаси-аккаунты, под
+       -- которыми закрывали наряды). Чтобы выплатить бывшему — временно сделать активным.
+       AND u.is_active = true
+       AND u.deleted_at IS NULL
        ${engineerFilter}
      GROUP BY COALESCE(wol.engineer_id, wo.engineer_id), u.full_name
   `)) as unknown as Array<{
@@ -227,6 +232,9 @@ async function loadAggregates(
        AND t.closed_at >= ${startIso}::timestamptz
        AND t.closed_at <  ${endIso}::timestamptz
        AND wo.engineer_id IS NOT NULL
+       -- Только действующие сотрудники (см. коммент выше по works).
+       AND u.is_active = true
+       AND u.deleted_at IS NULL
        ${filterEngineerId ? sql`AND wo.engineer_id = ${filterEngineerId}::uuid` : sql``}
      GROUP BY wo.engineer_id, u.full_name
   `)) as unknown as Array<{

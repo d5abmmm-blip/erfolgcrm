@@ -343,16 +343,11 @@ describe('payroll персональные правила', () => {
     expect(row!.totalEarningsKopecks).toBe('500000');
   });
 
-  it('уволенный с персональным окладом НЕ получает оклад; за работы — по глобальному правилу', async () => {
+  it('заблокированный/уволенный (is_active=false) НЕ попадает в ведомость даже с работами за период', async () => {
+    // Требование владельца: неактивных/служебных аккаунтов (напр. «Администратор», под
+    // которым закрывали наряды) в ведомости ЗП быть не должно. Чтобы выплатить бывшему —
+    // временно сделать его активным.
     await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
-    await updateUserPayout(getDb(), erfolgId, erfolgEngineerId, {
-      baseSalaryKopecks: 9_999_999n,
-      bonusPercent: 50,
-    });
-    // Увольняем сотрудника (is_active=false), но у него есть работа в периоде.
-    await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.execute(sql`UPDATE users SET is_active = false WHERE id = ${erfolgEngineerId}::uuid`),
-    );
     const closedAt = new Date();
     await createClosedTicketWithWorks(
       erfolgId,
@@ -366,12 +361,16 @@ describe('payroll персональные правила', () => {
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 1);
 
-    const result = await computePayouts(getDb(), erfolgId, { start, end });
-    const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
-    expect(row).toBeDefined();
-    // Персональный оклад НЕ применён (уволен) → глобальная сделка 30% от 100_000 = 30_000
-    expect(row!.baseSalaryKopecks).toBe('0');
-    expect(row!.totalEarningsKopecks).toBe('30000');
+    // Пока активен — в ведомости есть.
+    const active = await computePayouts(getDb(), erfolgId, { start, end });
+    expect(active.rows.find((r) => r.engineerId === erfolgEngineerId)).toBeDefined();
+
+    // Блокируем (is_active=false) — исчезает из ведомости, несмотря на работы в периоде.
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`UPDATE users SET is_active = false WHERE id = ${erfolgEngineerId}::uuid`),
+    );
+    const blocked = await computePayouts(getDb(), erfolgId, { start, end });
+    expect(blocked.rows.find((r) => r.engineerId === erfolgEngineerId)).toBeUndefined();
   });
 
   it('видимость заработка: по умолчанию true, переключается, setRule не сбрасывает', async () => {
