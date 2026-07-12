@@ -135,7 +135,7 @@ function DirectorDashboard() {
           <h2 className="text-xl font-semibold md:text-2xl">Сводка по сервисному центру</h2>
           <p className="text-muted-foreground text-sm">Сегодня · {today}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <PeriodTabs value={period} onChange={setPeriod} />
           <button
             type="button"

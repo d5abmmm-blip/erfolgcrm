@@ -70,7 +70,7 @@ export function MobileShell({ children, session }: Props) {
     (location.startsWith('/m/tickets') ? 'Заявка' : 'ErfolgCRM');
 
   return (
-    <div className="bg-background flex h-full min-h-[100dvh] flex-col">
+    <div className="bg-background flex h-full min-h-[100dvh] flex-col overflow-x-hidden">
       {/* Шапка в «чернилах Эрфольга» — как сайдбар десктопа: экран сразу
           делится на навигацию и работу, статус связи виден боковым зрением. */}
       <header
@@ -102,8 +102,11 @@ export function MobileShell({ children, session }: Props) {
         />
       </header>
 
-      {/* overscroll-contain — прокрутка не «перетекает» на документ (нет отскока). */}
-      <main className="flex-1 overflow-y-auto overscroll-contain pb-20">{children}</main>
+      {/* overscroll-contain — прокрутка не «перетекает» на документ (нет отскока).
+          overflow-x-hidden — только вертикальный скролл, вбок страница статична. */}
+      <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-20">
+        {children}
+      </main>
 
       <nav
         className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 border-t"
