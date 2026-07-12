@@ -112,6 +112,7 @@ export const payrollRouter = router({
     .input(
       periodPresetSchema.extend({
         engineerId: z.string().uuid(),
+        kind: z.enum(['advance', 'final', 'bonus']).default('final'),
         amountRub: z.number().positive().max(MAX_AMOUNT_RUB),
         paidOn: isoDate,
         accountId: z.string().uuid(),
@@ -121,6 +122,7 @@ export const payrollRouter = router({
     .mutation(({ ctx, input }) =>
       createPayoutCmd(buildCmdCtx(ctx), {
         engineerId: input.engineerId,
+        kind: input.kind,
         period: { preset: input.preset, start: input.start, end: input.end },
         amountKopecks: rubToKopecks(input.amountRub),
         paidOn: input.paidOn,

@@ -31,6 +31,18 @@ export const payrollModeEnum = pgEnum('payroll_mode', [
   'salary_bonus',
 ]);
 
+/**
+ * Тип выплаты ЗП:
+ *   advance — аванс (промежуточная выплата в счёт расчёта за период);
+ *   final   — окончательный расчёт (основная выплата; сюда попадают все прежние выплаты);
+ *   bonus   — премия (отдельное поощрение, НЕ входит в расчёт за период).
+ */
+export const payrollPayoutKindEnum = pgEnum('payroll_payout_kind', [
+  'advance',
+  'final',
+  'bonus',
+]);
+
 export const engineerPayoutRules = pgTable(
   'engineer_payout_rules',
   {
@@ -74,8 +86,9 @@ export const engineerPayoutRules = pgTable(
  * «Зарплата»), её id кладётся в cash_transaction_id. Правка суммы пересоздаёт расход,
  * удаление выплаты — мягко удаляет расход и пересчитывает остаток счёта.
  *
- * UNIQUE (tenant, engineer, period_start) среди живых — нельзя дважды выплатить
- * одному инженеру за один период (повторно — после отмены прежней выплаты).
+ * UNIQUE (tenant, engineer, period_start, kind) среди живых, КРОМЕ премий — за период
+ * нельзя дважды провести аванс или окончательный расчёт (повторно — после отмены прежней);
+ * премий ('bonus') за период может быть сколько угодно.
  *
  * RLS включается отдельно через 0050_enable_rls_payroll_payouts.sql (setup-rls.ts).
  */
@@ -90,6 +103,8 @@ export const payrollPayouts = pgTable(
     periodEnd: date('period_end').notNull(),
     /** Человекочитаемая метка периода («Июнь», «Неделя» и т.п.). */
     periodLabel: varchar('period_label', { length: 40 }).notNull(),
+    /** Тип выплаты: аванс / окончательный расчёт / премия (см. payrollPayoutKindEnum). */
+    kind: payrollPayoutKindEnum('kind').notNull().default('final'),
     /** Что система посчитала на момент выплаты — для прозрачности ручной правки. */
     computedKopecks: bigint('computed_kopecks', { mode: 'bigint' }).notNull(),
     /** Сколько реально выплачено (можно отредактировать вручную). > 0. */
@@ -105,9 +120,10 @@ export const payrollPayouts = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex('payroll_payouts_engineer_period_uniq')
-      .on(t.tenantId, t.engineerId, t.periodStart)
-      .where(sql`deleted_at IS NULL`),
+    // Один 'advance' и один 'final' на период; премий ('bonus') — сколько угодно.
+    uniqueIndex('payroll_payouts_engineer_period_kind_uniq')
+      .on(t.tenantId, t.engineerId, t.periodStart, t.kind)
+      .where(sql`deleted_at IS NULL AND kind <> 'bonus'`),
     index('payroll_payouts_tenant_period_idx')
       .on(t.tenantId, t.periodStart)
       .where(sql`deleted_at IS NULL`),
