@@ -33,11 +33,18 @@ const PERIOD_LABEL: Record<Period, string> = {
  */
 export function MobileEarningsPage() {
   const [period, setPeriod] = useState<Period>('month');
-  const q = trpc.payroll.myEarnings.useQuery({ preset: period });
+  const me = trpc.auth.me.useQuery();
+  // Раздел «Зарплата» может быть отключён в компании — тогда экран заработка не
+  // грузим (как и карточка в профиле, MobileProfilePage). disabledModules — UI-гейт.
+  const moduleDisabled = me.data?.tenant.disabledModules.includes('payroll') ?? false;
+  const q = trpc.payroll.myEarnings.useQuery(
+    { preset: period },
+    { enabled: !!me.data && !moduleDisabled },
+  );
 
   // Директор мог отключить показ заработка — тогда сервер отдаёт { enabled: false }.
   const data = q.data?.enabled ? q.data : null;
-  const disabled = q.data?.enabled === false;
+  const disabled = moduleDisabled || q.data?.enabled === false;
   const row = data?.rows[0];
   const works = row ? BigInt(row.worksAmountKopecks) : 0n;
   const piece = row ? BigInt(row.pieceworkPartKopecks) : 0n;
@@ -80,7 +87,11 @@ export function MobileEarningsPage() {
       {disabled && (
         <div className="bg-card text-muted-foreground flex items-start gap-2 rounded-lg border p-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Показ заработка сейчас отключён директором.</span>
+          <span>
+            {moduleDisabled
+              ? 'Раздел «Зарплата» отключён в компании.'
+              : 'Показ заработка сейчас отключён директором.'}
+          </span>
         </div>
       )}
 

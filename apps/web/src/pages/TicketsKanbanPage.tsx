@@ -91,6 +91,15 @@ export function TicketsKanbanPage() {
     ? [...ACTIVE_TICKET_STATUSES, 'closed', 'cancelled']
     : [...ACTIVE_TICKET_STATUSES];
 
+  // Легаси/нестандартные статусы (например снятые из потока «Смета»/«Согласование»),
+  // которые бэкенд всё же вернул: показываем отдельными колонками, чтобы такие заявки
+  // не выпадали с доски беззвучно. Актуально при «показать закрытые» — иначе бэкенд
+  // фильтрует список по активным статусам, и легаси-заявки в него не попадают.
+  const extraCols: TicketStatus[] = [...new Set(items.map((t) => t.status))].filter(
+    (s) => !cols.includes(s),
+  );
+  const boardCols: TicketStatus[] = [...cols, ...extraCols];
+
   return (
     <div className="mx-auto max-w-[100rem] space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -157,7 +166,7 @@ export function TicketsKanbanPage() {
       ) : (
         <KanbanBoard
           items={items}
-          columns={cols}
+          columns={boardCols}
           onMove={(id, status) => changeStatus.mutate({ id, status })}
         />
       )}

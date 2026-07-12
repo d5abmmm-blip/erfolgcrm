@@ -45,9 +45,65 @@ export function llmConfigFromEnv(): LlmRuntimeConfig | null {
   };
 }
 
+/** Строка llm_configs (уже с расшифрованным ключом) для решения о рантайм-конфиге. */
+export interface LlmConfigRow {
+  enabled: boolean;
+  apiStyle: string | null;
+  baseUrl: string | null;
+  model: string | null;
+  customInstructions: string | null;
+  assistantMode: string | null;
+  /** Расшифрованный ключ или null, если в БД его нет. */
+  apiKey: string | null;
+}
+
+/**
+ * Решает, какой рантайм-конфиг использовать, по строке БД и env-фолбэку. Вынесено в
+ * ЧИСТУЮ функцию (тестируется без БД). Ключевое правило безопасности:
+ *
+ *   ЯВНОЕ ВЫКЛЮЧЕНИЕ ПРИОРИТЕТНЕЕ ENV-ФОЛБЭКА. Если строка в БД есть и enabled=false —
+ *   директор осознанно выключил ассистента в Настройках → возвращаем null и НЕ проваливаемся
+ *   в env (иначе на проде с заданными LLM_* «Выключен» игнорировался бы, и запросы/ПДн
+ *   продолжали бы уходить во внешний LLM).
+ *
+ * Env-фолбэк применяется только когда строки в БД нет вовсе, либо когда она enabled=true, но
+ * неполна (ключ хранится в env, а не в БД). В последнем случае накладываем mode и инструкцию
+ * из БД на env-конфиг — чтобы режим «только чтение» и памятка не терялись.
+ */
+export function resolveRuntimeConfig(
+  row: LlmConfigRow | null,
+  envCfg: LlmRuntimeConfig | null,
+): LlmRuntimeConfig | null {
+  // Явное выключение в Настройках — приоритетнее env-фолбэка.
+  if (row && !row.enabled) return null;
+
+  // БД включена и полностью заполнена → конфиг из БД.
+  if (row?.enabled && row.baseUrl && row.model && row.apiKey) {
+    return {
+      apiStyle: normalizeStyle(row.apiStyle),
+      baseUrl: row.baseUrl.replace(/\/+$/, ''),
+      apiKey: row.apiKey,
+      model: row.model,
+      customInstructions: row.customInstructions ?? null,
+      mode: normalizeMode(row.assistantMode),
+    };
+  }
+
+  // Иначе — env-фолбэк (прод настроен через LLM_*). Если строка в БД есть (enabled=true,
+  // но неполна), накладываем mode/инструкцию из БД, чтобы read_only и памятка не терялись.
+  if (envCfg && row) {
+    return {
+      ...envCfg,
+      customInstructions: row.customInstructions ?? null,
+      mode: normalizeMode(row.assistantMode),
+    };
+  }
+  return envCfg;
+}
+
 /**
  * Рабочий конфиг для вызова модели: сперва БД (если включён и заполнен), иначе env.
- * Возвращает null, если ассистент нигде не настроен.
+ * Возвращает null, если ассистент выключен директором или нигде не настроен.
  *
  * @internal Результат содержит РАСШИФРОВАННЫЙ apiKey. НЕ логировать, НЕ возвращать
  * клиенту, НЕ писать в аудит. Использовать только для немедленного вызова callLlm.
@@ -74,19 +130,18 @@ export async function loadLlmRuntimeConfig(
     return rows[0] ?? null;
   });
 
-  const apiKey = (row?.apiKey as string | null) ?? null;
-  if (row?.enabled && row.baseUrl && row.model && apiKey) {
-    return {
-      apiStyle: normalizeStyle(row.apiStyle),
-      baseUrl: row.baseUrl.replace(/\/+$/, ''),
-      apiKey,
-      model: row.model,
-      customInstructions: row.customInstructions ?? null,
-      mode: normalizeMode(row.assistantMode),
-    };
-  }
-  // БД не настроена/выключена → пробуем env (текущий прод).
-  return llmConfigFromEnv();
+  const dbRow: LlmConfigRow | null = row
+    ? {
+        enabled: row.enabled,
+        apiStyle: row.apiStyle,
+        baseUrl: row.baseUrl,
+        model: row.model,
+        customInstructions: row.customInstructions,
+        assistantMode: row.assistantMode,
+        apiKey: (row.apiKey as string | null) ?? null,
+      }
+    : null;
+  return resolveRuntimeConfig(dbRow, llmConfigFromEnv());
 }
 
 /** Конфиг для UI — БЕЗ ключа (только флаг hasApiKey) + признак работы из env. */
@@ -147,7 +202,9 @@ export async function getLlmConfigDto(db: Db, tenant: TenantKeyCtx): Promise<Llm
     hasApiKey: Boolean(row.hasApiKey),
     customInstructions: row.customInstructions ?? null,
     mode: normalizeMode(row.assistantMode),
-    usingEnvFallback: !dbComplete && envCfg != null,
+    // Env-фолбэк «работает» только когда ассистент НЕ выключен явно (enabled=true), но
+    // строка в БД неполна. При enabled=false ассистент выключен — из env он больше не поднимается.
+    usingEnvFallback: row.enabled && !dbComplete && envCfg != null,
     updatedAt: row.updatedAt,
   };
 }
