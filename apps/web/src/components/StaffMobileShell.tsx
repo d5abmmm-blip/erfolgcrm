@@ -87,7 +87,7 @@ export function StaffMobileShell({ children, session, onUseFullVersion }: Props)
   const tabHrefs = new Set(tabs.map((t) => t.href));
 
   return (
-    <div className="bg-background flex h-full min-h-[100dvh] flex-col">
+    <div className="bg-background flex h-full min-h-[100dvh] flex-col overflow-x-hidden">
       <header
         className="bg-sidebar text-sidebar-foreground sticky top-0 z-30 flex h-14 items-center justify-between gap-2 px-3"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
@@ -111,7 +111,9 @@ export function StaffMobileShell({ children, session, onUseFullVersion }: Props)
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto overscroll-contain pb-20">{children}</main>
+      <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-20">
+        {children}
+      </main>
 
       <nav
         className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 border-t"
