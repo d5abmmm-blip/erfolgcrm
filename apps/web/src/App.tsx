@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Route, Switch, Link, useLocation } from 'wouter';
 import { Loader2, EyeOff } from 'lucide-react';
 import { AppShell } from './components/AppShell';
 import { MobileShell } from './components/MobileShell';
+import { StaffMobileShell } from './components/StaffMobileShell';
 import { PWARegister } from './components/PWARegister';
 import { DashboardPage } from './pages/DashboardPage';
 import { TicketCardPage } from './pages/TicketCardPage';
@@ -81,6 +82,7 @@ import { ClientCabinetUsersPage } from './pages/ClientCabinetUsersPage';
 import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
 import { isPathDisabled } from './lib/modules';
+import { useIsMobile } from './lib/use-is-mobile';
 
 export default function App() {
   const [location] = useLocation();
@@ -97,6 +99,16 @@ export default function App() {
   return <StaffApp />;
 }
 
+const FORCE_DESKTOP_KEY = 'erfolg-staff-force-desktop';
+
+function readForceDesktop(): boolean {
+  try {
+    return localStorage.getItem(FORCE_DESKTOP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function StaffApp() {
   const me = trpc.auth.me.useQuery(undefined, {
     retry: false,
@@ -104,6 +116,16 @@ function StaffApp() {
   });
   const [location, navigate] = useLocation();
   const isMobileRoute = location === '/m' || location.startsWith('/m/');
+  const isMobile = useIsMobile();
+  const [forceDesktop, setForceDesktopState] = useState(readForceDesktop);
+  const setForceDesktop = (v: boolean) => {
+    setForceDesktopState(v);
+    try {
+      localStorage.setItem(FORCE_DESKTOP_KEY, v ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
 
   // После логина инженера — однократный редирект на /m/queue, если он на корне.
   // Не делаем «вечный» редирект, чтобы инженер мог сознательно зайти на полную версию.
@@ -154,13 +176,13 @@ function StaffApp() {
   // Маршруты при этом не трогаем — данные/логика живы, это чисто навигационный гард.
   const sectionDisabled = isPathDisabled(me.data.tenant.disabledModules, location);
 
-  return (
-    <>
-      <AppShell session={me.data}>
-        {sectionDisabled ? (
-          <SectionDisabled />
-        ) : (
-          <Switch>
+  const isStaff = me.data.user.role === 'director' || me.data.user.role === 'dispatcher';
+  const useMobileShell = isStaff && isMobile && !forceDesktop;
+
+  const inner = sectionDisabled ? (
+    <SectionDisabled />
+  ) : (
+    <Switch>
           <Route path="/" component={DashboardPage} />
           <Route path="/board" component={BoardPage} />
           <Route path="/parts-waiting" component={PartsWaitingPage} />
@@ -229,9 +251,32 @@ function StaffApp() {
           <Route>
             <NotFound />
           </Route>
-          </Switch>
-        )}
-      </AppShell>
+    </Switch>
+  );
+
+  if (useMobileShell) {
+    return (
+      <>
+        <StaffMobileShell session={me.data} onUseFullVersion={() => setForceDesktop(true)}>
+          {inner}
+        </StaffMobileShell>
+        <PWARegister />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AppShell session={me.data}>{inner}</AppShell>
+      {isStaff && isMobile && forceDesktop && (
+        <button
+          type="button"
+          onClick={() => setForceDesktop(false)}
+          className="bg-primary text-primary-foreground fixed bottom-4 right-4 z-50 rounded-full px-4 py-2 text-sm font-medium shadow-lg md:hidden"
+        >
+          Мобильная версия
+        </button>
+      )}
       <PWARegister />
     </>
   );

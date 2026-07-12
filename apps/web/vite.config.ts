@@ -13,7 +13,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'erfolg-logo.png'],
+      includeAssets: ['favicon.png', 'erfolg-logo.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'ErfolgCRM — медтехника',
         short_name: 'ErfolgCRM',

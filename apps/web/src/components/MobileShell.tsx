@@ -77,13 +77,18 @@ export function MobileShell({ children, session }: Props) {
         className="bg-sidebar text-sidebar-foreground sticky top-0 z-30 flex h-14 items-center justify-between px-3"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="flex items-center gap-2.5">
-          <div className="bg-primary/25 grid h-9 w-9 place-items-center rounded-full text-sm font-semibold">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <img
+            src="/favicon.png"
+            alt="Эрфольг"
+            className="h-8 w-8 shrink-0 rounded-md"
+          />
+          <div className="bg-primary/25 grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold">
             {initials || '??'}
           </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">{headerTitle}</div>
-            <div className="text-sidebar-muted text-[11px]">
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm font-semibold">{headerTitle}</div>
+            <div className="text-sidebar-muted truncate text-[11px]">
               {session.user.fullName.split(' ').slice(0, 2).join(' ')} ·{' '}
               {session.tenant.displayName}
             </div>
