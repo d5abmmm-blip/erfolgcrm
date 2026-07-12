@@ -131,10 +131,15 @@ function StaffApp() {
   // Не делаем «вечный» редирект, чтобы инженер мог сознательно зайти на полную версию.
   useEffect(() => {
     if (!me.data) return;
-    if (me.data.user.role === 'engineer' && location === '/') {
+    const role = me.data.user.role;
+    if (role === 'engineer' && location === '/') {
       navigate('/m/queue');
+    } else if (role !== 'engineer' && isMobileRoute) {
+      // Директор/диспетчер не работают в инженерном мобильном приложении /m/* —
+      // возвращаем их на свой домашний экран (там сработает StaffMobileShell).
+      navigate('/');
     }
-  }, [me.data, location, navigate]);
+  }, [me.data, location, navigate, isMobileRoute]);
 
   if (me.isLoading) {
     return (
@@ -149,6 +154,16 @@ function StaffApp() {
   }
 
   if (isMobileRoute) {
+    // Инженерное мобильное приложение (/m/*) — только для инженера. Staff, попавший
+    // сюда (старая ссылка/стартовый экран PWA), редиректится на '/' в useEffect выше;
+    // пока показываем спиннер, чтобы не мелькал инженерский экран.
+    if (me.data.user.role !== 'engineer') {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+        </div>
+      );
+    }
     return (
       <>
         <MobileShell session={me.data}>

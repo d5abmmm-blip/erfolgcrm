@@ -22,7 +22,7 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/m/queue',
+        start_url: '/',
         scope: '/',
         lang: 'ru-RU',
         categories: ['business', 'productivity', 'medical'],
