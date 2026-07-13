@@ -16,6 +16,7 @@ import {
   Tag,
   Printer,
   FileWarning,
+  FileCheck,
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
@@ -134,21 +135,41 @@ export function MobileTicketPage() {
    * Сформировать акт (выполненных работ / дефектный) в PDF прямо с телефона.
    * На мобильных браузерах это открывается как «сохранить/поделиться PDF».
    */
-  const printAct = async (kind: 'work_act' | 'defect_act') => {
+  const printAct = async (kind: 'work_act' | 'defect_act' | 'tech_condition_act') => {
     const woData = wo.data;
-    if (!woData) {
+    // Акт работ и дефектный требуют наряд; акт тех.состояния можно печатать и без него
+    // (пустой бланк под заполнение от руки прямо в поле).
+    if (!woData && kind !== 'tech_condition_act') {
       setToast({ kind: 'error', text: 'Наряд ещё не создан — акт сформировать нельзя' });
       return;
     }
     const win = openPrintWindow();
     try {
-      const [{ printWorkAct, printDefectAct }, { ERFOLG_FALLBACK }] = await Promise.all([
-        import('../../lib/pdf'),
-        import('../../lib/pdf/branding'),
-      ]);
+      const [{ printWorkAct, printDefectAct, printTechConditionAct }, { ERFOLG_FALLBACK }] =
+        await Promise.all([import('../../lib/pdf'), import('../../lib/pdf/branding')]);
       const doc = clientDoc.data;
       const ass = assetFull.data;
-      const payload = {
+      const workOrder = woData
+        ? {
+            vatRate: woData.vatRate,
+            worksAmountKopecks: Number(woData.worksAmountKopecks),
+            partsAmountKopecks: Number(woData.partsAmountKopecks),
+            expensesAmountKopecks: Number(woData.expensesAmountKopecks),
+            totalAmountKopecks: Number(woData.totalAmountKopecks),
+            diagnosis: woData.diagnosis ?? null,
+            repairDescription: woData.repairDescription ?? null,
+            recommendation: woData.recommendation ?? null,
+            lines: woData.lines.map((l) => ({
+              lineType: l.lineType,
+              name: l.name,
+              unit: l.unit,
+              quantity: Number(l.quantity),
+              unitPriceKopecks: Number(l.unitPriceKopecks),
+              amountKopecks: Number(l.amountKopecks),
+            })),
+          }
+        : null;
+      const payloadBase = {
         tenant: { ...ERFOLG_FALLBACK },
         client: {
           displayName: doc?.displayName ?? t.clientDisplayName,
@@ -178,29 +199,14 @@ export function MobileTicketPage() {
           symptom: t.symptom ?? null,
           barcode: t.barcode,
         },
-        workOrder: {
-          vatRate: woData.vatRate,
-          worksAmountKopecks: Number(woData.worksAmountKopecks),
-          partsAmountKopecks: Number(woData.partsAmountKopecks),
-          expensesAmountKopecks: Number(woData.expensesAmountKopecks),
-          totalAmountKopecks: Number(woData.totalAmountKopecks),
-          diagnosis: woData.diagnosis ?? null,
-          repairDescription: woData.repairDescription ?? null,
-          recommendation: woData.recommendation ?? null,
-          lines: woData.lines.map((l) => ({
-            lineType: l.lineType,
-            name: l.name,
-            unit: l.unit,
-            quantity: Number(l.quantity),
-            unitPriceKopecks: Number(l.unitPriceKopecks),
-            amountKopecks: Number(l.amountKopecks),
-          })),
-        },
+        // Инженер, печатающий акт, — исполнитель в строке «Осмотр произвёл».
+        executorName: me.data?.user.fullName ?? null,
       };
-      if (kind === 'work_act') {
-        await printWorkAct(payload, win);
-      } else {
-        await printDefectAct(payload, win);
+      if (kind === 'tech_condition_act') {
+        await printTechConditionAct({ ...payloadBase, workOrder }, win);
+      } else if (workOrder) {
+        if (kind === 'work_act') await printWorkAct({ ...payloadBase, workOrder }, win);
+        else await printDefectAct({ ...payloadBase, workOrder }, win);
       }
       recordPrintM.mutate({ ticketId: t.id, documentKind: kind });
     } catch (err) {
@@ -356,24 +362,36 @@ export function MobileTicketPage() {
         )}
 
         {canPrintActs && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={!wo.data}
+                onClick={() => void printAct('work_act')}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+              >
+                <Printer className="h-4 w-4" />
+                Акт работ
+              </button>
+              <button
+                type="button"
+                disabled={!wo.data}
+                onClick={() => void printAct('defect_act')}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+              >
+                <FileWarning className="h-4 w-4" />
+                Дефектный акт
+              </button>
+            </div>
+            {/* Акт технического состояния — «полевой» документ: печатается и без наряда
+                (пустой бланк под заполнение от руки), поэтому кнопка не блокируется. */}
             <button
               type="button"
-              disabled={!wo.data}
-              onClick={() => void printAct('work_act')}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+              onClick={() => void printAct('tech_condition_act')}
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
             >
-              <Printer className="h-4 w-4" />
-              Акт работ
-            </button>
-            <button
-              type="button"
-              disabled={!wo.data}
-              onClick={() => void printAct('defect_act')}
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
-            >
-              <FileWarning className="h-4 w-4" />
-              Дефектный акт
+              <FileCheck className="h-4 w-4" />
+              Акт технического состояния
             </button>
           </div>
         )}

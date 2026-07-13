@@ -16,6 +16,7 @@ import { buildAssetLabelDoc, type PrintAssetLabelInput } from './asset-label';
 import { buildContractDoc, type PrintContractInput } from './contract';
 import { buildDailySummaryDoc, type DailySummaryInput } from './daily-summary';
 import { buildDefectActDoc, type PrintDefectActInput } from './defect-act';
+import { buildTechConditionActDoc, type PrintTechConditionActInput } from './tech-condition-act';
 import { buildIntakeActDoc } from './intake-act';
 import { buildInvoiceDoc, type ExtendedPrintInvoiceInput } from './invoice';
 import type {
@@ -144,6 +145,13 @@ export async function getDefectActAsBase64(
   return getDocAsBase64(buildDefectActDoc({ ...input, barcodeDataUrl }));
 }
 
+export async function getTechConditionActAsBase64(
+  input: Omit<PrintTechConditionActInput, 'barcodeDataUrl'>,
+): Promise<string> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  return getDocAsBase64(buildTechConditionActDoc({ ...input, barcodeDataUrl }));
+}
+
 export async function printIntakeAct(
   input: PrintIntakeInput,
   win?: Window | null,
@@ -178,6 +186,15 @@ export async function printDefectAct(
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildDefectActDoc({ ...input, barcodeDataUrl });
   await openDoc(doc, win, 'Дефектный_акт.pdf');
+}
+
+export async function printTechConditionAct(
+  input: Omit<PrintTechConditionActInput, 'barcodeDataUrl'>,
+  win?: Window | null,
+): Promise<void> {
+  const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
+  const doc = buildTechConditionActDoc({ ...input, barcodeDataUrl });
+  await openDoc(doc, win, 'Акт_технического_состояния.pdf');
 }
 
 export async function printContract(
@@ -338,5 +355,7 @@ export { buildContractDoc } from './contract';
 export type { ContractData, ContractTerms, PrintContractInput } from './contract';
 export { buildDefectActDoc } from './defect-act';
 export type { PrintDefectActInput } from './defect-act';
+export { buildTechConditionActDoc } from './tech-condition-act';
+export type { PrintTechConditionActInput } from './tech-condition-act';
 export type { ExtendedPrintInvoiceInput } from './invoice';
 export type { DailySummaryInput } from './daily-summary';
