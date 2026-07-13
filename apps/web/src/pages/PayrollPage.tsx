@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import {
-  ArrowLeft,
+  Calculator,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
   Loader2,
-  Pencil,
   Plus,
   Save,
   Settings as SettingsIcon,
+  Trash2,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -18,53 +22,6 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 type Period = 'today' | 'week' | 'month' | 'quarter';
 type PayrollMode = 'piecework' | 'salary_bonus';
 
-type PayoutRow = {
-  engineerId: string;
-  engineerName: string;
-  totalEarningsKopecks: string;
-  baseSalaryKopecks: string;
-};
-type PayoutKind = 'advance' | 'final' | 'bonus';
-type Payout = {
-  id: string;
-  engineerId: string;
-  kind: PayoutKind;
-  amountKopecks: string;
-  computedKopecks: string;
-  paidOn: string;
-  accountId: string;
-  comment: string | null;
-};
-type CashAccount = { id: string; name: string; kind: 'cash' | 'bank' | 'card' };
-
-const KIND_LABEL: Record<PayoutKind, string> = {
-  advance: 'Аванс',
-  final: 'Окончательный расчёт',
-  bonus: 'Премия',
-};
-const KIND_SHORT: Record<PayoutKind, string> = {
-  advance: 'Аванс',
-  final: 'Расчёт',
-  bonus: 'Премия',
-};
-const KIND_BADGE: Record<PayoutKind, string> = {
-  advance: 'bg-primary/10 text-primary',
-  final: 'bg-success/10 text-success',
-  bonus: 'bg-warning/10 text-warning',
-};
-
-function defaultPayoutComment(kind: PayoutKind, name: string): string {
-  if (kind === 'advance') return `Аванс · ${name}`;
-  if (kind === 'bonus') return `Премия · ${name}`;
-  return `ЗП · ${name}`;
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function kopecksToRubInput(kopStr: string): string {
-  return (Number(BigInt(kopStr)) / 100).toString();
-}
 function parseRubNumber(rubStr: string): number {
   const n = Number(rubStr.replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
@@ -104,634 +61,7 @@ export function PayrollPage() {
 /* ========================== ДИРЕКТОР ========================== */
 
 function DirectorPayroll() {
-  const utils = trpc.useUtils();
-  const [period, setPeriod] = useState<Period>('month');
-  const ruleQ = trpc.payroll.getRule.useQuery();
-  const payoutsQ = trpc.payroll.computePayouts.useQuery({ preset: period });
-  const paidQ = trpc.payroll.listPayouts.useQuery({ preset: period });
-  const accountsQ = trpc.cash.accounts.list.useQuery();
-
-  const [manager, setManager] = useState<PayoutRow | null>(null);
-
-  const paidByEngineer = new Map<string, Payout[]>();
-  for (const p of (paidQ.data ?? []) as Payout[]) {
-    const arr = paidByEngineer.get(p.engineerId);
-    if (arr) arr.push(p);
-    else paidByEngineer.set(p.engineerId, [p]);
-  }
-  const accounts: CashAccount[] = accountsQ.data ?? [];
-
-  const refresh = () => {
-    void utils.payroll.listPayouts.invalidate();
-    void utils.cash.invalidate();
-  };
-
-  // Оклад — МЕСЯЧНЫЙ и на не-месячных периодах показывается целиком (не пропорционально).
-  // Если в ведомости есть окладники и выбран не «Месяц» — предупреждаем директора, чтобы
-  // он не выплатил полный оклад за неделю/квартал по ошибке.
-  const hasSalaryRows = (payoutsQ.data?.rows ?? []).some(
-    (r) => BigInt(r.baseSalaryKopecks) > 0n,
-  );
-  const salaryPeriodWarning = period !== 'month' && hasSalaryRows;
-
-  return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold md:text-2xl">Зарплата инженеров</h2>
-          <p className="text-muted-foreground text-sm">
-            Расчёт по правилу{' '}
-            <span className="text-foreground font-medium">
-              {ruleQ.data?.mode === 'piecework' ? 'сделка' : 'оклад + бонус'}
-            </span>
-            {ruleQ.data && ruleQ.data.mode === 'piecework' && (
-              <> · {ruleQ.data.pieceworkPercent}% от работ</>
-            )}
-            {ruleQ.data && ruleQ.data.mode === 'salary_bonus' && (
-              <>
-                {' '}
-                · оклад {formatRubFromKopecks(ruleQ.data.baseSalaryKopecks)} +{' '}
-                {ruleQ.data.bonusPercent}% от работ
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <PeriodTabs value={period} onChange={setPeriod} />
-          <Link
-            href="/settings/payroll"
-            className="bg-secondary hover:bg-muted inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition"
-          >
-            <SettingsIcon className="h-4 w-4" />
-            Правила
-          </Link>
-        </div>
-      </div>
-
-      {payoutsQ.isLoading && (
-        <div className="bg-card flex items-center gap-3 rounded-lg border p-4">
-          <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-          <span className="text-muted-foreground text-sm">Считаем…</span>
-        </div>
-      )}
-
-      {payoutsQ.error && (
-        <div className="bg-destructive/10 text-destructive rounded-lg border border-destructive/30 p-4 text-sm">
-          {payoutsQ.error.message}
-        </div>
-      )}
-
-      {payoutsQ.data && (
-        <>
-          <div className="bg-card flex items-center justify-between rounded-lg border p-4">
-            <div>
-              <div className="text-muted-foreground text-xs uppercase">Итого к выплате</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">
-                {formatRubFromKopecks(payoutsQ.data.grandTotalKopecks)}
-              </div>
-              <div className="text-muted-foreground mt-1 text-xs">
-                {PERIOD_LABEL[period]} · {payoutsQ.data.rows.length} инженер(ов)
-              </div>
-            </div>
-            <Wallet className="text-muted-foreground h-8 w-8" />
-          </div>
-
-          {salaryPeriodWarning && (
-            <div className="bg-warning/10 text-warning border-warning/30 rounded-lg border p-3 text-sm">
-              Оклад начисляется <span className="font-medium">помесячно</span> и на периоде «
-              {PERIOD_LABEL[period]}» показан за полный месяц. Для выплаты оклада выбирайте период
-              «Месяц» — иначе сумма к выплате будет завышена.
-            </div>
-          )}
-
-          <div className="bg-card overflow-hidden rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
-                <tr>
-                  <th className="p-3 text-left font-medium">Инженер</th>
-                  <th className="p-3 text-right font-medium">Закрыто нарядов</th>
-                  <th className="p-3 text-right font-medium">Сумма работ</th>
-                  <th className="p-3 text-right font-medium">Оклад</th>
-                  <th className="p-3 text-right font-medium">Сделка/бонус</th>
-                  <th className="p-3 text-right font-medium">Начислено</th>
-                  <th className="p-3 text-right font-medium">Выплаты</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {payoutsQ.data.rows.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="text-muted-foreground p-6 text-center">
-                      За выбранный период работ нет
-                    </td>
-                  </tr>
-                )}
-                {payoutsQ.data.rows.map((r) => (
-                  <tr key={r.engineerId} className="hover:bg-muted/30">
-                    <td className="p-3 font-medium">{r.engineerName}</td>
-                    <td className="p-3 text-right tabular-nums">{r.closedOrdersCount}</td>
-                    <td className="p-3 text-right tabular-nums">
-                      {formatRubFromKopecks(r.worksAmountKopecks)}
-                    </td>
-                    <td className="p-3 text-right tabular-nums">
-                      {formatRubFromKopecks(r.baseSalaryKopecks)}
-                    </td>
-                    <td className="p-3 text-right tabular-nums">
-                      {formatRubFromKopecks(r.pieceworkPartKopecks)}
-                    </td>
-                    <td className="text-success p-3 text-right text-base font-semibold tabular-nums">
-                      {formatRubFromKopecks(r.totalEarningsKopecks)}
-                    </td>
-                    <td className="p-3 text-right">
-                      <PayoutSummaryCell
-                        computedKopecks={r.totalEarningsKopecks}
-                        payouts={paidByEngineer.get(r.engineerId) ?? []}
-                        canPay={accounts.length > 0}
-                        onOpen={() => setManager(r)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {!accountsQ.isLoading && accounts.length === 0 && (
-        <div className="text-muted-foreground bg-card rounded-lg border border-dashed p-4 text-sm">
-          Чтобы проводить выплаты, заведите денежный счёт в{' '}
-          <Link href="/finance/accounts" className="text-primary hover:underline">
-            кассе
-          </Link>
-          .
-        </div>
-      )}
-
-      {manager && (
-        <PayoutManagerModal
-          row={manager}
-          period={period}
-          accounts={accounts}
-          payouts={paidByEngineer.get(manager.engineerId) ?? []}
-          onClose={() => setManager(null)}
-          onChanged={refresh}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ===================== Выплаты: ячейка + окно управления ===================== */
-
-function PayoutSummaryCell({
-  computedKopecks,
-  payouts,
-  canPay,
-  onOpen,
-}: {
-  computedKopecks: string;
-  payouts: Payout[];
-  canPay: boolean;
-  onOpen: () => void;
-}) {
-  const paid = payouts
-    .filter((p) => p.kind !== 'bonus')
-    .reduce((a, p) => a + BigInt(p.amountKopecks), 0n);
-  const bonus = payouts
-    .filter((p) => p.kind === 'bonus')
-    .reduce((a, p) => a + BigInt(p.amountKopecks), 0n);
-  const remaining = BigInt(computedKopecks) - paid;
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      {payouts.length > 0 && (
-        <div className="text-muted-foreground text-right text-xs leading-tight">
-          {paid > 0n && (
-            <div>
-              Выплачено{' '}
-              <span className="text-foreground tabular-nums">
-                {formatRubFromKopecks(paid.toString())}
-              </span>
-            </div>
-          )}
-          {remaining > 0n ? (
-            <div>
-              Осталось{' '}
-              <span className="text-warning tabular-nums">
-                {formatRubFromKopecks(remaining.toString())}
-              </span>
-            </div>
-          ) : paid > 0n ? (
-            <div className="text-success">Расчёт закрыт</div>
-          ) : null}
-          {bonus > 0n && (
-            <div>
-              Премии{' '}
-              <span className="text-foreground tabular-nums">
-                {formatRubFromKopecks(bonus.toString())}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        disabled={!canPay}
-        onClick={onOpen}
-        className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40"
-      >
-        <Wallet className="h-3.5 w-3.5" />
-        {payouts.length > 0 ? 'Выплаты' : 'Выплатить'}
-      </button>
-    </div>
-  );
-}
-
-function AddPayoutButton({
-  label,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-40"
-    >
-      <Plus className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
-}
-
-function PayoutRowItem({
-  payout: p,
-  onEdit,
-  onCancel,
-}: {
-  payout: Payout;
-  onEdit: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-md border p-2">
-      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', KIND_BADGE[p.kind])}>
-        {KIND_SHORT[p.kind]}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold tabular-nums">{formatRubFromKopecks(p.amountKopecks)}</div>
-        <div className="text-muted-foreground truncate text-xs">
-          {new Date(p.paidOn).toLocaleDateString('ru-RU')}
-          {p.comment ? ` · ${p.comment}` : ''}
-        </div>
-      </div>
-      <button
-        type="button"
-        title="Изменить выплату"
-        onClick={onEdit}
-        className="hover:bg-muted text-muted-foreground rounded p-1 transition"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        title="Отменить выплату"
-        onClick={onCancel}
-        className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded p-1 transition"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
-function PayoutManagerModal({
-  row,
-  period,
-  accounts,
-  payouts,
-  onClose,
-  onChanged,
-}: {
-  row: PayoutRow;
-  period: Period;
-  accounts: CashAccount[];
-  payouts: Payout[];
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const [form, setForm] = useState<{ kind: PayoutKind; editing: Payout | null } | null>(null);
-  const [toCancel, setToCancel] = useState<Payout | null>(null);
-
-  const deleteM = trpc.payroll.deletePayout.useMutation({
-    onSuccess: () => {
-      onChanged();
-      setToCancel(null);
-    },
-  });
-
-  const advance = payouts.find((p) => p.kind === 'advance') ?? null;
-  const finalPayout = payouts.find((p) => p.kind === 'final') ?? null;
-  const computed = BigInt(row.totalEarningsKopecks);
-  const paid =
-    (advance ? BigInt(advance.amountKopecks) : 0n) +
-    (finalPayout ? BigInt(finalPayout.amountKopecks) : 0n);
-  const remaining = computed - paid;
-  const noAccounts = accounts.length === 0;
-
-  if (form) {
-    return (
-      <PayoutForm
-        row={row}
-        period={period}
-        accounts={accounts}
-        kind={form.kind}
-        editing={form.editing}
-        remainingKopecks={remaining > 0n ? remaining.toString() : '0'}
-        onBack={() => setForm(null)}
-        onSaved={() => {
-          onChanged();
-          setForm(null);
-        }}
-      />
-    );
-  }
-
-  return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
-      <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="bg-card relative z-10 w-full max-w-md rounded-lg border p-5 shadow-xl">
-        <div className="flex items-start justify-between">
-          <h3 className="text-base font-semibold">Выплаты · {row.engineerName}</h3>
-          <button
-            type="button"
-            aria-label="Закрыть"
-            onClick={onClose}
-            className="hover:bg-muted text-muted-foreground -mr-1 rounded p-1"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="bg-muted/40 mt-3 grid grid-cols-3 gap-2 rounded-md p-3 text-center text-xs">
-          <div>
-            <div className="text-muted-foreground uppercase">Начислено</div>
-            <div className="mt-0.5 font-semibold tabular-nums">
-              {formatRubFromKopecks(computed.toString())}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground uppercase">Выплачено</div>
-            <div className="mt-0.5 font-semibold tabular-nums">
-              {formatRubFromKopecks(paid.toString())}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground uppercase">Осталось</div>
-            <div
-              className={cn(
-                'mt-0.5 font-semibold tabular-nums',
-                remaining > 0n ? 'text-warning' : 'text-success',
-              )}
-            >
-              {formatRubFromKopecks((remaining > 0n ? remaining : 0n).toString())}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-3 space-y-1.5">
-          {payouts.length === 0 ? (
-            <div className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">
-              Выплат ещё не было
-            </div>
-          ) : (
-            payouts.map((p) => (
-              <PayoutRowItem
-                key={p.id}
-                payout={p}
-                onEdit={() => setForm({ kind: p.kind, editing: p })}
-                onCancel={() => setToCancel(p)}
-              />
-            ))
-          )}
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <AddPayoutButton
-            label="Аванс"
-            disabled={noAccounts || !!advance}
-            onClick={() => setForm({ kind: 'advance', editing: null })}
-          />
-          <AddPayoutButton
-            label="Окончательный расчёт"
-            disabled={noAccounts || !!finalPayout}
-            onClick={() => setForm({ kind: 'final', editing: null })}
-          />
-          <AddPayoutButton
-            label="Премия"
-            disabled={noAccounts}
-            onClick={() => setForm({ kind: 'bonus', editing: null })}
-          />
-        </div>
-        {noAccounts && (
-          <p className="text-muted-foreground mt-2 text-xs">
-            Заведите денежный счёт в кассе, чтобы проводить выплаты.
-          </p>
-        )}
-      </div>
-
-      <ConfirmDialog
-        open={!!toCancel}
-        title="Отменить выплату?"
-        description="Запись о выплате будет удалена, а связанный расход — убран из кассы (остаток счёта вернётся)."
-        confirmText="Отменить выплату"
-        variant="danger"
-        loading={deleteM.isPending}
-        onConfirm={() => toCancel && deleteM.mutate({ id: toCancel.id })}
-        onCancel={() => setToCancel(null)}
-      />
-    </div>
-  );
-}
-
-function PayoutForm({
-  row,
-  period,
-  accounts,
-  kind,
-  editing,
-  remainingKopecks,
-  onBack,
-  onSaved,
-}: {
-  row: PayoutRow;
-  period: Period;
-  accounts: CashAccount[];
-  kind: PayoutKind;
-  editing: Payout | null;
-  remainingKopecks: string;
-  onBack: () => void;
-  onSaved: () => void;
-}) {
-  const isEdit = !!editing;
-  const isBonus = kind === 'bonus';
-  const [amountRub, setAmountRub] = useState(() => {
-    if (editing) return kopecksToRubInput(editing.amountKopecks);
-    if (kind === 'final') return kopecksToRubInput(remainingKopecks);
-    return '';
-  });
-  const [paidOn, setPaidOn] = useState(() => editing?.paidOn ?? todayIso());
-  const [accountId, setAccountId] = useState(() => editing?.accountId ?? accounts[0]?.id ?? '');
-  const [comment, setComment] = useState(
-    () => editing?.comment ?? defaultPayoutComment(kind, row.engineerName),
-  );
-
-  const createM = trpc.payroll.createPayout.useMutation({ onSuccess: onSaved });
-  const updateM = trpc.payroll.updatePayout.useMutation({ onSuccess: onSaved });
-  const pending = createM.isPending || updateM.isPending;
-  const error = createM.error?.message ?? updateM.error?.message;
-
-  const amountNum = parseRubNumber(amountRub);
-  const valid = amountNum > 0 && !!accountId && !!paidOn;
-  // Оклад месячный: на не-месячном периоде расчёт включает полный оклад — предупреждаем
-  // (к премии не относится — она вне расчёта).
-  const salaryWarning = !isBonus && period !== 'month' && BigInt(row.baseSalaryKopecks) > 0n;
-
-  const submit = () => {
-    if (!valid) return;
-    if (isEdit && editing) {
-      updateM.mutate({ id: editing.id, amountRub: amountNum, paidOn, accountId, comment });
-    } else {
-      createM.mutate({
-        preset: period,
-        engineerId: row.engineerId,
-        kind,
-        amountRub: amountNum,
-        paidOn,
-        accountId,
-        comment,
-      });
-    }
-  };
-
-  return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
-      <button type="button" aria-label="Закрыть" onClick={onBack} className="absolute inset-0 bg-black/40" />
-      <div className="bg-card relative z-10 w-full max-w-md rounded-lg border p-5 shadow-xl">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Назад"
-            onClick={onBack}
-            className="hover:bg-muted text-muted-foreground -ml-1 rounded p-1"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <h3 className="text-base font-semibold">
-            {isEdit ? 'Изменить выплату' : KIND_LABEL[kind]} · {row.engineerName}
-          </h3>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="text-sm font-medium">Сумма, ₽</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amountRub}
-              onChange={(e) => setAmountRub(e.target.value)}
-              autoFocus
-              className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
-            />
-            {isBonus ? (
-              <p className="text-muted-foreground mt-1 text-xs">
-                Премия не входит в расчёт ЗП за период — отдельная статья «Премии» в кассе.
-              </p>
-            ) : (
-              <p className="text-muted-foreground mt-1 text-xs">
-                Начислено за период: {kopecksToRubInput(row.totalEarningsKopecks)} ₽
-                {kind === 'final' && <> · осталось доплатить: {kopecksToRubInput(remainingKopecks)} ₽</>}
-              </p>
-            )}
-            {salaryWarning && (
-              <p className="text-warning bg-warning/10 border-warning/30 mt-2 rounded-md border p-2 text-xs">
-                Внимание: расчёт за период включает{' '}
-                <span className="font-medium">полный месячный оклад</span> (период «{PERIOD_LABEL[period]}
-                »). Проверьте сумму — за неполный период оклад платить не нужно.
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium">Дата</label>
-              <input
-                type="date"
-                value={paidOn}
-                onChange={(e) => setPaidOn(e.target.value)}
-                className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Из счёта</label>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
-              >
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Комментарий</label>
-            <input
-              type="text"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={pending}
-            className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          >
-            Назад
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!valid || pending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {isEdit ? 'Сохранить' : 'Выплатить'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return <PayrollVedomost />;
 }
 
 /* ========================== ИНЖЕНЕР ========================== */
@@ -1298,6 +628,778 @@ function PeriodTabs({
           {PERIOD_LABEL[p]}
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ===================== Ведомость — единственный экран ЗП директора ===================== */
+
+const MONTHS_RU = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+const MONTHS_SHORT = [
+  'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
+  'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
+];
+
+function kopToRubInput(kopecks: number): string {
+  return kopecks ? String(kopecks / 100) : '';
+}
+function kopStr(rub: number): string {
+  return String(Math.round(rub * 100));
+}
+
+type VedRow = {
+  employeeId: string;
+  employeeName: string;
+  /** Сделка (₽) — автозаполняется по % от работ, редактируется руками. */
+  piecework: string;
+  salary: string;
+  advance: string;
+  bonus: string;
+};
+
+function PayrollVedomost() {
+  const utils = trpc.useUtils();
+  const sheetsQ = trpc.payroll.sheets.list.useQuery();
+  const staffQ = trpc.users.list.useQuery();
+  const ruleQ = trpc.payroll.getRule.useQuery();
+  const accountsQ = trpc.cash.accounts.list.useQuery();
+  const accounts: Array<{ id: string; name: string }> = accountsQ.data ?? [];
+
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [monthIdx, setMonthIdx] = useState(now.getMonth()); // 0-based
+  const monthKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+  const monthStartIso = new Date(Date.UTC(year, monthIdx, 1)).toISOString();
+  const monthEndIso = new Date(Date.UTC(year, monthIdx + 1, 1)).toISOString();
+
+  // Работы по каждому за выбранный месяц — переиспользуем расчёт по закрытым нарядам.
+  const worksQ = trpc.payroll.computePayouts.useQuery({
+    preset: 'custom',
+    start: monthStartIso,
+    end: monthEndIso,
+  });
+  const worksByEmployee = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of worksQ.data?.rows ?? []) {
+      m.set(r.engineerId, Number(r.worksAmountKopecks));
+    }
+    return m;
+  }, [worksQ.data]);
+
+  const saveM = trpc.payroll.sheets.save.useMutation({
+    onSuccess: () => utils.payroll.sheets.list.invalidate(),
+  });
+  const deleteM = trpc.payroll.sheets.delete.useMutation({
+    onSuccess: () => utils.payroll.sheets.list.invalidate(),
+  });
+  const afterCash = () => {
+    void utils.payroll.sheets.list.invalidate();
+    void utils.cash.invalidate();
+  };
+  const postM = trpc.payroll.sheets.postToCash.useMutation({ onSuccess: afterCash });
+  const unpostM = trpc.payroll.sheets.unpost.useMutation({ onSuccess: afterCash });
+
+  const savedSheet = useMemo(
+    () => sheetsQ.data?.find((s) => s.month === monthKey) ?? null,
+    [sheetsQ.data, monthKey],
+  );
+
+  const [rows, setRows] = useState<VedRow[]>([]);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+
+  // % от работ — по умолчанию из глобального правила (процент сделки).
+  const [percent, setPercent] = useState('');
+  useEffect(() => {
+    if (percent === '' && ruleQ.data) setPercent(String(ruleQ.data.pieceworkPercent ?? 0));
+  }, [ruleQ.data, percent]);
+
+  // Гидрируем строки из сохранённой ведомости при смене месяца / первой загрузке.
+  useEffect(() => {
+    if (!sheetsQ.data) return;
+    if (loadedKey === monthKey) return;
+    setRows(
+      savedSheet
+        ? savedSheet.entries.map((e) => ({
+            employeeId: e.employeeId,
+            employeeName: e.employeeName,
+            piecework: kopToRubInput(e.pieceworkKopecks ?? 0),
+            salary: kopToRubInput(e.salaryKopecks),
+            advance: kopToRubInput(e.advanceKopecks),
+            bonus: kopToRubInput(e.bonusKopecks),
+          }))
+        : [],
+    );
+    setLoadedKey(monthKey);
+  }, [sheetsQ.data, savedSheet, monthKey, loadedKey]);
+
+  const prevMonth = () => {
+    setLoadedKey(null);
+    if (monthIdx === 0) {
+      setMonthIdx(11);
+      setYear((y) => y - 1);
+    } else setMonthIdx((m) => m - 1);
+  };
+  const nextMonth = () => {
+    setLoadedKey(null);
+    if (monthIdx === 11) {
+      setMonthIdx(0);
+      setYear((y) => y + 1);
+    } else setMonthIdx((m) => m + 1);
+  };
+
+  const pullEmployees = () => {
+    const present = new Set(rows.map((r) => r.employeeId));
+    const additions: VedRow[] = (staffQ.data ?? [])
+      .filter((u) => !present.has(u.id))
+      .map((u) => ({
+        employeeId: u.id,
+        employeeName: u.fullName,
+        piecework: '',
+        salary: '',
+        advance: '',
+        bonus: '',
+      }));
+    if (additions.length > 0) setRows((prev) => [...prev, ...additions]);
+  };
+
+  const addRow = () =>
+    setRows((prev) => [
+      ...prev,
+      {
+        employeeId: `manual_${prev.length}_${monthKey}`,
+        employeeName: '',
+        piecework: '',
+        salary: '',
+        advance: '',
+        bonus: '',
+      },
+    ]);
+  const removeRow = (idx: number) => setRows((prev) => prev.filter((_, i) => i !== idx));
+  const setField = (idx: number, field: keyof VedRow, value: string) =>
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+
+  // «Посчитать по %» — каждому подставляем его работы за месяц × процент в колонку «Сделка».
+  // Ручные строки и тех, у кого работ нет, не трогаем.
+  const applyPercent = () => {
+    const p = Math.max(0, Number(percent.replace(',', '.')) || 0);
+    setRows((prev) =>
+      prev.map((r) => {
+        const worksKop = worksByEmployee.get(r.employeeId);
+        if (worksKop === undefined) return r;
+        const pieceRub = Math.round((worksKop * p) / 100) / 100;
+        return { ...r, piecework: pieceRub ? String(pieceRub) : '' };
+      }),
+    );
+  };
+
+  const totals = useMemo(() => {
+    let piecework = 0;
+    let salary = 0;
+    let advance = 0;
+    let bonus = 0;
+    for (const r of rows) {
+      piecework += parseRubNumber(r.piecework);
+      salary += parseRubNumber(r.salary);
+      advance += parseRubNumber(r.advance);
+      bonus += parseRubNumber(r.bonus);
+    }
+    return { piecework, salary, advance, bonus, total: piecework + salary + advance + bonus };
+  }, [rows]);
+
+  const buildEntries = () =>
+    rows.map((r) => ({
+      employeeId: r.employeeId,
+      employeeName: r.employeeName.trim(),
+      pieceworkRub: parseRubNumber(r.piecework),
+      salaryRub: parseRubNumber(r.salary),
+      advanceRub: parseRubNumber(r.advance),
+      bonusRub: parseRubNumber(r.bonus),
+    }));
+
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const doSave = (withReason?: string) => {
+    saveM.mutate(
+      { month: monthKey, entries: buildEntries(), reason: withReason },
+      {
+        onSuccess: () => {
+          setReasonOpen(false);
+          setReason('');
+        },
+      },
+    );
+  };
+  const handleSave = () => {
+    if (savedSheet) setReasonOpen(true);
+    else doSave();
+  };
+  const handleDelete = () => {
+    deleteM.mutate(
+      { month: monthKey },
+      {
+        onSuccess: () => {
+          setConfirmDelete(false);
+          setRows([]);
+          setLoadedKey(null);
+        },
+      },
+    );
+  };
+
+  // ── Проведение в кассу ──
+  const posted = savedSheet?.cashTransactionId != null;
+  const postedAmount = savedSheet?.postedAmountKopecks ?? null;
+  const savedTotalKop = useMemo(() => {
+    if (!savedSheet) return 0;
+    return savedSheet.entries.reduce(
+      (s, e) => s + e.salaryKopecks + (e.pieceworkKopecks ?? 0) + e.advanceKopecks + e.bonusKopecks,
+      0,
+    );
+  }, [savedSheet]);
+  const needsRepost = posted && postedAmount != null && String(savedTotalKop) !== postedAmount;
+
+  const [postOpen, setPostOpen] = useState(false);
+  const [postAccountId, setPostAccountId] = useState('');
+  const openPost = () => {
+    setPostAccountId(savedSheet?.postedAccountId ?? accounts[0]?.id ?? '');
+    setPostOpen(true);
+  };
+  const doPost = () => {
+    if (!postAccountId) return;
+    postM.mutate({ month: monthKey, accountId: postAccountId }, { onSuccess: () => setPostOpen(false) });
+  };
+
+  // ── Годовая сводка ──
+  const [summaryYear, setSummaryYear] = useState(now.getFullYear());
+  const summary = useMemo(() => {
+    const map = new Map<string, { name: string; months: number[] }>();
+    for (const s of sheetsQ.data ?? []) {
+      if (!s.month.startsWith(`${summaryYear}-`)) continue;
+      const mIdx = Number(s.month.slice(5, 7)) - 1;
+      if (mIdx < 0 || mIdx > 11) continue;
+      for (const e of s.entries) {
+        const kop =
+          e.salaryKopecks + (e.pieceworkKopecks ?? 0) + e.advanceKopecks + e.bonusKopecks;
+        let rec = map.get(e.employeeId);
+        if (!rec) {
+          rec = { name: e.employeeName, months: Array.from({ length: 12 }, () => 0) };
+          map.set(e.employeeId, rec);
+        }
+        if (e.employeeName) rec.name = e.employeeName;
+        rec.months[mIdx] = (rec.months[mIdx] ?? 0) + kop;
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, rec]) => ({
+        id,
+        name: rec.name,
+        months: rec.months,
+        yearTotal: rec.months.reduce((a, b) => a + b, 0),
+      }))
+      .sort((a, b) => b.yearTotal - a.yearTotal);
+  }, [sheetsQ.data, summaryYear]);
+
+  const exportSummary = () => {
+    const header = ['Сотрудник', ...MONTHS_SHORT, 'Итого за год'];
+    const lines = [header.join('\t')];
+    for (const r of summary) {
+      lines.push(
+        [r.name, ...r.months.map((k) => Math.round(k / 100)), Math.round(r.yearTotal / 100)].join(
+          '\t',
+        ),
+      );
+    }
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vedomost_${summaryYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const numCls =
+    'border-input bg-background w-24 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40';
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold md:text-2xl">Зарплата — ведомость</h2>
+          <p className="text-muted-foreground text-sm">
+            Помесячно. «Сделка» считается процентом от закрытых заявок — любую сумму можно поправить
+            руками для справедливости.
+          </p>
+        </div>
+        <Link
+          href="/settings/payroll"
+          className="bg-secondary hover:bg-muted inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition"
+        >
+          <SettingsIcon className="h-4 w-4" />
+          Правила
+        </Link>
+      </div>
+
+      {/* ── Ведомость за месяц ── */}
+      <div className="bg-card overflow-hidden rounded-lg border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-secondary text-muted-foreground flex items-center gap-1 rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="hover:bg-background rounded p-1 transition"
+                aria-label="Предыдущий месяц"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-foreground min-w-[132px] text-center text-sm font-medium">
+                {MONTHS_RU[monthIdx]} {year}
+              </span>
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="hover:bg-background rounded p-1 transition"
+                aria-label="Следующий месяц"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground text-xs">% от работ</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={percent}
+                onChange={(e) => setPercent(e.target.value)}
+                className="border-input bg-background w-14 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <button
+                type="button"
+                onClick={applyPercent}
+                className="bg-secondary hover:bg-muted inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm font-medium transition"
+              >
+                <Calculator className="h-4 w-4" />
+                Посчитать
+              </button>
+            </div>
+            {savedSheet && (
+              <span className="text-muted-foreground text-xs">
+                Сохранено: {new Date(savedSheet.savedAt).toLocaleString('ru-RU')}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={pullEmployees}
+              className="bg-secondary hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+            >
+              <Users className="h-4 w-4" />
+              Подтянуть сотрудников
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saveM.isPending}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-60"
+            >
+              {saveM.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Сохранить
+            </button>
+            {savedSheet && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium transition"
+                aria-label="Удалить ведомость за месяц"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {saveM.error && !reasonOpen && (
+          <div className="bg-destructive/10 text-destructive border-b border-destructive/30 p-3 text-sm">
+            {saveM.error.message}
+          </div>
+        )}
+
+        {/* Проведение в кассу */}
+        {savedSheet && (
+          <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5 text-sm">
+            {posted ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-success inline-flex items-center gap-1 font-medium">
+                  <Check className="h-4 w-4" />
+                  Проведено в кассу: {formatRubFromKopecks(postedAmount ?? '0')}
+                </span>
+                {needsRepost && (
+                  <span className="text-warning text-xs">
+                    ведомость изменилась ({formatRubFromKopecks(String(savedTotalKop))}) —
+                    перепроведите
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="text-muted-foreground">
+                Не проведено в кассу — общие деньги (касса/ДДС) не затронуты.
+                {accounts.length === 0 && ' Заведите денежный счёт в «Финансах».'}
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              {(!posted || needsRepost) && (
+                <button
+                  type="button"
+                  onClick={openPost}
+                  disabled={accounts.length === 0 || postM.isPending}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+                >
+                  {postM.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wallet className="h-4 w-4" />
+                  )}
+                  {posted ? 'Перепровести' : 'Провести в кассу'}
+                </button>
+              )}
+              {posted && (
+                <button
+                  type="button"
+                  onClick={() => unpostM.mutate({ month: monthKey })}
+                  disabled={unpostM.isPending}
+                  className="border-input hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+                >
+                  {unpostM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Отменить проведение
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
+              <tr>
+                <th className="p-3 text-left font-medium" style={{ minWidth: 170 }}>
+                  Сотрудник
+                </th>
+                <th className="p-3 text-right font-medium">Работы за месяц</th>
+                <th className="p-3 text-right font-medium">Сделка, ₽</th>
+                <th className="p-3 text-right font-medium">Оклад, ₽</th>
+                <th className="p-3 text-right font-medium">Аванс, ₽</th>
+                <th className="p-3 text-right font-medium">Премия, ₽</th>
+                <th className="p-3 text-right font-medium">Итого</th>
+                <th className="p-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-muted-foreground p-6 text-center">
+                    Нажмите «Подтянуть сотрудников» или добавьте строку вручную
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r, idx) => {
+                  const worksKop = worksByEmployee.get(r.employeeId);
+                  const rowTotal =
+                    parseRubNumber(r.piecework) +
+                    parseRubNumber(r.salary) +
+                    parseRubNumber(r.advance) +
+                    parseRubNumber(r.bonus);
+                  return (
+                    <tr key={`${r.employeeId}-${idx}`} className="hover:bg-muted/30">
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={r.employeeName}
+                          onChange={(e) => setField(idx, 'employeeName', e.target.value)}
+                          placeholder="Имя сотрудника"
+                          className="border-input bg-background w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        />
+                      </td>
+                      <td className="text-muted-foreground p-3 text-right tabular-nums whitespace-nowrap">
+                        {worksKop === undefined ? '—' : formatRubFromKopecks(String(worksKop))}
+                      </td>
+                      {(['piecework', 'salary', 'advance', 'bonus'] as const).map((field) => (
+                        <td key={field} className="p-2 text-right">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={r[field]}
+                            onChange={(e) => setField(idx, field, e.target.value)}
+                            placeholder="0"
+                            className={numCls}
+                          />
+                        </td>
+                      ))}
+                      <td className="p-3 text-right font-semibold tabular-nums whitespace-nowrap">
+                        {formatRubFromKopecks(kopStr(rowTotal))}
+                      </td>
+                      <td className="p-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(idx)}
+                          className="text-muted-foreground hover:text-destructive p-1 transition"
+                          aria-label="Удалить строку"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr className="bg-muted/40 border-t-2 font-semibold tabular-nums">
+                  <td className="p-3">Всего</td>
+                  <td className="text-muted-foreground p-3 text-right">—</td>
+                  <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.piecework))}</td>
+                  <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.salary))}</td>
+                  <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.advance))}</td>
+                  <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.bonus))}</td>
+                  <td className="text-primary p-3 text-right">
+                    {formatRubFromKopecks(kopStr(totals.total))}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        <div className="flex items-center gap-4 border-t p-3">
+          <button
+            type="button"
+            onClick={addRow}
+            className="text-primary inline-flex items-center gap-1 text-sm font-medium hover:underline"
+          >
+            <Plus className="h-4 w-4" />
+            Добавить строку
+          </button>
+          {worksQ.isFetching && (
+            <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Считаю работы за месяц…
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Годовая сводка ── */}
+      <div className="bg-card overflow-hidden rounded-lg border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+          <h3 className="font-semibold">Сводная таблица выплат за год</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-muted-foreground text-xs">Год</label>
+            <input
+              type="number"
+              value={summaryYear}
+              onChange={(e) => setSummaryYear(Number(e.target.value) || now.getFullYear())}
+              className="border-input bg-background w-24 rounded-md border px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <button
+              type="button"
+              onClick={exportSummary}
+              disabled={summary.length === 0}
+              className="bg-secondary hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Экспорт в Excel
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/40 text-muted-foreground uppercase">
+              <tr>
+                <th className="p-2 text-left font-medium" style={{ minWidth: 150 }}>
+                  Сотрудник
+                </th>
+                {MONTHS_SHORT.map((m) => (
+                  <th key={m} className="p-2 text-right font-medium" style={{ minWidth: 56 }}>
+                    {m}
+                  </th>
+                ))}
+                <th className="p-2 text-right font-medium" style={{ minWidth: 90 }}>
+                  Итого за год
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {summary.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="text-muted-foreground p-6 text-center">
+                    Нет сохранённых ведомостей за {summaryYear} год
+                  </td>
+                </tr>
+              ) : (
+                summary.map((r) => (
+                  <tr key={r.id} className="hover:bg-muted/30">
+                    <td className="p-2 font-medium">{r.name || '—'}</td>
+                    {r.months.map((k, mi) => (
+                      <td
+                        key={mi}
+                        className={cn(
+                          'p-2 text-right tabular-nums',
+                          k > 0 ? '' : 'text-muted-foreground',
+                        )}
+                      >
+                        {k > 0 ? formatRubFromKopecks(String(k)) : '—'}
+                      </td>
+                    ))}
+                    <td className="text-primary p-2 text-right font-semibold tabular-nums">
+                      {formatRubFromKopecks(String(r.yearTotal))}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Причина перезаписи ── */}
+      {reasonOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setReasonOpen(false)}
+        >
+          <div
+            className="bg-card w-full max-w-md rounded-lg border p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold">
+              Перезапись ведомости за {MONTHS_RU[monthIdx]} {year}
+            </h3>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Ведомость за этот месяц уже сохранена. Укажите причину изменения (минимум 10 символов)
+              — она попадёт в журнал изменений (требование 402-ФЗ).
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder="Например: исправлена сумма премии по инженеру Иванову"
+              className="border-input bg-background mt-3 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {saveM.error && (
+              <div className="text-destructive mt-2 text-xs">{saveM.error.message}</div>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReasonOpen(false)}
+                className="bg-secondary hover:bg-muted rounded-md px-3 py-1.5 text-sm font-medium transition"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={reason.trim().length < 10 || saveM.isPending}
+                onClick={() => doSave(reason.trim())}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+              >
+                {saveM.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Перезаписать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {postOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setPostOpen(false)}
+        >
+          <div
+            className="bg-card w-full max-w-md rounded-lg border p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold">
+              Провести в кассу — {MONTHS_RU[monthIdx]} {year}
+            </h3>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Сумма ведомости станет расходом в кассе (статья «Зарплата») — общие деньги (ДДС)
+              уменьшатся. Проводится сохранённая сумма; если меняли цифры — сначала сохраните.
+            </p>
+            <div className="bg-muted/30 mt-3 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Сумма к проведению</span>
+              <span className="font-semibold tabular-nums">
+                {formatRubFromKopecks(String(savedTotalKop))}
+              </span>
+            </div>
+            <label className="mt-3 block text-sm font-medium">Из счёта</label>
+            <select
+              value={postAccountId}
+              onChange={(e) => setPostAccountId(e.target.value)}
+              className="border-input bg-background mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            {postM.error && (
+              <div className="text-destructive mt-2 text-xs">{postM.error.message}</div>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPostOpen(false)}
+                className="bg-secondary hover:bg-muted rounded-md px-3 py-1.5 text-sm font-medium transition"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={doPost}
+                disabled={!postAccountId || postM.isPending}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+              >
+                {postM.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wallet className="h-4 w-4" />
+                )}
+                Провести
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Удалить ведомость?"
+        description={`Ведомость за ${MONTHS_RU[monthIdx]} ${year} будет удалена (можно завести месяц заново).`}
+        confirmText="Удалить"
+        variant="danger"
+        loading={deleteM.isPending}
+        error={deleteM.error?.message ?? null}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
