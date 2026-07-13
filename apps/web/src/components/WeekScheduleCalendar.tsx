@@ -111,7 +111,11 @@ export function WeekScheduleCalendar({
     sameLocalDay(t.scheduledStartAt, day),
   );
 
-  const engineerCols = engineers.slice(0, 9);
+  // Показываем ВСЕХ активных инженеров. Раньше был жёсткий лимит .slice(0, 9),
+  // который прятал инженеров сверх девятого (по алфавиту) — при 12 активных
+  // последние трое не попадали в график. Лишние колонки уводит в горизонтальный
+  // скролл (обёртка overflow-auto ниже + min-width колонок).
+  const engineerCols = engineers;
 
   const handleDrop = (engineerId: string, slotIndex: number, e: DragEvent) => {
     e.preventDefault();
