@@ -18,6 +18,14 @@ import {
   setRuleCmd,
   updatePayoutCmd,
 } from './service';
+import {
+  deleteSheet,
+  getSheetByMonth,
+  listSheets,
+  postToCash,
+  saveSheet,
+  unpostFromCash,
+} from './sheets';
 
 const periodPresetSchema = z.object({
   preset: z.enum(['today', 'week', 'month', 'quarter', 'custom']),
@@ -29,7 +37,9 @@ const payrollModeSchema = z.enum(['piecework', 'salary_bonus']);
 
 const MAX_AMOUNT_RUB = 9_999_999_999;
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
+const monthKey = z.string().regex(/^\d{4}-\d{2}$/, 'Месяц в формате YYYY-MM');
 const rubToKopecks = (rub: number): bigint => BigInt(Math.round(rub * 100));
+const rubToKopecksInt = (rub: number): number => Math.round(rub * 100);
 
 export const payrollRouter = router({
   getRule: directorProcedure.query(({ ctx }) =>
@@ -155,4 +165,65 @@ export const payrollRouter = router({
   deletePayout: directorProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) => deletePayoutCmd(buildCmdCtx(ctx), input.id)),
+
+  /* ── Ручная ведомость (директор): отдельный журнал, кассу НЕ трогает ── */
+  sheets: router({
+    /** Все сохранённые ведомости (для годовой сводки). */
+    list: directorProcedure.query(({ ctx }) => listSheets(ctx.db, ctx.tenant.id)),
+
+    /** Ведомость за конкретный месяц. */
+    getByMonth: directorProcedure
+      .input(z.object({ month: monthKey }))
+      .query(({ ctx, input }) => getSheetByMonth(ctx.db, ctx.tenant.id, input.month)),
+
+    /** Сохранить/перезаписать ведомость за месяц (перезапись — с причиной ≥10 симв.). */
+    save: directorProcedure
+      .input(
+        z.object({
+          month: monthKey,
+          entries: z
+            .array(
+              z.object({
+                employeeId: z.string().trim().min(1).max(100),
+                employeeName: z.string().trim().max(200),
+                salaryRub: z.number().min(0).max(MAX_AMOUNT_RUB),
+                pieceworkRub: z.number().min(0).max(MAX_AMOUNT_RUB).default(0),
+                advanceRub: z.number().min(0).max(MAX_AMOUNT_RUB),
+                bonusRub: z.number().min(0).max(MAX_AMOUNT_RUB),
+              }),
+            )
+            .max(500),
+          reason: z.string().trim().min(10).max(500).optional(),
+        }),
+      )
+      .mutation(({ ctx, input }) =>
+        saveSheet(buildCmdCtx(ctx), {
+          month: input.month,
+          entries: input.entries.map((e) => ({
+            employeeId: e.employeeId,
+            employeeName: e.employeeName,
+            salaryKopecks: rubToKopecksInt(e.salaryRub),
+            pieceworkKopecks: rubToKopecksInt(e.pieceworkRub),
+            advanceKopecks: rubToKopecksInt(e.advanceRub),
+            bonusKopecks: rubToKopecksInt(e.bonusRub),
+          })),
+          reason: input.reason,
+        }),
+      ),
+
+    /** Мягко удалить ведомость за месяц. */
+    delete: directorProcedure
+      .input(z.object({ month: monthKey }))
+      .mutation(({ ctx, input }) => deleteSheet(buildCmdCtx(ctx), input.month)),
+
+    /** Провести ведомость в кассу: сумма за месяц → расход (статья «Зарплата»). */
+    postToCash: directorProcedure
+      .input(z.object({ month: monthKey, accountId: z.string().uuid() }))
+      .mutation(({ ctx, input }) => postToCash(buildCmdCtx(ctx), input.month, input.accountId)),
+
+    /** Отменить проведение в кассу. */
+    unpost: directorProcedure
+      .input(z.object({ month: monthKey }))
+      .mutation(({ ctx, input }) => unpostFromCash(buildCmdCtx(ctx), input.month)),
+  }),
 });

@@ -15,6 +15,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -131,3 +132,68 @@ export const payrollPayouts = pgTable(
     check('payroll_payouts_computed_non_negative', sql`computed_kopecks >= 0`),
   ],
 );
+
+/**
+ * Строка ручной ведомости — вводится директором вручную. Суммы — ЦЕЛЫЕ КОПЕЙКИ
+ * (integer в jsonb; копейки помещаются в Number без потерь точности).
+ */
+export interface PayrollSheetEntry {
+  /** ID пользователя (uuid) либо `manual_<...>` для строки, введённой вручную (свободное имя). */
+  employeeId: string;
+  employeeName: string;
+  /** Оклад (ручной). */
+  salaryKopecks: number;
+  /** Сделка = работы по закрытым заявкам × %, потом можно поправить руками (для справедливости). */
+  pieceworkKopecks: number;
+  advanceKopecks: number;
+  bonusKopecks: number;
+}
+
+/**
+ * Ручная ведомость выплат по сотрудникам (перенос из старой CRM).
+ *
+ * ОТДЕЛЬНЫЙ учётный журнал: директор вручную вбивает оклад/аванс/премию по месяцам.
+ * В отличие от payroll_payouts, кассу (ДДС) НЕ трогает — это табель/справка, а не проводка.
+ *
+ * Одна живая ведомость на (tenant, month). Перезапись существующей — только с причиной
+ * (≥10 симв.) и записью diff в audit_logs (402-ФЗ ст.10). Удаление — мягкое (deleted_at),
+ * после чего месяц можно завести заново.
+ *
+ * RLS включается отдельно через 0073_enable_rls_payroll_sheets.sql (setup-rls.ts).
+ */
+export const payrollSheets = pgTable(
+  'payroll_sheets',
+  {
+    id: pk(),
+    tenantId: tenantId(),
+    /** Месяц ведомости, формат YYYY-MM. */
+    month: varchar('month', { length: 7 }).notNull(),
+    /** Строки ведомости (ручной ввод). Суммы — целые копейки. */
+    entries: jsonb('entries')
+      .notNull()
+      .$type<PayrollSheetEntry[]>()
+      .default(sql`'[]'::jsonb`),
+    /** Кто последним сохранил ведомость. */
+    createdBy: uuid('created_by'),
+    /**
+     * Проведение в кассу: если ведомость проведена, здесь ссылка на расход в
+     * cash_transactions (статья «Зарплата»). NULL — не проведена. Сумма/счёт/время
+     * проведения — в соседних колонках (для отображения «Проведено: X ₽» и перепроведения).
+     */
+    cashTransactionId: uuid('cash_transaction_id'),
+    postedAmountKopecks: bigint('posted_amount_kopecks', { mode: 'bigint' }),
+    postedAccountId: uuid('posted_account_id'),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    // Одна живая ведомость на месяц; мягко удалённые не мешают пересоздать месяц.
+    uniqueIndex('payroll_sheets_tenant_month_uniq')
+      .on(t.tenantId, t.month)
+      .where(sql`deleted_at IS NULL`),
+    check('payroll_sheets_month_format', sql`month ~ '^[0-9]{4}-[0-9]{2}$'`),
+  ],
+);
+
+export type PayrollSheet = typeof payrollSheets.$inferSelect;
+export type InsertPayrollSheet = typeof payrollSheets.$inferInsert;

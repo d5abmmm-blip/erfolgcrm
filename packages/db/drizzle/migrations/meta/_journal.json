@@ -449,6 +449,20 @@
       "when": 1778501100000,
       "tag": "0072_payroll_payout_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1778501200000,
+      "tag": "0073_payroll_sheets",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1778501300000,
+      "tag": "0074_payroll_sheets_cash_posting",
+      "breakpoints": true
     }
   ]
 }
