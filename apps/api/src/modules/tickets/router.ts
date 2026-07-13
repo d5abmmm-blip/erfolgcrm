@@ -260,7 +260,7 @@ export const ticketsRouter = router({
     .input(
       z.object({
         ticketId: z.string().uuid(),
-        documentKind: z.enum(['intake_act', 'invoice', 'work_act', 'defect_act']),
+        documentKind: z.enum(['intake_act', 'invoice', 'work_act', 'defect_act', 'tech_condition_act']),
       }),
     )
     .mutation(({ ctx, input }) =>

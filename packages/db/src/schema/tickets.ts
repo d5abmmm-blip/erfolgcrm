@@ -277,7 +277,7 @@ export interface TicketEventPayload {
   from?: unknown;
   to?: unknown;
   comment?: string;
-  documentKind?: 'intake_act' | 'invoice' | 'work_act' | 'defect_act';
+  documentKind?: 'intake_act' | 'invoice' | 'work_act' | 'defect_act' | 'tech_condition_act';
   /** Поле выводится только для assignment_change */
   role?: 'engineer' | 'dispatcher';
 }

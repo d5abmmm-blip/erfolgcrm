@@ -1578,7 +1578,7 @@ interface EventDto {
     from?: unknown;
     to?: unknown;
     comment?: string;
-    documentKind?: 'intake_act' | 'invoice' | 'work_act' | 'defect_act';
+    documentKind?: 'intake_act' | 'invoice' | 'work_act' | 'defect_act' | 'tech_condition_act';
     role?: 'engineer' | 'dispatcher';
   };
   createdAt: Date;
@@ -1642,7 +1642,9 @@ function EventRow({ event, compact }: { event: EventDto; compact?: boolean }) {
           ? 'Счёт'
           : p.documentKind === 'defect_act'
             ? 'Дефектный акт'
-            : 'Акт работ';
+            : p.documentKind === 'tech_condition_act'
+              ? 'Акт технического состояния'
+              : 'Акт работ';
     title = `Документ напечатан: ${kindLabel}`;
   }
 
