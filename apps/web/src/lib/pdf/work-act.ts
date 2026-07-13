@@ -236,14 +236,19 @@ function diagnosisBlock(input: BuildWorkActInput): Content | null {
   return sections.length > 0 ? { stack: sections } : null;
 }
 
-function warrantyBlock(): Content {
+function warrantyBlock(hasParts: boolean): Content {
+  // Гарантия даётся ТОЛЬКО на установленные запчасти (6 месяцев). На сами работы
+  // (ремонт без замены з/ч) гарантия не предоставляется. Если запчастей не было —
+  // гарантии нет вовсе.
+  const warrantyText = hasParts
+    ? 'Гарантия на установленные запасные части — 6 месяцев со дня подписания акта. На выполненные работы (ремонт) гарантия не предоставляется.'
+    : 'Гарантия на выполненные работы не предоставляется.';
   return {
     margin: [0, 12, 0, 0],
     stack: [
       { text: 'Гарантия', bold: true, color: BRAND_PRIMARY, fontSize: 11 },
       {
-        text:
-          'Гарантия на выполненные работы — 6 месяцев со дня подписания. На устанавливаемые запчасти — гарантия производителя.',
+        text: warrantyText,
         fontSize: 9,
         margin: [0, 2, 0, 0] as [number, number, number, number],
       },
@@ -340,7 +345,7 @@ export function buildWorkActDoc(input: BuildWorkActInput): TDocumentDefinitions 
   const diag = diagnosisBlock(input);
   if (diag) content.push(diag);
 
-  content.push(warrantyBlock());
+  content.push(warrantyBlock(parts.length > 0));
 
   if (input.barcodeDataUrl) {
     content.push({
