@@ -137,7 +137,7 @@ export function WeekScheduleCalendar({
   };
 
   return (
-    <div className="bg-card flex flex-col gap-3 rounded-lg border p-3">
+    <div className="bg-card flex flex-col gap-3 rounded-lg border p-3 lg:h-full lg:min-h-0">
       <DayTabs weekStart={weekStart} value={dayIndex} onChange={setDayIndex} />
 
       {engineerCols.length === 0 ? (
@@ -145,15 +145,15 @@ export function WeekScheduleCalendar({
           Нет активных инженеров. Добавьте их в «Настройки → Пользователи».
         </div>
       ) : (
-        <div className="overflow-auto">
+        <div className="overflow-auto max-h-[80vh] lg:min-h-0 lg:flex-1">
           <div
             className="relative grid"
             style={{
               gridTemplateColumns: `64px repeat(${engineerCols.length}, minmax(180px, 1fr))`,
             }}
           >
-            {/* header row: empty + engineer names */}
-            <div className="bg-card sticky top-0 z-20 border-b" />
+            {/* header row: угол (закреплён и сверху, и слева) + имена инженеров */}
+            <div className="bg-card sticky left-0 top-0 z-30 border-b border-r" />
             {engineerCols.map((eng) => (
               <div
                 key={eng.id}
@@ -164,8 +164,8 @@ export function WeekScheduleCalendar({
               </div>
             ))}
 
-            {/* time column */}
-            <div className="border-r">
+            {/* колонка времени — закреплена слева, чтобы часы не пропадали при скролле вправо */}
+            <div className="bg-card sticky left-0 z-20 border-r">
               {Array.from({ length: SLOTS_PER_DAY }).map((_, i) => (
                 <div
                   key={i}
