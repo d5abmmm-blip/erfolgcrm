@@ -123,6 +123,8 @@ export const ticketsRouter = router({
         .object({
           search: z.string().trim().max(100).optional(),
           statuses: z.array(TicketStatus).optional(),
+          /** Фильтр по срочности (UI «только срочные» шлёт ['urgent']). */
+          priorities: z.array(TicketPriority).optional(),
           engineerId: z.string().uuid().optional(),
           clientId: z.string().uuid().optional(),
           contractId: z.string().uuid().optional(),
@@ -130,6 +132,8 @@ export const ticketsRouter = router({
           scheduled: z.boolean().optional(),
           /** Фича A — только заявки, ждущие запчасть. */
           waitingForPart: z.boolean().optional(),
+          /** Порядок: 'priority' — срочные наверх (рабочие очереди). Дефолт 'received'. */
+          sort: z.enum(['received', 'priority']).optional(),
           page: z.number().int().positive().max(1000).optional(),
           pageSize: z.number().int().positive().max(200).optional(),
         })

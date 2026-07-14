@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import {
   Clock,
+  Flame,
   Package,
   Plus,
   Search,
@@ -55,12 +56,16 @@ export function TicketsListPage() {
   const debounced = useDebounce(search.trim(), 300);
   const [statuses, setStatuses] = useState<TicketStatus[]>([]);
   const [onlyWaitingPart, setOnlyWaitingPart] = useState(false);
+  const [onlyUrgent, setOnlyUrgent] = useState(false);
   const [page, setPage] = useState(1);
 
   const list = trpc.tickets.list.useQuery({
     search: debounced || undefined,
     statuses: statuses.length > 0 ? statuses : undefined,
+    priorities: onlyUrgent ? ['urgent'] : undefined,
     waitingForPart: onlyWaitingPart ? true : undefined,
+    // Рабочая очередь: срочные наверх, внутри срочности — свежие первыми.
+    sort: 'priority',
     page,
     pageSize: PAGE_SIZE,
   });
@@ -234,6 +239,23 @@ export function TicketsListPage() {
         )}
 
         <span className="bg-border mx-1 h-4 w-px self-center" aria-hidden />
+
+        <button
+          type="button"
+          onClick={() => {
+            setOnlyUrgent((v) => !v);
+            setPage(1);
+          }}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs transition',
+            onlyUrgent
+              ? 'border-destructive bg-destructive/10 text-destructive'
+              : 'border-border text-muted-foreground hover:border-foreground/30',
+          )}
+        >
+          <Flame className="h-3 w-3" />
+          Только срочные
+        </button>
 
         <button
           type="button"
