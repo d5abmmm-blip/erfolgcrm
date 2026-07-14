@@ -24,6 +24,7 @@ import { openPrintWindow } from '../../lib/open-print-window';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
 import { PhotoUploader } from '../../components/PhotoUploader';
+import { RepairArchiveBlock } from '../../components/RepairArchiveBlock';
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   received: 'Принята',
@@ -405,6 +406,15 @@ export function MobileTicketPage() {
           </div>
         )}
       </div>
+
+      {/* AI-подсказка «похожие ремонты» из архива 2015–2023: что за симптом, что нашли,
+          что делали. Инженеру у аппарата она нужнее всего — на десктопе диспетчера блок
+          уже был, на телефоне его не хватало.
+          canSummarize={false}: ИИ-резюме «что обычно помогало» — только для staff
+          (repairArchive.summarize = staffProcedure), сам список архива инженеру разрешён
+          (repairArchive.searchSimilar = engineerProcedure). Блок сам прячется, если
+          похожего не нашлось. В архиве нет ПДн клиента — только техника. */}
+      <RepairArchiveBlock ticketId={t.id} canSummarize={false} />
 
       {allowedActions.length > 0 && (
         <div className="space-y-2">
