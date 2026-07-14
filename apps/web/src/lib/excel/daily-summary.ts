@@ -14,61 +14,14 @@
  */
 import type ExcelJSType from 'exceljs';
 import type { DailySummaryInput } from '../pdf/daily-summary';
-
-/**
- * Lazy-loader: exceljs (~700KB) подгружается только при первом построении xlsx.
- * До этого момента в главном бандле его нет.
- */
-let _excelJsPromise: Promise<typeof ExcelJSType> | null = null;
-async function getExcelJS(): Promise<typeof ExcelJSType> {
-  if (_excelJsPromise) return _excelJsPromise;
-  _excelJsPromise = import('exceljs').then((m) => m.default);
-  return _excelJsPromise;
-}
-
-const PRIMARY = 'FF29ABE2'; // ARGB фирменного цвета (без #)
-const HEADER_FILL: ExcelJSType.FillPattern = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: PRIMARY },
-};
-const HEADER_FONT: Partial<ExcelJSType.Font> = {
-  bold: true,
-  color: { argb: 'FFFFFFFF' },
-};
-
-function kopecksToRub(kopStr: string): number {
-  // Копейки в рубли как Number — точности хватает для отчёта; bigint в xlsx сохранять нельзя.
-  return Number(BigInt(kopStr)) / 100;
-}
-
-function applyHeader(row: ExcelJSType.Row): void {
-  row.eachCell((cell) => {
-    cell.fill = HEADER_FILL;
-    cell.font = HEADER_FONT;
-    cell.alignment = { vertical: 'middle', horizontal: 'left' };
-  });
-  row.height = 18;
-}
-
-function autoSize(sheet: ExcelJSType.Worksheet, minWidth = 10, maxWidth = 50): void {
-  sheet.columns.forEach((col) => {
-    let max = minWidth;
-    col.eachCell?.({ includeEmpty: false }, (cell) => {
-      const v = cell.value;
-      const s =
-        typeof v === 'string'
-          ? v
-          : v instanceof Date
-            ? '99.99.9999'
-            : typeof v === 'number' || typeof v === 'boolean'
-              ? String(v)
-              : '';
-      if (s.length > max) max = s.length;
-    });
-    col.width = Math.min(maxWidth, max + 2);
-  });
-}
+import {
+  applyHeader,
+  autoSize,
+  getExcelJS,
+  kopecksToRub,
+  makeTableSheet,
+  workbookToBlob,
+} from './shared';
 
 function metricsSheet(wb: ExcelJSType.Workbook, input: DailySummaryInput): void {
   const m = input.metrics;
@@ -114,40 +67,6 @@ function metricsSheet(wb: ExcelJSType.Workbook, input: DailySummaryInput): void 
     if (typeof r[1] === 'number' && r[0].includes('₽')) {
       cell.numFmt = '#,##0.00';
     }
-  }
-  autoSize(sh);
-}
-
-interface RowDef<T> {
-  header: string;
-  key: keyof T & string;
-  width?: number;
-  numFmt?: string;
-  type?: 'text' | 'money' | 'number' | 'date';
-}
-
-function makeTableSheet<T extends Record<string, unknown>>(
-  wb: ExcelJSType.Workbook,
-  name: string,
-  defs: Array<RowDef<T>>,
-  rows: T[],
-  emptyMessage: string,
-): void {
-  const sh = wb.addWorksheet(name);
-  sh.columns = defs.map((d) => ({ header: d.header, key: d.key, width: d.width }));
-  applyHeader(sh.getRow(1));
-  if (rows.length === 0) {
-    sh.addRow([emptyMessage]);
-    sh.mergeCells(2, 1, 2, defs.length);
-    const cell = sh.getCell('A2');
-    cell.font = { italic: true, color: { argb: 'FF888888' } };
-    return;
-  }
-  for (const r of rows) sh.addRow(r);
-  for (const d of defs) {
-    if (!d.numFmt) continue;
-    const col = sh.getColumn(d.key);
-    col.numFmt = d.numFmt;
   }
   autoSize(sh);
 }
@@ -254,10 +173,7 @@ export async function buildDailySummaryWorkbook(
     'За день закрытых заявок нет',
   );
 
-  const buffer = await wb.xlsx.writeBuffer();
-  return new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  return workbookToBlob(wb);
 }
 
 function parseIsoDate(iso: string): Date {
