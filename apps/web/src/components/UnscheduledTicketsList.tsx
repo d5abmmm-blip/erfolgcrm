@@ -39,6 +39,8 @@ export function UnscheduledTicketsList({ onTicketClick }: Props) {
     scheduled: false,
     statuses: ACTIVE_FOR_SCHEDULE,
     search: debounced || undefined,
+    // Планируем в первую очередь срочное.
+    sort: 'priority',
     pageSize: 100,
   });
 

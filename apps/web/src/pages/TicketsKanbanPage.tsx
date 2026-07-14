@@ -65,6 +65,8 @@ export function TicketsKanbanPage() {
         engineerFilter !== ENGINEER_ALL && engineerFilter !== ENGINEER_NONE
           ? engineerFilter
           : undefined,
+      // Рабочая очередь: срочные карточки — вверху своей колонки.
+      sort: 'priority',
     },
     { refetchInterval: POLL_INTERVAL_MS, refetchOnWindowFocus: true },
   );

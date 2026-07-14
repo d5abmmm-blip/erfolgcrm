@@ -160,9 +160,23 @@ export interface UpdateTicketInput {
 const PAGE_SIZE_DEFAULT = 25;
 const TICKET_COUNTER_KIND = 'ticket';
 
+/**
+ * Порядок выдачи списка заявок.
+ *   'received' — по дате приёма (свежие сверху). Историческое поведение, дефолт:
+ *                нужен там, где список читают как хронологию (карточка договора,
+ *                «похожие случаи»).
+ *   'priority' — сначала срочность (urgent → high → normal → low), внутри — свежие
+ *                сверху. Для рабочих очередей: список заявок, канбан, незапланированные.
+ * Сортировка по enum ticket_priority опирается на порядок значений в самом enum
+ * ('low','normal','high','urgent'), поэтому DESC даёт срочные первыми.
+ */
+export type TicketListSort = 'received' | 'priority';
+
 export interface ListTicketsOpts {
   search?: string;
   statuses?: TicketStatus[];
+  /** Фильтр по приоритету (напр. «только срочные» = ['urgent']). Пустой/undefined — без фильтра. */
+  priorities?: TicketPriority[];
   engineerId?: string;
   clientId?: string;
   contractId?: string;
@@ -175,6 +189,8 @@ export interface ListTicketsOpts {
   scheduled?: boolean;
   /** Фича A — только заявки с флагом «Ждём запчасть». */
   waitingForPart?: boolean;
+  /** Порядок выдачи. По умолчанию 'received' — прежнее поведение. */
+  sort?: TicketListSort;
   page?: number;
   pageSize?: number;
 }
@@ -214,6 +230,9 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
   if (opts.statuses && opts.statuses.length > 0) {
     filters.push(inArray(tickets.status, opts.statuses));
   }
+  if (opts.priorities && opts.priorities.length > 0) {
+    filters.push(inArray(tickets.priority, opts.priorities));
+  }
   if (opts.engineerId) filters.push(eq(tickets.assignedEngineerId, opts.engineerId));
   if (opts.clientId) filters.push(eq(tickets.clientId, opts.clientId));
   if (opts.contractId) filters.push(eq(tickets.contractId, opts.contractId));
@@ -232,6 +251,37 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
     );
   }
   return filters.length ? and(...filters) : undefined;
+}
+
+/**
+ * Хелпер: ORDER BY для listTickets.
+ *
+ * ВАЖНО — уникальный последний ключ (id). Пагинация делает отдельный SELECT на каждую
+ * страницу (LIMIT/OFFSET). Если ключ сортировки не уникален, Postgres НЕ обязан выдавать
+ * строки-«близнецы» в одном и том же порядке на разных страницах: строка может попасть
+ * на две страницы сразу, а другая — не попасть никуда. У нас это не теория: импорт из
+ * WinServisePro проставил всем ~6000 архивным заявкам priority='normal' и дату БЕЗ времени,
+ * т.е. тысячи строк совпадают по (priority, received_at). Раньше порядок нечаянно держался
+ * на индексе (tenant_id, received_at); сортировка по приоритету этот индекс не использует.
+ * Поэтому добавляем desc(id) — id это uuidv7 (монотонный), так что он же корректно доломает
+ * тай-брейк «кто новее».
+ *
+ * ВАЖНО — завершённые вниз (только в режиме 'priority'). Список заявок по умолчанию
+ * показывает ВСЕ статусы. Без этого условия закрытая срочная заявка вечно обгоняла бы
+ * открытую обычную, и первая страница очереди со временем забилась бы архивом.
+ * Очередь — про открытую работу. При фильтре «только закрытые» слагаемое константно и ни на
+ * что не влияет.
+ */
+function buildListOrder(sort: TicketListSort | undefined): SQL[] {
+  if (sort !== 'priority') {
+    return [desc(tickets.receivedAt), desc(tickets.id)];
+  }
+  return [
+    asc(sql`(${tickets.status} in ('closed', 'cancelled'))`),
+    desc(tickets.priority),
+    desc(tickets.receivedAt),
+    desc(tickets.id),
+  ];
 }
 
 export async function listTickets(
@@ -280,7 +330,7 @@ export async function listTickets(
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .leftJoin(users, eq(tickets.assignedEngineerId, users.id))
       .where(whereClause)
-      .orderBy(desc(tickets.receivedAt))
+      .orderBy(...buildListOrder(opts.sort))
       .limit(pageSize)
       .offset(offset);
 
