@@ -85,6 +85,23 @@ export type AssetEventType = z.infer<typeof AssetEventType>;
 export const TicketPriority = z.enum(['low', 'normal', 'high', 'urgent']);
 export type TicketPriority = z.infer<typeof TicketPriority>;
 
+/**
+ * Часы срока реакции (SLA) по приоритету заявки: дедлайн = момент приёма + эти часы.
+ * Это разумные дефолты — при необходимости меняются здесь одной строкой (общий источник
+ * истины для сервера и клиента, чтобы срок в списке и на форме совпадал).
+ */
+export const SLA_HOURS_BY_PRIORITY: Record<TicketPriority, number> = {
+  urgent: 4,
+  high: 8,
+  normal: 24,
+  low: 72,
+};
+
+/** Целевой срок SLA от момента приёма заявки по её приоритету. */
+export function computeSlaTargetAt(receivedAt: Date, priority: TicketPriority): Date {
+  return new Date(receivedAt.getTime() + SLA_HOURS_BY_PRIORITY[priority] * 60 * 60 * 1000);
+}
+
 /** Тип ремонта (повторяет реальный бланк ООО Эрфольг) */
 export const RepairType = z.enum(['paid', 'warranty', 'service_contract']);
 export type RepairType = z.infer<typeof RepairType>;
