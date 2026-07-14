@@ -1420,6 +1420,16 @@ export const BOARD_WARN_DAYS = 3;
  */
 export const BOARD_STUCK_DAYS = 7;
 
+/**
+ * Старение «Ожидает акта» (готово к выдаче, но не забрали). Готовая техника лежит на
+ * полке и занимает место — если клиенту не позвонили, она не должна вечно светиться
+ * зелёным. Свежая (< WARN) — зелёная (норм, только что доделали); полежала ≥ WARN —
+ * жёлтая («позвоните клиенту»); ≥ RED — красная («забыли, лежит давно»).
+ * Пороги мягче основного простоя: техника «готова», а не «застряла в работе».
+ */
+export const ACT_PENDING_WARN_DAYS = 4;
+export const ACT_PENDING_RED_DAYS = 10;
+
 export type TrafficLight = 'green' | 'yellow' | 'red';
 
 /**
@@ -1456,9 +1466,12 @@ export function computeStuckDays(
 }
 
 /**
- * Светофор карточки. act_pending (готово к выдаче) — зелёный (позитив, «позвонить»).
- * Красный — застряла (≥ STUCK) или просрочен SLA. Жёлтый — есть причина простоя или
- * замедлилась (≥ WARN). Иначе зелёный (движется).
+ * Светофор карточки.
+ * act_pending (готово к выдаче) стареет по своим порогам: свежее — зелёное, залежалось —
+ * жёлтое, забыли надолго — красное (см. ACT_PENDING_*). SLA к нему не применяем: срок
+ * реакции про ремонт, а не про то, как быстро клиент забрал.
+ * Прочие активные: красный — застряла (≥ STUCK) или просрочен SLA; жёлтый — есть причина
+ * простоя или замедлилась (≥ WARN); иначе зелёный (движется).
  */
 export function computeTrafficLight(
   status: TicketStatus,
@@ -1467,7 +1480,11 @@ export function computeTrafficLight(
   slaTargetAt: Date | null,
   nowMs: number,
 ): TrafficLight {
-  if (status === 'act_pending') return 'green';
+  if (status === 'act_pending') {
+    if (stuckDays >= ACT_PENDING_RED_DAYS) return 'red';
+    if (stuckDays >= ACT_PENDING_WARN_DAYS) return 'yellow';
+    return 'green';
+  }
   const slaOverdue = slaTargetAt != null && slaTargetAt.getTime() < nowMs;
   if (slaOverdue || stuckDays >= BOARD_STUCK_DAYS) return 'red';
   if (effectiveReason != null || stuckDays >= BOARD_WARN_DAYS) return 'yellow';
