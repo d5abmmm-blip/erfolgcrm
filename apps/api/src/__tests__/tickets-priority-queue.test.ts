@@ -10,13 +10,14 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { inArray, like } from 'drizzle-orm';
-import { clients, getDb, tickets, withTenantTx } from '@erfolg/db';
+import { clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import type { TicketPriority } from '@erfolg/shared';
 import { ensureSeed } from './setup';
 import { changeStatus, createTicket, listTickets } from '../modules/tickets/repository';
 
 let erfolgId = '';
 let primaryClientId = '';
+let engineerId = '';
 
 const TEST_PREFIX = 'TEST-PRIOQ-';
 
@@ -29,6 +30,11 @@ beforeAll(async () => {
   );
   if (!c) throw new Error('seed missing client');
   primaryClientId = c.id;
+
+  const usrs = await withTenantTx(getDb(), erfolgId, async (tx) =>
+    tx.select({ id: users.id, role: users.role }).from(users),
+  );
+  engineerId = usrs.find((u) => u.role === 'engineer')!.id;
 });
 
 beforeEach(async () => {
@@ -139,6 +145,27 @@ describe('Приоритет двигает очередь', () => {
     expect(seen).toHaveLength(12);
     expect(new Set(seen).size).toBe(12); // ни одного дубля
     expect([...seen].sort()).toEqual([...ids].sort()); // ни одна не потерялась
+  });
+
+  it('unassigned — только заявки без назначенного инженера (для колонок канбана)', async () => {
+    // Канбан листает колонки постранично, поэтому «без назначения» обязан считаться на
+    // сервере: иначе total и число страниц соврут (клиент фильтрует лишь свою страницу).
+    const withEngineer = await mk('normal', 'a-assigned');
+    const withoutEngineer = await mk('normal', 'b-unassigned');
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx
+        .update(tickets)
+        .set({ assignedEngineerId: engineerId })
+        .where(inArray(tickets.id, [withEngineer]));
+    });
+
+    const res = await listTickets(getDb(), erfolgId, {
+      search: TEST_PREFIX,
+      unassigned: true,
+      pageSize: 50,
+    });
+    expect(res.total).toBe(1); // total тоже честный, не только items
+    expect(res.items.map((t) => t.id)).toEqual([withoutEngineer]);
   });
 
   it('РЕГРЕССИЯ: без sort порядок прежний — по дате приёма, свежие сверху', async () => {

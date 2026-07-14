@@ -126,6 +126,8 @@ export const ticketsRouter = router({
           /** Фильтр по срочности (UI «только срочные» шлёт ['urgent']). */
           priorities: z.array(TicketPriority).optional(),
           engineerId: z.string().uuid().optional(),
+          /** Только заявки без назначенного инженера (канбан, фильтр «без назначения»). */
+          unassigned: z.boolean().optional(),
           clientId: z.string().uuid().optional(),
           contractId: z.string().uuid().optional(),
           /** Stage 11 — фильтр по наличию расписания (для UI «незапланированные»). */
