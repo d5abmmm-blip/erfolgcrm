@@ -16,6 +16,7 @@ import type {
   TicketPriority,
   TicketSource,
 } from '@erfolg/shared';
+import { SLA_HOURS_BY_PRIORITY, computeSlaTargetAt } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
@@ -562,6 +563,19 @@ export function NewTicketPage() {
             options={PRIORITY_OPTS}
             onChange={(v) => form.setValue('priority', v)}
           />
+          <p className="text-muted-foreground mt-1.5 text-xs">
+            Срок реакции (SLA): до{' '}
+            <strong className="text-foreground">
+              {computeSlaTargetAt(new Date(), form.watch('priority')).toLocaleString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </strong>{' '}
+            ({SLA_HOURS_BY_PRIORITY[form.watch('priority')]} ч от приёма) — проставится
+            автоматически и подсветит «горит / успеваем» в списке и на доске.
+          </p>
         </div>
 
         <div>

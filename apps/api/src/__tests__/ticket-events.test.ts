@@ -127,6 +127,60 @@ describe('ticket_events: бизнес-инвариант', () => {
     expect(top.type).toBe('sla_change');
   });
 
+  it('createTicket → авто-SLA по приоритету (обычный = 24 ч от приёма)', async () => {
+    const id = await createBaseTicket();
+    const [row] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    expect(row?.slaTargetAt).toBeInstanceOf(Date);
+    // received_at и sla_target_at считаются от одного и того же now → ровно 24 часа.
+    expect(row!.slaTargetAt!.getTime() - row!.receivedAt.getTime()).toBe(24 * 3600 * 1000);
+  });
+
+  it('createTicket(priority=urgent) → авто-SLA = 4 ч', async () => {
+    const { id } = await createTicket(getDb(), erfolgId, null, {
+      clientId: primaryClientId,
+      symptom: `${TEST_PREFIX}urgent`,
+      priority: 'urgent',
+    });
+    const [row] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    expect(row!.slaTargetAt!.getTime() - row!.receivedAt.getTime()).toBe(4 * 3600 * 1000);
+  });
+
+  it('createTicket с явным slaTargetAt → авто-расчёт его не перебивает', async () => {
+    const explicit = new Date(Date.now() + 90 * 3600 * 1000);
+    const { id } = await createTicket(getDb(), erfolgId, null, {
+      clientId: primaryClientId,
+      symptom: `${TEST_PREFIX}explicit`,
+      priority: 'urgent',
+      slaTargetAt: explicit,
+    });
+    const [row] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    expect(row!.slaTargetAt!.getTime()).toBe(explicit.getTime());
+  });
+
+  it('update priority → SLA пересчитан от приёма, без отдельного события sla_change', async () => {
+    const id = await createBaseTicket();
+    const [beforeRow] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    await updateTicket(getDb(), erfolgId, null, id, { priority: 'urgent' });
+    const [afterRow] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    // urgent = 4 ч от того же received_at; срок реально изменился.
+    expect(afterRow!.slaTargetAt!.getTime() - afterRow!.receivedAt.getTime()).toBe(4 * 3600 * 1000);
+    expect(afterRow!.slaTargetAt!.getTime()).not.toBe(beforeRow!.slaTargetAt!.getTime());
+    // Смена приоритета порождает priority_change, но не отдельный sla_change.
+    const events = await listEvents(getDb(), erfolgId, id);
+    expect(events[0]!.type).toBe('priority_change');
+    expect(events.some((e) => e.type === 'sla_change')).toBe(false);
+  });
+
   it('changeStatus(in_progress → closed) → закрывается closed_at, event status_change', async () => {
     const id = await createBaseTicket();
     await changeStatus(getDb(), erfolgId, null, id, 'in_progress');

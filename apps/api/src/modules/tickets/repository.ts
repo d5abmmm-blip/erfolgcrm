@@ -54,6 +54,7 @@ import type {
   TicketEventType,
   TicketBlockedReason,
 } from '@erfolg/shared';
+import { computeSlaTargetAt } from '@erfolg/shared';
 
 export interface TicketListItem {
   id: string;
@@ -517,6 +518,7 @@ export async function createTicket(
     const now = new Date();
     const ticketNumber = await nextTicketNumber(tx, tenantId, now.getUTCFullYear());
     const barcode = generateBarcode();
+    const priority = input.priority ?? 'normal';
     const inserted = await tx
       .insert(tickets)
       .values({
@@ -530,13 +532,14 @@ export async function createTicket(
         source: input.source ?? 'call',
         intakeMethod: input.intakeMethod ?? 'brought_in',
         repairType: input.repairType ?? 'paid',
-        priority: input.priority ?? 'normal',
+        priority,
         status: 'received',
         symptom: input.symptom ?? null,
         notes: input.notes ?? null,
         assignedDispatcherId: input.assignedDispatcherId ?? null,
         assignedEngineerId: input.assignedEngineerId ?? null,
-        slaTargetAt: input.slaTargetAt ?? null,
+        // Авто-SLA: если срок реакции не задан явно — вычисляем по приоритету от момента приёма.
+        slaTargetAt: input.slaTargetAt ?? computeSlaTargetAt(now, priority),
         deadlineAt: input.deadlineAt ?? null,
         receivedAt: now,
       })
@@ -648,6 +651,16 @@ export async function updateTicket(
     if (!before) return { events: [] };
 
     const setObj = buildUpdateSet(patch);
+    // Авто-SLA: при смене приоритета пересчитываем срок реакции от момента приёма
+    // (если явный slaTargetAt не задан). Обновляем только поле — отдельное событие
+    // sla_change не пишем: смена приоритета в хронологии уже объясняет сдвиг срока.
+    if (
+      patch.priority !== undefined &&
+      patch.priority !== before.priority &&
+      patch.slaTargetAt === undefined
+    ) {
+      setObj.slaTargetAt = computeSlaTargetAt(before.receivedAt, patch.priority);
+    }
     if (Object.keys(setObj).length === 0) return { events: [] };
     await tx.update(tickets).set(setObj).where(eq(tickets.id, id));
 
