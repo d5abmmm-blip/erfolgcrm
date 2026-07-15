@@ -68,6 +68,7 @@ import { MobileWorkLogPage } from './pages/mobile/MobileWorkLogPage';
 import { MobileScanPage } from './pages/mobile/MobileScanPage';
 import { MobileProfilePage } from './pages/mobile/MobileProfilePage';
 import { MobileEarningsPage } from './pages/mobile/MobileEarningsPage';
+import { MobileTasksPage } from './pages/mobile/MobileTasksPage';
 import { ClientLoginPage } from './pages/client/ClientLoginPage';
 import { ClientDashboardPage } from './pages/client/ClientDashboardPage';
 import { ClientTicketsPage } from './pages/client/ClientTicketsPage';
@@ -171,6 +172,7 @@ function StaffApp() {
             <Route path="/m/queue">
               <MobileQueuePage engineerId={me.data.user.id} />
             </Route>
+            <Route path="/m/tasks" component={MobileTasksPage} />
             <Route path="/m/scan" component={MobileScanPage} />
             <Route path="/m/profile" component={MobileProfilePage} />
             <Route path="/m/earnings" component={MobileEarningsPage} />

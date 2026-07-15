@@ -5,9 +5,16 @@
  * Цель: «выручка 5 млн за Q3 2026» — target/current/unit дают прогресс-бар,
  * isDone — ручная отметка завершения (прогресс может быть нелинейным).
  */
-import { boolean, index, integer, pgEnum, pgTable, text, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgEnum, pgTable, text, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { pk, tenantId, timestamps } from './_shared';
+
+/** Этап цели — подшаг с галочкой «сделано». Прогресс цели = сделано/всего этапов. */
+export interface GoalStage {
+  id: string;
+  title: string;
+  done: boolean;
+}
 
 export const roadmapQuarterEnum = pgEnum('roadmap_quarter', ['Q1', 'Q2', 'Q3', 'Q4']);
 
@@ -41,6 +48,9 @@ export const roadmapGoals = pgTable(
     category: roadmapCategoryEnum('category').notNull(),
     priority: roadmapPriorityEnum('priority').notNull().default('medium'),
     isDone: boolean('is_done').notNull().default(false),
+
+    /** Этапы цели (подшаги с галочками). Прогресс = сделано/всего. */
+    stages: jsonb('stages').$type<GoalStage[]>().notNull().default([]),
 
     ...timestamps,
   },

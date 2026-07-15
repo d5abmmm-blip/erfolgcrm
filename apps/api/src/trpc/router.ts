@@ -33,6 +33,7 @@ import { reportsRouter } from '../modules/reports';
 import { tradeInRouter } from '../modules/trade-in';
 import { roadmapRouter } from '../modules/roadmap';
 import { calendarRouter } from '../modules/calendar';
+import { tasksRouter } from '../modules/tasks';
 import { settingsRouter } from '../modules/settings';
 import { emailRouter } from '../modules/email';
 import { cashRouter } from '../modules/cash';
@@ -104,6 +105,8 @@ export const appRouter = router({
   roadmap: roadmapRouter,
   /** Календарь компании — выезды, дедлайны, ТО, окончания договоров/гарантий. */
   calendar: calendarRouter,
+  /** Задачи менеджеров (таск-лист) — дела фирмы с датой/исполнителем, видны в календаре. */
+  tasks: tasksRouter,
   /** Настройки tenant'а: отключаемые разделы (модули) интерфейса. */
   settings: settingsRouter,
   /** Раздел «Почта» (Этап A): реквизиты ящика, отправка писем, журнал. */

@@ -17,6 +17,17 @@ const goalFields = {
   unit: z.string().trim().max(32).nullable().optional(),
   category: RoadmapCategory,
   priority: RoadmapPriority.optional(),
+  /** Этапы цели (подшаги с галочками). Полный массив — заменяет прежний. */
+  stages: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        title: z.string().trim().min(1).max(200),
+        done: z.boolean(),
+      }),
+    )
+    .max(50)
+    .optional(),
 };
 
 export const roadmapRouter = router({

@@ -55,6 +55,8 @@ export async function runOutboxItem(item: OutboxItem): Promise<unknown> {
       return client.maintenance.recordPerformed.mutate(p as never);
     case 'tickets.engineerReact':
       return client.tickets.engineerReact.mutate(p as never);
+    case 'tasks.setDone':
+      return client.tasks.setDone.mutate(p as never);
     default: {
       const exhaust: never = item.kind;
       throw new Error(`Unknown outbox kind: ${String(exhaust)}`);

@@ -43,6 +43,7 @@ export * from './kp-versions';
 export * from './trade-in';
 export * from './roadmap';
 export * from './calendar';
+export * from './tasks';
 export * from './email';
 export * from './cash';
 export * from './sales';
