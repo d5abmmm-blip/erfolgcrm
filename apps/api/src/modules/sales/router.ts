@@ -11,6 +11,8 @@ const MAX_AMOUNT_RUB = 9_999_999_999;
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
 const rubToKopecks = (rub: number): bigint => BigInt(Math.round(rub * 100));
 const saleStatus = z.enum(['new', 'ordered', 'received', 'handed_over', 'cancelled']);
+const salesSort = z.enum(['date', 'amount', 'profit']);
+const periodSchema = z.object({ from: isoDate.optional(), to: isoDate.optional() });
 
 const itemSchema = z.object({
   name: z.string().trim().min(1).max(255),
@@ -35,11 +37,20 @@ export const salesRouter = router({
         .object({
           search: z.string().trim().max(200).optional(),
           status: saleStatus.optional(),
+          paid: z.boolean().optional(),
+          from: isoDate.optional(),
+          to: isoDate.optional(),
+          sort: salesSort.optional(),
           page: z.number().int().min(1).optional(),
         })
         .optional(),
     )
     .query(({ ctx, input }) => svc.listSalesQuery(ctx.db, ctx.tenant, input ?? {})),
+
+  /** Аналитика продаж за период: итоги, помесячно, топ клиентов/товаров. */
+  analytics: staffProcedure
+    .input(periodSchema.optional())
+    .query(({ ctx, input }) => svc.salesAnalyticsQuery(ctx.db, ctx.tenant, input ?? {})),
 
   get: staffProcedure
     .input(z.object({ id: z.string().uuid() }))

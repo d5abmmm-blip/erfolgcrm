@@ -23,6 +23,10 @@ export function getSaleQuery(db: Db, tenant: ResolvedTenant, id: string) {
   return repo.getSale(db, tenant.id, id);
 }
 
+export function salesAnalyticsQuery(db: Db, tenant: ResolvedTenant, period: repo.SalesPeriod) {
+  return repo.salesAnalytics(db, tenant.id, period);
+}
+
 export async function createSaleCmd(
   ctx: CmdCtx,
   input: Omit<repo.CreateSaleInput, 'createdBy'>,
