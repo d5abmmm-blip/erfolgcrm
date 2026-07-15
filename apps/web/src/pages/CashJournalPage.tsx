@@ -4,7 +4,7 @@
  * удаление операции. RBAC: staff. Авто-доходы от оплат помечены «из заявки».
  */
 import { useState } from 'react';
-import { ArrowRightLeft, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRightLeft, Loader2, Sheet, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -76,6 +76,40 @@ export function CashJournalPage() {
 
   const items = (listQ.data?.items ?? []) as Row[];
   const total = listQ.data?.total ?? 0;
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const filter = {
+    kind: kind || undefined,
+    accountId: accountId || undefined,
+    categoryId: categoryId || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  };
+
+  // Excel по ТЕКУЩЕМУ фильтру — но со ВСЕМИ операциями, а не только видимой страницей.
+  // На экране limit=50; сервер отдаёт максимум 200 за вызов, поэтому листаем страницы,
+  // пока не соберём все `total` строк (страховочный предел на случай рассинхрона счётчика).
+  const onExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const EXPORT_LIMIT = 200;
+      const all: Row[] = [];
+      for (let p = 1; p <= 200; p++) {
+        const chunk = await utils.cash.transactions.list.fetch({ ...filter, page: p, limit: EXPORT_LIMIT });
+        all.push(...((chunk?.items ?? []) as Row[]));
+        if (!chunk || all.length >= (chunk.total ?? 0) || chunk.items.length < EXPORT_LIMIT) break;
+      }
+      const { downloadCashJournalXlsx } = await import('../lib/excel/cash-journal');
+      const label = from || to ? `${from || '...'}_${to || '...'}` : 'все';
+      await downloadCashJournalXlsx(all, label);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Не удалось собрать файл');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const columns: Column<Row>[] = [
     {
@@ -178,8 +212,23 @@ export function CashJournalPage() {
           >
             <ArrowRightLeft className="h-4 w-4" /> Перевод
           </button>
+          <button
+            type="button"
+            onClick={() => void onExport()}
+            disabled={exporting || total === 0}
+            className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+            title="Скачать операции по текущему фильтру в Excel"
+          >
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+            {exporting ? 'Собираю…' : 'Excel'}
+          </button>
         </div>
       </div>
+      {exportError && (
+        <div className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border p-2.5 text-xs">
+          {exportError}
+        </div>
+      )}
 
       {/* Фильтры */}
       <div className="flex flex-wrap items-center gap-2">

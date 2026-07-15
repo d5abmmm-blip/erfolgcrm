@@ -8,8 +8,10 @@ import {
   BarChart3,
   Clock,
   Coins,
+  Loader2,
   Receipt,
   RefreshCw,
+  Sheet,
   Sparkles,
   Target,
   TrendingUp,
@@ -64,18 +66,80 @@ export function ReportsPage() {
 
   const visibleTabs = TABS.filter((t) => !t.directorOnly || isDirector);
 
+  const utils = trpc.useUtils();
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Собрать Excel «Аналитика за период»: дотягиваем данные всех разделов за текущий период
+  // (директорские — только директору) и раскладываем по листам. Сбой одного раздела не рушит
+  // весь файл — просто пропускаем его лист.
+  const onExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const grab = async <T,>(p: Promise<T>): Promise<T | undefined> => {
+        try {
+          return await p;
+        } catch {
+          return undefined;
+        }
+      };
+      const [revenue, engineers, sla, leads, profitability, receivables] = await Promise.all([
+        grab(utils.reports.revenueByClient.fetch(period)),
+        grab(utils.reports.engineerPerformance.fetch(period)),
+        grab(utils.reports.slaCompliance.fetch(period)),
+        grab(utils.reports.leadsFunnel.fetch(period)),
+        isDirector ? grab(utils.reports.profitability.fetch(period)) : Promise.resolve(undefined),
+        isDirector ? grab(utils.reports.receivables.fetch()) : Promise.resolve(undefined),
+      ]);
+      const { downloadAnalyticsXlsx } = await import('../lib/excel/analytics');
+      const human = period.from ? `${period.from} — ${period.to ?? ''}` : 'всё время';
+      const label = period.from ? `${period.from}_${period.to ?? ''}` : 'все';
+      await downloadAnalyticsXlsx({
+        periodLabel: label,
+        periodHuman: human,
+        revenue,
+        engineers,
+        sla,
+        leads,
+        profitability,
+        receivables: receivables?.items,
+      });
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Не удалось собрать файл');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
-      <div>
-        <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
-          <BarChart3 className="h-3.5 w-3.5" />
-          Отчёты
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Отчёты
+          </div>
+          <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Аналитика за период</h1>
+          <p className="text-muted-foreground text-sm">
+            Выручка, нагрузка, SLA и воронка — агрегаты считаются на сервере
+          </p>
         </div>
-        <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Аналитика за период</h1>
-        <p className="text-muted-foreground text-sm">
-          Выручка, нагрузка, SLA и воронка — агрегаты считаются на сервере
-        </p>
+        <button
+          type="button"
+          onClick={() => void onExport()}
+          disabled={exporting}
+          className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
+        >
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+          {exporting ? 'Собираю…' : 'Скачать Excel'}
+        </button>
       </div>
+      {exportError && (
+        <div className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border p-2.5 text-xs">
+          {exportError}
+        </div>
+      )}
 
       {/* Период (на вкладке «Итог месяца» — свой выбор месяца) */}
       {tab !== 'monthly' && (
