@@ -3,7 +3,7 @@
  * Карточки с прогресс-баром target/current, отметка «выполнено», inline-добавление.
  */
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Circle, HelpCircle, Map as MapIcon, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Circle, HelpCircle, Map as MapIcon, Plus, Trash2, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -29,6 +29,12 @@ const PRIORITY_LABEL: Record<Priority, string> = {
 
 const QUARTERS: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 
+interface Stage {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 interface Goal {
   id: string;
   quarter: Quarter;
@@ -41,6 +47,7 @@ interface Goal {
   category: Category;
   priority: Priority;
   isDone: boolean;
+  stages: Stage[];
 }
 
 export function RoadmapPage() {
@@ -178,6 +185,7 @@ export function RoadmapPage() {
                       onToggleDone={() => update.mutate({ id: g.id, patch: { isDone: !g.isDone } })}
                       onProgress={(v) => update.mutate({ id: g.id, patch: { currentValue: v } })}
                       onArchive={() => setArchiveId(g.id)}
+                      onStages={(stages) => update.mutate({ id: g.id, patch: { stages } })}
                     />
                   ))
                 )}
@@ -206,11 +214,13 @@ function GoalCard({
   onToggleDone,
   onProgress,
   onArchive,
+  onStages,
 }: {
   goal: Goal;
   onToggleDone: () => void;
   onProgress: (v: number) => void;
   onArchive: () => void;
+  onStages: (stages: Stage[]) => void;
 }) {
   const cat = CATEGORY_META[goal.category];
   const pct =
@@ -287,6 +297,7 @@ function GoalCard({
               />
             </div>
           )}
+          <GoalStages stages={goal.stages} onChange={onStages} />
         </div>
         <button
           type="button"
@@ -296,6 +307,104 @@ function GoalCard({
           className="text-muted-foreground hover:text-destructive shrink-0"
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Этапы цели: чек-лист подшагов + прогресс сделано/всего. Полный массив шлём в onChange. */
+function GoalStages({ stages, onChange }: { stages: Stage[]; onChange: (s: Stage[]) => void }) {
+  const [newTitle, setNewTitle] = useState('');
+  const done = stages.filter((s) => s.done).length;
+  const pct = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
+
+  const add = () => {
+    const t = newTitle.trim();
+    if (!t) return;
+    onChange([...stages, { id: crypto.randomUUID(), title: t, done: false }]);
+    setNewTitle('');
+  };
+  const toggle = (id: string) =>
+    onChange(stages.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  const remove = (id: string) => onChange(stages.filter((s) => s.id !== id));
+
+  return (
+    <div className="mt-2">
+      {stages.length > 0 && (
+        <>
+          <div className="text-muted-foreground mb-1 flex justify-between text-[11px] tabular-nums">
+            <span>
+              Этапы: {done}/{stages.length}
+            </span>
+            <span>{pct}%</span>
+          </div>
+          <div className="bg-muted mb-1.5 h-1.5 overflow-hidden rounded-full">
+            <div
+              className={'h-full rounded-full ' + (pct >= 100 ? 'bg-success' : 'bg-primary')}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <ul className="mb-1 space-y-1">
+            {stages.map((s) => (
+              <li key={s.id} className="flex items-center gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className="shrink-0"
+                  aria-label={s.done ? 'Снять отметку этапа' : 'Отметить этап сделанным'}
+                  title={s.done ? 'Снять отметку' : 'Отметить сделанным'}
+                >
+                  {s.done ? (
+                    <CheckCircle2 className="text-success h-4 w-4" />
+                  ) : (
+                    <Circle className="text-muted-foreground hover:text-foreground h-4 w-4" />
+                  )}
+                </button>
+                <span
+                  className={
+                    'min-w-0 flex-1 truncate ' + (s.done ? 'text-muted-foreground line-through' : '')
+                  }
+                >
+                  {s.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => remove(s.id)}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  aria-label="Удалить этап"
+                  title="Удалить этап"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <div className="flex items-center gap-1">
+        <input
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Добавить этап…"
+          maxLength={200}
+          className="bg-background focus:ring-primary/40 min-w-0 flex-1 rounded border px-2 py-1 text-xs outline-none focus:ring-2"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!newTitle.trim()}
+          className="bg-primary/10 text-primary hover:bg-primary/20 grid h-6 w-6 shrink-0 place-items-center rounded transition disabled:opacity-40"
+          aria-label="Добавить этап"
+          title="Добавить этап"
+        >
+          <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

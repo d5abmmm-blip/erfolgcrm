@@ -3,7 +3,7 @@
  * Сортировка: год/квартал desc, приоритет (high первым), создание.
  */
 import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
-import { roadmapGoals, withTenantTx, type Db } from '@erfolg/db';
+import { roadmapGoals, withTenantTx, type Db, type GoalStage } from '@erfolg/db';
 import type { RoadmapCategory, RoadmapPriority, RoadmapQuarter } from '@erfolg/shared';
 
 export interface RoadmapGoalDto {
@@ -18,6 +18,7 @@ export interface RoadmapGoalDto {
   category: RoadmapCategory;
   priority: RoadmapPriority;
   isDone: boolean;
+  stages: GoalStage[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +33,7 @@ export interface CreateGoalInput {
   unit?: string | null;
   category: RoadmapCategory;
   priority?: RoadmapPriority;
+  stages?: GoalStage[];
 }
 
 export interface UpdateGoalPatch {
@@ -45,6 +47,7 @@ export interface UpdateGoalPatch {
   category?: RoadmapCategory;
   priority?: RoadmapPriority;
   isDone?: boolean;
+  stages?: GoalStage[];
 }
 
 function rowToDto(row: typeof roadmapGoals.$inferSelect): RoadmapGoalDto {
@@ -60,6 +63,7 @@ function rowToDto(row: typeof roadmapGoals.$inferSelect): RoadmapGoalDto {
     category: row.category,
     priority: row.priority,
     isDone: row.isDone,
+    stages: row.stages ?? [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -106,6 +110,7 @@ export async function createGoal(
         unit: input.unit ?? null,
         category: input.category,
         priority: input.priority ?? 'medium',
+        stages: input.stages ?? [],
       })
       .returning({ id: roadmapGoals.id });
     const row = inserted[0];
@@ -132,6 +137,7 @@ export async function updateGoal(
     if (patch.category !== undefined) set.category = patch.category;
     if (patch.priority !== undefined) set.priority = patch.priority;
     if (patch.isDone !== undefined) set.isDone = patch.isDone;
+    if (patch.stages !== undefined) set.stages = patch.stages;
     if (Object.keys(set).length === 0) {
       const rows = await tx
         .select()
