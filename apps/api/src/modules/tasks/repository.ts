@@ -41,6 +41,18 @@ export interface TaskInput {
 const dateStr = (col: unknown) => sql<string | null>`to_char(${col}, 'YYYY-MM-DD')`;
 const timeStr = (col: unknown) => sql<string | null>`to_char(${col}, 'HH24:MI')`;
 
+/** Сколько дней выполненная задача остаётся в основном списке, прежде чем скрыться. */
+export const RECENT_DONE_DAYS = 3;
+
+/**
+ * Фильтр «основного списка» (includeDone=false): открытые ИЛИ выполненные за
+ * последние RECENT_DONE_DAYS дней. Чтобы свежевыполненные не исчезали сразу —
+ * менеджер/инженер ещё видит их пару дней, потом уходят в архив («Все»).
+ */
+function recentlyVisibleFilter() {
+  return sql`(${tasks.isDone} = false OR ${tasks.doneAt} >= now() - make_interval(days => ${RECENT_DONE_DAYS}))`;
+}
+
 /**
  * Момент напоминания: накануне даты в 09:00 пояса организации.
  * Если момент уже в прошлом (или даты нет) — NULL: задним числом не напоминаем.
@@ -75,7 +87,7 @@ export async function listTasks(
 ): Promise<TaskDto[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const filters = [isNull(tasks.deletedAt)];
-    if (!opts.includeDone) filters.push(eq(tasks.isDone, false));
+    if (!opts.includeDone) filters.push(recentlyVisibleFilter());
     return tx
       .select(SELECT_FIELDS)
       .from(tasks)
@@ -94,7 +106,7 @@ export async function listMyTasks(
 ): Promise<TaskDto[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const filters = [isNull(tasks.deletedAt), eq(tasks.assigneeUserId, assigneeUserId)];
-    if (!opts.includeDone) filters.push(eq(tasks.isDone, false));
+    if (!opts.includeDone) filters.push(recentlyVisibleFilter());
     return tx
       .select(SELECT_FIELDS)
       .from(tasks)

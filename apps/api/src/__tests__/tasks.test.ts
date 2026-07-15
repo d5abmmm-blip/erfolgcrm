@@ -119,11 +119,17 @@ describe('tasks — CRUD репозитория', () => {
     expect(list.find((x) => x.id === id)?.dueDate).toBe('2031-03-20');
     expect(list.find((x) => x.id === id)?.dueTime).toBeNull();
 
-    // setDone → пропадает из открытых, виден при includeDone.
+    // setDone → задача ОСТАЁТСЯ в основном списке (выполнена недавно), помечена done.
     expect(await setTaskDone(getDb(), erfolgId, id, true, ENG1)).toBe(true);
+    expect((await listTasks(getDb(), erfolgId, {})).find((x) => x.id === id)?.isDone).toBe(true);
+    // «Состарим» выполнение на 4 дня → уходит из основного списка, но виден в «Все».
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`UPDATE tasks SET done_at = now() - interval '4 days' WHERE id = ${id}::uuid`),
+    );
     expect((await listTasks(getDb(), erfolgId, {})).some((x) => x.id === id)).toBe(false);
-    const withDone = await listTasks(getDb(), erfolgId, { includeDone: true });
-    expect(withDone.find((x) => x.id === id)?.isDone).toBe(true);
+    expect(
+      (await listTasks(getDb(), erfolgId, { includeDone: true })).some((x) => x.id === id),
+    ).toBe(true);
 
     // soft-delete — исчезает совсем, повторный delete → false.
     expect(await softDeleteTask(getDb(), erfolgId, id)).toBe(true);

@@ -109,7 +109,8 @@ export function CalendarPage() {
   const tasksByDate = useMemo(() => {
     const map = new Map<string, { id: string; title: string }[]>();
     for (const t of openTasksQ.data ?? []) {
-      if (!t.dueDate) continue;
+      // Выполненные (в т.ч. недавно) в сетке месяца не рисуем — чип только для дел «к выполнению».
+      if (!t.dueDate || t.isDone) continue;
       const list = map.get(t.dueDate);
       if (list) list.push({ id: t.id, title: t.title });
       else map.set(t.dueDate, [{ id: t.id, title: t.title }]);
