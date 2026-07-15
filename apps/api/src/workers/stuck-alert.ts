@@ -57,7 +57,13 @@ export async function processStuckAlertTick(): Promise<TickStats> {
   for (const tenantId of tenantIds) {
     stats.tenants++;
     const cards = await boardTickets(getDb(), tenantId);
-    const stuck = cards.filter((c) => c.light === 'red');
+    // Красные пушим менеджерам, КРОМЕ «готово к выдаче»: залежавшаяся готовая техника
+    // теперь тоже краснеет на доске (визуальное старение act_pending), но отдельный пуш
+    // «позвоните, техника лежит» пока не шлём — по решению владельца сперва только подсветка,
+    // чтобы не завалить менеджера уведомлениями. Включается отдельным шагом при желании.
+    const stuck = cards.filter(
+      (c) => c.light === 'red' && c.status !== 'act_pending',
+    );
     if (stuck.length === 0) continue;
     const staff = await staffUserIds(tenantId);
     if (staff.length === 0) continue;
