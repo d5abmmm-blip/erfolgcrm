@@ -21,6 +21,7 @@ import {
   createTicket,
   listEvents,
   recordPrintEvent,
+  setWaitingForPart,
   updateTicket,
 } from '../modules/tickets/repository';
 
@@ -179,6 +180,28 @@ describe('ticket_events: бизнес-инвариант', () => {
     const events = await listEvents(getDb(), erfolgId, id);
     expect(events[0]!.type).toBe('priority_change');
     expect(events.some((e) => e.type === 'sla_change')).toBe(false);
+  });
+
+  it('переход в act_pending снимает «ждём запчасть» и старый blocked_since (готовую не красим)', async () => {
+    const id = await createBaseTicket();
+    // Инженер поставил «ждём запчасть» — появляется blocked_since (причина простоя).
+    await setWaitingForPart(getDb(), erfolgId, null, id, true, 'плата питания');
+    // Деталь ехала долго — состарим blocked_since на 15 дней назад.
+    const old = new Date(Date.now() - 15 * 86_400_000);
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx.update(tickets).set({ blockedSince: old }).where(eq(tickets.id, id));
+    });
+    // Инженер закончил и нажал «Готов к акту».
+    await changeStatus(getDb(), erfolgId, null, id, 'act_pending');
+    const [row] = await withTenantTx(getDb(), erfolgId, async (tx) =>
+      tx.select().from(tickets).where(eq(tickets.id, id)).limit(1),
+    );
+    // Блокировка снята → светофор посчитает «готово только что» (зелёный), а не «лежит 15 дн».
+    expect(row?.status).toBe('act_pending');
+    expect(row?.blockedReason).toBeNull();
+    expect(row?.blockedSince).toBeNull();
+    expect(row?.waitingForPart).toBe(false);
+    expect(row?.waitingForPartNote).toBeNull();
   });
 
   it('changeStatus(in_progress → closed) → закрывается closed_at, event status_change', async () => {

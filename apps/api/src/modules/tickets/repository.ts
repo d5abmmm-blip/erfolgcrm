@@ -771,6 +771,16 @@ export async function changeStatus(
       setObj.cancelledAt = null;
       setObj.cancelReason = null;
     }
+    // Переход в «Ожидает акта» = техника готова к выдаче, значит она больше ничем не
+    // заблокирована: снимаем «ждём запчасть» и любую причину простоя. Иначе старый
+    // blocked_since «состаривал» бы только что доделанную заявку — светофор красил бы её
+    // красной, а ИИ-сводка считала «застряла, ждём запчасть» вместо «готово — позвонить».
+    if (newStatus === 'act_pending') {
+      setObj.blockedReason = null;
+      setObj.blockedSince = null;
+      setObj.waitingForPart = false;
+      setObj.waitingForPartNote = null;
+    }
     await tx.update(tickets).set(setObj).where(eq(tickets.id, id));
 
     await tx.insert(ticketEvents).values({
