@@ -38,19 +38,26 @@ export function assertEngineerOwnsTask(
   }
 }
 
-/** Push инженеру при назначении задачи (fire-and-forget, только если исполнитель — инженер). */
-async function notifyEngineerAssignee(
-  ctx: CmdCtx,
-  taskId: string,
-  title: string,
-  assigneeUserId: string | null,
-): Promise<void> {
-  if (!assigneeUserId) return;
+type Role = 'director' | 'dispatcher' | 'engineer';
+
+/**
+ * Проверяет, что исполнитель — реальный пользователь ЭТОГО tenant'а (не удалён,
+ * не из чужого tenant'а), и возвращает его роль. Без исполнителя → null.
+ * Иначе задачу можно было бы сохранить с «пустым» исполнителем, а напоминание
+ * тихо потерялось бы (как в модуле tickets — ensureRefsExist/userBelongsToTenant).
+ */
+async function resolveAssigneeRole(ctx: CmdCtx, assigneeUserId: string | null): Promise<Role | null> {
+  if (!assigneeUserId) return null;
   const role = await getUserRole(ctx.db, ctx.tenant.id, assigneeUserId);
-  if (role !== 'engineer') return;
+  if (!role) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Исполнитель не найден' });
+  return role;
+}
+
+/** Push инженеру при назначении задачи (fire-and-forget). Роль проверена вызывающим. */
+function pushTaskAssigned(ctx: CmdCtx, taskId: string, title: string, engineerUserId: string): void {
   enqueuePushToUser({
     tenantId: ctx.tenant.id,
-    userId: assigneeUserId,
+    userId: engineerUserId,
     payload: {
       title: 'Новая задача',
       body: title.slice(0, 140),
@@ -79,6 +86,8 @@ export function listMyTasksQuery(
 }
 
 export async function createTaskCmd(ctx: CmdCtx, input: TaskInput): Promise<{ id: string }> {
+  // Валидируем исполнителя ДО записи (роль заодно решает, слать ли push инженеру).
+  const assigneeRole = await resolveAssigneeRole(ctx, input.assigneeUserId);
   const result = await createTask(
     ctx.db,
     ctx.tenant.id,
@@ -95,7 +104,9 @@ export async function createTaskCmd(ctx: CmdCtx, input: TaskInput): Promise<{ id
     ip: ctx.audit.ip,
     userAgent: ctx.audit.userAgent,
   });
-  await notifyEngineerAssignee(ctx, result.id, input.title, input.assigneeUserId);
+  if (assigneeRole === 'engineer' && input.assigneeUserId) {
+    pushTaskAssigned(ctx, result.id, input.title, input.assigneeUserId);
+  }
   return result;
 }
 
@@ -106,6 +117,10 @@ export async function updateTaskCmd(
 ): Promise<{ ok: true }> {
   const before = await getTask(ctx.db, ctx.tenant.id, id);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Задача не найдена' });
+  // Исполнителя проверяем ТОЛЬКО если он сменился на нового (правка чужих полей
+  // не должна падать из-за исполнителя, уволенного уже после назначения).
+  const assigneeChanged = (input.assigneeUserId ?? null) !== (before.assigneeUserId ?? null);
+  const newAssigneeRole = assigneeChanged ? await resolveAssigneeRole(ctx, input.assigneeUserId) : null;
   const ok = await updateTask(ctx.db, ctx.tenant.id, id, ctx.tenant.timezone, input);
   if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'Задача не найдена' });
   await writeAudit(ctx.db, ctx.tenant.id, {
@@ -117,9 +132,9 @@ export async function updateTaskCmd(
     ip: ctx.audit.ip,
     userAgent: ctx.audit.userAgent,
   });
-  // Push только при РЕАЛЬНОЙ смене исполнителя на нового (иначе спам при любой правке).
-  if (input.assigneeUserId && input.assigneeUserId !== before.assigneeUserId) {
-    await notifyEngineerAssignee(ctx, id, input.title, input.assigneeUserId);
+  // Push только при РЕАЛЬНОЙ смене исполнителя на нового инженера (иначе спам).
+  if (assigneeChanged && newAssigneeRole === 'engineer' && input.assigneeUserId) {
+    pushTaskAssigned(ctx, id, input.title, input.assigneeUserId);
   }
   return { ok: true };
 }

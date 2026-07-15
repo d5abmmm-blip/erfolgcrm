@@ -27,6 +27,7 @@ import {
 } from '../modules/tasks/repository';
 import {
   assertEngineerOwnsTask,
+  createTaskCmd,
   setTaskDoneCmd,
 } from '../modules/tasks/service';
 import { processTaskReminderTick } from '../workers/task-reminder';
@@ -259,6 +260,54 @@ describe('tasks — владение (assertEngineerOwnsTask)', () => {
     await expect(
       setTaskDoneCmd(ctxFor(erfolgId, directorId, 'director'), id, false),
     ).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('tasks — валидация исполнителя', () => {
+  it('нельзя назначить несуществующего исполнителя (BAD_REQUEST), реального — можно', async () => {
+    const ctx = ctxFor(erfolgId, directorId, 'director');
+    await expect(
+      createTaskCmd(ctx, {
+        title: `${TEST_PREFIX}bogus`,
+        date: null,
+        time: null,
+        notes: null,
+        assigneeUserId: '00000000-0000-4000-8000-0000000000ff',
+        remind: false,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await expect(
+      createTaskCmd(ctx, {
+        title: `${TEST_PREFIX}valid`,
+        date: null,
+        time: null,
+        notes: null,
+        assigneeUserId: directorId,
+        remind: false,
+      }),
+    ).resolves.toHaveProperty('id');
+  });
+
+  it('cross-tenant: нельзя назначить пользователя demo в задаче erfolg', async () => {
+    const demoDirectorId = await withTenantTx(getDb(), demoId, async (tx) => {
+      const rows = await tx.execute<{ id: string }>(
+        sql`SELECT id FROM users WHERE role='director' LIMIT 1`,
+      );
+      return (rows as unknown as Array<{ id: string }>)[0]?.id ?? null;
+    });
+    expect(demoDirectorId).toBeTruthy();
+    const ctx = ctxFor(erfolgId, directorId, 'director');
+    await expect(
+      createTaskCmd(ctx, {
+        title: `${TEST_PREFIX}cross-tenant`,
+        date: null,
+        time: null,
+        notes: null,
+        assigneeUserId: demoDirectorId!,
+        remind: false,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 

@@ -24,11 +24,11 @@ function fmtDue(dueDate: string | null, dueTime: string | null): string {
   return dueTime ? `${d}.${m} · ${dueTime}` : `${d}.${m}`;
 }
 
-function isOverdue(t: Task): boolean {
-  if (t.isDone || !t.dueDate) return false;
+function isOverdue(dueDate: string | null, isDone: boolean): boolean {
+  if (isDone || !dueDate) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return new Date(`${t.dueDate}T00:00:00`) < today;
+  return new Date(`${dueDate}T00:00:00`) < today;
 }
 
 export function MobileTasksPage() {
@@ -44,6 +44,17 @@ export function MobileTasksPage() {
 
   const setDoneM = trpc.tasks.setDone.useMutation();
   const [busy, setBusy] = useState<string | null>(null);
+  // Оптимистичная отметка: id → желаемое isDone. Нужна для мгновенной реакции и
+  // особенно для офлайна (invalidate без сети не перечитает данные — галочка
+  // осталась бы прежней). Снимается на 'ok' (после рефетча) и 'error' (откат);
+  // на 'queued' держится до синхронизации.
+  const [override, setOverride] = useState<Record<string, boolean>>({});
+  const clearOverride = (id: string) =>
+    setOverride((o) => {
+      const n = { ...o };
+      delete n[id];
+      return n;
+    });
   const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (t: NonNullable<typeof toast>) => {
@@ -55,22 +66,25 @@ export function MobileTasksPage() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
 
-  const onToggle = async (id: string, isDone: boolean) => {
+  const onToggle = async (id: string, next: boolean) => {
     setBusy(id);
+    setOverride((o) => ({ ...o, [id]: next })); // сразу меняем галочку
     const result = await executeOrQueue(
       'tasks.setDone',
-      { id, isDone },
+      { id, isDone: next },
       (p) => setDoneM.mutateAsync(p),
       tenantSubdomain,
     );
     setBusy(null);
     if (result.status === 'ok') {
-      await utils.tasks.myList.invalidate();
-      showToast({ kind: 'ok', text: isDone ? 'Задача отмечена сделанной' : 'Отметка снята' });
+      await utils.tasks.myList.invalidate(); // дождались свежих данных
+      clearOverride(id); // сервер — источник правды
+      showToast({ kind: 'ok', text: next ? 'Задача отмечена сделанной' : 'Отметка снята' });
     } else if (result.status === 'queued') {
-      await utils.tasks.myList.invalidate();
+      // Нет связи: держим оптимистичную отметку до синхронизации.
       showToast({ kind: 'queued', text: 'Нет связи — отметка сохранена и отправится сама' });
     } else {
+      clearOverride(id); // откат к серверному состоянию
       showToast({ kind: 'error', text: result.error.message });
     }
   };
@@ -137,24 +151,25 @@ export function MobileTasksPage() {
 
       <ul className="space-y-2 p-3">
         {tasks.map((t) => {
-          const overdue = isOverdue(t);
+          const done = t.id in override ? override[t.id]! : t.isDone;
+          const overdue = isOverdue(t.dueDate, done);
           return (
             <li key={t.id} className="bg-card flex items-start gap-3 rounded-lg border p-3">
               <button
                 type="button"
-                onClick={() => void onToggle(t.id, !t.isDone)}
+                onClick={() => void onToggle(t.id, !done)}
                 disabled={busy === t.id}
                 className="mt-0.5 shrink-0 disabled:opacity-50"
-                aria-label={t.isDone ? 'Снять отметку' : 'Отметить сделанной'}
+                aria-label={done ? 'Снять отметку' : 'Отметить сделанной'}
               >
-                {t.isDone ? (
+                {done ? (
                   <CheckCircle2 className="text-success h-6 w-6" />
                 ) : (
                   <Circle className="text-muted-foreground h-6 w-6" />
                 )}
               </button>
               <div className="min-w-0 flex-1">
-                <div className={cn('text-sm font-medium', t.isDone && 'text-muted-foreground line-through')}>
+                <div className={cn('text-sm font-medium', done && 'text-muted-foreground line-through')}>
                   {t.title}
                 </div>
                 {t.notes && <p className="text-muted-foreground mt-0.5 text-xs">{t.notes}</p>}
