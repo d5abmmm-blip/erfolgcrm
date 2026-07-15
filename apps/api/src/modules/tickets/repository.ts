@@ -178,6 +178,13 @@ export interface ListTicketsOpts {
   /** Фильтр по приоритету (напр. «только срочные» = ['urgent']). Пустой/undefined — без фильтра. */
   priorities?: TicketPriority[];
   engineerId?: string;
+  /**
+   * Только заявки БЕЗ назначенного инженера. Нужен канбану: там колонки листаются
+   * постранично, и фильтр «без назначения» обязан считаться на сервере — иначе счётчик
+   * и число страниц врут (клиент отфильтровал бы только текущую страницу).
+   * Если задан — engineerId игнорируется (взаимоисключающие условия).
+   */
+  unassigned?: boolean;
   clientId?: string;
   contractId?: string;
   /**
@@ -233,7 +240,12 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
   if (opts.priorities && opts.priorities.length > 0) {
     filters.push(inArray(tickets.priority, opts.priorities));
   }
-  if (opts.engineerId) filters.push(eq(tickets.assignedEngineerId, opts.engineerId));
+  // «Без назначения» и «конкретный инженер» взаимоисключающи: unassigned важнее.
+  if (opts.unassigned === true) {
+    filters.push(isNull(tickets.assignedEngineerId));
+  } else if (opts.engineerId) {
+    filters.push(eq(tickets.assignedEngineerId, opts.engineerId));
+  }
   if (opts.clientId) filters.push(eq(tickets.clientId, opts.clientId));
   if (opts.contractId) filters.push(eq(tickets.contractId, opts.contractId));
   if (opts.scheduled === true) filters.push(isNotNull(tickets.scheduledStartAt));

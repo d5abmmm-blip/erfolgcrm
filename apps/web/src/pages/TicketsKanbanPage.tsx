@@ -6,14 +6,28 @@
  * closed/cancelled скрыты по умолчанию (опциональный чекбокс).
  *
  * Реализация:
+ *   - КАЖДАЯ КОЛОНКА ГРУЗИТСЯ ОТДЕЛЬНЫМ ЗАПРОСОМ и листается своими страницами
+ *     (COLUMN_PAGE_SIZE карточек). Раньше доска тянула всё ОДНИМ запросом с потолком
+ *     в 200 строк: при «показать закрытые» архив (тысячи заявок) обрезался молча, а
+ *     колонка росла вниз без конца. Постраничные колонки убирают потолок совсем и
+ *     дают в шапке НАСТОЯЩЕЕ число заявок в статусе (а не «сколько влезло»).
  *   - Native HTML5 drag-and-drop, без внешних либ (react-dnd слишком тяжёл).
- *   - Optimistic update: при drop сразу применяем status в кэше; на ошибке откатываем + toast.
- *   - Live polling: refetchInterval=30_000.
- *   - Фильтр по инженеру (вкл. «без назначения»).
+ *   - Live polling: refetchInterval=30_000 на каждую колонку.
+ *   - Фильтр по инженеру (вкл. «без назначения» — считается на сервере, иначе счётчик
+ *     и число страниц врали бы).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
-import { Clock, LayoutGrid, List, Package, Plus, Ticket as TicketIcon } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  LayoutGrid,
+  List,
+  Package,
+  Plus,
+  Ticket as TicketIcon,
+} from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -27,6 +41,19 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 
 const ENGINEER_ALL = '__all__';
 const ENGINEER_NONE = '__none__';
+
+/** Сколько карточек показывать в колонке до перелистывания (как в обычном списке заявок). */
+const COLUMN_PAGE_SIZE = 25;
+
+const POLL_INTERVAL_MS = 30_000;
+
+/**
+ * Легаси-статусы, снятые из потока («Смета»/«Согласование»). Колонку показываем ТОЛЬКО
+ * если такие заявки реально есть, чтобы старые заявки не выпадали с доски беззвучно.
+ * Раньше это делалось перебором фактически пришедших статусов — при постраничных колонках
+ * так нельзя (мы больше не видим весь список), поэтому запрашиваем их явно и прячем пустые.
+ */
+const LEGACY_STATUSES: TicketStatus[] = ['estimate', 'approval'];
 
 interface TicketRow {
   id: string;
@@ -47,29 +74,21 @@ interface TicketRow {
   idleDays: number;
 }
 
-const POLL_INTERVAL_MS = 30_000;
+/** Что тащим: id + текущий статус (нужен, чтобы не «перекладывать» карточку саму в себя). */
+interface DragState {
+  id: string;
+  status: TicketStatus;
+}
 
 export function TicketsKanbanPage() {
   const [showClosed, setShowClosed] = useState(false);
   const [engineerFilter, setEngineerFilter] = useState<string>(ENGINEER_ALL);
   const [toast, setToast] = useState<string | null>(null);
+  /** Текущая страница каждой колонки (по статусу). Сбрасывается при смене фильтров. */
+  const [pages, setPages] = useState<Partial<Record<TicketStatus, number>>>({});
 
   const engineers = trpc.users.list.useQuery({ onlyEngineers: true });
   const utils = trpc.useUtils();
-
-  const list = trpc.tickets.list.useQuery(
-    {
-      pageSize: 200,
-      statuses: showClosed ? undefined : [...ACTIVE_TICKET_STATUSES],
-      engineerId:
-        engineerFilter !== ENGINEER_ALL && engineerFilter !== ENGINEER_NONE
-          ? engineerFilter
-          : undefined,
-      // Рабочая очередь: срочные карточки — вверху своей колонки.
-      sort: 'priority',
-    },
-    { refetchInterval: POLL_INTERVAL_MS, refetchOnWindowFocus: true },
-  );
 
   const changeStatus = trpc.tickets.changeStatus.useMutation({
     onSuccess: async () => {
@@ -82,25 +101,22 @@ export function TicketsKanbanPage() {
     },
   });
 
-  const allItems = (list.data?.items ?? []) as TicketRow[];
-  // Локальный фильтр «без инженера» — на стороне клиента (tickets.list не принимает null).
-  const items =
-    engineerFilter === ENGINEER_NONE
-      ? allItems.filter((t) => !t.assignedEngineerId)
-      : allItems;
+  const engineerId =
+    engineerFilter !== ENGINEER_ALL && engineerFilter !== ENGINEER_NONE
+      ? engineerFilter
+      : undefined;
+  const unassigned = engineerFilter === ENGINEER_NONE ? true : undefined;
 
-  const cols: TicketStatus[] = showClosed
-    ? [...ACTIVE_TICKET_STATUSES, 'closed', 'cancelled']
-    : [...ACTIVE_TICKET_STATUSES];
+  // Сменили фильтр — начинаем каждую колонку с первой страницы.
+  useEffect(() => {
+    setPages({});
+  }, [showClosed, engineerFilter]);
 
-  // Легаси/нестандартные статусы (например снятые из потока «Смета»/«Согласование»),
-  // которые бэкенд всё же вернул: показываем отдельными колонками, чтобы такие заявки
-  // не выпадали с доски беззвучно. Актуально при «показать закрытые» — иначе бэкенд
-  // фильтрует список по активным статусам, и легаси-заявки в него не попадают.
-  const extraCols: TicketStatus[] = [...new Set(items.map((t) => t.status))].filter(
-    (s) => !cols.includes(s),
-  );
-  const boardCols: TicketStatus[] = [...cols, ...extraCols];
+  const columns: TicketStatus[] = [
+    ...ACTIVE_TICKET_STATUSES,
+    ...(showClosed ? (['closed', 'cancelled'] as TicketStatus[]) : []),
+    ...LEGACY_STATUSES,
+  ];
 
   return (
     <div className="mx-auto max-w-[100rem] space-y-4 p-4 md:p-6">
@@ -155,23 +171,16 @@ export function TicketsKanbanPage() {
           />
           закрытые/отменённые
         </label>
-
-        {list.isFetching && !list.isLoading && (
-          <span className="text-muted-foreground text-xs">обновляю…</span>
-        )}
       </div>
 
-      {list.isLoading ? (
-        <div className="text-muted-foreground p-8 text-center text-sm">Загрузка…</div>
-      ) : list.error ? (
-        <div className="text-destructive p-6 text-sm">Ошибка: {list.error.message}</div>
-      ) : (
-        <KanbanBoard
-          items={items}
-          columns={boardCols}
-          onMove={(id, status) => changeStatus.mutate({ id, status })}
-        />
-      )}
+      <KanbanBoard
+        columns={columns}
+        engineerId={engineerId}
+        unassigned={unassigned}
+        pages={pages}
+        onPageChange={(status, page) => setPages((prev) => ({ ...prev, [status]: page }))}
+        onMove={(id, status) => changeStatus.mutate({ id, status })}
+      />
 
       {toast && (
         <div className="bg-destructive/10 border-destructive/30 text-destructive fixed bottom-4 right-4 z-50 rounded-md border px-3 py-2 text-sm shadow-lg">
@@ -183,15 +192,21 @@ export function TicketsKanbanPage() {
 }
 
 function KanbanBoard({
-  items,
   columns,
+  engineerId,
+  unassigned,
+  pages,
+  onPageChange,
   onMove,
 }: {
-  items: TicketRow[];
   columns: TicketStatus[];
+  engineerId: string | undefined;
+  unassigned: boolean | undefined;
+  pages: Partial<Record<TicketStatus, number>>;
+  onPageChange: (status: TicketStatus, page: number) => void;
   onMove: (id: string, status: TicketStatus) => void;
 }) {
-  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragged, setDragged] = useState<DragState | null>(null);
   const [overCol, setOverCol] = useState<TicketStatus | null>(null);
 
   return (
@@ -203,65 +218,197 @@ function KanbanBoard({
           : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-8',
       )}
     >
-      {columns.map((col) => {
-        const colItems = items.filter((t) => t.status === col);
-        return (
-          <div
-            key={col}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOverCol(col);
-            }}
-            onDragLeave={() => setOverCol((c) => (c === col ? null : c))}
-            onDrop={(e) => {
-              e.preventDefault();
-              setOverCol(null);
-              const id = e.dataTransfer.getData('text/plain') || draggedId;
-              if (!id) return;
-              const t = items.find((x) => x.id === id);
-              if (!t || t.status === col) return;
-              onMove(id, col);
-            }}
-            className={cn(
-              'bg-card flex min-h-[120px] flex-col gap-2 rounded-lg border p-2 transition',
-              overCol === col && 'border-primary ring-2 ring-primary/30',
-            )}
-          >
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-medium uppercase tracking-wide">
-                {TICKET_STATUS_META[col].label}
-              </span>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                {colItems.length}
-              </span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {colItems.length === 0 ? (
-                <div className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">
-                  пусто
-                </div>
-              ) : (
-                colItems.map((t) => (
-                  <KanbanCard
-                    key={t.id}
-                    ticket={t}
-                    onDragStart={(e) => {
-                      setDraggedId(t.id);
-                      e.dataTransfer.setData('text/plain', t.id);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => {
-                      setDraggedId(null);
-                      setOverCol(null);
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {columns.map((col) => (
+        <KanbanColumn
+          key={col}
+          status={col}
+          engineerId={engineerId}
+          unassigned={unassigned}
+          page={pages[col] ?? 1}
+          onPageChange={(p) => onPageChange(col, p)}
+          // Легаси-колонку («Смета»/«Согласование») прячем, если таких заявок нет.
+          hideWhenEmpty={LEGACY_STATUSES.includes(col)}
+          dragged={dragged}
+          setDragged={setDragged}
+          isOver={overCol === col}
+          setOverCol={setOverCol}
+          onMove={onMove}
+        />
+      ))}
     </div>
+  );
+}
+
+function KanbanColumn({
+  status,
+  engineerId,
+  unassigned,
+  page,
+  onPageChange,
+  hideWhenEmpty,
+  dragged,
+  setDragged,
+  isOver,
+  setOverCol,
+  onMove,
+}: {
+  status: TicketStatus;
+  engineerId: string | undefined;
+  unassigned: boolean | undefined;
+  page: number;
+  onPageChange: (page: number) => void;
+  hideWhenEmpty: boolean;
+  dragged: DragState | null;
+  setDragged: (d: DragState | null) => void;
+  isOver: boolean;
+  setOverCol: (s: TicketStatus | null) => void;
+  onMove: (id: string, status: TicketStatus) => void;
+}) {
+  const q = trpc.tickets.list.useQuery(
+    {
+      statuses: [status],
+      engineerId,
+      unassigned,
+      // Срочные — вверху своей колонки.
+      sort: 'priority',
+      page,
+      pageSize: COLUMN_PAGE_SIZE,
+    },
+    { refetchInterval: POLL_INTERVAL_MS, refetchOnWindowFocus: true },
+  );
+
+  const items = (q.data?.items ?? []) as TicketRow[];
+  const total = q.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / COLUMN_PAGE_SIZE));
+
+  // Заявку перетащили из этой колонки — страница могла «схлопнуться». Не зависаем на пустой.
+  useEffect(() => {
+    if (total > 0 && page > pageCount) onPageChange(pageCount);
+  }, [total, page, pageCount, onPageChange]);
+
+  // Легаси-статусы: колонки нет, пока в ней нечего показывать.
+  if (hideWhenEmpty && !q.isLoading && total === 0) return null;
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOverCol(status);
+      }}
+      onDragLeave={() => setOverCol(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOverCol(null);
+        const id = e.dataTransfer.getData('text/plain') || dragged?.id;
+        if (!id) return;
+        // Статус тащим вместе с карточкой: у колонки больше нет общего списка заявок.
+        const from = dragged?.status;
+        if (from === status) return;
+        onMove(id, status);
+      }}
+      className={cn(
+        'bg-card flex min-h-[120px] flex-col gap-2 rounded-lg border p-2 transition',
+        isOver && 'border-primary ring-2 ring-primary/30',
+      )}
+    >
+      <div className="flex items-center justify-between gap-1 px-1">
+        <span className="text-xs font-medium uppercase tracking-wide">
+          {TICKET_STATUS_META[status].label}
+        </span>
+        {/* Настоящее число заявок в статусе, а не «сколько влезло на страницу». */}
+        <span className="text-muted-foreground text-xs tabular-nums" title="Всего в статусе">
+          {q.isLoading ? '…' : total}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {q.isLoading ? (
+          <div className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">
+            загрузка…
+          </div>
+        ) : q.error ? (
+          <div className="text-destructive rounded-md border border-dashed p-3 text-center text-xs">
+            ошибка
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">
+            пусто
+          </div>
+        ) : (
+          items.map((t) => (
+            <KanbanCard
+              key={t.id}
+              ticket={t}
+              onDragStart={(e) => {
+                setDragged({ id: t.id, status: t.status });
+                e.dataTransfer.setData('text/plain', t.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragEnd={() => {
+                setDragged(null);
+                setOverCol(null);
+              }}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Подвал колонки. Показываем ВСЕГДА (когда есть что показывать), даже если страница
+          одна: иначе низ колонки просто обрывается и непонятно — это конец или обрезка. */}
+      {total > 0 && !q.isLoading && (
+        <div className="mt-auto space-y-1 border-t pt-1.5">
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between gap-1">
+              <PagerButton
+                label="Предыдущая страница"
+                disabled={page <= 1}
+                onClick={() => onPageChange(page - 1)}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </PagerButton>
+              <span className="text-muted-foreground text-[10px] tabular-nums">
+                {page} / {pageCount}
+              </span>
+              <PagerButton
+                label="Следующая страница"
+                disabled={page >= pageCount}
+                onClick={() => onPageChange(page + 1)}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </PagerButton>
+            </div>
+          )}
+          <div className="text-muted-foreground text-center text-[10px] tabular-nums">
+            показано {items.length} из {total}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PagerButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex h-6 w-6 items-center justify-center rounded transition disabled:pointer-events-none disabled:opacity-30"
+    >
+      {children}
+    </button>
   );
 }
 
