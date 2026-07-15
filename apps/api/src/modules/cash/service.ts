@@ -39,6 +39,49 @@ export function resolvePeriod(preset: PeriodPreset): repo.PeriodInput {
   }
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * Предыдущий сопоставимый период — для строчки «+12% к прошлому месяцу».
+ *
+ * Сегодня/неделя — просто сдвигаем окно на его длину назад (вчера / прошлые 7 дней).
+ *
+ * Месяц/квартал/год — сравниваем с ТЕМ ЖЕ отрезком предыдущего месяца/квартала/года
+ * (1–15 июля ↔ 1–15 июня), а не с равным куском, перетекающим через границу месяца:
+ * иначе «месяц к месяцу» сравнивал бы 1–15 июля с 16–30 июня, и цифра врала бы.
+ *
+ * Отрезок обрезаем по длине предыдущей единицы: 31 марта сравнивать не с чем (31 февраля
+ * не бывает) → берём февраль целиком.
+ */
+export function resolvePreviousPeriod(
+  preset: PeriodPreset,
+  current: repo.PeriodInput,
+): repo.PeriodInput {
+  const elapsedDays = Math.round((current.end.getTime() - current.start.getTime()) / DAY_MS);
+
+  if (preset === 'today' || preset === 'week') {
+    const shift = elapsedDays * DAY_MS;
+    return {
+      start: new Date(current.start.getTime() - shift),
+      end: new Date(current.end.getTime() - shift),
+    };
+  }
+
+  const y = current.start.getUTCFullYear();
+  const m = current.start.getUTCMonth();
+  const prevStart =
+    preset === 'month'
+      ? new Date(Date.UTC(y, m - 1, 1))
+      : preset === 'quarter'
+        ? new Date(Date.UTC(y, m - 3, 1))
+        : new Date(Date.UTC(y - 1, 0, 1));
+
+  // Сколько дней в предыдущей единице (месяц/квартал/год) — чтобы не выйти за её границу.
+  const unitDays = Math.round((current.start.getTime() - prevStart.getTime()) / DAY_MS);
+  const span = Math.min(elapsedDays, unitDays);
+  return { start: prevStart, end: new Date(prevStart.getTime() + span * DAY_MS) };
+}
+
 /* ─────────────────────────── Счета ───────────────────────────── */
 
 export function listAccountsQuery(db: Db, tenant: ResolvedTenant, includeArchived: boolean) {
@@ -205,9 +248,12 @@ export async function deleteTransactionCmd(ctx: CmdCtx, id: string) {
 export interface CashOverview {
   balances: repo.AccountBalancesReport;
   summary: repo.PeriodSummary;
+  /** Тот же расчёт за предыдущий сопоставимый период — для дельты «+12% к прошлому месяцу». */
+  previous: repo.PeriodSummary;
   monthly: repo.MonthlyFlowRow[];
   recent: repo.CashTransactionDto[];
   period: { start: string; end: string };
+  previousPeriod: { start: string; end: string };
 }
 
 /** Всё для страницы «Обзор» одним вызовом. */
@@ -217,18 +263,26 @@ export async function overviewQuery(
   preset: PeriodPreset,
 ): Promise<CashOverview> {
   const period = resolvePeriod(preset);
-  const [balances, summary, monthly, recent] = await Promise.all([
+  const prevPeriod = resolvePreviousPeriod(preset, period);
+  const [balances, summary, previous, monthly, recent] = await Promise.all([
     repo.getAccountBalances(db, tenant.id),
     repo.getPeriodSummary(db, tenant.id, period),
+    // Тот же агрегат, просто другое окно дат — нового SQL не нужно.
+    repo.getPeriodSummary(db, tenant.id, prevPeriod),
     repo.getMonthlyFlow(db, tenant.id, 6),
     repo.listTransactions(db, tenant.id, {}, 8, 0).then((r) => r.items),
   ]);
   return {
     balances,
     summary,
+    previous,
     monthly,
     recent,
     period: { start: period.start.toISOString(), end: period.end.toISOString() },
+    previousPeriod: {
+      start: prevPeriod.start.toISOString(),
+      end: prevPeriod.end.toISOString(),
+    },
   };
 }
 

@@ -6,9 +6,12 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   Banknote,
   CreditCard,
   Landmark,
+  Minus,
   Wallet,
   TrendingUp,
   TrendingDown,
@@ -31,6 +34,15 @@ const PRESET_LABEL: Record<Preset, string> = {
   month: 'Месяц',
   quarter: 'Квартал',
   year: 'Год',
+};
+
+/** С чем сравниваем. Сервер отдаёт тот же отрезок предыдущего периода (1–15 июля ↔ 1–15 июня). */
+const PRESET_COMPARE_LABEL: Record<Preset, string> = {
+  today: 'ко вчера',
+  week: 'к прошлой неделе',
+  month: 'к прошлому месяцу',
+  quarter: 'к прошлому кварталу',
+  year: 'к прошлому году',
 };
 
 const ACCOUNT_ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
@@ -85,6 +97,14 @@ export function FinanceOverviewPage() {
             label={PRESET_LABEL[preset].toLowerCase()}
             totalKopecks={data.summary.incomeKopecks}
             byKind={data.summary.incomeByKind}
+            delta={
+              <Delta
+                current={data.summary.incomeKopecks}
+                previous={data.previous?.incomeKopecks}
+                label={PRESET_COMPARE_LABEL[preset]}
+                goodWhen="up"
+              />
+            }
           />
 
           {/* Остатки по счетам */}
@@ -127,12 +147,29 @@ export function FinanceOverviewPage() {
               value={formatRubWhole(data.summary.expenseKopecks)}
               icon={TrendingDown}
               tone="danger"
+              // Рост расхода — плохо, поэтому зелёным подсвечиваем снижение.
+              delta={
+                <Delta
+                  current={data.summary.expenseKopecks}
+                  previous={data.previous?.expenseKopecks}
+                  label={PRESET_COMPARE_LABEL[preset]}
+                  goodWhen="down"
+                />
+              }
             />
             <KpiCard
               title={`Разница (приход − расход) · ${PRESET_LABEL[preset].toLowerCase()}`}
               value={formatRubWhole(data.summary.profitKopecks)}
               icon={Scale}
               tone={safeBig(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}
+              delta={
+                <Delta
+                  current={data.summary.profitKopecks}
+                  previous={data.previous?.profitKopecks}
+                  label={PRESET_COMPARE_LABEL[preset]}
+                  goodWhen="up"
+                />
+              }
             />
           </div>
 
@@ -149,6 +186,69 @@ export function FinanceOverviewPage() {
       )}
 
       <CashTransactionModal open={txOpen} onClose={() => setTxOpen(false)} />
+    </div>
+  );
+}
+
+/* ─────────────────────── дельта к прошлому периоду ─────────────────────── */
+
+/**
+ * Строчка «↑ 12% к прошлому месяцу» под цифрой.
+ *
+ * goodWhen: для прихода и разницы рост — это хорошо (зелёный), для расхода — плохо (красный).
+ * Если в прошлом периоде был ноль — проценты считать не от чего, показываем сумму разницы.
+ */
+function Delta({
+  current,
+  previous,
+  label,
+  goodWhen,
+}: {
+  current?: string;
+  previous?: string;
+  label: string;
+  goodWhen: 'up' | 'down';
+}) {
+  const cur = safeBig(current);
+  const prev = safeBig(previous);
+  // Сравнивать нечего — не мозолим глаза пустой строкой.
+  if (cur === 0n && prev === 0n) return null;
+
+  const diff = cur - prev;
+  const hint = `Было ${formatRubWhole(prev.toString())} ${label}`;
+
+  if (diff === 0n) {
+    return (
+      <div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs" title={hint}>
+        <Minus className="h-3 w-3" />
+        без изменений {label}
+      </div>
+    );
+  }
+
+  const up = diff > 0n;
+  const good = goodWhen === 'up' ? up : !up;
+  const Icon = up ? ArrowUpRight : ArrowDownRight;
+  const absDiff = diff < 0n ? -diff : diff;
+  const absPrev = prev < 0n ? -prev : prev;
+  // Проценты в десятых долях, чтобы не терять точность на bigint.
+  const text =
+    absPrev === 0n
+      ? formatRubWhole(absDiff.toString())
+      : `${(Number((absDiff * 1000n) / absPrev) / 10).toLocaleString('ru-RU', {
+          maximumFractionDigits: 1,
+        })}%`;
+
+  return (
+    <div
+      className={cn(
+        'mt-1 flex items-center gap-1 text-xs font-medium',
+        good ? 'text-success' : 'text-destructive',
+      )}
+      title={hint}
+    >
+      <Icon className="h-3 w-3 shrink-0" />
+      {text} {label}
     </div>
   );
 }
@@ -201,11 +301,13 @@ function KpiCard({
   value,
   icon: Icon,
   tone,
+  delta,
 }: {
   title: string;
   value: string;
   icon: typeof Wallet;
   tone: 'success' | 'danger';
+  delta?: React.ReactNode;
 }) {
   return (
     <div className="bg-card relative flex flex-col gap-2 overflow-hidden rounded-xl border p-4 shadow-sm">
@@ -224,8 +326,16 @@ function KpiCard({
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <div className={cn('text-2xl font-semibold tabular-nums tracking-tight', tone === 'success' ? 'text-success' : 'text-destructive')}>
-        {value}
+      <div>
+        <div
+          className={cn(
+            'text-2xl font-semibold tabular-nums tracking-tight',
+            tone === 'success' ? 'text-success' : 'text-destructive',
+          )}
+        >
+          {value}
+        </div>
+        {delta}
       </div>
     </div>
   );
@@ -237,11 +347,13 @@ function CollectedHero({
   label,
   totalKopecks,
   byKind,
+  delta,
 }: {
   label: string;
   totalKopecks?: string;
   // byKind может отсутствовать (старый бэкенд / рассинхрон версий) — не должно ронять страницу.
   byKind?: { cashKopecks?: string; cardKopecks?: string; bankKopecks?: string } | null;
+  delta?: React.ReactNode;
 }) {
   const k = byKind ?? {};
   return (
@@ -255,6 +367,7 @@ function CollectedHero({
           <div className="text-success mt-1 text-3xl font-semibold tabular-nums tracking-tight md:text-4xl">
             {formatRubWhole(totalKopecks ?? '0')}
           </div>
+          {delta}
         </div>
         <div className="flex flex-wrap gap-2">
           <MethodChip icon={Banknote} label="Наличными" value={k.cashKopecks ?? '0'} />
