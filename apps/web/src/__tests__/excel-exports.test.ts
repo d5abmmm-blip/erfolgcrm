@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadCashJournalXlsx, type CashJournalRow } from '../lib/excel/cash-journal';
 import { downloadAnalyticsXlsx } from '../lib/excel/analytics';
+import { downloadSalesAnalyticsXlsx } from '../lib/excel/sales';
 
 let lastBlob: Blob | null = null;
 
@@ -134,6 +135,69 @@ describe('Excel: аналитика за период', () => {
 
   it('пропускает не загруженные разделы (только обзор) без ошибки', async () => {
     await downloadAnalyticsXlsx({ periodLabel: 'все', periodHuman: 'всё время' });
+    expect(lastBlob).toBeInstanceOf(Blob);
+    expect(lastBlob!.size).toBeGreaterThan(0);
+  });
+});
+
+describe('Excel: аналитика продаж', () => {
+  it('строит книгу из итогов, месяцев и топов', async () => {
+    await downloadSalesAnalyticsXlsx(
+      {
+        summary: {
+          revenueKopecks: '850000',
+          costKopecks: '530000',
+          profitKopecks: '320000',
+          salesCount: 2,
+          avgCheckKopecks: '425000',
+          marginPercent: 37.6,
+          unpaidKopecks: '850000',
+          unpaidCount: 2,
+        },
+        byMonth: [
+          {
+            month: '2026-03',
+            revenueKopecks: '850000',
+            costKopecks: '530000',
+            profitKopecks: '320000',
+            salesCount: 2,
+          },
+        ],
+        topClients: [
+          { clientName: 'ООО Ромашка', revenueKopecks: '850000', profitKopecks: '320000', salesCount: 2 },
+        ],
+        topProducts: [
+          { name: 'Плата ИВЛ', revenueKopecks: '500000', profitKopecks: '200000', quantity: 1 },
+        ],
+      },
+      'март 2026',
+      'Продажи_тест.xlsx',
+    );
+    expect(lastBlob).toBeInstanceOf(Blob);
+    expect(lastBlob!.type).toBe(XLSX_MIME);
+    expect(lastBlob!.size).toBeGreaterThan(0);
+  });
+
+  it('не падает на пустых данных', async () => {
+    await downloadSalesAnalyticsXlsx(
+      {
+        summary: {
+          revenueKopecks: '0',
+          costKopecks: '0',
+          profitKopecks: '0',
+          salesCount: 0,
+          avgCheckKopecks: '0',
+          marginPercent: null,
+          unpaidKopecks: '0',
+          unpaidCount: 0,
+        },
+        byMonth: [],
+        topClients: [],
+        topProducts: [],
+      },
+      'весь период',
+      'Продажи_пусто.xlsx',
+    );
     expect(lastBlob).toBeInstanceOf(Blob);
     expect(lastBlob!.size).toBeGreaterThan(0);
   });

@@ -13,7 +13,14 @@ import { uuidv7 } from 'uuidv7';
 import { cashAccounts, getDb, sales, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createAccount, getAccountBalances } from '../modules/cash/repository';
-import { createSale, getSale, paySale, unpaySale, updateSale } from '../modules/sales/repository';
+import {
+  createSale,
+  getSale,
+  paySale,
+  salesAnalytics,
+  unpaySale,
+  updateSale,
+} from '../modules/sales/repository';
 
 let erfolgId = '';
 const TEST_PREFIX = 'TESTSALE-';
@@ -108,5 +115,41 @@ describe('продажи ↔ касса', () => {
     await expect(
       updateSale(getDb(), erfolgId, id, { comment: `${TEST_PREFIX}правка` }),
     ).rejects.toThrow();
+  });
+
+  it('salesAnalytics: итоги, помесячно и топ-товаров по периоду (по дате продажи)', async () => {
+    const db = getDb();
+    // Две продажи в изолированном будущем месяце (2099-03), чтобы чужие данные не влияли.
+    const s1 = await createSale(db, erfolgId, baseSale()); // total 3500 ₽, закупка 2300 ₽
+    const s2 = await createSale(db, erfolgId, {
+      ...baseSale(),
+      items: [
+        { name: 'Плата ИВЛ', quantity: 1, unitPriceKopecks: 500_000n, unitCostKopecks: 300_000n },
+      ],
+    }); // total 5000 ₽, закупка 3000 ₽
+    await withTenantTx(db, erfolgId, async (tx) => {
+      await tx.execute(sql`UPDATE sales SET created_at = '2099-03-10T10:00:00Z' WHERE id = ${s1.id}::uuid`);
+      await tx.execute(sql`UPDATE sales SET created_at = '2099-03-20T10:00:00Z' WHERE id = ${s2.id}::uuid`);
+    });
+
+    const a = await salesAnalytics(db, erfolgId, { from: '2099-03-01', to: '2099-03-31' });
+    expect(a.summary.revenueKopecks).toBe('850000'); // 350000 + 500000
+    expect(a.summary.costKopecks).toBe('530000'); // 230000 + 300000
+    expect(a.summary.profitKopecks).toBe('320000'); // 850000 − 530000
+    expect(a.summary.salesCount).toBe(2);
+    expect(a.summary.avgCheckKopecks).toBe('425000'); // 850000 / 2
+    expect(a.summary.marginPercent).toBeCloseTo(37.6, 1); // 320000/850000 ≈ 37.6%
+    expect(a.summary.unpaidKopecks).toBe('850000'); // обе не оплачены
+    expect(a.summary.unpaidCount).toBe(2);
+
+    const march = a.byMonth.find((m) => m.month === '2099-03');
+    expect(march).toBeTruthy();
+    expect(march!.revenueKopecks).toBe('850000');
+    expect(march!.profitKopecks).toBe('320000');
+    expect(march!.salesCount).toBe(2);
+
+    // Топ товаров: «Плата ИВЛ» (выручка 5000 ₽) первым.
+    expect(a.topProducts[0]?.name).toBe('Плата ИВЛ');
+    expect(a.topProducts[0]?.revenueKopecks).toBe('500000');
   });
 });

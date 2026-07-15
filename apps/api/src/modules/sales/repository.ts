@@ -8,7 +8,7 @@
  *
  * Имя клиента резолвится join'ом на clients.display_name (как в trade-in).
  */
-import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import {
   cashAccounts,
   cashCategories,
@@ -50,6 +50,10 @@ export interface SaleListDto {
   clientName: string | null;
   status: SaleStatus;
   totalKopecks: string;
+  /** Σ закупки по позициям (себестоимость). */
+  costKopecks: string;
+  /** Выручка − закупка; null если закупка не задана (0). */
+  marginKopecks: string | null;
   itemsCount: number;
   isPaid: boolean;
   paidOn: string | null;
@@ -166,6 +170,11 @@ function toListDto(r: {
     clientName: r.clientName ?? null,
     status: s.status,
     totalKopecks: s.totalKopecks.toString(),
+    costKopecks: s.purchaseCostKopecks.toString(),
+    marginKopecks:
+      BigInt(s.purchaseCostKopecks) > 0n
+        ? (BigInt(s.totalKopecks) - BigInt(s.purchaseCostKopecks)).toString()
+        : null,
     itemsCount: r.itemsCount,
     isPaid: s.paidOn !== null,
     paidOn: s.paidOn ?? null,
@@ -175,9 +184,17 @@ function toListDto(r: {
 
 /* ───────────────────────────── queries ───────────────────────────── */
 
+export type SalesSort = 'date' | 'amount' | 'profit';
+
 export interface ListOpts {
   search?: string;
   status?: SaleStatus;
+  /** true — только оплаченные, false — только неоплаченные, undefined — все. */
+  paid?: boolean;
+  /** Период по дате продажи (created_at), YYYY-MM-DD включительно. */
+  from?: string;
+  to?: string;
+  sort?: SalesSort;
   page?: number;
 }
 
@@ -189,6 +206,11 @@ export async function listSales(
   return withTenantTx(db, tenantId, async (tx) => {
     const filters: SQL[] = [isNull(sales.deletedAt)];
     if (opts.status) filters.push(eq(sales.status, opts.status));
+    if (opts.paid !== undefined) {
+      filters.push(opts.paid ? (sql`${sales.paidOn} IS NOT NULL` as SQL) : isNull(sales.paidOn));
+    }
+    if (opts.from) filters.push(gte(sql`${sales.createdAt}::date`, opts.from));
+    if (opts.to) filters.push(lte(sql`${sales.createdAt}::date`, opts.to));
     if (opts.search) {
       const q = `%${opts.search.trim()}%`;
       filters.push(
@@ -203,12 +225,19 @@ export async function listSales(
     const page = Math.max(1, opts.page ?? 1);
     const offset = (page - 1) * PAGE_SIZE;
 
+    const orderBy =
+      opts.sort === 'amount'
+        ? desc(sales.totalKopecks)
+        : opts.sort === 'profit'
+          ? desc(sql`${sales.totalKopecks} - ${sales.purchaseCostKopecks}`)
+          : desc(sales.createdAt);
+
     const rows = await tx
       .select(listSelect)
       .from(sales)
       .leftJoin(clients, eq(clients.id, sales.clientId))
       .where(where)
-      .orderBy(desc(sales.createdAt))
+      .orderBy(orderBy)
       .limit(PAGE_SIZE)
       .offset(offset);
 
@@ -449,5 +478,258 @@ export async function deleteSale(db: Db, tenantId: string, id: string): Promise<
   return withTenantTx(db, tenantId, async (tx) => {
     await tx.update(sales).set({ deletedAt: new Date() }).where(eq(sales.id, id));
     return true;
+  });
+}
+
+/* ───────────────────────────── аналитика ─────────────────────────────
+ * Агрегаты по дате продажи (created_at). Отменённые (status='cancelled') из
+ * денег исключаются. Прибыль = выручка − закупка (обе материализованы на строке
+ * sales). Всё под withTenantTx (RLS FORCE). Своей таблицы для аналитики нет —
+ * считаем поверх sales/sale_items (паттерн reports/repository.ts).
+ */
+
+export interface SalesPeriod {
+  /** YYYY-MM-DD включительно. */
+  from?: string;
+  to?: string;
+}
+
+export interface SalesTotals {
+  revenueKopecks: string;
+  costKopecks: string;
+  profitKopecks: string;
+  salesCount: number;
+}
+
+export interface SalesSummary extends SalesTotals {
+  avgCheckKopecks: string;
+  /** прибыль / выручка · 100, одна десятая; null если выручка 0. */
+  marginPercent: number | null;
+  unpaidKopecks: string;
+  unpaidCount: number;
+  /** Предыдущий период той же длины (для сравнения ↑/↓); null если период открыт. */
+  previous: SalesTotals | null;
+}
+
+export interface SalesMonthRow {
+  /** YYYY-MM */
+  month: string;
+  revenueKopecks: string;
+  costKopecks: string;
+  profitKopecks: string;
+  salesCount: number;
+}
+
+export interface SalesTopClientRow {
+  clientId: string | null;
+  clientName: string;
+  revenueKopecks: string;
+  profitKopecks: string;
+  salesCount: number;
+}
+
+export interface SalesTopProductRow {
+  name: string;
+  revenueKopecks: string;
+  profitKopecks: string;
+  quantity: number;
+}
+
+export interface SalesAnalyticsDto {
+  summary: SalesSummary;
+  byMonth: SalesMonthRow[];
+  topClients: SalesTopClientRow[];
+  topProducts: SalesTopProductRow[];
+}
+
+/** Условие периода по sales.created_at::date. Пустые fragment'ы если границы не заданы. */
+function periodCond(period: SalesPeriod) {
+  const from = period.from ? sql`AND sales.created_at::date >= ${period.from}` : sql``;
+  const to = period.to ? sql`AND sales.created_at::date <= ${period.to}` : sql``;
+  return sql`${from} ${to}`;
+}
+
+async function aggregateTotals(tx: Tx, tenantId: string, period: SalesPeriod): Promise<SalesTotals> {
+  const rows = (await tx.execute(sql`
+    SELECT
+      COALESCE(SUM(total_kopecks), 0)::bigint::text         AS revenue,
+      COALESCE(SUM(purchase_cost_kopecks), 0)::bigint::text AS cost,
+      COUNT(*)::int                                         AS cnt
+    FROM sales
+    WHERE tenant_id = ${tenantId}::uuid
+      AND deleted_at IS NULL
+      AND status <> 'cancelled'
+      ${periodCond(period)}
+  `)) as unknown as Array<{ revenue: string; cost: string; cnt: number }>;
+  const revenue = BigInt(rows[0]?.revenue ?? '0');
+  const cost = BigInt(rows[0]?.cost ?? '0');
+  return {
+    revenueKopecks: revenue.toString(),
+    costKopecks: cost.toString(),
+    profitKopecks: (revenue - cost).toString(),
+    salesCount: rows[0]?.cnt ?? 0,
+  };
+}
+
+async function aggregateUnpaid(
+  tx: Tx,
+  tenantId: string,
+  period: SalesPeriod,
+): Promise<{ kopecks: string; count: number }> {
+  const rows = (await tx.execute(sql`
+    SELECT COALESCE(SUM(total_kopecks), 0)::bigint::text AS total, COUNT(*)::int AS cnt
+    FROM sales
+    WHERE tenant_id = ${tenantId}::uuid
+      AND deleted_at IS NULL
+      AND status <> 'cancelled'
+      AND paid_on IS NULL
+      ${periodCond(period)}
+  `)) as unknown as Array<{ total: string; cnt: number }>;
+  return { kopecks: BigInt(rows[0]?.total ?? '0').toString(), count: rows[0]?.cnt ?? 0 };
+}
+
+async function monthRows(tx: Tx, tenantId: string, period: SalesPeriod): Promise<SalesMonthRow[]> {
+  const rows = (await tx.execute(sql`
+    SELECT to_char(date_trunc('month', created_at), 'YYYY-MM')  AS month,
+           COALESCE(SUM(total_kopecks), 0)::bigint::text         AS revenue,
+           COALESCE(SUM(purchase_cost_kopecks), 0)::bigint::text AS cost,
+           COUNT(*)::int                                         AS cnt
+    FROM sales
+    WHERE tenant_id = ${tenantId}::uuid
+      AND deleted_at IS NULL
+      AND status <> 'cancelled'
+      ${periodCond(period)}
+    GROUP BY 1
+    ORDER BY 1
+  `)) as unknown as Array<{ month: string; revenue: string; cost: string; cnt: number }>;
+  return rows.map((r) => {
+    const revenue = BigInt(r.revenue);
+    const cost = BigInt(r.cost);
+    return {
+      month: r.month,
+      revenueKopecks: revenue.toString(),
+      costKopecks: cost.toString(),
+      profitKopecks: (revenue - cost).toString(),
+      salesCount: r.cnt,
+    };
+  });
+}
+
+async function topClientRows(
+  tx: Tx,
+  tenantId: string,
+  period: SalesPeriod,
+  limit: number,
+): Promise<SalesTopClientRow[]> {
+  const rows = (await tx.execute(sql`
+    SELECT sales.client_id                                                       AS "clientId",
+           COALESCE(clients.display_name, '—')                                   AS "clientName",
+           COALESCE(SUM(sales.total_kopecks), 0)::bigint::text                    AS revenue,
+           COALESCE(SUM(sales.total_kopecks - sales.purchase_cost_kopecks), 0)::bigint::text AS profit,
+           COUNT(*)::int                                                         AS cnt
+    FROM sales
+    LEFT JOIN clients ON clients.id = sales.client_id
+    WHERE sales.tenant_id = ${tenantId}::uuid
+      AND sales.deleted_at IS NULL
+      AND sales.status <> 'cancelled'
+      ${periodCond(period)}
+    GROUP BY sales.client_id, clients.display_name
+    ORDER BY SUM(sales.total_kopecks) DESC
+    LIMIT ${limit}
+  `)) as unknown as Array<{
+    clientId: string | null;
+    clientName: string;
+    revenue: string;
+    profit: string;
+    cnt: number;
+  }>;
+  return rows.map((r) => ({
+    clientId: r.clientId,
+    clientName: r.clientName,
+    revenueKopecks: BigInt(r.revenue).toString(),
+    profitKopecks: BigInt(r.profit).toString(),
+    salesCount: r.cnt,
+  }));
+}
+
+async function topProductRows(
+  tx: Tx,
+  tenantId: string,
+  period: SalesPeriod,
+  limit: number,
+): Promise<SalesTopProductRow[]> {
+  const rows = (await tx.execute(sql`
+    SELECT sale_items.name                                                                          AS name,
+           COALESCE(SUM(sale_items.quantity * sale_items.unit_price_kopecks), 0)::bigint::text       AS revenue,
+           COALESCE(SUM(sale_items.quantity * (sale_items.unit_price_kopecks - sale_items.unit_cost_kopecks)), 0)::bigint::text AS profit,
+           COALESCE(SUM(sale_items.quantity), 0)::int                                                AS qty
+    FROM sale_items
+    JOIN sales ON sales.id = sale_items.sale_id
+    WHERE sales.tenant_id = ${tenantId}::uuid
+      AND sales.deleted_at IS NULL
+      AND sales.status <> 'cancelled'
+      ${periodCond(period)}
+    GROUP BY sale_items.name
+    ORDER BY SUM(sale_items.quantity * sale_items.unit_price_kopecks) DESC
+    LIMIT ${limit}
+  `)) as unknown as Array<{ name: string; revenue: string; profit: string; qty: number }>;
+  return rows.map((r) => ({
+    name: r.name,
+    revenueKopecks: BigInt(r.revenue).toString(),
+    profitKopecks: BigInt(r.profit).toString(),
+    quantity: r.qty,
+  }));
+}
+
+/** Предыдущий период той же длины непосредственно перед [from,to]. */
+function prevPeriod(period: SalesPeriod): SalesPeriod | null {
+  if (!period.from || !period.to) return null;
+  const from = new Date(`${period.from}T00:00:00Z`);
+  const to = new Date(`${period.to}T00:00:00Z`);
+  if (Number.isNaN(from.valueOf()) || Number.isNaN(to.valueOf()) || to < from) return null;
+  const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  const prevTo = new Date(from);
+  prevTo.setUTCDate(prevTo.getUTCDate() - 1);
+  const prevFrom = new Date(prevTo);
+  prevFrom.setUTCDate(prevFrom.getUTCDate() - days + 1);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(prevFrom), to: iso(prevTo) };
+}
+
+/** Полная аналитика продаж за период: итоги + помесячно + топ клиентов/товаров. */
+export async function salesAnalytics(
+  db: Db,
+  tenantId: string,
+  period: SalesPeriod,
+): Promise<SalesAnalyticsDto> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const current = await aggregateTotals(tx, tenantId, period);
+    const prev = prevPeriod(period);
+    const previous = prev ? await aggregateTotals(tx, tenantId, prev) : null;
+    const unpaid = await aggregateUnpaid(tx, tenantId, period);
+    const byMonth = await monthRows(tx, tenantId, period);
+    const topClients = await topClientRows(tx, tenantId, period, 5);
+    const topProducts = await topProductRows(tx, tenantId, period, 5);
+
+    const revenue = BigInt(current.revenueKopecks);
+    const profit = BigInt(current.profitKopecks);
+    const avgCheckKopecks =
+      current.salesCount > 0 ? (revenue / BigInt(current.salesCount)).toString() : '0';
+    const marginPercent =
+      revenue > 0n ? Math.round((Number(profit) / Number(revenue)) * 1000) / 10 : null;
+
+    return {
+      summary: {
+        ...current,
+        avgCheckKopecks,
+        marginPercent,
+        unpaidKopecks: unpaid.kopecks,
+        unpaidCount: unpaid.count,
+        previous,
+      },
+      byMonth,
+      topClients,
+      topProducts,
+    };
   });
 }
