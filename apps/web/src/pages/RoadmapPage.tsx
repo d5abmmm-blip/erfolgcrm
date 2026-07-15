@@ -1,8 +1,9 @@
 /**
- * Дорожная карта — цели компании по кварталам (директор).
- * Карточки с прогресс-баром target/current, отметка «выполнено», inline-добавление.
+ * Дорожная карта — цели компании (директор).
+ * Единый список: каждая цель во всю ширину отдельной строкой, квартал — меткой-чипом,
+ * числовой прогресс target/current и этапы (чек-чипы). Список отсортирован API по кварталу.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, Circle, HelpCircle, Map as MapIcon, Plus, Trash2, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
@@ -28,6 +29,12 @@ const PRIORITY_LABEL: Record<Priority, string> = {
 };
 
 const QUARTERS: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
+const QUARTER_LABEL: Record<Quarter, string> = {
+  Q1: 'Кв 1',
+  Q2: 'Кв 2',
+  Q3: 'Кв 3',
+  Q4: 'Кв 4',
+};
 
 interface Stage {
   id: string;
@@ -85,17 +92,10 @@ export function RoadmapPage() {
   });
 
   const goals = (list.data ?? []) as Goal[];
-  const byQuarter = useMemo(() => {
-    const map = new Map<Quarter, Goal[]>();
-    for (const q of QUARTERS) map.set(q, []);
-    for (const g of goals) map.get(g.quarter)!.push(g);
-    return map;
-  }, [goals]);
-
   const doneCount = goals.filter((g) => g.isDone).length;
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
+    <div className="mx-auto max-w-[1100px] space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
@@ -108,7 +108,7 @@ export function RoadmapPage() {
               className="inline-flex"
               side="bottom"
               align="start"
-              content="«Дорожная карта» — внутренний план целей компании на год по кварталам (Q1–Q4). Цель здесь — это крупная задача бизнеса («Выручка 5 млн», «Нанять инженера», «Запустить рекламу»), а не заявка клиента. Экран видит только директор, всё заполняется вручную: цели не берутся из заявок и никуда автоматически не уходят."
+              content="«Дорожная карта» — внутренний план целей компании на год. Каждая цель показана отдельной строкой во всю ширину: слева — квартал (Кв 1–4), к которому она привязана, дальше — прогресс и этапы. Цель здесь — это крупная задача бизнеса («Выручка 5 млн», «Нанять инженера», «Запустить рекламу»), а не заявка клиента. Экран видит только директор, всё заполняется вручную: цели не берутся из заявок и никуда автоматически не уходят."
             >
               <HelpCircle
                 className="text-muted-foreground hover:text-foreground h-4 w-4 cursor-help"
@@ -119,7 +119,7 @@ export function RoadmapPage() {
           <p className="text-muted-foreground text-sm">
             {goals.length > 0
               ? `Выполнено ${doneCount} из ${goals.length}`
-              : 'Поставьте цели на кварталы — выручка, клиенты, процессы'}
+              : 'Поставьте цели на год — выручка, клиенты, процессы'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -164,34 +164,22 @@ export function RoadmapPage() {
 
       {list.isLoading ? (
         <p className="text-muted-foreground text-sm">Загрузка…</p>
+      ) : goals.length === 0 ? (
+        <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
+          Целей на {year} год пока нет. Нажмите «Новая цель», чтобы добавить первую.
+        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          {QUARTERS.map((q) => {
-            const items = byQuarter.get(q)!;
-            return (
-              <section key={q} className="space-y-2">
-                <h2 className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-                  {q} · {year} <span className="ml-1">({items.length})</span>
-                </h2>
-                {items.length === 0 ? (
-                  <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-xs">
-                    Нет целей
-                  </div>
-                ) : (
-                  items.map((g) => (
-                    <GoalCard
-                      key={g.id}
-                      goal={g}
-                      onToggleDone={() => update.mutate({ id: g.id, patch: { isDone: !g.isDone } })}
-                      onProgress={(v) => update.mutate({ id: g.id, patch: { currentValue: v } })}
-                      onArchive={() => setArchiveId(g.id)}
-                      onStages={(stages) => update.mutate({ id: g.id, patch: { stages } })}
-                    />
-                  ))
-                )}
-              </section>
-            );
-          })}
+        <div className="space-y-3">
+          {goals.map((g) => (
+            <GoalRow
+              key={g.id}
+              goal={g}
+              onToggleDone={() => update.mutate({ id: g.id, patch: { isDone: !g.isDone } })}
+              onProgress={(v) => update.mutate({ id: g.id, patch: { currentValue: v } })}
+              onArchive={() => setArchiveId(g.id)}
+              onStages={(stages) => update.mutate({ id: g.id, patch: { stages } })}
+            />
+          ))}
         </div>
       )}
 
@@ -209,7 +197,8 @@ export function RoadmapPage() {
   );
 }
 
-function GoalCard({
+/** Одна цель — строка во всю ширину: квартал-чип, заголовок, метки, числовой прогресс, этапы. */
+function GoalRow({
   goal,
   onToggleDone,
   onProgress,
@@ -228,8 +217,8 @@ function GoalCard({
       ? Math.min(100, Math.round(((goal.currentValue ?? 0) / goal.targetValue) * 100))
       : null;
   return (
-    <div className={'bg-card rounded-lg border p-3 ' + (goal.isDone ? 'opacity-70' : '')}>
-      <div className="flex items-start justify-between gap-2">
+    <div className={'bg-card rounded-lg border p-4 ' + (goal.isDone ? 'opacity-70' : '')}>
+      <div className="flex items-start gap-3">
         <button
           type="button"
           onClick={onToggleDone}
@@ -238,19 +227,29 @@ function GoalCard({
           title={goal.isDone ? 'Снять отметку' : 'Отметить выполненной'}
         >
           {goal.isDone ? (
-            <CheckCircle2 className="text-success h-4.5 w-4.5 h-5 w-5" />
+            <CheckCircle2 className="text-success h-5 w-5" />
           ) : (
             <Circle className="text-muted-foreground hover:text-foreground h-5 w-5" />
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <div className={'text-sm font-medium ' + (goal.isDone ? 'line-through' : '')}>
-            {goal.title}
-          </div>
-          {goal.description && (
-            <p className="text-muted-foreground mt-0.5 text-xs">{goal.description}</p>
-          )}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Tooltip
+              className="inline-flex"
+              content="Квартал, в котором планируется достичь цели. Список отсортирован по кварталам: Кв 1 (янв–март) → Кв 4 (окт–дек)."
+            >
+              <span className="border-border bg-muted text-foreground inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold">
+                {QUARTER_LABEL[goal.quarter]}
+              </span>
+            </Tooltip>
+            <span
+              className={
+                'text-sm font-medium md:text-[15px] ' +
+                (goal.isDone ? 'text-muted-foreground line-through' : '')
+              }
+            >
+              {goal.title}
+            </span>
             <Tooltip
               className="inline-flex"
               content="Категория цели — задаёт цвет метки и группировку. На расчёты не влияет."
@@ -270,16 +269,19 @@ function GoalCard({
               </Tooltip>
             )}
           </div>
+          {goal.description && (
+            <p className="text-muted-foreground mt-1 text-xs">{goal.description}</p>
+          )}
           {pct !== null && (
-            <div className="mt-2">
-              <div className="text-muted-foreground flex justify-between text-[11px] tabular-nums">
+            <div className="mt-3 max-w-2xl">
+              <div className="text-muted-foreground flex justify-between text-xs tabular-nums">
                 <span>
                   {formatNum(goal.currentValue ?? 0)} / {formatNum(goal.targetValue!)}
                   {goal.unit ? ` ${goal.unit}` : ''}
                 </span>
                 <span>{pct}%</span>
               </div>
-              <div className="bg-muted mt-1 h-1.5 overflow-hidden rounded-full">
+              <div className="bg-muted mt-1 h-2 overflow-hidden rounded-full">
                 <div
                   className={'h-full rounded-full ' + (pct >= 100 ? 'bg-success' : 'bg-primary')}
                   style={{ width: `${pct}%` }}
@@ -291,13 +293,13 @@ function GoalCard({
                 max={goal.targetValue!}
                 value={goal.currentValue ?? 0}
                 onChange={(e) => onProgress(Number(e.target.value))}
-                className="mt-1 w-full"
+                className="mt-1.5 w-full"
                 aria-label="Текущий прогресс"
                 title="Двигайте ползунок: отметьте, сколько уже достигнуто. Полоса и % считаются от целевого числа."
               />
             </div>
           )}
-          <GoalStages stages={goal.stages} onChange={onStages} />
+          <GoalStages stages={goal.stages} onChange={onStages} className="mt-3" />
         </div>
         <button
           type="button"
@@ -306,15 +308,23 @@ function GoalCard({
           title="Удалить"
           className="text-muted-foreground hover:text-destructive shrink-0"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 }
 
-/** Этапы цели: чек-лист подшагов + прогресс сделано/всего. Полный массив шлём в onChange. */
-function GoalStages({ stages, onChange }: { stages: Stage[]; onChange: (s: Stage[]) => void }) {
+/** Этапы цели: чек-чипы подшагов во всю ширину + прогресс сделано/всего. Полный массив шлём в onChange. */
+function GoalStages({
+  stages,
+  onChange,
+  className = '',
+}: {
+  stages: Stage[];
+  onChange: (s: Stage[]) => void;
+  className?: string;
+}) {
   const [newTitle, setNewTitle] = useState('');
   const done = stages.filter((s) => s.done).length;
   const pct = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
@@ -330,59 +340,61 @@ function GoalStages({ stages, onChange }: { stages: Stage[]; onChange: (s: Stage
   const remove = (id: string) => onChange(stages.filter((s) => s.id !== id));
 
   return (
-    <div className="mt-2">
+    <div className={className}>
       {stages.length > 0 && (
         <>
-          <div className="text-muted-foreground mb-1 flex justify-between text-[11px] tabular-nums">
-            <span>
-              Этапы: {done}/{stages.length}
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs font-medium tabular-nums whitespace-nowrap">
+              Этапы {done}/{stages.length}
             </span>
-            <span>{pct}%</span>
+            <div className="bg-muted h-2 w-40 max-w-full overflow-hidden rounded-full">
+              <div
+                className={'h-full rounded-full ' + (pct >= 100 ? 'bg-success' : 'bg-primary')}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-muted-foreground text-xs tabular-nums">{pct}%</span>
           </div>
-          <div className="bg-muted mb-1.5 h-1.5 overflow-hidden rounded-full">
-            <div
-              className={'h-full rounded-full ' + (pct >= 100 ? 'bg-success' : 'bg-primary')}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <ul className="mb-1 space-y-1">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {stages.map((s) => (
-              <li key={s.id} className="flex items-center gap-1.5 text-xs">
+              <span
+                key={s.id}
+                className="border-border bg-background inline-flex items-center gap-1 rounded-full border py-1 pl-1.5 pr-1 text-xs"
+              >
                 <button
                   type="button"
                   onClick={() => toggle(s.id)}
-                  className="shrink-0"
-                  aria-label={s.done ? 'Снять отметку этапа' : 'Отметить этап сделанным'}
+                  className="inline-flex min-w-0 items-center gap-1.5"
                   title={s.done ? 'Снять отметку' : 'Отметить сделанным'}
                 >
                   {s.done ? (
-                    <CheckCircle2 className="text-success h-4 w-4" />
+                    <CheckCircle2 className="text-success h-4 w-4 shrink-0" />
                   ) : (
-                    <Circle className="text-muted-foreground hover:text-foreground h-4 w-4" />
+                    <Circle className="text-muted-foreground hover:text-foreground h-4 w-4 shrink-0" />
                   )}
+                  <span
+                    className={
+                      'max-w-[260px] truncate ' + (s.done ? 'text-muted-foreground line-through' : '')
+                    }
+                  >
+                    {s.title}
+                  </span>
                 </button>
-                <span
-                  className={
-                    'min-w-0 flex-1 truncate ' + (s.done ? 'text-muted-foreground line-through' : '')
-                  }
-                >
-                  {s.title}
-                </span>
                 <button
                   type="button"
                   onClick={() => remove(s.id)}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  className="text-muted-foreground hover:text-destructive ml-0.5 shrink-0"
                   aria-label="Удалить этап"
                   title="Удалить этап"
                 >
                   <X className="h-3 w-3" />
                 </button>
-              </li>
+              </span>
             ))}
-          </ul>
+          </div>
         </>
       )}
-      <div className="flex items-center gap-1">
+      <div className="mt-2 flex max-w-xs items-center gap-1">
         <input
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
@@ -463,12 +475,12 @@ function GoalForm({
           className="block"
           side="bottom"
           align="center"
-          content="В каком квартале планируете достичь цели. Q1 — янв–март, Q2 — апр–июнь, Q3 — июль–сент, Q4 — окт–дек."
+          content="В каком квартале планируете достичь цели. Кв 1 — янв–март, Кв 2 — апр–июнь, Кв 3 — июль–сент, Кв 4 — окт–дек."
         >
           <select value={quarter} onChange={(e) => setQuarter(e.target.value as Quarter)} className={inputCls}>
             {QUARTERS.map((q) => (
               <option key={q} value={q}>
-                {q} {year}
+                {QUARTER_LABEL[q]} · {year}
               </option>
             ))}
           </select>
