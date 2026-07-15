@@ -463,6 +463,13 @@
       "when": 1778501300000,
       "tag": "0074_payroll_sheets_cash_posting",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1778501400000,
+      "tag": "0075_tasks",
+      "breakpoints": true
     }
   ]
 }

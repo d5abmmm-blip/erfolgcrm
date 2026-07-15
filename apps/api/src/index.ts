@@ -32,6 +32,10 @@ import {
   registerCalendarReminderWorker,
 } from './workers/calendar-reminder';
 import {
+  enqueueTaskReminderSchedule,
+  registerTaskReminderWorker,
+} from './workers/task-reminder';
+import {
   enqueueEmailInboundSchedule,
   registerEmailInboundWorker,
 } from './workers/email-inbound';
@@ -207,6 +211,7 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerInvoiceReminderWorker();
   registerTicketStatusNotifyWorker();
   registerCalendarReminderWorker();
+  registerTaskReminderWorker();
   registerEmailInboundWorker();
   registerEmailScheduledWorker();
   registerStuckAlertWorker();
@@ -219,6 +224,10 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   // расписание ставим всегда (тик без «созревших» событий — no-op).
   void enqueueCalendarReminderSchedule().catch((err) =>
     logger.warn({ err }, 'calendar-reminder schedule failed'),
+  );
+  // Напоминания о задачах с датой — тоже внутренний push, расписание ставим всегда.
+  void enqueueTaskReminderSchedule().catch((err) =>
+    logger.warn({ err }, 'task-reminder schedule failed'),
   );
   // Алерты о застревании — внутренний push (no-op без VAPID). Расписание гейтится
   // внутри enqueueStuckAlertSchedule (STUCK_ALERT_ENABLED=false отключает).
