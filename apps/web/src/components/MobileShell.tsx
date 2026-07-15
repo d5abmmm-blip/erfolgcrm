@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ListChecks, Package, ScanLine, User, LogOut, CloudOff, Cloud } from 'lucide-react';
+import { ClipboardList, ListChecks, Package, ScanLine, User, LogOut, CloudOff, Cloud } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useAppViewportLock } from '../lib/use-app-viewport-lock';
@@ -31,6 +31,7 @@ const NAV: Array<{
     icon: ListChecks,
     match: (p) => p === '/m/queue' || p.startsWith('/m/tickets'),
   },
+  { href: '/m/tasks', label: 'Задачи', icon: ClipboardList, match: (p) => p.startsWith('/m/tasks') },
   { href: '/m/scan', label: 'Сканер', icon: ScanLine, match: (p) => p.startsWith('/m/scan') },
   { href: '/m/inventory', label: 'Склад', icon: Package, match: (p) => p.startsWith('/m/inventory'), module: 'inventory' },
   { href: '/m/profile', label: 'Профиль', icon: User, match: (p) => p.startsWith('/m/profile') },

@@ -29,7 +29,9 @@ export type MutationKind =
   // Этап 5: запись о выполненном ТО.
   | 'maintenance.recordPerformed'
   // «Мой день»: реакция инженера одной кнопкой (ещё в работе / готово / жду запчасть).
-  | 'tickets.engineerReact';
+  | 'tickets.engineerReact'
+  // Таск-лист: инженер отмечает свою задачу сделанной/снимает отметку.
+  | 'tasks.setDone';
 
 export interface OutboxItem<P = unknown> {
   id: string;

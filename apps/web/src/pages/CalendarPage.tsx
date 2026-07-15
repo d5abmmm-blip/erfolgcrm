@@ -8,9 +8,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'wouter';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Square } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { CalendarTasksPanel } from '../components/CalendarTasksPanel';
 
 type EventType =
   | 'ticket'
@@ -102,6 +103,19 @@ export function CalendarPage() {
     }
     return map;
   }, [eventsQ.data]);
+
+  // Открытые задачи с датой — показываем в сетке месяца отдельными чипами.
+  const openTasksQ = trpc.tasks.list.useQuery({ includeDone: false });
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, { id: string; title: string }[]>();
+    for (const t of openTasksQ.data ?? []) {
+      if (!t.dueDate) continue;
+      const list = map.get(t.dueDate);
+      if (list) list.push({ id: t.id, title: t.title });
+      else map.set(t.dueDate, [{ id: t.id, title: t.title }]);
+    }
+    return map;
+  }, [openTasksQ.data]);
 
   const shiftMonth = (delta: number) => {
     const d = new Date(year, month - 1 + delta, 1);
@@ -221,6 +235,7 @@ export function CalendarPage() {
                 }
                 const dateStr = toDateStr(year, month, dayNum);
                 const dayEvents = eventsByDate.get(dateStr) ?? [];
+                const dayTasks = tasksByDate.get(dateStr) ?? [];
                 const isToday = dateStr === today;
                 const isSelected = dateStr === selected;
                 return (
@@ -264,6 +279,20 @@ export function CalendarPage() {
                       {dayEvents.length > 3 && (
                         <div className="text-muted-foreground px-1 text-[11px]">
                           +{dayEvents.length - 3} ещё
+                        </div>
+                      )}
+                      {dayTasks.slice(0, 2).map((t) => (
+                        <div
+                          key={`task-${t.id}`}
+                          className="border-primary/40 text-foreground/80 flex items-center gap-1 truncate rounded border border-dashed px-1 py-0.5 text-[11px] font-medium"
+                        >
+                          <Square className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                          <span className="truncate">{t.title}</span>
+                        </div>
+                      ))}
+                      {dayTasks.length > 2 && (
+                        <div className="text-muted-foreground px-1 text-[11px]">
+                          +{dayTasks.length - 2} задач
                         </div>
                       )}
                     </div>
@@ -349,6 +378,9 @@ export function CalendarPage() {
           )}
         </aside>
       </div>
+
+      {/* Таск-лист менеджеров: дела фирмы с датой/без + галочка «сделано». */}
+      <CalendarTasksPanel />
 
       {dialog && <EventDialog initial={dialog} onClose={() => setDialog(null)} />}
     </div>
