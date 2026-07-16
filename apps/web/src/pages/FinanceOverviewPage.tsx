@@ -25,6 +25,7 @@ import { formatRub, formatRubWhole } from '../lib/money';
 import { monthLabel } from '../lib/cash-format';
 import { FinanceTabs } from '../components/finance/FinanceTabs';
 import { CashTransactionModal } from '../components/finance/CashTransactionModal';
+import { CashInternalOpModal } from '../components/finance/CashInternalOpModal';
 import { CASH_ACCOUNT_KIND_LABEL, CASH_TX_KIND_META } from '../lib/dictionaries';
 
 type Preset = 'today' | 'week' | 'month' | 'quarter' | 'year';
@@ -59,7 +60,9 @@ function safeBig(v: string | number | null | undefined): bigint {
 export function FinanceOverviewPage() {
   const [preset, setPreset] = useState<Preset>('today');
   const [txOpen, setTxOpen] = useState(false);
-  const q = trpc.cash.overview.useQuery({ preset });
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [includeInternal, setIncludeInternal] = useState(false);
+  const q = trpc.cash.overview.useQuery({ preset, includeInternal });
   const data = q.data;
 
   return (
@@ -68,8 +71,16 @@ export function FinanceOverviewPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold md:text-2xl">Касса</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <PeriodTabs value={preset} onChange={setPreset} />
+          <button
+            type="button"
+            onClick={() => setInternalOpen(true)}
+            className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition"
+            title="Внесение в кассу / выдача из кассы — внутренняя операция, не доход и не расход бизнеса"
+          >
+            Внесение/выдача
+          </button>
           <button
             type="button"
             onClick={() => setTxOpen(true)}
@@ -80,6 +91,20 @@ export function FinanceOverviewPage() {
           </button>
         </div>
       </div>
+
+      {/* Тумблер внутренних операций: по умолчанию внесения/выдачи НЕ считаются доходом/расходом */}
+      <label
+        className="text-muted-foreground -mt-2 inline-flex cursor-pointer select-none items-center gap-2 text-sm"
+        title="Внесения в кассу и выдачи из неё — внутренние движения денег (обнал и т.п.). Выключено — в «Собрано», приходе и расходе их нет (нет двойного дохода). Включи, чтобы сверить цифры с реальным сейфом. На остатки счетов не влияет — они всегда учитывают всё."
+      >
+        <input
+          type="checkbox"
+          checked={includeInternal}
+          onChange={(e) => setIncludeInternal(e.target.checked)}
+          className="accent-primary h-4 w-4"
+        />
+        Учитывать внесения/выдачи в сводке
+      </label>
 
       {q.isLoading && (
         <div className="text-muted-foreground bg-card rounded-lg border p-6 text-sm">Загружаем…</div>
@@ -186,6 +211,7 @@ export function FinanceOverviewPage() {
       )}
 
       <CashTransactionModal open={txOpen} onClose={() => setTxOpen(false)} />
+      <CashInternalOpModal open={internalOpen} onClose={() => setInternalOpen(false)} />
     </div>
   );
 }

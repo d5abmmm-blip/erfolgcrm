@@ -204,6 +204,36 @@ export function listTransactionsQuery(
   return repo.listTransactions(db, tenant.id, filter, limit, offset);
 }
 
+/** Внутренняя операция кассы: внесение/выдача — не доход/расход бизнеса. */
+export async function createInternalCmd(
+  ctx: CmdCtx,
+  input: Omit<repo.CreateInternalOpInput, 'userId'>,
+) {
+  let result;
+  try {
+    result = await repo.createInternalOp(ctx.db, ctx.tenant.id, {
+      ...input,
+      userId: ctx.session.userId,
+    });
+  } catch (err) {
+    throw toTrpc(err);
+  }
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'create',
+    entityType: 'cash_transaction',
+    entityId: result.id,
+    after: {
+      internal: input.kind,
+      accountId: input.accountId,
+      amountKopecks: input.amountKopecks.toString(),
+    },
+    ip: ctx.audit.ip,
+    userAgent: ctx.audit.userAgent,
+  });
+  return result;
+}
+
 export async function createTransactionCmd(ctx: CmdCtx, input: repo.CreateTransactionInput) {
   let result;
   try {
@@ -261,15 +291,16 @@ export async function overviewQuery(
   db: Db,
   tenant: ResolvedTenant,
   preset: PeriodPreset,
+  includeInternal = false,
 ): Promise<CashOverview> {
   const period = resolvePeriod(preset);
   const prevPeriod = resolvePreviousPeriod(preset, period);
   const [balances, summary, previous, monthly, recent] = await Promise.all([
     repo.getAccountBalances(db, tenant.id),
-    repo.getPeriodSummary(db, tenant.id, period),
+    repo.getPeriodSummary(db, tenant.id, period, includeInternal),
     // Тот же агрегат, просто другое окно дат — нового SQL не нужно.
-    repo.getPeriodSummary(db, tenant.id, prevPeriod),
-    repo.getMonthlyFlow(db, tenant.id, 6),
+    repo.getPeriodSummary(db, tenant.id, prevPeriod, includeInternal),
+    repo.getMonthlyFlow(db, tenant.id, 6, includeInternal),
     repo.listTransactions(db, tenant.id, {}, 8, 0).then((r) => r.items),
   ]);
   return {

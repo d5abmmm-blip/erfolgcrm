@@ -207,7 +207,7 @@ export async function listSales(
     const filters: SQL[] = [isNull(sales.deletedAt)];
     if (opts.status) filters.push(eq(sales.status, opts.status));
     if (opts.paid !== undefined) {
-      filters.push(opts.paid ? (sql`${sales.paidOn} IS NOT NULL` as SQL) : isNull(sales.paidOn));
+      filters.push(opts.paid ? sql`${sales.paidOn} IS NOT NULL` : isNull(sales.paidOn));
     }
     if (opts.from) filters.push(gte(sql`${sales.createdAt}::date`, opts.from));
     if (opts.to) filters.push(lte(sql`${sales.createdAt}::date`, opts.to));
