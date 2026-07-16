@@ -47,4 +47,5 @@ export * from './tasks';
 export * from './email';
 export * from './cash';
 export * from './sales';
+export * from './tenders';
 export * from './ai';

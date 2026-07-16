@@ -62,6 +62,7 @@ const STAGE_TRIGGER_TABLE: Record<string, string | null> = {
   '0066_enable_rls_repair_archive.sql': 'repair_archive',
   '0073_enable_rls_payroll_sheets.sql': 'payroll_sheets',
   '0075_enable_rls_tasks.sql': 'tasks',
+  '0077_enable_rls_tenders.sql': 'tenders',
 };
 
 async function main() {

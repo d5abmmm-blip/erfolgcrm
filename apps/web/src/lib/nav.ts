@@ -18,6 +18,7 @@ import {
   FileSignature,
   Settings,
   Wallet,
+  Gavel,
   ShoppingCart,
   Target,
   ShieldCheck,
@@ -90,6 +91,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: '/finance', label: 'Финансы', icon: Receipt, module: 'invoices' },
       { href: '/sales', label: 'Продажи', icon: ShoppingCart, roles: ['director', 'dispatcher'], module: 'sales' },
+      { href: '/tenders', label: 'Тендеры', icon: Gavel, roles: ['director', 'dispatcher'], module: 'tenders' },
       { href: '/payroll', label: 'Зарплата', icon: Wallet, module: 'payroll' },
       { href: '/reports', label: 'Отчёты', icon: BarChart3, roles: ['director', 'dispatcher'], module: 'reports' },
     ],
