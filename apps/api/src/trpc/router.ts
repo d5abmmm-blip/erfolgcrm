@@ -38,6 +38,7 @@ import { settingsRouter } from '../modules/settings';
 import { emailRouter } from '../modules/email';
 import { cashRouter } from '../modules/cash';
 import { salesRouter } from '../modules/sales';
+import { tendersRouter } from '../modules/tenders';
 import { backupRouter } from '../modules/backup';
 import { aiAssistantRouter } from '../modules/ai-assistant';
 import { engineerProfileRouter } from '../modules/engineer-profile';
@@ -115,6 +116,7 @@ export const appRouter = router({
   cash: cashRouter,
   /** Продажи запчастей/оборудования клиентам (отдельно от ремонтных заявок). */
   sales: salesRouter,
+  tenders: tendersRouter,
   /** Резервные копии и архив по годам (только директор). */
   backup: backupRouter,
   /** AI-ассистент: чат с tool-use поверх процедур (LLM провайдеро-независимый). */

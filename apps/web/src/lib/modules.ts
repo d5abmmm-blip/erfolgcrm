@@ -33,7 +33,8 @@ export type ModuleKey =
   | 'reports'
   | 'roadmap'
   | 'mail'
-  | 'sales';
+  | 'sales'
+  | 'tenders';
 
 export type ModuleGroup = 'Работа' | 'Картотека' | 'Деньги' | 'Система';
 
@@ -66,6 +67,7 @@ export const TOGGLEABLE_MODULES: readonly ModuleMeta[] = [
   // Деньги
   { key: 'invoices', label: 'Финансы', group: 'Деньги', description: 'Касса (доходы/расходы), счета на оплату, остатки и обзор', routes: ['/finance', '/invoices'] },
   { key: 'sales', label: 'Продажи', group: 'Деньги', description: 'Продажа запчастей и оборудования клиентам (отдельно от заявок)', routes: ['/sales'] },
+  { key: 'tenders', label: 'Тендеры', group: 'Деньги', description: 'Реестр тендерных контрактов: реальные суммы, статусы, оплаты по этапам', routes: ['/tenders'] },
   { key: 'payroll', label: 'Зарплата', group: 'Деньги', description: 'Расчёт зарплаты инженеров (сделка/оклад)', routes: ['/payroll'] },
   { key: 'reports', label: 'Отчёты', group: 'Деньги', description: 'Аналитические отчёты по периодам', routes: ['/reports'] },
   // Система

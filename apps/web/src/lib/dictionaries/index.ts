@@ -17,3 +17,4 @@ export {
   PAYMENT_METHOD_LABEL,
 } from './cash';
 export { SALE_STATUS_META, SALE_STATUS_FLOW, type SaleStatus } from './sales';
+export { TENDER_STATUS_META, type TenderStatus } from './tenders';

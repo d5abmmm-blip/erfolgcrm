@@ -46,6 +46,8 @@ import { InvoiceCardPage } from './pages/InvoiceCardPage';
 import { FinanceOverviewPage } from './pages/FinanceOverviewPage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { SalesPage } from './pages/SalesPage';
+import { TendersListPage } from './pages/TendersListPage';
+import { TenderFormPage } from './pages/TenderFormPage';
 import { SalesFormPage } from './pages/SalesFormPage';
 import { CashJournalPage } from './pages/CashJournalPage';
 import { CashAccountsPage } from './pages/CashAccountsPage';
@@ -247,6 +249,9 @@ function StaffApp() {
           <Route path="/sales" component={SalesPage} />
           <Route path="/sales/new" component={SalesFormPage} />
           <Route path="/sales/:id" component={SalesFormPage} />
+          <Route path="/tenders" component={TendersListPage} />
+          <Route path="/tenders/new" component={TenderFormPage} />
+          <Route path="/tenders/:id" component={TenderFormPage} />
           <Route path="/payroll" component={PayrollPage} />
           <Route path="/reports" component={ReportsPage} />
           <Route path="/templates" component={TemplatesPage} />

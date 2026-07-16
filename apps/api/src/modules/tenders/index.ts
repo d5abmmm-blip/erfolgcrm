@@ -1,0 +1,1 @@
+export { tendersRouter } from './router';
