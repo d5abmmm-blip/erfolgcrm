@@ -11,7 +11,7 @@
  *
  * Все суммы — копейки (bigint, в DTO → string). occurred_on — date 'YYYY-MM-DD'.
  */
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   cashAccounts,
   cashCategories,
@@ -611,16 +611,53 @@ function dateOnly(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/* ─────────────── внутренние операции кассы (внесение/выдача) ───────────────
+ * «Внесение в кассу» / «Выдача из кассы» — внутренние движения денег (обнал и т.п.):
+ * меняют остаток счёта, но НЕ являются доходом/расходом бизнеса. Хранятся как обычные
+ * income/expense с системными статьями и по умолчанию ИСКЛЮЧАЮТСЯ из сводок кассы
+ * (includeInternal=false); тумблер на обзоре включает их для сверки с реальным сейфом.
+ */
+export const INTERNAL_INCOME_CATEGORY = 'Внесение в кассу';
+export const INTERNAL_EXPENSE_CATEGORY = 'Выдача из кассы';
+
+/** id системных статей внутренних операций (пусто, если ещё не создавались). */
+async function internalCategoryIds(tx: Tx, tenantId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ id: cashCategories.id })
+    .from(cashCategories)
+    .where(
+      and(
+        eq(cashCategories.tenantId, tenantId),
+        eq(cashCategories.isSystem, true),
+        inArray(cashCategories.name, [INTERNAL_INCOME_CATEGORY, INTERNAL_EXPENSE_CATEGORY]),
+        isNull(cashCategories.deletedAt),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
+/** SQL-условие «без внутренних операций». col — имя колонки в конкретном запросе. */
+function exclInternalCond(ids: string[], col: 'category_id' | 'ct.category_id') {
+  if (ids.length === 0) return sql``;
+  const list = sql.join(
+    ids.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  return sql`AND (${sql.raw(col)} IS NULL OR ${sql.raw(col)} NOT IN (${list}))`;
+}
+
 /** Приход/расход/прибыль за период + разбивка по статьям (переводы исключены). */
 export async function getPeriodSummary(
   db: Db,
   tenantId: string,
   period: PeriodInput,
+  includeInternal = false,
 ): Promise<PeriodSummary> {
   return withTenantTx(db, tenantId, async (tx) => {
     const from = dateOnly(period.start);
     // end эксклюзивен → берём строго меньше даты end.
     const toExcl = dateOnly(period.end);
+    const internal = includeInternal ? [] : await internalCategoryIds(tx, tenantId);
 
     const totalRows = (await tx.execute(sql`
       SELECT
@@ -631,6 +668,7 @@ export async function getPeriodSummary(
         AND kind <> 'transfer'
         AND occurred_on >= ${from}::date
         AND occurred_on <  ${toExcl}::date
+        ${exclInternalCond(internal, 'category_id')}
     `)) as unknown as Array<{ income: string; expense: string }>;
     const income = BigInt(totalRows[0]?.income ?? '0');
     const expense = BigInt(totalRows[0]?.expense ?? '0');
@@ -647,6 +685,7 @@ export async function getPeriodSummary(
         AND ct.kind <> 'transfer'
         AND ct.occurred_on >= ${from}::date
         AND ct.occurred_on <  ${toExcl}::date
+        ${exclInternalCond(internal, 'ct.category_id')}
       GROUP BY ct.kind, ct.category_id, cat.name
       ORDER BY SUM(ct.amount_kopecks) DESC
     `)) as unknown as Array<{
@@ -666,6 +705,7 @@ export async function getPeriodSummary(
         AND ct.kind = 'income'
         AND ct.occurred_on >= ${from}::date
         AND ct.occurred_on <  ${toExcl}::date
+        ${exclInternalCond(internal, 'ct.category_id')}
       GROUP BY a.kind
     `)) as unknown as Array<{ kind: CashAccountKind; amountKopecks: string }>;
     const byKind: Record<CashAccountKind, string> = { cash: '0', bank: '0', card: '0' };
@@ -702,8 +742,10 @@ export async function getMonthlyFlow(
   db: Db,
   tenantId: string,
   monthsBack: number,
+  includeInternal = false,
 ): Promise<MonthlyFlowRow[]> {
   return withTenantTx(db, tenantId, async (tx) => {
+    const internal = includeInternal ? [] : await internalCategoryIds(tx, tenantId);
     const rows = (await tx.execute(sql`
       SELECT
         to_char(date_trunc('month', occurred_on), 'YYYY-MM') AS "month",
@@ -713,9 +755,88 @@ export async function getMonthlyFlow(
       WHERE deleted_at IS NULL
         AND kind <> 'transfer'
         AND occurred_on >= (date_trunc('month', CURRENT_DATE) - make_interval(months => ${monthsBack - 1}::int))
+        ${exclInternalCond(internal, 'category_id')}
       GROUP BY date_trunc('month', occurred_on)
       ORDER BY date_trunc('month', occurred_on) ASC
     `)) as unknown as MonthlyFlowRow[];
     return rows;
   });
+}
+
+/* ─────────────── создание внутренней операции (внесение/выдача) ─────────────── */
+
+export type InternalOpKind = 'deposit' | 'withdrawal';
+
+/** Найти/создать системную статью внутренней операции. */
+async function ensureInternalCategory(
+  tx: Tx,
+  tenantId: string,
+  kind: InternalOpKind,
+): Promise<string> {
+  const name = kind === 'deposit' ? INTERNAL_INCOME_CATEGORY : INTERNAL_EXPENSE_CATEGORY;
+  const dir: CashDirection = kind === 'deposit' ? 'income' : 'expense';
+  const existing = await tx
+    .select({ id: cashCategories.id })
+    .from(cashCategories)
+    .where(
+      and(
+        eq(cashCategories.tenantId, tenantId),
+        eq(cashCategories.direction, dir),
+        eq(cashCategories.name, name),
+        isNull(cashCategories.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) return existing[0].id;
+  const inserted = await tx
+    .insert(cashCategories)
+    .values({ tenantId, name, direction: dir, isSystem: true })
+    .returning({ id: cashCategories.id });
+  return inserted[0]!.id;
+}
+
+export interface CreateInternalOpInput {
+  kind: InternalOpKind;
+  accountId: string;
+  amountKopecks: bigint;
+  occurredOn: string;
+  counterparty?: string | null;
+  comment?: string | null;
+  userId: string | null;
+}
+
+/** Внесение в кассу / выдача из кассы: остаток меняется, доходом/расходом бизнеса не считается. */
+export async function createInternalOp(
+  db: Db,
+  tenantId: string,
+  input: CreateInternalOpInput,
+): Promise<{ id: string }> {
+  if (input.amountKopecks <= 0n) {
+    throw new Error('Сумма должна быть больше нуля');
+  }
+  return withDbRetry('cash.createInternalOp', () =>
+    withTenantTx(db, tenantId, async (tx) => {
+      if (!(await liveAccountExists(tx, input.accountId))) {
+        throw new Error('Счёт не найден');
+      }
+      const categoryId = await ensureInternalCategory(tx, tenantId, input.kind);
+      const inserted = await tx
+        .insert(cashTransactions)
+        .values({
+          tenantId,
+          kind: input.kind === 'deposit' ? 'income' : 'expense',
+          accountId: input.accountId,
+          categoryId,
+          amountKopecks: input.amountKopecks,
+          occurredOn: input.occurredOn,
+          comment: input.comment ?? null,
+          counterparty: input.counterparty ?? null,
+          userId: input.userId,
+          source: 'manual',
+        })
+        .returning({ id: cashTransactions.id });
+      await recalcAccountBalanceInTx(tx, tenantId, input.accountId);
+      return inserted[0]!;
+    }),
+  );
 }

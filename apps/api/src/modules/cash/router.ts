@@ -186,6 +186,39 @@ export const cashRouter = router({
   transactions: transactionsRouter,
 
   overview: staffProcedure
-    .input(z.object({ preset: z.enum(['today', 'week', 'month', 'quarter', 'year']).optional() }).optional())
-    .query(({ ctx, input }) => svc.overviewQuery(ctx.db, ctx.tenant, input?.preset ?? 'month')),
+    .input(
+      z
+        .object({
+          preset: z.enum(['today', 'week', 'month', 'quarter', 'year']).optional(),
+          /** Учитывать внесения/выдачи (внутренние операции) в сводках. По умолчанию — нет. */
+          includeInternal: z.boolean().optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) =>
+      svc.overviewQuery(ctx.db, ctx.tenant, input?.preset ?? 'month', input?.includeInternal ?? false),
+    ),
+
+  /** Внесение в кассу / выдача из кассы — внутренняя операция (не доход/расход бизнеса). */
+  internalAdd: staffProcedure
+    .input(
+      z.object({
+        kind: z.enum(['deposit', 'withdrawal']),
+        accountId: z.string().uuid(),
+        amountRub: z.number().positive().max(MAX_AMOUNT_RUB),
+        occurredOn: isoDate,
+        counterparty: z.string().trim().max(200).nullable().optional(),
+        comment: z.string().trim().max(2000).nullable().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      svc.createInternalCmd(buildCmdCtx(ctx), {
+        kind: input.kind,
+        accountId: input.accountId,
+        amountKopecks: rubToKopecks(input.amountRub),
+        occurredOn: input.occurredOn,
+        counterparty: input.counterparty ?? null,
+        comment: input.comment ?? null,
+      }),
+    ),
 });

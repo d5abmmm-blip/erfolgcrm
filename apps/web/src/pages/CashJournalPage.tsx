@@ -4,7 +4,7 @@
  * удаление операции. RBAC: staff. Авто-доходы от оплат помечены «из заявки».
  */
 import { useState } from 'react';
-import { ArrowRightLeft, Loader2, Sheet, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRightLeft, Loader2, PiggyBank, Sheet, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -13,6 +13,7 @@ import { Pagination } from '../components/ui/Pagination';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { FinanceTabs } from '../components/finance/FinanceTabs';
 import { CashTransactionModal } from '../components/finance/CashTransactionModal';
+import { CashInternalOpModal } from '../components/finance/CashInternalOpModal';
 import { CASH_TX_KIND_META } from '../lib/dictionaries';
 import { cn } from '../lib/utils';
 
@@ -47,6 +48,7 @@ export function CashJournalPage() {
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
   const [modalKind, setModalKind] = useState<Kind | null>(null);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
@@ -214,6 +216,14 @@ export function CashJournalPage() {
           </button>
           <button
             type="button"
+            onClick={() => setInternalOpen(true)}
+            className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition"
+            title="Внесение в кассу / выдача из кассы — внутренняя операция, не доход и не расход бизнеса"
+          >
+            <PiggyBank className="h-4 w-4" /> Внесение/выдача
+          </button>
+          <button
+            type="button"
             onClick={() => void onExport()}
             disabled={exporting || total === 0}
             className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
@@ -298,6 +308,7 @@ export function CashJournalPage() {
         initialKind={modalKind ?? 'expense'}
         onClose={() => setModalKind(null)}
       />
+      <CashInternalOpModal open={internalOpen} onClose={() => setInternalOpen(false)} />
 
       <ConfirmDialog
         open={deleteId !== null}
