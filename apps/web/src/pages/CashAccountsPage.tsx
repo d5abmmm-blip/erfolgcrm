@@ -41,93 +41,110 @@ export function CashAccountsPage() {
   const accounts = (accountsQ.data ?? []) as Account[];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+    // Внешний контейнер той же ширины, что у остальных вкладок «Финансов», —
+    // иначе вкладки «прыгают» при переходе. Контент держим узким по центру.
+    <div className="mx-auto max-w-[1600px] p-4 md:p-6">
       <FinanceTabs />
 
-      {/* Счета */}
-      <section className="bg-card rounded-xl border shadow-sm">
-        <div className="flex items-center justify-between border-b p-4">
-          <h2 className="text-base font-semibold">Денежные счета</h2>
-          <button
-            type="button"
-            onClick={() => setModal({ open: true })}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
-          >
-            <Plus className="h-4 w-4" /> Счёт
-          </button>
-        </div>
-        {accountsQ.isLoading ? (
-          <div className="text-muted-foreground p-6 text-sm">Загружаем…</div>
-        ) : accounts.length === 0 ? (
-          <div className="text-muted-foreground p-6 text-sm">Счетов пока нет.</div>
-        ) : (
-          <div className="divide-y">
-            {accounts.map((a) => (
-              <div key={a.id} className={cn('flex items-center justify-between gap-3 p-4', a.isArchived && 'opacity-60')}>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{a.name}</span>
-                    {a.isArchived && (
-                      <span className="bg-secondary text-muted-foreground rounded px-1.5 py-0.5 text-[11px]">в архиве</span>
-                    )}
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    {CASH_ACCOUNT_KIND_LABEL[a.kind]}
-                    {a.defaultForMethod && ` · по умолчанию для: ${PAYMENT_METHOD_LABEL[a.defaultForMethod]}`}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      'text-sm font-semibold tabular-nums',
-                      BigInt(a.balanceKopecks) < 0n && 'text-destructive',
-                    )}
-                  >
-                    {formatRub(a.balanceKopecks)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setModal({ open: true, edit: a })}
-                    className="text-muted-foreground hover:bg-muted hover:text-foreground grid h-7 w-7 place-items-center rounded transition"
-                    aria-label="Редактировать счёт"
-                    title="Редактировать"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteId(a.id)}
-                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive grid h-7 w-7 place-items-center rounded transition"
-                    aria-label="Удалить счёт"
-                    title="Удалить (или архивировать, если есть операции)"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+      <div className="mx-auto mt-4 max-w-5xl space-y-6 md:mt-6">
+        {/* Счета */}
+        <section className="bg-card rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between border-b p-4">
+            <h2 className="text-base font-semibold">Денежные счета</h2>
+            <button
+              type="button"
+              onClick={() => setModal({ open: true })}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition"
+            >
+              <Plus className="h-4 w-4" /> Счёт
+            </button>
           </div>
-        )}
-      </section>
+          {accountsQ.isLoading ? (
+            <div className="text-muted-foreground p-6 text-sm">Загружаем…</div>
+          ) : accounts.length === 0 ? (
+            <div className="text-muted-foreground p-6 text-sm">Счетов пока нет.</div>
+          ) : (
+            <div className="divide-y">
+              {accounts.map((a) => (
+                <div
+                  key={a.id}
+                  className={cn(
+                    'flex items-center justify-between gap-3 p-4',
+                    a.isArchived && 'opacity-60',
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{a.name}</span>
+                      {a.isArchived && (
+                        <span className="bg-secondary text-muted-foreground rounded px-1.5 py-0.5 text-[11px]">
+                          в архиве
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      {CASH_ACCOUNT_KIND_LABEL[a.kind]}
+                      {a.defaultForMethod &&
+                        ` · по умолчанию для: ${PAYMENT_METHOD_LABEL[a.defaultForMethod]}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        'text-sm font-semibold tabular-nums',
+                        BigInt(a.balanceKopecks) < 0n && 'text-destructive',
+                      )}
+                    >
+                      {formatRub(a.balanceKopecks)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModal({ open: true, edit: a })}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground grid h-7 w-7 place-items-center rounded transition"
+                      aria-label="Редактировать счёт"
+                      title="Редактировать"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteId(a.id)}
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive grid h-7 w-7 place-items-center rounded transition"
+                      aria-label="Удалить счёт"
+                      title="Удалить (или архивировать, если есть операции)"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-      {/* Статьи */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <CategorySection direction="income" title="Статьи доходов" />
-        <CategorySection direction="expense" title="Статьи расходов" />
+        {/* Статьи */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <CategorySection direction="income" title="Статьи доходов" />
+          <CategorySection direction="expense" title="Статьи расходов" />
+        </div>
+
+        <AccountModal
+          open={modal.open}
+          edit={modal.edit}
+          onClose={() => setModal({ open: false })}
+        />
+
+        <ConfirmDialog
+          open={deleteId !== null}
+          title="Удалить счёт?"
+          description="Если по счёту есть операции, он будет перемещён в архив (данные сохранятся). Иначе — удалён."
+          confirmText="Удалить"
+          variant="danger"
+          loading={del.isPending}
+          onConfirm={() => deleteId && del.mutate({ id: deleteId })}
+          onCancel={() => setDeleteId(null)}
+        />
       </div>
-
-      <AccountModal open={modal.open} edit={modal.edit} onClose={() => setModal({ open: false })} />
-
-      <ConfirmDialog
-        open={deleteId !== null}
-        title="Удалить счёт?"
-        description="Если по счёту есть операции, он будет перемещён в архив (данные сохранятся). Иначе — удалён."
-        confirmText="Удалить"
-        variant="danger"
-        loading={del.isPending}
-        onConfirm={() => deleteId && del.mutate({ id: deleteId })}
-        onCancel={() => setDeleteId(null)}
-      />
     </div>
   );
 }
@@ -158,9 +175,17 @@ function CategorySection({ direction, title }: { direction: 'income' | 'expense'
         <h2 className="text-base font-semibold">{title}</h2>
       </div>
       <div className="divide-y">
-        {cats.length === 0 && <div className="text-muted-foreground p-4 text-sm">Статей пока нет.</div>}
+        {cats.length === 0 && (
+          <div className="text-muted-foreground p-4 text-sm">Статей пока нет.</div>
+        )}
         {cats.map((c) => (
-          <div key={c.id} className={cn('flex items-center justify-between gap-2 px-4 py-2.5', c.isArchived && 'opacity-50')}>
+          <div
+            key={c.id}
+            className={cn(
+              'flex items-center justify-between gap-2 px-4 py-2.5',
+              c.isArchived && 'opacity-50',
+            )}
+          >
             <span className="text-sm">{c.name}</span>
             <button
               type="button"
@@ -180,7 +205,8 @@ function CategorySection({ direction, title }: { direction: 'income' | 'expense'
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && newName.trim()) create.mutate({ name: newName.trim(), direction });
+            if (e.key === 'Enter' && newName.trim())
+              create.mutate({ name: newName.trim(), direction });
           }}
           placeholder="Новая статья"
           className="bg-background focus:ring-primary/40 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none focus:ring-2"
@@ -192,7 +218,11 @@ function CategorySection({ direction, title }: { direction: 'income' | 'expense'
           className="bg-primary text-primary-foreground hover:bg-primary/90 grid h-8 w-8 place-items-center rounded-md transition disabled:opacity-50"
           aria-label="Добавить статью"
         >
-          {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {create.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
         </button>
       </div>
     </section>
@@ -201,7 +231,15 @@ function CategorySection({ direction, title }: { direction: 'income' | 'expense'
 
 /* ───────────────────────────── модалка счёта ───────────────────────────── */
 
-function AccountModal({ open, edit, onClose }: { open: boolean; edit?: Account; onClose: () => void }) {
+function AccountModal({
+  open,
+  edit,
+  onClose,
+}: {
+  open: boolean;
+  edit?: Account;
+  onClose: () => void;
+}) {
   const utils = trpc.useUtils();
   const [name, setName] = useState('');
   const [kind, setKind] = useState<Kind>('cash');
@@ -275,7 +313,11 @@ function AccountModal({ open, edit, onClose }: { open: boolean; edit?: Account; 
   const busy = create.isPending || update.isPending;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose} role="presentation">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         className="bg-card w-full max-w-md rounded-xl border shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -349,7 +391,11 @@ function AccountModal({ open, edit, onClose }: { open: boolean; edit?: Account; 
 
           {edit && (
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isArchived} onChange={(e) => setIsArchived(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={isArchived}
+                onChange={(e) => setIsArchived(e.target.checked)}
+              />
               В архиве (скрыт из выбора при операциях)
             </label>
           )}
@@ -358,7 +404,11 @@ function AccountModal({ open, edit, onClose }: { open: boolean; edit?: Account; 
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
-          <button type="button" onClick={onClose} className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium">
+          <button
+            type="button"
+            onClick={onClose}
+            className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium"
+          >
             Отмена
           </button>
           <button
