@@ -26,7 +26,7 @@ import { monthLabel } from '../lib/cash-format';
 import { FinanceTabs } from '../components/finance/FinanceTabs';
 import { CashTransactionModal } from '../components/finance/CashTransactionModal';
 import { CashInternalOpModal } from '../components/finance/CashInternalOpModal';
-import { CASH_ACCOUNT_KIND_LABEL, CASH_TX_KIND_META } from '../lib/dictionaries';
+import { CASH_TX_KIND_META } from '../lib/dictionaries';
 
 type Preset = 'today' | 'week' | 'month' | 'quarter' | 'year';
 const PRESET_LABEL: Record<Preset, string> = {
@@ -66,7 +66,7 @@ export function FinanceOverviewPage() {
   const data = q.data;
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
       <FinanceTabs />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -92,22 +92,10 @@ export function FinanceOverviewPage() {
         </div>
       </div>
 
-      {/* Тумблер внутренних операций: по умолчанию внесения/выдачи НЕ считаются доходом/расходом */}
-      <label
-        className="text-muted-foreground -mt-2 inline-flex cursor-pointer select-none items-center gap-2 text-sm"
-        title="Внесения в кассу и выдачи из неё — внутренние движения денег (обнал и т.п.). Выключено — в «Собрано», приходе и расходе их нет (нет двойного дохода). Включи, чтобы сверить цифры с реальным сейфом. На остатки счетов не влияет — они всегда учитывают всё."
-      >
-        <input
-          type="checkbox"
-          checked={includeInternal}
-          onChange={(e) => setIncludeInternal(e.target.checked)}
-          className="accent-primary h-4 w-4"
-        />
-        Учитывать внесения/выдачи в сводке
-      </label>
-
       {q.isLoading && (
-        <div className="text-muted-foreground bg-card rounded-lg border p-6 text-sm">Загружаем…</div>
+        <div className="text-muted-foreground bg-card rounded-lg border p-6 text-sm">
+          Загружаем…
+        </div>
       )}
       {q.error && (
         <div className="text-destructive bg-destructive/10 border-destructive/30 rounded-lg border p-4 text-sm">
@@ -117,86 +105,18 @@ export function FinanceOverviewPage() {
 
       {data && (
         <>
-          {/* Собрано за период — главный вопрос менеджера «сколько сегодня?» */}
-          <CollectedHero
+          {/* Сводка за период: Собрано / Расход / Разница — главный вопрос «сколько сегодня?» */}
+          <PeriodSummaryCard
             label={PRESET_LABEL[preset].toLowerCase()}
-            totalKopecks={data.summary.incomeKopecks}
-            byKind={data.summary.incomeByKind}
-            delta={
-              <Delta
-                current={data.summary.incomeKopecks}
-                previous={data.previous?.incomeKopecks}
-                label={PRESET_COMPARE_LABEL[preset]}
-                goodWhen="up"
-              />
-            }
+            compareLabel={PRESET_COMPARE_LABEL[preset]}
+            summary={data.summary}
+            previous={data.previous}
+            includeInternal={includeInternal}
+            onIncludeInternalChange={setIncludeInternal}
           />
 
-          {/* Остатки по счетам */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <BalanceCard
-              title="Всего денег"
-              value={formatRubWhole(data.balances.totalKopecks)}
-              hint={`Наличные ${formatRubWhole(data.balances.cashKopecks)} · Безнал ${formatRubWhole(data.balances.nonCashKopecks)}`}
-              icon={Wallet}
-              accent
-            />
-            {data.balances.accounts.map((a) => {
-              const Icon = ACCOUNT_ICON[a.kind] ?? Wallet;
-              const neg = safeBig(a.balanceKopecks) < 0n;
-              return (
-                <BalanceCard
-                  key={a.id}
-                  title={a.name}
-                  value={formatRubWhole(a.balanceKopecks)}
-                  hint={CASH_ACCOUNT_KIND_LABEL[a.kind]}
-                  icon={Icon}
-                  danger={neg}
-                />
-              );
-            })}
-            {data.balances.accounts.length === 0 && (
-              <div className="text-muted-foreground bg-card col-span-full rounded-xl border border-dashed p-4 text-sm">
-                Счетов пока нет.{' '}
-                <Link href="/finance/accounts" className="text-primary hover:underline">
-                  Завести счёт
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* KPI за период (приход вынесен в герой «Собрано» выше) */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <KpiCard
-              title={`Расход · ${PRESET_LABEL[preset].toLowerCase()}`}
-              value={formatRubWhole(data.summary.expenseKopecks)}
-              icon={TrendingDown}
-              tone="danger"
-              // Рост расхода — плохо, поэтому зелёным подсвечиваем снижение.
-              delta={
-                <Delta
-                  current={data.summary.expenseKopecks}
-                  previous={data.previous?.expenseKopecks}
-                  label={PRESET_COMPARE_LABEL[preset]}
-                  goodWhen="down"
-                />
-              }
-            />
-            <KpiCard
-              title={`Разница (приход − расход) · ${PRESET_LABEL[preset].toLowerCase()}`}
-              value={formatRubWhole(data.summary.profitKopecks)}
-              icon={Scale}
-              tone={safeBig(data.summary.profitKopecks) >= 0n ? 'success' : 'danger'}
-              delta={
-                <Delta
-                  current={data.summary.profitKopecks}
-                  previous={data.previous?.profitKopecks}
-                  label={PRESET_COMPARE_LABEL[preset]}
-                  goodWhen="up"
-                />
-              }
-            />
-          </div>
+          {/* Остатки по счетам — одна полоса вместо ряда крупных карточек */}
+          <BalancesStrip balances={data.balances} />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <MonthlyFlowCard data={data.monthly} />
@@ -279,147 +199,222 @@ function Delta({
   );
 }
 
-/* ───────────────────────────── карточки ───────────────────────────── */
+/* ─────────────────── сводка за период (одна карточка) ─────────────────── */
 
-function BalanceCard({
-  title,
-  value,
-  hint,
-  icon: Icon,
-  accent,
-  danger,
-}: {
-  title: string;
-  value: string;
-  hint?: string;
-  icon: typeof Wallet;
-  accent?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'bg-card relative flex flex-col gap-2 overflow-hidden rounded-xl border p-4 shadow-sm',
-        accent && 'ring-primary/20 ring-1',
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{title}</div>
-        <span
-          className={cn(
-            'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-            accent ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground',
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-      </div>
-      <div className={cn('text-2xl font-semibold tabular-nums tracking-tight', danger && 'text-destructive')}>
-        {value}
-      </div>
-      {hint && <div className="text-muted-foreground text-xs">{hint}</div>}
-    </div>
-  );
+interface OverviewSummary {
+  incomeKopecks: string;
+  expenseKopecks: string;
+  profitKopecks: string;
+  incomeByKind?: { cashKopecks?: string; cardKopecks?: string; bankKopecks?: string } | null;
+  expenseByCategory: Array<{
+    categoryId: string | null;
+    categoryName: string;
+    amountKopecks: string;
+  }>;
 }
 
-function KpiCard({
-  title,
-  value,
-  icon: Icon,
-  tone,
-  delta,
-}: {
-  title: string;
-  value: string;
-  icon: typeof Wallet;
-  tone: 'success' | 'danger';
-  delta?: React.ReactNode;
-}) {
-  return (
-    <div className="bg-card relative flex flex-col gap-2 overflow-hidden rounded-xl border p-4 shadow-sm">
-      <span
-        className={cn('absolute inset-y-3 left-0 w-[3px] rounded-r-full', tone === 'success' ? 'bg-success' : 'bg-destructive')}
-        aria-hidden
-      />
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{title}</div>
-        <span
-          className={cn(
-            'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-            tone === 'success' ? 'bg-success/12 text-success' : 'bg-destructive/12 text-destructive',
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-      </div>
-      <div>
-        <div
-          className={cn(
-            'text-2xl font-semibold tabular-nums tracking-tight',
-            tone === 'success' ? 'text-success' : 'text-destructive',
-          )}
-        >
-          {value}
-        </div>
-        {delta}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────── «Собрано» за период ─────────────────────── */
-
-function CollectedHero({
+function PeriodSummaryCard({
   label,
-  totalKopecks,
-  byKind,
-  delta,
+  compareLabel,
+  summary,
+  previous,
+  includeInternal,
+  onIncludeInternalChange,
 }: {
   label: string;
-  totalKopecks?: string;
-  // byKind может отсутствовать (старый бэкенд / рассинхрон версий) — не должно ронять страницу.
-  byKind?: { cashKopecks?: string; cardKopecks?: string; bankKopecks?: string } | null;
-  delta?: React.ReactNode;
+  compareLabel: string;
+  summary: OverviewSummary;
+  previous?: { incomeKopecks: string; expenseKopecks: string; profitKopecks: string } | null;
+  includeInternal: boolean;
+  onIncludeInternalChange: (v: boolean) => void;
 }) {
-  const k = byKind ?? {};
+  // byKind может отсутствовать (старый бэкенд / рассинхрон версий) — не должно ронять страницу.
+  const k = summary.incomeByKind ?? {};
+  const profitPositive = safeBig(summary.profitKopecks) >= 0n;
+
   return (
-    <section className="bg-card rounded-xl border p-4 shadow-sm sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-        <div>
-          <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
-            <TrendingUp className="text-success h-4 w-4" />
-            Собрано · {label}
-          </div>
-          <div className="text-success mt-1 text-3xl font-semibold tabular-nums tracking-tight md:text-4xl">
-            {formatRubWhole(totalKopecks ?? '0')}
-          </div>
-          {delta}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <MethodChip icon={Banknote} label="Наличными" value={k.cashKopecks ?? '0'} />
-          <MethodChip icon={CreditCard} label="Картой" value={k.cardKopecks ?? '0'} />
-          <MethodChip icon={Landmark} label="Безнал" value={k.bankKopecks ?? '0'} />
-        </div>
+    <section className="bg-card rounded-xl border shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-4 py-2">
+        <h3 className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          За период · {label}
+        </h3>
+        {/* Тумблер внутренних операций: по умолчанию внесения/выдачи НЕ считаются доходом/расходом */}
+        <label
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer select-none items-center gap-1.5 text-xs transition"
+          title="Внесения в кассу и выдачи из неё — внутренние движения денег (обнал и т.п.). Выключено — в «Собрано», приходе и расходе их нет (нет двойного дохода). Включи, чтобы сверить цифры с реальным сейфом. На остатки счетов не влияет — они всегда учитывают всё."
+        >
+          <input
+            type="checkbox"
+            checked={includeInternal}
+            onChange={(e) => onIncludeInternalChange(e.target.checked)}
+            className="accent-primary h-3.5 w-3.5"
+          />
+          Учитывать внесения/выдачи
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <SummaryCell
+          icon={TrendingUp}
+          title="Собрано"
+          value={formatRubWhole(summary.incomeKopecks)}
+          valueCls="text-success"
+          delta={
+            <Delta
+              current={summary.incomeKopecks}
+              previous={previous?.incomeKopecks}
+              label={compareLabel}
+              goodWhen="up"
+            />
+          }
+          extra={
+            <div className="text-muted-foreground mt-1.5 text-xs tabular-nums">
+              Нал {formatRubWhole(k.cashKopecks ?? '0')} · Карта{' '}
+              {formatRubWhole(k.cardKopecks ?? '0')} · Безнал {formatRubWhole(k.bankKopecks ?? '0')}
+            </div>
+          }
+        />
+        <SummaryCell
+          icon={TrendingDown}
+          title="Расход"
+          value={formatRubWhole(summary.expenseKopecks)}
+          valueCls="text-destructive"
+          // Рост расхода — плохо, поэтому зелёным подсвечиваем снижение.
+          delta={
+            <Delta
+              current={summary.expenseKopecks}
+              previous={previous?.expenseKopecks}
+              label={compareLabel}
+              goodWhen="down"
+            />
+          }
+        />
+        <SummaryCell
+          icon={Scale}
+          title="Разница (приход − расход)"
+          value={formatRubWhole(summary.profitKopecks)}
+          valueCls={profitPositive ? 'text-success' : 'text-destructive'}
+          delta={
+            <Delta
+              current={summary.profitKopecks}
+              previous={previous?.profitKopecks}
+              label={compareLabel}
+              goodWhen="up"
+            />
+          }
+        />
       </div>
     </section>
   );
 }
 
-function MethodChip({ icon: Icon, label, value }: { icon: typeof Wallet; label: string; value: string }) {
+function SummaryCell({
+  icon: Icon,
+  title,
+  value,
+  valueCls,
+  delta,
+  extra,
+}: {
+  icon: typeof Wallet;
+  title: string;
+  value: string;
+  valueCls: string;
+  delta?: React.ReactNode;
+  extra?: React.ReactNode;
+}) {
   return (
-    <div className="bg-secondary/60 inline-flex items-center gap-2.5 rounded-lg px-3 py-2">
-      <Icon className="text-muted-foreground h-4 w-4 shrink-0" />
-      <div className="leading-tight">
-        <div className="text-muted-foreground text-[11px]">{label}</div>
-        <div className="text-sm font-semibold tabular-nums">{formatRubWhole(value)}</div>
+    <div className="px-4 py-3">
+      <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
+        <Icon className={cn('h-3.5 w-3.5', valueCls)} />
+        {title}
       </div>
+      <div className={cn('mt-1 text-2xl font-semibold tabular-nums tracking-tight', valueCls)}>
+        {value}
+      </div>
+      {delta}
+      {extra}
     </div>
+  );
+}
+
+/* ─────────────────── остатки по счетам (одна полоса) ─────────────────── */
+
+function BalancesStrip({
+  balances,
+}: {
+  balances: {
+    totalKopecks: string;
+    cashKopecks: string;
+    nonCashKopecks: string;
+    accounts: Array<{
+      id: string;
+      name: string;
+      kind: 'cash' | 'bank' | 'card';
+      balanceKopecks: string;
+    }>;
+  };
+}) {
+  return (
+    <section className="bg-card rounded-xl border p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+        <div className="flex items-center gap-3">
+          <span className="bg-primary/10 text-primary grid h-9 w-9 shrink-0 place-items-center rounded-lg">
+            <Wallet className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+              Всего денег
+            </div>
+            <div className="text-2xl font-semibold tabular-nums tracking-tight">
+              {formatRubWhole(balances.totalKopecks)}
+            </div>
+          </div>
+        </div>
+
+        {balances.accounts.map((a) => {
+          const Icon = ACCOUNT_ICON[a.kind] ?? Wallet;
+          const neg = safeBig(a.balanceKopecks) < 0n;
+          return (
+            <div key={a.id} className="flex items-center gap-2.5">
+              <span className="bg-secondary text-muted-foreground grid h-8 w-8 shrink-0 place-items-center rounded-lg">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-muted-foreground text-xs">{a.name}</div>
+                <div
+                  className={cn(
+                    'text-lg font-semibold tabular-nums leading-tight',
+                    neg && 'text-destructive',
+                  )}
+                >
+                  {formatRubWhole(a.balanceKopecks)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {balances.accounts.length === 0 && (
+          <div className="text-muted-foreground text-sm">
+            Счетов пока нет.{' '}
+            <Link href="/finance/accounts" className="text-primary hover:underline">
+              Завести счёт
+            </Link>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
 /* ───────────────────────────── графики ───────────────────────────── */
 
-function MonthlyFlowCard({ data }: { data: Array<{ month: string; incomeKopecks: string; expenseKopecks: string }> }) {
+function MonthlyFlowCard({
+  data,
+}: {
+  data: Array<{ month: string; incomeKopecks: string; expenseKopecks: string }>;
+}) {
   const max = data.reduce((m, r) => {
     const v = Math.max(Number(r.incomeKopecks), Number(r.expenseKopecks));
     return v > m ? v : m;
@@ -495,7 +490,10 @@ function ExpenseByCategoryCard({
                   </span>
                 </div>
                 <div className="bg-secondary h-2 overflow-hidden rounded-full">
-                  <div className="bg-primary h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%` }} />
+                  <div
+                    className="bg-primary h-full rounded-full"
+                    style={{ width: `${Math.max(pct, 2)}%` }}
+                  />
                 </div>
               </div>
             );
@@ -524,7 +522,10 @@ function RecentTransactionsCard({
     <section className="bg-card rounded-xl border shadow-sm">
       <div className="flex items-center justify-between border-b p-4">
         <h3 className="text-sm font-semibold">Последние операции</h3>
-        <Link href="/finance/transactions" className="text-primary inline-flex items-center gap-1 text-sm hover:underline">
+        <Link
+          href="/finance/transactions"
+          className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
+        >
           Все операции <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
@@ -573,7 +574,9 @@ function PeriodTabs({ value, onChange }: { value: Preset; onChange: (p: Preset) 
           onClick={() => onChange(p)}
           className={cn(
             'rounded px-2.5 py-1 font-medium transition',
-            p === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            p === value
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           {PRESET_LABEL[p]}
