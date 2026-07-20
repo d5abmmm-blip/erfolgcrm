@@ -13,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { SILENT_ERROR } from '../lib/error-message';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
 import {
@@ -51,12 +52,14 @@ export function LeadCardPage() {
   };
 
   const update = trpc.leads.update.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await invalidate();
       setLostOpen(false);
     },
   });
   const convert = trpc.leads.convertToClient.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async (res) => {
       await invalidate();
       navigate(`/clients/${res.clientId}`);

@@ -36,6 +36,7 @@ import {
 import { trpc } from '../lib/trpc';
 import { ConfirmDialog, DataTable, StatusBadge, type Column } from '../components/ui';
 import { renderMarkdown } from '../lib/markdown';
+import { SILENT_ERROR } from '../lib/error-message';
 
 interface KbListItem {
   id: string;
@@ -260,12 +261,14 @@ function KbEditor({
   const models = useFieldArray({ control: form.control, name: 'assetModels' });
 
   const create = trpc.kbArticles.create.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await utils.kbArticles.list.invalidate();
       onClose();
     },
   });
   const update = trpc.kbArticles.update.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await utils.kbArticles.list.invalidate();
       if (id) await utils.kbArticles.get.invalidate({ id });

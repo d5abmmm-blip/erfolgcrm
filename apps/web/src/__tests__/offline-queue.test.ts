@@ -14,6 +14,7 @@ import {
   enqueue,
   listPending,
   remove,
+  removeByDedupeKey,
 } from '../lib/offline/queue';
 import { executeOrQueue, syncOutbox } from '../lib/offline/executor';
 import type { AppRouter } from '@erfolg/api';
@@ -36,6 +37,66 @@ describe('outbox queue', () => {
     expect(items).toHaveLength(2);
     expect(items[0]!.kind).toBe('tickets.changeStatus');
     expect(items[1]!.kind).toBe('tickets.addNote');
+    expect(await count()).toBe(2);
+  });
+
+  // Строка наряда сохраняется по уходу курсора из КАЖДОГО поля. Без склейки
+  // одна новая строка легла бы в очередь трижды — и сервер вставил бы три строки.
+  it('dedupeKey: повторная правка ЗАМЕНЯЕТ запись, а не добавляет вторую', async () => {
+    const key = 'wo-line:T1:draft-1';
+    await enqueue('workOrders.upsertLine', { line: { name: 'Замена платы' } }, 'erfolg', key);
+    await enqueue(
+      'workOrders.upsertLine',
+      { line: { name: 'Замена платы', quantity: '2' } },
+      'erfolg',
+      key,
+    );
+    await enqueue(
+      'workOrders.upsertLine',
+      { line: { name: 'Замена платы', quantity: '2', unitPriceRub: 18000 } },
+      'erfolg',
+      key,
+    );
+
+    const items = await listPending();
+    expect(items).toHaveLength(1);
+    expect(items[0]!.payload).toEqual({
+      line: { name: 'Замена платы', quantity: '2', unitPriceRub: 18000 },
+    });
+  });
+
+  it('dedupeKey: разные строки друг друга не вытесняют', async () => {
+    await enqueue('workOrders.upsertLine', { n: 1 }, 'erfolg', 'wo-line:T1:a');
+    await enqueue('workOrders.upsertLine', { n: 2 }, 'erfolg', 'wo-line:T1:b');
+    expect(await count()).toBe(2);
+  });
+
+  it('dedupeKey: склейка сохраняет исходное место в очереди', async () => {
+    await enqueue('workOrders.upsertLine', { n: 'первая' }, 'erfolg', 'wo-line:T1:a');
+    await new Promise((r) => setTimeout(r, 5));
+    await enqueue('tickets.addNote', { comment: 'вторая' }, 'erfolg');
+    await new Promise((r) => setTimeout(r, 5));
+    // правим первую строку — она должна остаться ПЕРВОЙ, а не уехать в конец
+    await enqueue('workOrders.upsertLine', { n: 'первая, правка' }, 'erfolg', 'wo-line:T1:a');
+
+    const items = await listPending();
+    expect(items).toHaveLength(2);
+    expect(items[0]!.payload).toEqual({ n: 'первая, правка' });
+    expect(items[1]!.kind).toBe('tickets.addNote');
+  });
+
+  it('removeByDedupeKey убирает отменённую строку из очереди', async () => {
+    await enqueue('workOrders.upsertLine', { n: 1 }, 'erfolg', 'wo-line:T1:a');
+    await enqueue('workOrders.upsertLine', { n: 2 }, 'erfolg', 'wo-line:T1:b');
+    expect(await removeByDedupeKey('wo-line:T1:a')).toBe(1);
+    const left = await listPending();
+    expect(left).toHaveLength(1);
+    expect(left[0]!.dedupeKey).toBe('wo-line:T1:b');
+  });
+
+  it('без dedupeKey поведение прежнее — записи копятся', async () => {
+    await enqueue('tickets.addNote', { comment: 'a' }, 'erfolg');
+    await enqueue('tickets.addNote', { comment: 'b' }, 'erfolg');
     expect(await count()).toBe(2);
   });
 

@@ -26,6 +26,7 @@ import { Archive, ArrowLeft, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { ConfirmDialog, DataTable, StatusBadge, type Column } from '../components/ui';
 import { cn } from '../lib/utils';
+import { SILENT_ERROR } from '../lib/error-message';
 
 const QUANTITY_REGEX = /^\d+(\.\d{1,3})?$/;
 
@@ -258,12 +259,14 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
   const lines = useFieldArray({ control: form.control, name: 'lines' });
 
   const create = trpc.ticketTemplates.create.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await utils.ticketTemplates.list.invalidate();
       onClose();
     },
   });
   const update = trpc.ticketTemplates.update.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await utils.ticketTemplates.list.invalidate();
       if (id) await utils.ticketTemplates.get.invalidate({ id });

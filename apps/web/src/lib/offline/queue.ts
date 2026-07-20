@@ -42,6 +42,15 @@ export interface OutboxItem<P = unknown> {
   /** Заголовок tenant — мутации могут «зависнуть» после смены tenant, тогда воспроизведение пропустится. */
   tenantSubdomain: string | null;
   lastError?: string;
+  /**
+   * Ключ склейки. Если задан, новая запись ВЫТЕСНЯЕТ прежнюю с тем же ключом.
+   *
+   * Нужен для наряда: строка сохраняется по уходу курсора из каждого поля, и без
+   * склейки одна новая строка легла бы в очередь трижды (имя, кол-во, цена) —
+   * при возврате связи сервер вставил бы три строки вместо одной. С ключом
+   * в очереди всегда лежит последнее состояние строки, то есть ровно одна вставка.
+   */
+  dedupeKey?: string;
 }
 
 const DB_NAME = 'erfolg-offline';
@@ -73,15 +82,29 @@ export async function enqueue<P>(
   kind: MutationKind,
   payload: P,
   tenantSubdomain: string | null,
+  dedupeKey?: string,
 ): Promise<OutboxItem<P>> {
   const db = await getDb();
+  let createdAt = Date.now();
+  if (dedupeKey) {
+    // Вытесняем прежние записи той же сущности, но СОХРАНЯЕМ их место в очереди:
+    // порядок отправки должен остаться тем, в котором инженер вводил данные.
+    const all = (await db.getAll(STORE)) as OutboxItem[];
+    for (const prev of all) {
+      if (prev.dedupeKey === dedupeKey) {
+        createdAt = Math.min(createdAt, prev.createdAt);
+        await db.delete(STORE, prev.id);
+      }
+    }
+  }
   const item: OutboxItem<P> = {
     id: newId(),
     kind,
     payload,
-    createdAt: Date.now(),
+    createdAt,
     attempts: 0,
     tenantSubdomain,
+    ...(dedupeKey ? { dedupeKey } : {}),
   };
   await db.put(STORE, item);
   notify();
@@ -98,6 +121,25 @@ export async function remove(id: string): Promise<void> {
   const db = await getDb();
   await db.delete(STORE, id);
   notify();
+}
+
+/**
+ * Убирает из очереди всё, что помечено этим ключом склейки.
+ * Нужно, когда инженер отменяет строку наряда, уже уехавшую в очередь:
+ * иначе при возврате связи отменённая строка всё равно создалась бы на сервере.
+ */
+export async function removeByDedupeKey(dedupeKey: string): Promise<number> {
+  const db = await getDb();
+  const all = (await db.getAll(STORE)) as OutboxItem[];
+  let removed = 0;
+  for (const item of all) {
+    if (item.dedupeKey === dedupeKey) {
+      await db.delete(STORE, item.id);
+      removed++;
+    }
+  }
+  if (removed > 0) notify();
+  return removed;
 }
 
 export async function update(item: OutboxItem): Promise<void> {

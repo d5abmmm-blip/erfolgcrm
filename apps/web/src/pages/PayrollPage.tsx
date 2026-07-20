@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { SILENT_ERROR } from '../lib/error-message';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
@@ -693,6 +694,7 @@ function PayrollVedomost() {
     onSuccess: () => utils.payroll.sheets.list.invalidate(),
   });
   const deleteM = trpc.payroll.sheets.delete.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: () => utils.payroll.sheets.list.invalidate(),
   });
   const afterCash = () => {

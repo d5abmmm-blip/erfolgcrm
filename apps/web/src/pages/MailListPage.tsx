@@ -48,6 +48,7 @@ import {
   replySubject,
 } from '../lib/mail-quote';
 import { sanitizeEmailHtml } from '../lib/sanitize-html';
+import { SILENT_ERROR } from '../lib/error-message';
 
 /** Письмо треда (полное письмо + вложения) — элемент вывода `email.thread`. */
 type ThreadMessage = RouterOutputs['email']['thread'][number];
@@ -837,8 +838,8 @@ function ScheduledReader({
     await utils.email.list.invalidate();
     onDone();
   };
-  const sendNow = trpc.email.sendScheduledNow.useMutation({ onSuccess: afterAction });
-  const cancel = trpc.email.cancelSchedule.useMutation({ onSuccess: afterAction });
+  const sendNow = trpc.email.sendScheduledNow.useMutation({ onSuccess: afterAction, meta: SILENT_ERROR });
+  const cancel = trpc.email.cancelSchedule.useMutation({ onSuccess: afterAction, meta: SILENT_ERROR });
   const busy = sendNow.isPending || cancel.isPending;
 
   if (msg.isLoading) {
@@ -938,8 +939,9 @@ function TrashReader({
     await utils.email.unreadCount.invalidate();
     onDone();
   };
-  const restore = trpc.email.restore.useMutation({ onSuccess: afterAction });
+  const restore = trpc.email.restore.useMutation({ onSuccess: afterAction, meta: SILENT_ERROR });
   const purge = trpc.email.purge.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       setConfirmPurge(false);
       await afterAction();
