@@ -1,8 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Wrench, Package, Coins, Boxes, Sparkles } from 'lucide-react';
+/**
+ * Редактор наряда. Открывается и на десктопе (карточка заявки), и на телефоне
+ * инженера (`/m/tickets/:id/work-log`) — другой формы наряда в приложении нет.
+ *
+ * Три свойства, на которых держится сохранность работы инженера в поле:
+ *  1. Кнопки «Сохранить» нет — пишем по уходу курсора из поля.
+ *  2. Пропала связь → правка ложится в оффлайн-очередь и уходит сама (см. lib/offline).
+ *  3. Одна строка = одна запись: пока сервер не вернул номер новой строки,
+ *     повторные сохранения не отправляются, иначе он вставил бы дубли.
+ */
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CloudOff, Plus, Trash2, Wrench, Package, Coins, Boxes, Sparkles } from 'lucide-react';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
-import { trpc } from '../lib/trpc';
+import { trpc, getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { executeOrQueue } from '../lib/offline/executor';
+import { listPending, removeByDedupeKey, subscribe as subscribeOutbox } from '../lib/offline/queue';
+import { humanizeError, SILENT_ERROR } from '../lib/error-message';
+import { showToast } from '../lib/toast';
 import { IssueFromInventory } from './IssueFromInventory';
 import { ReturnToInventory } from './ReturnToInventory';
 
@@ -14,6 +28,12 @@ interface Props {
 }
 
 interface LineDraft {
+  /**
+   * Локальная метка строки, живёт от «Добавить строку» до появления строки
+   * с сервера. Именно по ней подставляется номер и склеиваются повторы —
+   * сравнивать сами объекты нельзя: любой введённый символ пересоздаёт объект.
+   */
+  uid: string;
   /** UUID существующей строки или null для новой. */
   id: string | null;
   lineType: WorkOrderLineType;
@@ -21,7 +41,21 @@ interface LineDraft {
   unit: string;
   quantity: string;
   unitPriceRub: string;
+  /** Строка лежит в оффлайн-очереди и ждёт связи. */
+  queued?: boolean;
 }
+
+let draftSeq = 0;
+function newDraftUid(): string {
+  return `d${++draftSeq}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Ключ склейки повторов в оффлайн-очереди: одна строка наряда — одна запись. */
+function lineDedupeKey(ticketId: string, lineIdOrUid: string): string {
+  return `wo-line:${ticketId}:${lineIdOrUid}`;
+}
+
+const QUEUED_TEXT = 'Нет связи — сохранено в очередь, уйдёт когда появится сеть';
 
 const LINE_GROUPS: Array<{
   type: WorkOrderLineType;
@@ -136,12 +170,33 @@ function WorkOrderHeader({
   canEditVat: boolean;
 }) {
   const utils = trpc.useUtils();
-  const updateHeader = trpc.workOrders.updateHeader.useMutation({
-    onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
-  });
+  const tenantSubdomain = getTenantSubdomain();
+  // Ошибку/очередь показываем сами — глобальный тост здесь молчит (см. main.tsx).
+  const updateHeader = trpc.workOrders.updateHeader.useMutation({ meta: SILENT_ERROR });
   const setVat = trpc.workOrders.setVatRate.useMutation({
     onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
   });
+
+  const saveHeader = async (
+    field: 'diagnosis' | 'repairDescription' | 'recommendation',
+    next: string | null,
+  ) => {
+    const res = await executeOrQueue(
+      'workOrders.updateHeader',
+      { ticketId, patch: { [field]: next } },
+      (p) => updateHeader.mutateAsync(p),
+      tenantSubdomain,
+      // Правки одного поля склеиваются: в очереди лежит последнее состояние.
+      `wo-header:${ticketId}:${field}`,
+    );
+    if (res.status === 'ok') {
+      await utils.workOrders.getByTicket.invalidate({ ticketId });
+    } else if (res.status === 'queued') {
+      showToast('queued', QUEUED_TEXT);
+    } else {
+      showToast('error', humanizeError(res.error));
+    }
+  };
 
   const blurSave = (
     field: 'diagnosis' | 'repairDescription' | 'recommendation',
@@ -149,7 +204,7 @@ function WorkOrderHeader({
   ) => (e: React.FocusEvent<HTMLTextAreaElement>) => {
     const next = e.target.value.trim() || null;
     if (next === (initial ?? null)) return;
-    updateHeader.mutate({ ticketId, patch: { [field]: next } });
+    void saveHeader(field, next);
   };
 
   return (
@@ -165,9 +220,7 @@ function WorkOrderHeader({
           ticketId={ticketId}
           initial={repairDescription}
           canEdit={canEdit}
-          onSave={(value) =>
-            updateHeader.mutate({ ticketId, patch: { repairDescription: value } })
-          }
+          onSave={(value) => void saveHeader('repairDescription', value)}
         />
         <Field
           label="Рекомендации"
@@ -320,28 +373,61 @@ function LineTable({
   canEdit: boolean;
 }) {
   const utils = trpc.useUtils();
-  const upsert = trpc.workOrders.upsertLine.useMutation({
-    onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
-  });
-  const remove = trpc.workOrders.deleteLine.useMutation({
-    onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
-  });
+  const tenantSubdomain = getTenantSubdomain();
+  // Ошибку и «легло в очередь» показываем сами — глобальный тост молчит (main.tsx).
+  const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
+  const remove = trpc.workOrders.deleteLine.useMutation({ meta: SILENT_ERROR });
 
   // Локальные «ещё не сохранённые» новые строки. После первого успешного upsert
   // строка прилетит из data — локальная скрывается.
+  // Дублируем в ref: сохранение читает СВЕЖИЙ черновик прямо в обработчике,
+  // куда состояние React ещё не успело доехать.
   const [drafts, setDrafts] = useState<LineDraft[]>([]);
+  const draftsRef = useRef<LineDraft[]>([]);
+  const patchDrafts = (fn: (prev: LineDraft[]) => LineDraft[]) => {
+    draftsRef.current = fn(draftsRef.current);
+    setDrafts(draftsRef.current);
+  };
+
+  /** Строки, чей запрос уже в пути: второй посылать нельзя — будет дубль. */
+  const inFlight = useRef<Set<string>>(new Set());
+  /** Строки, которые правили, пока шёл их же запрос — досохраним после ответа. */
+  const resaveNeeded = useRef<Set<string>>(new Set());
+
   const [issuingFromInventory, setIssuingFromInventory] = useState(false);
   const [returningToInventory, setReturningToInventory] = useState(false);
 
   // Если строка с тем же id появилась в lines — выкидываем её из drafts.
   useEffect(() => {
-    setDrafts((prev) => prev.filter((d) => !d.id || !lines.find((l) => l.id === d.id)));
+    patchDrafts((prev) => prev.filter((d) => !d.id || !lines.find((l) => l.id === d.id)));
   }, [lines]);
 
+  // Очередь опустела → наши «ждущие» строки уже ушли на сервер. Убираем локальные
+  // копии и перечитываем наряд, иначе строка задвоится на экране: одна ждущая,
+  // вторая пришедшая с сервера.
+  useEffect(() => {
+    return subscribeOutbox(() => {
+      void (async () => {
+        const waiting = draftsRef.current.filter((d) => d.queued);
+        if (waiting.length === 0) return;
+        const pending = await listPending();
+        const stillQueued = new Set(pending.map((i) => i.dedupeKey).filter(Boolean));
+        const sent = waiting.filter(
+          (d) => !stillQueued.has(lineDedupeKey(ticketId, d.id ?? d.uid)),
+        );
+        if (sent.length === 0) return;
+        const sentUids = new Set(sent.map((d) => d.uid));
+        patchDrafts((prev) => prev.filter((d) => !sentUids.has(d.uid)));
+        await utils.workOrders.getByTicket.invalidate({ ticketId });
+      })();
+    });
+  }, [ticketId]);
+
   const addRow = () => {
-    setDrafts((prev) => [
+    patchDrafts((prev) => [
       ...prev,
       {
+        uid: newDraftUid(),
         id: null,
         lineType,
         name: '',
@@ -352,11 +438,20 @@ function LineTable({
     ]);
   };
 
-  const saveLine = (line: LineDraft) => {
-    if (!line.name.trim()) return; // пустые не сохраняем
-    const qty = line.quantity.trim() || '0';
-    const priceRub = Math.max(0, Math.round(Number(line.unitPriceRub) || 0));
-    upsert.mutate(
+  const saveLine = async (uid: string): Promise<void> => {
+    const line = draftsRef.current.find((d) => d.uid === uid);
+    if (!line || !line.name.trim()) return; // пустые не сохраняем
+
+    // Пока сервер не вернул номер новой строки, второй запрос слать нельзя —
+    // он вставил бы ещё одну строку. Запомним и досохраним после ответа.
+    if (inFlight.current.has(uid)) {
+      resaveNeeded.current.add(uid);
+      return;
+    }
+    inFlight.current.add(uid);
+
+    const res = await executeOrQueue(
+      'workOrders.upsertLine',
       {
         ticketId,
         line: {
@@ -364,21 +459,58 @@ function LineTable({
           lineType,
           name: line.name.trim(),
           unit: line.unit.trim() || 'шт',
-          quantity: qty,
-          unitPriceRub: priceRub,
+          quantity: line.quantity.trim() || '0',
+          unitPriceRub: Math.max(0, Math.round(Number(line.unitPriceRub) || 0)),
         },
       },
-      {
-        onSuccess: (res) => {
-          if (!line.id) {
-            // подставим id, чтобы дальнейшие onBlur пошли как update
-            setDrafts((prev) =>
-              prev.map((d) => (d === line ? { ...d, id: res.id } : d)),
-            );
-          }
-        },
-      },
+      (p) => upsert.mutateAsync(p),
+      tenantSubdomain,
+      lineDedupeKey(ticketId, line.id ?? uid),
     );
+    inFlight.current.delete(uid);
+
+    if (res.status === 'ok') {
+      // Подставим номер, чтобы дальнейшие правки шли как изменение, а не вставка.
+      patchDrafts((prev) =>
+        prev.map((d) => (d.uid === uid ? { ...d, id: res.data.id, queued: false } : d)),
+      );
+      await utils.workOrders.getByTicket.invalidate({ ticketId });
+    } else if (res.status === 'queued') {
+      patchDrafts((prev) => prev.map((d) => (d.uid === uid ? { ...d, queued: true } : d)));
+      showToast('queued', QUEUED_TEXT);
+    } else {
+      showToast('error', humanizeError(res.error));
+    }
+
+    // Правили, пока шёл запрос — сохраняем ещё раз (теперь уже с номером строки).
+    if (resaveNeeded.current.delete(uid)) await saveLine(uid);
+  };
+
+  const cancelDraft = (uid: string) => {
+    const line = draftsRef.current.find((d) => d.uid === uid);
+    patchDrafts((prev) => prev.filter((d) => d.uid !== uid));
+    // Строка уже уехала в очередь — убираем и оттуда, иначе при возврате связи
+    // отменённая строка всё равно появится на сервере.
+    if (line?.queued) {
+      void removeByDedupeKey(lineDedupeKey(ticketId, line.id ?? uid));
+    }
+  };
+
+  const deleteLine = async (lineId: string) => {
+    const res = await executeOrQueue(
+      'workOrders.deleteLine',
+      { ticketId, lineId },
+      (p) => remove.mutateAsync(p),
+      tenantSubdomain,
+      `wo-line-del:${ticketId}:${lineId}`,
+    );
+    if (res.status === 'ok') {
+      await utils.workOrders.getByTicket.invalidate({ ticketId });
+    } else if (res.status === 'queued') {
+      showToast('queued', QUEUED_TEXT);
+    } else {
+      showToast('error', humanizeError(res.error));
+    }
   };
 
   return (
@@ -419,22 +551,20 @@ function LineTable({
                 ticketId={ticketId}
                 lineType={lineType}
                 canEdit={canEdit}
-                onDelete={() => remove.mutate({ ticketId, lineId: l.id })}
+                onDelete={() => void deleteLine(l.id)}
               />
             ))}
-            {drafts.map((d, idx) => (
+            {drafts.map((d) => (
               <DraftRow
-                key={`draft-${idx}`}
+                key={d.uid}
                 draft={d}
                 onChange={(patch) =>
-                  setDrafts((prev) =>
-                    prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)),
+                  patchDrafts((prev) =>
+                    prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)),
                   )
                 }
-                onSave={() => saveLine(drafts[idx]!)}
-                onCancel={() =>
-                  setDrafts((prev) => prev.filter((_, i) => i !== idx))
-                }
+                onSave={() => void saveLine(d.uid)}
+                onCancel={() => cancelDraft(d.uid)}
               />
             ))}
           </tbody>
@@ -520,9 +650,10 @@ function ExistingRow({
   onDelete: () => void;
 }) {
   const utils = trpc.useUtils();
-  const upsert = trpc.workOrders.upsertLine.useMutation({
-    onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
-  });
+  const tenantSubdomain = getTenantSubdomain();
+  // Ошибку и «легло в очередь» показываем сами — глобальный тост молчит (main.tsx).
+  const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
+  const [queued, setQueued] = useState(false);
   // Используем locally controlled значения, чтобы onBlur мог сравнить с исходным
   const initialPriceRub = useMemo(
     () => kopecksToRubInput(line.unitPriceKopecks),
@@ -543,17 +674,36 @@ function ExistingRow({
       (field === 'quantity' && value !== line.quantity) ||
       (field === 'unitPriceRub' && Number(value) !== Number(initialPriceRub));
     if (!changed) return;
-    upsert.mutate({
-      ticketId,
-      line: {
-        id: line.id,
-        lineType,
-        name: extras.name.trim(),
-        unit: extras.unit.trim() || 'шт',
-        quantity: extras.quantity.trim() || '0',
-        unitPriceRub: priceRub,
-      },
-    });
+
+    void (async () => {
+      const res = await executeOrQueue(
+        'workOrders.upsertLine',
+        {
+          ticketId,
+          line: {
+            id: line.id,
+            lineType,
+            name: extras.name.trim(),
+            unit: extras.unit.trim() || 'шт',
+            quantity: extras.quantity.trim() || '0',
+            unitPriceRub: priceRub,
+          },
+        },
+        (p) => upsert.mutateAsync(p),
+        tenantSubdomain,
+        // Строка уже с номером: повторные правки перезаписывают запись в очереди.
+        lineDedupeKey(ticketId, line.id),
+      );
+      if (res.status === 'ok') {
+        setQueued(false);
+        await utils.workOrders.getByTicket.invalidate({ ticketId });
+      } else if (res.status === 'queued') {
+        setQueued(true);
+        showToast('queued', QUEUED_TEXT);
+      } else {
+        showToast('error', humanizeError(res.error));
+      }
+    })();
   };
 
   return (
@@ -569,6 +719,7 @@ function ExistingRow({
       canEdit={canEdit}
       onFieldBlur={handleBlur}
       onDelete={onDelete}
+      isQueued={queued}
     />
   );
 }
@@ -604,6 +755,7 @@ function DraftRow({
       onFieldBlur={() => onSave()}
       onDelete={onCancel}
       isDraft
+      isQueued={draft.queued}
     />
   );
 }
@@ -617,6 +769,7 @@ function RowInputs({
   onFieldBlur,
   onDelete,
   isDraft,
+  isQueued,
 }: {
   initial: { name: string; unit: string; quantity: string; unitPriceRub: string };
   amountKopecks: string;
@@ -630,6 +783,8 @@ function RowInputs({
   ) => void;
   onDelete: () => void;
   isDraft?: boolean;
+  /** Строка лежит в оффлайн-очереди — покажем это прямо в таблице. */
+  isQueued?: boolean;
 }) {
   const [vals, setVals] = useState(initial);
   // Если приходят новые значения снаружи (после mutation refetch) — синхронизируем
@@ -643,7 +798,7 @@ function RowInputs({
   };
 
   return (
-    <tr className={cn(isDraft && 'bg-primary/5')}>
+    <tr className={cn(isDraft && 'bg-primary/5', isQueued && 'bg-warning/10')}>
       <td className="px-3 py-1.5">
         <input
           type="text"
@@ -654,6 +809,12 @@ function RowInputs({
           className="bg-background w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/40"
           placeholder="Что выполнено"
         />
+        {isQueued && (
+          <span className="text-warning mt-1 inline-flex items-center gap-1 text-[11px] font-medium">
+            <CloudOff className="h-3 w-3" />
+            ждёт связи — отправится само
+          </span>
+        )}
       </td>
       <td className="px-3 py-1.5">
         <input

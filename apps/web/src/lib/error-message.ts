@@ -1,0 +1,97 @@
+/**
+ * Превращает ошибку мутации в короткую фразу для человека.
+ *
+ * Зачем: сервер отдаёт в INTERNAL_SERVER_ERROR текст исходной ошибки
+ * (`lib/errors.ts:169`) — туда попадает SQL, а Zod присылает JSON-массив.
+ * Показывать это сотруднику нельзя, поэтому наружу выпускаем только
+ * заранее написанные фразы, а «сырой» текст — лишь когда он заведомо
+ * человеческий (доменные ошибки с понятным сообщением).
+ */
+import { TRPCClientError } from '@trpc/client';
+
+/** Фразы по коду ответа — понятны без объяснений и всегда говорят о судьбе правки. */
+const BY_CODE: Record<string, string> = {
+  UNAUTHORIZED: 'Сессия истекла — войдите заново. Изменение не сохранено',
+  FORBIDDEN: 'Недостаточно прав для этого действия. Изменение не сохранено',
+  NOT_FOUND: 'Запись не найдена — возможно, её удалил другой сотрудник',
+  CONFLICT: 'Запись только что изменил другой сотрудник — обновите страницу',
+  TIMEOUT: 'Сервер не ответил вовремя. Изменение не сохранено',
+  TOO_MANY_REQUESTS: 'Слишком часто — подождите немного и повторите',
+  PAYLOAD_TOO_LARGE: 'Файл слишком большой',
+  INTERNAL_SERVER_ERROR: 'Ошибка на сервере. Изменение не сохранено, попробуйте ещё раз',
+};
+
+/** Машинные коды, которые сервер шлёт вместо текста. */
+const BY_MACHINE_CODE: Record<string, string> = {
+  NOT_ENOUGH_STOCK: 'Недостаточно остатков на складе',
+  RETURN_EXCEEDS_BATCH_INITIAL: 'Возврат больше, чем было выдано из партии',
+};
+
+const FALLBACK = 'Не удалось сохранить изменение';
+
+/**
+ * Пометка для useMutation: экран показывает ошибку сам (рядом с полем или
+ * в диалоге), глобальный тост дублировать не нужно. Читается в main.tsx.
+ */
+export const SILENT_ERROR = { silentError: true } as const;
+
+/**
+ * Похоже ли на сетевой сбой (нет связи, сервер недоступен).
+ * Намеренно совпадает с логикой offline/executor.ts — оба места решают
+ * один и тот же вопрос «сервер не ответил или ответил отказом».
+ */
+export function isOfflineError(err: unknown): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  if (err instanceof TypeError) return true; // fetch бросает TypeError при сетевом сбое
+  if (err instanceof TRPCClientError) {
+    if (err.cause instanceof TypeError) return true;
+    if (err.data == null) return true; // у сетевых ошибок tRPC нет data.code
+  }
+  return false;
+}
+
+export function humanizeError(err: unknown): string {
+  if (isOfflineError(err)) {
+    return 'Нет связи с сервером. Изменение не сохранено';
+  }
+
+  if (err instanceof TRPCClientError) {
+    const code = (err.data as { code?: string } | null | undefined)?.code;
+    const raw = firstLine(err.message);
+
+    // Машинный код важнее кода ответа: он точнее объясняет причину.
+    if (raw && BY_MACHINE_CODE[raw]) return BY_MACHINE_CODE[raw];
+    if (code && BY_CODE[code]) return BY_CODE[code];
+
+    // Ошибки валидации приходят JSON-массивом от Zod — наружу его не пускаем.
+    if (looksTechnical(raw)) return 'Проверьте заполнение полей — сервер не принял данные';
+    return raw || FALLBACK;
+  }
+
+  if (err instanceof Error) {
+    const raw = firstLine(err.message);
+    if (raw && BY_MACHINE_CODE[raw]) return BY_MACHINE_CODE[raw];
+    return looksTechnical(raw) ? FALLBACK : raw || FALLBACK;
+  }
+
+  return FALLBACK;
+}
+
+/** Первая строка сообщения, обрезанная до читаемой длины (без стека). */
+function firstLine(msg: string): string {
+  const line = (msg ?? '').split('\n')[0]!.trim();
+  return line.length > 140 ? `${line.slice(0, 140)}…` : line;
+}
+
+/**
+ * Технический ли текст: JSON от Zod, SQL или служебный код без пробелов.
+ * Такие строки сотруднику ничего не объясняют — показываем общую фразу.
+ */
+function looksTechnical(line: string): boolean {
+  if (!line) return true;
+  if (line.startsWith('[') || line.startsWith('{')) return true;
+  if (/^[A-Z][A-Z0-9_]{3,}$/.test(line)) return true; // ВЕРСАЛЬНЫЙ_КОД
+  if (/\b(select|insert|update|delete)\b .*\b(from|into|set|where)\b/i.test(line)) return true;
+  if (/(relation|column|constraint|duplicate key|violates)\b/i.test(line)) return true;
+  return false;
+}

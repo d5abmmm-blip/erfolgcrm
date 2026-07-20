@@ -1,12 +1,48 @@
 /**
  * useOutbox — React-хук для подписки на состояние оффлайн-очереди.
  * Возвращает {pending, isOnline, sync} и автоматически запускает sync при
- * переходе offline → online. UI должен сам показывать тост по итогу.
+ * переходе offline → online.
+ *
+ * Итог синхронизации показывается сам — через общий тост. Раньше результат
+ * молча выбрасывался, и записи, отклонённые сервером, исчезали бесследно.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { count, listPending, subscribe } from './queue';
 import { syncOutbox, type SyncResult } from './executor';
 import { runOutboxItem } from './runner';
+import { showToast } from '../toast';
+
+/** Человеческий отчёт по итогам отправки очереди. */
+export function reportSync(r: SyncResult): void {
+  if (r.succeeded === 0 && r.failedSoft === 0 && r.failedHard === 0) return;
+
+  // Отклонённое сервером повторить нельзя — такие записи удалены. Это самое
+  // важное в отчёте: работа инженера пропала, и он должен об этом узнать.
+  if (r.failedHard > 0) {
+    showToast(
+      'error',
+      `Сервер не принял ${r.failedHard} ${plural(r.failedHard, 'изменение', 'изменения', 'изменений')}` +
+        ' — их придётся внести заново',
+    );
+  }
+  if (r.succeeded > 0) {
+    showToast(
+      'ok',
+      `Отправлено ${r.succeeded} ${plural(r.succeeded, 'изменение', 'изменения', 'изменений')}`,
+    );
+  }
+  if (r.failedSoft > 0) {
+    showToast('queued', `Связи всё ещё нет — ${r.failedSoft} в очереди, попробуем позже`);
+  }
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
 
 export interface OutboxState {
   pending: number;
@@ -50,6 +86,7 @@ export function useOutbox() {
     try {
       const r = await syncOutbox(runOutboxItem);
       await refreshCount();
+      reportSync(r);
       return r;
     } finally {
       setState((s) => ({ ...s, isSyncing: false }));

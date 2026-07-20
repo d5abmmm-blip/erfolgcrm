@@ -16,6 +16,7 @@ import { CashTransactionModal } from '../components/finance/CashTransactionModal
 import { CashInternalOpModal } from '../components/finance/CashInternalOpModal';
 import { CASH_TX_KIND_META } from '../lib/dictionaries';
 import { cn } from '../lib/utils';
+import { SILENT_ERROR } from '../lib/error-message';
 
 type Kind = 'income' | 'expense' | 'transfer';
 const PAGE_SIZE = 50;
@@ -66,6 +67,7 @@ export function CashJournalPage() {
   });
 
   const del = trpc.cash.transactions.delete.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       setDeleteId(null);
       await Promise.all([

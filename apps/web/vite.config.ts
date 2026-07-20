@@ -61,7 +61,10 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
-            // tRPC GET-запросы (queries) — пробуем сеть, fallback на кеш не делаем (offline → ошибка)
+            // tRPC GET-запросы (queries): сначала сеть, и только если её нет —
+            // недавний ответ из кеша (не старше maxAgeSeconds). То есть экран,
+            // открытый онлайн последние 5 минут, откроется и без связи;
+            // всё остальное офлайн отдаст ошибку.
             urlPattern: ({ url }) => url.pathname.startsWith('/api'),
             handler: 'NetworkFirst',
             options: {

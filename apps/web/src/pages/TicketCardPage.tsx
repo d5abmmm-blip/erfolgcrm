@@ -41,6 +41,7 @@ import type {
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
+import { SILENT_ERROR } from '../lib/error-message';
 import { PromptDialog } from '../components/ui/PromptDialog';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { WorkOrderEditor, kopecksToRub } from '../components/WorkOrderEditor';
@@ -161,6 +162,7 @@ export function TicketCardPage() {
   const cancel = trpc.tickets.cancel.useMutation({ onSuccess: invalidateAll });
   const reopen = trpc.tickets.reopen.useMutation({ onSuccess: invalidateAll });
   const del = trpc.tickets.delete.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: async () => {
       await utils.tickets.list.invalidate();
       navigate('/tickets');
@@ -774,7 +776,7 @@ function TrackShareButton({ ticketId }: { ticketId: string }) {
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const getLink = trpc.tickets.getShareLink.useMutation();
+  const getLink = trpc.tickets.getShareLink.useMutation({ meta: SILENT_ERROR });
   const revoke = trpc.tickets.revokeShareLink.useMutation();
   const rootRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);

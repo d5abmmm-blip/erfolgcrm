@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { humanizeError, isOfflineError, SILENT_ERROR } from '../lib/error-message';
 
 interface Props {
   ticketId: string;
@@ -41,8 +42,9 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
   );
 
   const utils = trpc.useUtils();
-  const upsert = trpc.workOrders.upsertLine.useMutation();
-  const issue = trpc.inventoryMovements.issueToWorkOrder.useMutation();
+  // Ошибки показывает сама модалка — глобальный тост дублировать не должен.
+  const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
+  const issue = trpc.inventoryMovements.issueToWorkOrder.useMutation({ meta: SILENT_ERROR });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,8 +80,17 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
           setError(
             'Недостаточно остатков на складе. Строка наряда сохранена без списания — добавьте партию или удалите строку.',
           );
-        } else if (issueErr instanceof Error) {
-          setError(issueErr.message);
+        } else if (isOfflineError(issueErr)) {
+          // Строка наряда уже создана, а остаток НЕ списан. В очередь не кладём:
+          // сколько чего осталось, знает только сервер (партии по сроку годности),
+          // и отложенное списание могло бы уйти в минус. Говорим прямо.
+          setError(
+            'Связь пропала. Строка наряда сохранена, но со склада НЕ списана — ' +
+              'повторите списание, когда появится сеть.',
+          );
+          void utils.workOrders.getByTicket.invalidate({ ticketId });
+        } else {
+          setError(humanizeError(issueErr));
         }
         return;
       }
@@ -87,7 +98,12 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
       void utils.inventoryItems.list.invalidate();
       onIssued();
     } catch (upsertErr) {
-      if (upsertErr instanceof Error) setError(upsertErr.message);
+      setError(
+        isOfflineError(upsertErr)
+          ? 'Нет связи с сервером. Списание со склада требует связи — ' +
+              'добавьте запчасть строкой наряда, а спишете со склада позже.'
+          : humanizeError(upsertErr),
+      );
     }
   };
 

@@ -7,6 +7,7 @@ import type { PaymentMethod } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { kopecksToRub } from '../lib/money';
+import { SILENT_ERROR } from '../lib/error-message';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
 interface Props {
@@ -42,8 +43,9 @@ export function TicketPayments({ ticketId, canManage }: Props) {
     void utils.workOrders.getByTicket.invalidate({ ticketId });
   };
 
-  const add = trpc.payments.add.useMutation({ onSuccess: invalidate });
+  const add = trpc.payments.add.useMutation({ onSuccess: invalidate, meta: SILENT_ERROR });
   const remove = trpc.payments.delete.useMutation({
+    meta: SILENT_ERROR,
     onSuccess: () => {
       setDeleteTarget(null);
       invalidate();
