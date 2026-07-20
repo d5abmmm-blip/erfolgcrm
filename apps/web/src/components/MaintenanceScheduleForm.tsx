@@ -12,6 +12,8 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
   const [assetId, setAssetId] = useState<string | null>(null);
   const [kind, setKind] = useState<'planned' | 'urgent'>('planned');
   const [intervalDays, setIntervalDays] = useState('180');
+  // Дата последнего фактического ТО. Пусто — считаем от сегодня.
+  const [lastDone, setLastDone] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -28,10 +30,19 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
       return;
     }
     const days = Math.max(1, Math.round(Number(intervalDays) || 0));
+    // Сервер считает срок следующего ТО как startAt + интервал. Раньше форма
+    // это поле не слала вовсе, поэтому график всегда начинался «от сегодня»:
+    // завести его на аппарат, который обслуживали в марте, было невозможно.
+    const startAt = lastDone ? new Date(`${lastDone}T00:00:00`) : undefined;
+    if (startAt && Number.isNaN(startAt.getTime())) {
+      setError('Проверьте дату последнего ТО');
+      return;
+    }
     create.mutate({
       assetId,
       kind,
       intervalDays: days,
+      startAt,
       notes: notes.trim() || null,
     });
   };
@@ -80,6 +91,20 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
               />
             </Field>
           </div>
+          <Field label="Дата последнего ТО">
+            <input
+              type="date"
+              value={lastDone}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setLastDone(e.target.value)}
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
+            />
+            <span className="text-muted-foreground mt-1 block text-xs">
+              {lastDone
+                ? `Следующее ТО: ${formatNextDue(lastDone, intervalDays)}`
+                : 'Не знаете — оставьте пусто, отсчёт пойдёт от сегодня'}
+            </span>
+          </Field>
           <Field label="Примечания">
             <textarea
               value={notes}
@@ -109,6 +134,16 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
       </div>
     </div>
   );
+}
+
+/** Подсказка под полем: когда наступит следующее ТО при таком интервале. */
+export function formatNextDue(lastDoneIso: string, intervalDaysRaw: string): string {
+  const days = Math.max(1, Math.round(Number(intervalDaysRaw) || 0));
+  const start = new Date(`${lastDoneIso}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return '—';
+  const next = new Date(start.getTime() + days * 24 * 60 * 60 * 1000);
+  const label = next.toLocaleDateString('ru-RU');
+  return next.getTime() < Date.now() ? `${label} (уже просрочено)` : label;
 }
 
 function Field({
