@@ -23,10 +23,16 @@ import {
   clients,
   consentRecords,
   getDb,
+  getTenantEncryptionKey,
   invoices,
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
+import {
+  archiveClient,
+  createClient,
+  unarchiveClient,
+} from '../modules/clients/repository';
 import {
   ClientUserConflictError,
   changeMyClientPassword,
@@ -226,6 +232,51 @@ describe('login flow', () => {
         { email, password: 'StrongPwd1' },
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('клиент в архиве → в кабинет не пускает, после возврата пускает', async () => {
+    // Свой клиент, а не seed'овый: архивация seed-клиента задела бы соседние тесты.
+    const key = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
+    const { id: clientId } = await createClient(getDb(), erfolgId, key, {
+      type: 'legal',
+      displayName: `${TEST_EMAIL_PREFIX}-archived-client-${Date.now()}`,
+    });
+    const email = `${TEST_EMAIL_PREFIX}-archived@example.com`;
+    await createClientUser(getDb(), erfolgId, clientId, {
+      email,
+      password: 'StrongPwd1',
+      fullName: 'Архивный',
+    });
+
+    const login = () =>
+      loginClient(
+        {
+          db: getDb(),
+          tenantId: erfolgId,
+          tenantSubdomain: 'erfolg',
+          tenantDisplayName: 'ООО Эрфольг',
+          ip: '127.0.0.1',
+          userAgent: 'vitest',
+          res: fakeRes(),
+        },
+        { email, password: 'StrongPwd1' },
+      );
+
+    // До архивации вход работает.
+    expect((await login()).user.email).toBe(email);
+
+    await archiveClient(getDb(), erfolgId, clientId);
+    await expect(login()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    // Возврат из архива восстанавливает доступ сам: флаг is_active мы не
+    // трогаем, поэтому «заблокирован вручную» и «клиент в архиве» не путаются.
+    await unarchiveClient(getDb(), erfolgId, clientId);
+    expect((await login()).user.email).toBe(email);
+
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx.delete(clientUsers).where(eq(clientUsers.clientId, clientId));
+      await tx.delete(clients).where(eq(clients.id, clientId));
+    });
   });
 });
 

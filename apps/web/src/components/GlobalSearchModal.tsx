@@ -97,7 +97,15 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
         key: `c:${c.id}`,
         href: `/clients/${c.id}`,
         title: c.displayName,
-        subtitle: [c.type === 'legal' ? 'Юрлицо' : 'Физлицо', c.inn].filter(Boolean).join(' · '),
+        // «В архиве» показываем явно: архивного клиента нельзя выбрать в новой
+        // заявке, и без пометки непонятно, почему его там нет.
+        subtitle: [
+          c.type === 'legal' ? 'Юрлицо' : 'Физлицо',
+          c.inn,
+          c.status === 'archived' ? 'В архиве' : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
         group: 'Клиенты',
       });
     }

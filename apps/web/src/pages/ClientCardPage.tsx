@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useRoute } from 'wouter';
 import {
   Archive,
+  ArchiveRestore,
   Building2,
   ChevronLeft,
   Mail,
@@ -43,6 +44,15 @@ export function ClientCardPage() {
       setArchiveOpen(false);
       await utils.clients.list.invalidate();
       navigate('/clients');
+    },
+  });
+
+  const unarchive = trpc.clients.unarchive.useMutation({
+    onSuccess: async () => {
+      // Обязательно инвалидируем и саму карточку: без этого статус останется
+      // «archived», кнопка не переключится и директор нажмёт ещё раз.
+      // С карточки не уходим — человек вернул клиента, чтобы с ним работать.
+      await Promise.all([utils.clients.get.invalidate({ id }), utils.clients.list.invalidate()]);
     },
   });
 
@@ -105,6 +115,17 @@ export function ClientCardPage() {
             >
               <Archive className="h-3.5 w-3.5" />
               Архивировать
+            </button>
+          )}
+          {isDirector && c.status === 'archived' && (
+            <button
+              type="button"
+              disabled={unarchive.isPending}
+              onClick={() => unarchive.mutate({ id: c.id })}
+              className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition disabled:opacity-50"
+            >
+              <ArchiveRestore className="h-3.5 w-3.5" />
+              {unarchive.isPending ? 'Возвращаем…' : 'Вернуть из архива'}
             </button>
           )}
         </div>
@@ -291,7 +312,7 @@ export function ClientCardPage() {
       <ConfirmDialog
         open={archiveOpen}
         title="Архивировать клиента"
-        description={`Клиент «${c.displayName}» будет переведён в архив. Карточка останется доступна в архивных списках.`}
+        description={`Клиент «${c.displayName}» будет переведён в архив: его нельзя будет выбрать в новой заявке, счёте или договоре, а вход в личный кабинет закроется. Карточка останется во вкладке «Архив», и клиента можно вернуть обратно.`}
         confirmText="Архивировать"
         variant="danger"
         loading={archive.isPending}

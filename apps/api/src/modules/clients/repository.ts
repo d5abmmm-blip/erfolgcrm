@@ -412,6 +412,28 @@ export async function archiveClient(
   });
 }
 
+/**
+ * Возврат клиента из архива.
+ *
+ * Снимает ОБА поля, которые ставит archiveClient. Снять один только status
+ * недостаточно: `deleted_at` отдельно проверяют кабинет клиента
+ * (client-cabinet/repository.ts — имя в шапке) и trade-in
+ * (service.ts — можно ли выбрать клиента). Клиент вернулся бы наполовину:
+ * в списках есть, в кабинете безымянный, в trade-in невыбираемый.
+ */
+export async function unarchiveClient(
+  db: Db,
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx
+      .update(clients)
+      .set({ status: 'active', deletedAt: null })
+      .where(eq(clients.id, id));
+  });
+}
+
 export async function createContact(
   db: Db,
   tenantId: string,

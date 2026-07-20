@@ -19,6 +19,7 @@ import {
   createClientSession,
   findClientUserByEmail,
   getClientDisplayName,
+  isClientArchived,
   recordClientConsentIfMissing,
   revokeClientSession,
 } from './repository';
@@ -80,6 +81,27 @@ export async function loginClient(
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'Учётная запись заблокирована. Обратитесь в сервисный центр.',
+    });
+  }
+
+  // Клиента увели в архив — кабинет закрывается вместе с ним. Проверяем ДО
+  // пароля: незачем сверять хеш, если вход всё равно запрещён.
+  // Обратимо: директор возвращает клиента из архива, доступ восстанавливается
+  // сам — флаг is_active пользователя мы не трогаем, чтобы не путать
+  // «заблокирован вручную» с «клиент в архиве».
+  if (await isClientArchived(ctx.db, ctx.tenantId, user.clientId)) {
+    await writeAudit(ctx.db, ctx.tenantId, {
+      userId: null,
+      action: 'login_failed',
+      entityType: 'client_user',
+      entityId: user.id,
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+      context: { reason: 'client_archived', client_user_id: user.id, client_email: user.email },
+    });
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Доступ в кабинет закрыт. Обратитесь в сервисный центр.',
     });
   }
 

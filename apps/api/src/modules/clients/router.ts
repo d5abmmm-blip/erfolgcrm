@@ -3,7 +3,8 @@
  *
  * RBAC:
  * - list / get / search / create / update / addContact / updateContact — staffProcedure (director + dispatcher)
- * - archive / deleteContact — directorProcedure (необратимые действия)
+ * - archive / unarchive / deleteContact — directorProcedure
+ *   (archive обратим через unarchive; deleteContact — необратим)
  *
  * CreateClientInput — discriminatedUnion('type'). Legal требует displayName, individual — fullName.
  * Server разбирает fullName в displayName формата «Фамилия И.О.» если displayName не задан.
@@ -14,6 +15,7 @@ import { router, staffProcedure, directorProcedure } from '../../trpc/trpc';
 import {
   addContactCmd,
   archiveClientCmd,
+  unarchiveClientCmd,
   createClientCmd,
   deleteContactCmd,
   getClientQuery,
@@ -181,6 +183,18 @@ export const clientsRouter = router({
         { ip: ctx.ip, userAgent: ctx.userAgent },
         input.id,
         input.reason,
+      ),
+    ),
+
+  unarchive: directorProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      unarchiveClientCmd(
+        ctx.db,
+        ctx.tenant,
+        ctx.session,
+        { ip: ctx.ip, userAgent: ctx.userAgent },
+        input.id,
       ),
     ),
 
