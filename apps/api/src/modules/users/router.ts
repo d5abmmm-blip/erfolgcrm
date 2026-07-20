@@ -224,25 +224,29 @@ export const usersRouter = router({
         });
       }
       try {
-        const updated = await setUserActive(
+        const result = await setUserActive(
           ctx.db,
           ctx.tenant.id,
           input.userId,
           input.isActive,
         );
-        if (!updated) {
+        if (!result) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
         }
         await writeAudit(ctx.db, ctx.tenant.id, {
           userId: ctx.session.userId,
           action: 'update',
           entityType: 'user',
-          entityId: updated.id,
-          after: { isActive: updated.isActive },
+          entityId: result.user.id,
+          // В журнал пишем ТОЛЬКО факт выдачи пароля — сам пароль нигде не сохраняем.
+          after: {
+            isActive: result.user.isActive,
+            passwordIssued: result.issuedPassword !== null,
+          },
           ip: ctx.ip,
           userAgent: ctx.userAgent,
         });
-        return updated;
+        return { ...result.user, issuedPassword: result.issuedPassword };
       } catch (err) {
         mapConflict(err);
       }

@@ -4,6 +4,8 @@
  */
 import { z } from 'zod';
 
+export { generatePassword, GENERATED_PASSWORD_LENGTH } from './generate-password';
+
 export const UserRole = z.enum(['director', 'dispatcher', 'engineer']);
 export type UserRole = z.infer<typeof UserRole>;
 

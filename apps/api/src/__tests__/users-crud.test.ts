@@ -306,7 +306,86 @@ describe('setUserActive', () => {
       role: 'director',
     });
     const result = await setUserActive(getDb(), erfolgId, newDir.id, false);
-    expect(result?.isActive).toBe(false);
+    expect(result?.user.isActive).toBe(false);
+  });
+
+  /**
+   * Блокер аудита: при переносе из старой базы всем клали один пароль, лежавший
+   * в репозитории. Аккаунты неактивны, но активация открывала вход этим паролем.
+   */
+  describe('активация выдаёт новый пароль', () => {
+    it('аккаунту, которым НИ РАЗУ не входили — старый пароль перестаёт работать', async () => {
+      const u = await createUser(getDb(), erfolgId, {
+        username: `${TEST_PREFIX}imported`,
+        password: 'Erfolg-Import-2026',
+        fullName: 'Перенесённый сотрудник',
+        role: 'engineer',
+      });
+      await setUserActive(getDb(), erfolgId, u.id, false);
+
+      const res = await setUserActive(getDb(), erfolgId, u.id, true);
+
+      expect(res?.issuedPassword).toBeTruthy();
+      expect(res?.user.isActive).toBe(true);
+      const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx.select().from(users).where(eq(users.id, u.id)),
+      );
+      // Пароль из репозитория больше не подходит, подходит только выданный.
+      expect(await verify(row!.passwordHash, 'Erfolg-Import-2026')).toBe(false);
+      expect(await verify(row!.passwordHash, res!.issuedPassword!)).toBe(true);
+    });
+
+    it('выданный пароль каждый раз разный', async () => {
+      const mk = async (n: string) => {
+        const u = await createUser(getDb(), erfolgId, {
+          username: `${TEST_PREFIX}rnd${n}`,
+          password: 'StrongPass1',
+          fullName: `R${n}`,
+          role: 'engineer',
+        });
+        await setUserActive(getDb(), erfolgId, u.id, false);
+        return (await setUserActive(getDb(), erfolgId, u.id, true))?.issuedPassword;
+      };
+      const [a, b] = [await mk('a'), await mk('b')];
+      expect(a).not.toBe(b);
+    });
+
+    it('сотруднику, который УЖЕ входил, пароль не трогаем — это обычная разблокировка', async () => {
+      const u = await createUser(getDb(), erfolgId, {
+        username: `${TEST_PREFIX}worked`,
+        password: 'MyOwnPass123',
+        fullName: 'Действующий сотрудник',
+        role: 'engineer',
+      });
+      // отмечаем, что человек входил в систему
+      await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, u.id)),
+      );
+      await setUserActive(getDb(), erfolgId, u.id, false);
+
+      const res = await setUserActive(getDb(), erfolgId, u.id, true);
+
+      expect(res?.issuedPassword).toBeNull();
+      const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx.select().from(users).where(eq(users.id, u.id)),
+      );
+      expect(await verify(row!.passwordHash, 'MyOwnPass123')).toBe(true);
+    });
+
+    it('блокировка пароль не меняет', async () => {
+      const u = await createUser(getDb(), erfolgId, {
+        username: `${TEST_PREFIX}block`,
+        password: 'StayPass123',
+        fullName: 'B',
+        role: 'engineer',
+      });
+      const res = await setUserActive(getDb(), erfolgId, u.id, false);
+      expect(res?.issuedPassword).toBeNull();
+      const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx.select().from(users).where(eq(users.id, u.id)),
+      );
+      expect(await verify(row!.passwordHash, 'StayPass123')).toBe(true);
+    });
   });
 });
 

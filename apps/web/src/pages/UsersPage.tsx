@@ -247,9 +247,12 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
   const utils = trpc.useUtils();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Пароль, выданный при активации. Приходит с сервера один раз — показываем и забываем. */
+  const [issued, setIssued] = useState<string | null>(null);
   const m = trpc.users.setActive.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       setOpen(false);
+      if (res?.issuedPassword) setIssued(res.issuedPassword);
       return utils.users.list.invalidate();
     },
     onError: (e) => {
@@ -294,7 +297,7 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
         description={
           isBlocking
             ? `${user.fullName}: вход будет закрыт, активные сессии отозваны.`
-            : `${user.fullName} снова сможет входить в систему.`
+            : `${user.fullName} снова сможет входить в систему. Если этим аккаунтом ещё ни разу не входили, система выдаст новый пароль — старый работать не будет.`
         }
         variant={isBlocking ? 'danger' : 'default'}
         confirmText={isBlocking ? 'Заблокировать' : 'Разблокировать'}
@@ -302,7 +305,83 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
         onConfirm={() => m.mutate({ userId: user.id, isActive: !user.isActive })}
         onCancel={() => setOpen(false)}
       />
+      {issued && (
+        <IssuedPasswordDialog
+          fullName={user.fullName}
+          username={user.username}
+          password={issued}
+          onClose={() => setIssued(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Показывает выданный при активации пароль. Показ ОДИН раз: на сервере хранится
+ * только хеш, повторно узнать пароль нельзя — можно лишь выдать новый.
+ */
+function IssuedPasswordDialog({
+  fullName,
+  username,
+  password,
+  onClose,
+}: {
+  fullName: string;
+  username: string;
+  password: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`Логин: ${username}\nПароль: ${password}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* буфер обмена может быть недоступен — пароль виден на экране */
+    }
+  };
+  return (
+    <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-card w-full max-w-md rounded-lg border p-5 shadow-lg">
+        <h2 className="text-base font-semibold">Пароль для входа выдан</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {fullName} активирован. Этим аккаунтом ещё не входили, поэтому система задала
+          новый пароль.
+        </p>
+        <div className="bg-muted/50 mt-3 space-y-1 rounded-md border p-3 font-mono text-sm">
+          <div>
+            <span className="text-muted-foreground">Логин: </span>
+            {username}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Пароль: </span>
+            <span className="font-semibold">{password}</span>
+          </div>
+        </div>
+        <div className="text-warning mt-3 text-xs font-medium">
+          Передайте пароль сотруднику сейчас — больше он не покажется. Если потеряете,
+          выдайте новый кнопкой «Сбросить пароль».
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="hover:bg-muted rounded-md border px-3 py-2 text-sm transition"
+          >
+            {copied ? 'Скопировано' : 'Скопировать'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition"
+          >
+            Записал, закрыть
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

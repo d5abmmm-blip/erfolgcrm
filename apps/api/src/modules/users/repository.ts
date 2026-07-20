@@ -15,6 +15,7 @@
  */
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { hash, verify } from 'argon2';
+import { generatePassword } from '@erfolg/shared';
 import { sessions, users, withTenantTx, type Db } from '@erfolg/db';
 import { getRedis } from '../../lib/redis';
 
@@ -249,27 +250,51 @@ export async function updateUser(
   });
 }
 
+export interface SetActiveResult {
+  user: UserListRow;
+  /**
+   * Новый пароль, выданный при активации. Показывается директору РОВНО ОДИН РАЗ
+   * и нигде не хранится. null — пароль не менялся (обычная разблокировка).
+   */
+  issuedPassword: string | null;
+}
+
 export async function setUserActive(
   db: Db,
   tenantId: string,
   userId: string,
   isActive: boolean,
-): Promise<UserListRow | null> {
-  const tokensToRevoke = await withTenantTx(db, tenantId, async (tx) => {
+): Promise<SetActiveResult | null> {
+  // Пароль генерируем ДО транзакции: argon2 считается сотни миллисекунд, держать
+  // на это время открытую транзакцию с блокировками незачем.
+  let issuedPassword: string | null = null;
+
+  const outcome = await withTenantTx(db, tenantId, async (tx) => {
     const [current] = await tx
       .select()
       .from(users)
       .where(and(eq(users.id, userId), isNull(users.deletedAt)))
       .limit(1);
     if (!current) return null;
-    if (current.isActive === isActive) return [];
+    if (current.isActive === isActive) return { tokens: [] as string[] };
 
     if (!isActive && current.role === 'director') {
       const others = await countActiveDirectorsTx(tx, userId);
       if (others === 0) throw new LastDirectorError();
     }
 
-    await tx.update(users).set({ isActive }).where(eq(users.id, userId));
+    const set: { isActive: boolean; passwordHash?: string } = { isActive };
+
+    // Аккаунт, которым ещё ни разу не входили, активируем ТОЛЬКО с новым паролем.
+    // Так закрыт перенос из старой базы: там всем клали пароль, лежавший в
+    // репозитории, и активация открывала вход с общеизвестным паролем.
+    // Тем, кто уже работал в системе, пароль не трогаем — это обычная разблокировка.
+    if (isActive && current.lastLoginAt === null) {
+      issuedPassword = generatePassword();
+      set.passwordHash = await hash(issuedPassword);
+    }
+
+    await tx.update(users).set(set).where(eq(users.id, userId));
 
     if (!isActive) {
       const active = await tx
@@ -280,19 +305,21 @@ export async function setUserActive(
         .update(sessions)
         .set({ revokedAt: new Date() })
         .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
-      return active.map((s) => s.token);
+      return { tokens: active.map((s) => s.token) };
     }
-    return [];
+    return { tokens: [] as string[] };
   });
 
-  if (tokensToRevoke === null) return null;
+  if (outcome === null) return null;
 
-  if (tokensToRevoke.length > 0) {
+  if (outcome.tokens.length > 0) {
     const redis = getRedis();
-    await Promise.all(tokensToRevoke.map((t) => redis.del(`session:${t}`)));
+    await Promise.all(outcome.tokens.map((t) => redis.del(`session:${t}`)));
   }
 
-  return getUserById(db, tenantId, userId);
+  const user = await getUserById(db, tenantId, userId);
+  if (!user) return null;
+  return { user, issuedPassword };
 }
 
 export async function resetPassword(
