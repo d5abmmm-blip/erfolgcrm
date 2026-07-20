@@ -7,17 +7,23 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import {
   assets,
+  clients,
   maintenanceLog,
   maintenanceSchedules,
   withTenantTx,
   type Db,
 } from '@erfolg/db';
 
+/** Потолок выдачи списка графиков — страховка от «отдать всё разом». */
+const LIST_LIMIT = 500;
+
 export interface MaintenanceScheduleDto {
   id: string;
   assetId: string;
   assetModel: string | null;
   assetSerial: string | null;
+  clientId: string | null;
+  clientName: string | null;
   kind: 'planned' | 'urgent';
   intervalDays: number;
   lastDoneAt: Date | null;
@@ -74,6 +80,10 @@ export async function listSchedules(
         assetId: maintenanceSchedules.assetId,
         assetModel: assets.model,
         assetSerial: assets.serialNumber,
+        // Без клиента список нельзя превратить в план выездов: по «модель +
+        // серийник» при 5000 аппаратов непонятно, куда ехать.
+        clientId: clients.id,
+        clientName: clients.displayName,
         kind: maintenanceSchedules.kind,
         intervalDays: maintenanceSchedules.intervalDays,
         lastDoneAt: maintenanceSchedules.lastDoneAt,
@@ -86,9 +96,45 @@ export async function listSchedules(
       })
       .from(maintenanceSchedules)
       .leftJoin(assets, eq(maintenanceSchedules.assetId, assets.id))
+      .leftJoin(clients, eq(clients.id, assets.ownerClientId))
       .where(and(...conds))
-      .orderBy(asc(maintenanceSchedules.nextDueAt));
+      .orderBy(asc(maintenanceSchedules.nextDueAt))
+      // Предела не было вовсе. При массовом заведении графиков на 5000 единиц
+      // техники страница потянула бы всё разом.
+      .limit(LIST_LIMIT);
     return rows;
+  });
+}
+
+/**
+ * Гасит все графики ТО списанной техники.
+ *
+ * Чиним ИМЕННО так, а не фильтром по lifecycle_status в списке: график ТО
+ * читают пять независимых запросов (список, две плитки дашборда, бейдж меню,
+ * календарь), и все они уже смотрят на is_active. Погасив признак один раз,
+ * мы убираем аппарат сразу отовсюду и не заводим шестое условие, от которого
+ * цифры начнут расходиться ещё сильнее.
+ *
+ * Возврат техники из списания графики обратно НЕ включит — списание помечено
+ * как необратимое действие директора, обратного перехода в системе нет.
+ */
+export async function deactivateSchedulesForAsset(
+  db: Db,
+  tenantId: string,
+  assetId: string,
+): Promise<number> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .update(maintenanceSchedules)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(maintenanceSchedules.assetId, assetId),
+          eq(maintenanceSchedules.isActive, true),
+        ),
+      )
+      .returning({ id: maintenanceSchedules.id });
+    return rows.length;
   });
 }
 

@@ -2,7 +2,10 @@
  * Ротирующийся блок напоминаний в шапке (между заголовком страницы и поиском).
  *
  * Ничего не считает заново — переиспользует уже существующие запросы:
- *   - dashboard.navBadges (запчасти/счета/ТО/склад — те же цифры, что и бейджи в меню)
+ *   - dashboard.navBadges (запчасти/счета/склад — те же цифры, что и бейджи в меню).
+ *     ТО сюда СОЗНАТЕЛЬНО не выведено: сообщения показываются по одному с
+ *     ротацией, а просроченный график нельзя погасить из интерфейса — счётчик
+ *     висел бы вечно и отнимал показы у сигналов, за которыми стоит работа.
  *   - aiAssistant.dailySummary (застрявшие/перегруженные + готовая ИИ-сводка дня,
  *     кэшированная на сервере раз в сутки — она же используется на дашборде)
  *   - attestations.list (истекающие аттестации)
@@ -124,6 +127,29 @@ function pickNext(
   return [...available].sort(oldestFirst)[0]!;
 }
 
+/**
+ * Разбор аттестаций на две разные новости.
+ *
+ * Раньше в напоминания попадали только «истекает» (expiring_soon), поэтому на
+ * следующий день после окончания допуска сигнал ПРОПАДАЛ — система замолкала
+ * ровно тогда, когда инженер уже работает без действующего допуска.
+ *
+ * Просроченные и истекающие не сливаем в одно число: это разные действия.
+ * «Истекает» — запланировать обучение, «просрочен» — снять с работ сегодня.
+ */
+export function splitAttestations(rows: Array<{ status: string }>): {
+  expired: number;
+  expiringSoon: number;
+} {
+  let expired = 0;
+  let expiringSoon = 0;
+  for (const r of rows) {
+    if (r.status === 'expired') expired += 1;
+    else if (r.status === 'expiring_soon') expiringSoon += 1;
+  }
+  return { expired, expiringSoon };
+}
+
 export function HeaderNudges({ role }: { role: 'director' | 'dispatcher' | 'engineer' }) {
   const isStaff = role === 'director' || role === 'dispatcher';
 
@@ -211,15 +237,22 @@ export function HeaderNudges({ role }: { role: 'director' | 'dispatcher' | 'engi
       items.push({ id: 'ai-tip', icon: Sparkles, tone: 'ai', text: tip, href: '/board' });
     }
 
-    const soonAttestations = isStaff
-      ? (attestations.data ?? []).filter((a) => a.status === 'expiring_soon')
-      : [];
-    if (soonAttestations.length > 0) {
+    const att = splitAttestations(isStaff ? (attestations.data ?? []) : []);
+    if (att.expired > 0) {
+      items.push({
+        id: 'attestations-expired',
+        icon: ShieldAlert,
+        tone: 'warning',
+        text: `Просрочен допуск: ${att.expired} ${plural(att.expired, 'штука', 'штуки', 'штук')} — инженер работает без аттестации`,
+        href: '/settings/attestations',
+      });
+    }
+    if (att.expiringSoon > 0) {
       items.push({
         id: 'attestations',
         icon: ShieldAlert,
         tone: 'warning',
-        text: `Истекает аттестация: ${soonAttestations.length} ${plural(soonAttestations.length, 'штука', 'штуки', 'штук')}`,
+        text: `Истекает аттестация: ${att.expiringSoon} ${plural(att.expiringSoon, 'штука', 'штуки', 'штук')}`,
         href: '/settings/attestations',
       });
     }

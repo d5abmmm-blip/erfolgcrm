@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'wouter';
 import { CalendarCheck, CheckCircle2, Clock, Plus } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -84,6 +85,7 @@ export function MaintenancePage() {
               <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Техника</th>
+                  <th className="px-3 py-2 text-left font-medium">Клиент</th>
                   <th className="px-3 py-2 text-left font-medium">Тип</th>
                   <th className="px-3 py-2 text-right font-medium">Интервал, дн.</th>
                   <th className="px-3 py-2 text-left font-medium">Последнее ТО</th>
@@ -102,6 +104,18 @@ export function MaintenancePage() {
                           <div className="text-muted-foreground font-mono text-xs">
                             {s.assetSerial}
                           </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {s.clientId ? (
+                          <Link
+                            href={`/clients/${s.clientId}`}
+                            className="text-foreground hover:text-primary"
+                          >
+                            {s.clientName ?? '—'}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">

@@ -27,6 +27,7 @@ import {
   type CreateAssetInput,
   type UpdateAssetInput,
 } from './repository';
+import { deactivateSchedulesForAsset } from '../maintenance';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { SessionData } from '../../lib/session';
 
@@ -119,6 +120,9 @@ export async function decommissionAssetCmd(
   await updateAssetWithEvents(db, tenant.id, session.userId, id, {
     lifecycleStatus: 'decommissioned',
   });
+  // Списанный аппарат больше не обслуживают — гасим его графики ТО, иначе он
+  // навсегда останется в «Просрочено» и будет крутить счётчик в меню.
+  const deactivated = await deactivateSchedulesForAsset(db, tenant.id, id);
   if (comment) {
     await repoAddNote(db, tenant.id, session.userId, id, comment);
   }
@@ -127,7 +131,11 @@ export async function decommissionAssetCmd(
     action: 'delete',
     entityType: 'asset',
     entityId: id,
-    context: { reason: 'decommission', comment: comment ?? null },
+    context: {
+      reason: 'decommission',
+      comment: comment ?? null,
+      maintenanceSchedulesDeactivated: deactivated,
+    },
     ip: audit.ip ?? null,
     userAgent: audit.userAgent ?? null,
   });
