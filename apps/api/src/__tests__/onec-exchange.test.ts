@@ -36,6 +36,7 @@ import {
   receivePaymentsFromOnecCmd,
   verifyIncomingToken,
 } from '../modules/onec';
+import { setIncomingTokenHash, upsertConfig } from '../modules/onec/repository';
 import {
   buildCommerceMlExport,
   parseIncomingPayments,
@@ -178,7 +179,12 @@ describe('onec-xml lib', () => {
 });
 
 describe('onec service (8.F)', () => {
-  beforeEach(clearTestData);
+  beforeEach(async () => {
+    await clearTestData();
+    // Выгрузка требует включённого обмена. Раньше конфига не было вовсе и
+    // экспорт работал при выключенном тумблере — это и чиним.
+    await upsertConfig(getDb(), erfolgId, { enabled: true });
+  });
 
   it('hashIncomingToken stable + verifyIncomingToken constant-time', () => {
     const t = generateIncomingToken();
@@ -239,6 +245,104 @@ describe('onec service (8.F)', () => {
       tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
     );
     expect(afterSecond?.syncedAt?.getTime()).toBe(firstStamp);
+  });
+
+  it('при ВЫКЛЮЧЕННОМ обмене экспорт запрещён и ничего не помечает', async () => {
+    const { invoiceId } = await setupIssuedInvoice();
+    await upsertConfig(getDb(), erfolgId, { enabled: false });
+
+    await expect(
+      exportInvoicesToOnecCmd({
+        db: getDb(),
+        tenant: tenantCtx,
+        session: sessionCtx,
+        audit: { ip: '127.0.0.1', userAgent: 'test' },
+      }),
+    ).rejects.toThrow(/Обмен с 1С выключен/);
+
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+    );
+    expect(row?.syncedAt).toBeNull();
+
+    // Выключенный обмен не должен оставлять следов в журнале.
+    const log = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ id: onecExchangeLog.id }).from(onecExchangeLog),
+    );
+    expect(log).toHaveLength(0);
+  });
+
+  it('обмен включён БЕЗ входящего токена — экспорт работает', async () => {
+    // Входящий токен нужен вебхуку приёма платежей, к выгрузке файла он
+    // отношения не имеет. Страж, требующий токен, ломал бы экспорт на ровном
+    // месте — в том числе после кнопки «Отозвать токен».
+    await setIncomingTokenHash(getDb(), erfolgId, null);
+    await upsertConfig(getDb(), erfolgId, { enabled: true });
+    await setupIssuedInvoice();
+
+    const result = await exportInvoicesToOnecCmd({
+      db: getDb(),
+      tenant: tenantCtx,
+      session: sessionCtx,
+      audit: { ip: '127.0.0.1', userAgent: 'test' },
+    });
+    expect(result.processedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('помечены ровно те счета, что попали в файл', async () => {
+    const a = await setupIssuedInvoice();
+    const b = await setupIssuedInvoice();
+
+    const result = await exportInvoicesToOnecCmd({
+      db: getDb(),
+      tenant: tenantCtx,
+      session: sessionCtx,
+      audit: { ip: '127.0.0.1', userAgent: 'test' },
+    });
+
+    for (const id of [a.invoiceId, b.invoiceId]) {
+      expect(result.xml).toContain(id);
+      const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, id)),
+      );
+      expect(row?.syncedAt).toBeInstanceOf(Date);
+    }
+    expect(result.errorCount).toBe(0);
+  });
+
+  it('отменённый счёт в 1С не выгружается', async () => {
+    const { invoiceId } = await setupIssuedInvoice();
+    const cancelled = await transitionToCancelled(getDb(), erfolgId, invoiceId, `${TEST_PREFIX}отмена`);
+    expect(cancelled).toBeTruthy();
+
+    const result = await exportInvoicesToOnecCmd({
+      db: getDb(),
+      tenant: tenantCtx,
+      session: sessionCtx,
+      audit: { ip: '127.0.0.1', userAgent: 'test' },
+    });
+
+    expect(result.xml).not.toContain(invoiceId);
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+    );
+    expect(row?.syncedAt).toBeNull();
+  });
+
+  it('отчёт говорит, сколько ждало всего и сколько осталось', async () => {
+    await setupIssuedInvoice();
+    await setupIssuedInvoice();
+
+    const result = await exportInvoicesToOnecCmd({
+      db: getDb(),
+      tenant: tenantCtx,
+      session: sessionCtx,
+      audit: { ip: '127.0.0.1', userAgent: 'test' },
+    });
+
+    expect(result.totalPending).toBeGreaterThanOrEqual(2);
+    expect(result.processedCount).toBe(result.totalPending);
+    expect(result.remaining).toBe(0);
   });
 
   it('receivePaymentsFromOnec — payment по invoiceExternalId', async () => {

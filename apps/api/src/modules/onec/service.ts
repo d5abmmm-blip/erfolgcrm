@@ -10,7 +10,7 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { clients, getDb, invoices, tenants, withTenantTx, workOrderLines, type Db } from '@erfolg/db';
 import {
   buildCommerceMlExport,
@@ -23,12 +23,14 @@ import { logger } from '../../lib/logger';
 import { writeAudit } from '../../lib/audit';
 import { addPayment } from '../payments/repository';
 import {
+  countPendingOnecExport,
   listPendingOnecExport,
-  markOnecSynced,
+  markManyOnecSynced,
 } from '../invoices';
 import {
   completeExchange,
   findEnabledTokenHashByTenant,
+  getConfig,
   startExchange,
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
@@ -128,7 +130,10 @@ async function buildLinesForInvoice(
         amountKopecks: workOrderLines.amountKopecks,
       })
       .from(workOrderLines)
-      .where(eq(workOrderLines.workOrderId, workOrderId));
+      .where(eq(workOrderLines.workOrderId, workOrderId))
+      // Без явного порядка позиции в файле каждый раз разные — один и тот же
+      // счёт давал бы разные XML.
+      .orderBy(asc(workOrderLines.orderIdx));
     return rows.map((r) => {
       const total = kopecksToRubNumber(r.amountKopecks);
       // VAT по строке: пропорционально line.amount от общего vat ставки.
@@ -156,16 +161,47 @@ export interface ExportResult {
   xml: string;
   processedCount: number;
   errorCount: number;
+  /** Сколько счетов ждало выгрузки ВСЕГО (может быть больше EXPORT_BATCH_LIMIT). */
+  totalPending: number;
+  /** Сколько осталось на следующий запуск. */
+  remaining: number;
 }
 
-/** Генерирует CommerceML XML для всех ещё не синхронизированных счетов. */
+/**
+ * Сколько счетов уходит за один запуск. Потолок намеренный: выгрузка делает
+ * два запроса к базе на каждый счёт и отдаёт XML одной строкой в ответе.
+ */
+export const EXPORT_BATCH_LIMIT = 500;
+
+/**
+ * Генерирует CommerceML XML для ещё не синхронизированных счетов.
+ *
+ * Порядок операций важен: счета помечаются выгруженными ТОЛЬКО после того, как
+ * XML успешно собран, и одним запросом. Отметку снять нечем — ни кнопки, ни
+ * процедуры, ни скрипта во всём проекте нет, — поэтому пометить счета и не
+ * отдать файл означает потерять их из очереди навсегда.
+ */
 export async function exportInvoicesToOnecCmd(ctx: CmdCtx): Promise<ExportResult> {
+  // Проверяем ДО записи в журнал обменов: выключенный обмен не должен
+  // оставлять следов. Смотрим только на флаг «включён» — входящий токен
+  // нужен вебхуку приёма платежей, к выгрузке файла он отношения не имеет
+  // (иначе «Отозвать токен» молча ломало бы экспорт).
+  const config = await getConfig(ctx.db, ctx.tenant.id);
+  if (!config?.enabled) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message:
+        'Обмен с 1С выключен. Включите переключатель «Включить обмен с 1С» в начале страницы настроек и повторите выгрузку.',
+    });
+  }
+
   const exchange = await startExchange(ctx.db, ctx.tenant.id, {
     direction: 'export',
     kind: 'invoices_export',
   });
   try {
-    const pending = await listPendingOnecExport(ctx.db, ctx.tenant.id, 500);
+    const totalPending = await countPendingOnecExport(ctx.db, ctx.tenant.id);
+    const pending = await listPendingOnecExport(ctx.db, ctx.tenant.id, EXPORT_BATCH_LIMIT);
     const supplier = await loadTenantRequisites(ctx.db, ctx.tenant.id);
     const supplierCp: OnecCounterparty = {
       id: ctx.tenant.id,
@@ -200,7 +236,6 @@ export async function exportInvoicesToOnecCmd(ctx: CmdCtx): Promise<ExportResult
           lines,
           notes: inv.notes,
         });
-        await markOnecSynced(ctx.db, ctx.tenant.id, inv.id, exchange.id);
         processedIds.push(inv.id);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -214,6 +249,10 @@ export async function exportInvoicesToOnecCmd(ctx: CmdCtx): Promise<ExportResult
       generatedAt: new Date().toISOString(),
       documents: docs,
     });
+
+    // Только теперь — файл собран. Одна транзакция, один UPDATE: либо помечены
+    // все попавшие в файл счета, либо ни один.
+    await markManyOnecSynced(ctx.db, ctx.tenant.id, processedIds, exchange.id);
 
     await completeExchange(ctx.db, ctx.tenant.id, exchange.id, {
       status: errors.length === 0 ? 'success' : docs.length > 0 ? 'partial' : 'failed',
@@ -237,6 +276,8 @@ export async function exportInvoicesToOnecCmd(ctx: CmdCtx): Promise<ExportResult
       xml,
       processedCount: processedIds.length,
       errorCount: errors.length,
+      totalPending,
+      remaining: Math.max(0, totalPending - processedIds.length),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

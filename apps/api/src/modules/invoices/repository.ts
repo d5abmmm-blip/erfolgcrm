@@ -14,7 +14,7 @@
  * Расчёт НДС — «вкладной» (НДС включён в total), формула совпадает с
  * apps/web/src/lib/pdf/invoice.ts: vat = round(total * rate / (100 + rate)).
  */
-import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import {
   invoices,
   withTenantTx,
@@ -623,6 +623,17 @@ export async function markReminderSent(
   });
 }
 
+/**
+ * Условие «счёт подлежит выгрузке в 1С».
+ *
+ * Черновик ещё не документ. Отменённый — тоже: отмена не проставляет deleted_at
+ * (transitionToCancelled), поэтому раньше отменённые счета уезжали в бухгалтерию
+ * и создавали там дебиторку, оплатить которую система же потом и отказывается.
+ * Частичный индекс invoices_pending_onec_export_idx шире этого условия
+ * (там только <> 'draft'), поэтому остаётся применимым.
+ */
+const PENDING_ONEC_STATUS = sql`${invoices.status} NOT IN ('draft', 'cancelled')`;
+
 /** Список счетов, ожидающих выгрузку в 1С (8.F). */
 export async function listPendingOnecExport(
   db: Db,
@@ -633,13 +644,7 @@ export async function listPendingOnecExport(
     const rows = await tx
       .select()
       .from(invoices)
-      .where(
-        and(
-          isNull(invoices.deletedAt),
-          isNull(invoices.onecSyncedAt),
-          sql`${invoices.status} <> 'draft'`,
-        ),
-      )
+      .where(and(isNull(invoices.deletedAt), isNull(invoices.onecSyncedAt), PENDING_ONEC_STATUS))
       .orderBy(asc(invoices.updatedAt))
       .limit(limit);
     return rows.map(toDto);
@@ -660,6 +665,44 @@ export async function markOnecSynced(
         ...(externalId ? { onecExternalId: externalId } : {}),
       })
       .where(eq(invoices.id, invoiceId));
+  });
+}
+
+/**
+ * Помечает пачку счетов выгруженными ОДНИМ запросом в ОДНОЙ транзакции.
+ *
+ * Отметка необратима: снять её нечем ни в UI, ни в API. Поэтому она обязана
+ * ставиться всем счетам сразу и только после того, как файл собран — иначе
+ * половина счетов «уедет в 1С», которой они не увидят. Поштучный
+ * markOnecSynced в цикле такого свойства не даёт: там N независимых
+ * транзакций, и падение на середине оставляет разъехавшееся состояние.
+ */
+export async function markManyOnecSynced(
+  db: Db,
+  tenantId: string,
+  invoiceIds: string[],
+  externalId: string | null,
+): Promise<void> {
+  if (invoiceIds.length === 0) return;
+  await withTenantTx(db, tenantId, async (tx) => {
+    await tx
+      .update(invoices)
+      .set({
+        onecSyncedAt: new Date(),
+        ...(externalId ? { onecExternalId: externalId } : {}),
+      })
+      .where(inArray(invoices.id, invoiceIds));
+  });
+}
+
+/** Сколько всего счетов ждёт выгрузки (без потолка) — чтобы не врать «выгружены все». */
+export async function countPendingOnecExport(db: Db, tenantId: string): Promise<number> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(invoices)
+      .where(and(isNull(invoices.deletedAt), isNull(invoices.onecSyncedAt), PENDING_ONEC_STATUS));
+    return rows[0]?.n ?? 0;
   });
 }
 

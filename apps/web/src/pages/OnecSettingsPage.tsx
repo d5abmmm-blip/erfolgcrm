@@ -2,7 +2,14 @@
  * /settings/onec — настройка интеграции с 1С для tenant'а. Доступ — только директор.
  */
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Database, Loader2, RefreshCw } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCopy,
+  Database,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -57,6 +64,8 @@ export function OnecSettingsPage() {
     xml: string;
     processedCount: number;
     errorCount: number;
+    totalPending: number;
+    remaining: number;
   } | null>(null);
 
   const invalidateAll = async () => {
@@ -112,12 +121,12 @@ export function OnecSettingsPage() {
       </div>
 
       <p className="text-muted-foreground text-sm">
-        Выгрузка счетов в формате CommerceML/XML для загрузки в 1С:Бухгалтерия.
-        Входящий URL позволяет 1С отправлять информацию об оплатах.
+        Выгрузка счетов в формате CommerceML/XML для загрузки в 1С:Бухгалтерия. Входящий URL
+        позволяет 1С отправлять информацию об оплатах.
       </p>
 
       {actionError && (
-        <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 px-4 py-2 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border px-4 py-2 text-sm">
           {actionError}
           <button
             type="button"
@@ -175,7 +184,7 @@ export function OnecSettingsPage() {
                   setActionError(null);
                   setConfig.mutate({ exportTimezone: e.target.value });
                 }}
-                className="bg-background rounded-md border px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 rounded-md border px-3 py-1.5 text-sm outline-none focus:ring-2"
               >
                 {[
                   'Europe/Moscow',
@@ -198,7 +207,7 @@ export function OnecSettingsPage() {
           </div>
 
           {/* Token */}
-          <div className="bg-card rounded-lg border p-4 space-y-3">
+          <div className="bg-card space-y-3 rounded-lg border p-4">
             <div className="font-medium">Входящий токен (для 1С)</div>
             {cfg.data?.hasIncomingToken ? (
               <div className="bg-success/10 border-success/30 flex items-start gap-3 rounded-lg border p-3">
@@ -240,9 +249,7 @@ export function OnecSettingsPage() {
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
               >
-                {generateToken.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : null}
+                {generateToken.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Сгенерировать токен
               </button>
               {cfg.data?.hasIncomingToken && (
@@ -255,9 +262,7 @@ export function OnecSettingsPage() {
                   }}
                   className="hover:bg-destructive/10 hover:text-destructive inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                 >
-                  {revokeToken.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : null}
+                  {revokeToken.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                   Отозвать токен
                 </button>
               )}
@@ -292,7 +297,7 @@ export function OnecSettingsPage() {
           </div>
 
           {/* URL for 1C */}
-          <div className="bg-card rounded-lg border p-4 space-y-2">
+          <div className="bg-card space-y-2 rounded-lg border p-4">
             <div className="font-medium">URL для настройки в 1С</div>
             <div className="text-muted-foreground text-xs">
               Скопируйте адрес и укажите его в настройках обмена 1С
@@ -305,40 +310,59 @@ export function OnecSettingsPage() {
             </div>
           </div>
 
-          {/* Export */}
-          <div className="bg-card rounded-lg border p-4 space-y-3">
-            <div className="font-medium">Экспорт счетов</div>
-            <div className="text-muted-foreground text-xs">
-              Выгружает все несинхронизированные счета в XML и скачивает файл.
+          {/* Export — только при включённом обмене.
+
+              Выгрузка необратима: она помечает счета «отдано в 1С», и снять
+              отметку нечем. Пока обмен выключен, кнопки быть не должно, иначе
+              один клик из любопытства вычёркивает из очереди до 500 боевых
+              счетов. Сервер проверяет то же самое (exportInvoicesToOnecCmd). */}
+          {cfg.data?.enabled !== true ? (
+            <div className="bg-muted/40 text-muted-foreground rounded-lg border p-4 text-xs">
+              Экспорт счетов недоступен: обмен с 1С выключен. Включите переключатель выше, если
+              ведёте учёт в 1С.
             </div>
-            {exportResult && (
-              <div className="bg-success/10 border-success/30 rounded-lg border p-3 text-sm">
-                Экспортировано: {exportResult.processedCount} счетов
-                {exportResult.errorCount > 0 && (
-                  <span className="text-destructive ml-2">
-                    (ошибок: {exportResult.errorCount})
-                  </span>
-                )}
+          ) : (
+            <div className="bg-card space-y-3 rounded-lg border p-4">
+              <div className="font-medium">Экспорт счетов</div>
+              <div className="text-muted-foreground text-xs">
+                Выгружает несинхронизированные счета в XML и скачивает файл. За один раз — не больше
+                500 счетов.
               </div>
-            )}
-            <button
-              type="button"
-              disabled={exportInvoices.isPending}
-              onClick={() => {
-                setActionError(null);
-                setExportResult(null);
-                exportInvoices.mutate();
-              }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-            >
-              {exportInvoices.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
+              {exportResult && (
+                <div className="bg-success/10 border-success/30 rounded-lg border p-3 text-sm">
+                  Экспортировано: {exportResult.processedCount} из {exportResult.totalPending}{' '}
+                  ожидавших
+                  {exportResult.errorCount > 0 && (
+                    <span className="text-destructive ml-2">
+                      (ошибок: {exportResult.errorCount})
+                    </span>
+                  )}
+                  {exportResult.remaining > 0 && (
+                    <div className="text-muted-foreground mt-1 text-xs">
+                      Осталось {exportResult.remaining} — запустите экспорт ещё раз.
+                    </div>
+                  )}
+                </div>
               )}
-              {exportInvoices.isPending ? 'Экспорт…' : 'Запустить экспорт сейчас'}
-            </button>
-          </div>
+              <button
+                type="button"
+                disabled={exportInvoices.isPending}
+                onClick={() => {
+                  setActionError(null);
+                  setExportResult(null);
+                  exportInvoices.mutate();
+                }}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                {exportInvoices.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {exportInvoices.isPending ? 'Экспорт…' : 'Запустить экспорт сейчас'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -363,11 +387,10 @@ export function OnecSettingsPage() {
               </thead>
               <tbody className="divide-y">
                 {exchanges.data.map((ex) => {
-                  const b =
-                    EXCHANGE_STATUS_BADGE[ex.status] ?? {
-                      label: ex.status,
-                      cls: 'bg-muted text-muted-foreground',
-                    };
+                  const b = EXCHANGE_STATUS_BADGE[ex.status] ?? {
+                    label: ex.status,
+                    cls: 'bg-muted text-muted-foreground',
+                  };
                   return (
                     <tr key={ex.id} className="hover:bg-muted/20 transition">
                       <td className="px-3 py-2 text-xs">{formatDateTime(ex.startedAt)}</td>
