@@ -18,9 +18,7 @@ import type { TicketStatus } from '@erfolg/shared';
 import {
   assets,
   clients,
-  decryptSql,
   getDb,
-  getTenantEncryptionKey,
   tenants,
   tickets,
   users,
@@ -84,7 +82,6 @@ async function loadTicketDetails(
   tenantId: string,
   ticketId: string,
 ): Promise<LoadedTicket | null> {
-  const key = getTenantEncryptionKey({ id: tenantId, kmsKeyId: null });
   return withTenantTx(getDb(), tenantId, async (tx) => {
     const rows = await tx
       .select({
@@ -95,9 +92,7 @@ async function loadTicketDetails(
         clientType: clients.type,
         clientDisplayName: clients.displayName,
         clientEmail: clients.email,
-        individualFullName: decryptSql(clients.fullNameEncrypted, key).as(
-          'full_name_dec',
-        ),
+        individualFullName: clients.individualFullName,
         assetModel: assets.model,
         engineerFullName: users.fullName,
         readyNotifiedAt: tickets.readyNotifiedAt,
@@ -118,7 +113,7 @@ async function loadTicketDetails(
       clientType: r.clientType,
       clientDisplayName: r.clientDisplayName ?? '',
       clientEmail: r.clientEmail,
-      individualFullName: (r.individualFullName as string | null) ?? null,
+      individualFullName: r.individualFullName,
       assetModel: r.assetModel,
       engineerFullName: r.engineerFullName,
       readyNotifiedAt: r.readyNotifiedAt,

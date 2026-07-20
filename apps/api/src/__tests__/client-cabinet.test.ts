@@ -23,7 +23,6 @@ import {
   clients,
   consentRecords,
   getDb,
-  getTenantEncryptionKey,
   invoices,
   withTenantTx,
 } from '@erfolg/db';
@@ -236,8 +235,7 @@ describe('login flow', () => {
 
   it('клиент в архиве → в кабинет не пускает, после возврата пускает', async () => {
     // Свой клиент, а не seed'овый: архивация seed-клиента задела бы соседние тесты.
-    const key = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
-    const { id: clientId } = await createClient(getDb(), erfolgId, key, {
+    const { id: clientId } = await createClient(getDb(), erfolgId, {
       type: 'legal',
       displayName: `${TEST_EMAIL_PREFIX}-archived-client-${Date.now()}`,
     });

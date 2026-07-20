@@ -113,28 +113,34 @@ if [ -z "${PII_KEY:-}" ]; then
   exit 1
 fi
 
-# Сколько всего зашифрованных ФИО физлиц есть в копии.
+# Проверяем на ТЕЛЕ ПИСЬМА, а не на ФИО клиента.
+#
+# С миграции 0078 ФИО и телефоны физлиц лежат в базе ОТКРЫТО — расшифровывать их
+# больше не надо, и проверка на них ничего бы не доказывала (прошла бы всегда).
+# Ключ PII_ENCRYPTION_KEY по-прежнему нужен для переписки с клиентами, паролей
+# почты, токена бота и секретов 2FA — за письмами и следим: они самые объёмные
+# и восстановить их вводом заново, в отличие от паролей, НЕЛЬЗЯ.
 ENC_TOTAL="$(docker exec "$CONTAINER" psql -U "$PGUSER_" -d "$TESTDB" -At \
-  -c "SELECT count(*) FROM clients WHERE full_name_encrypted IS NOT NULL" 2>/dev/null)"
+  -c "SELECT count(*) FROM email_messages WHERE body_text_encrypted IS NOT NULL" 2>/dev/null)"
 
 if [ -z "${ENC_TOTAL:-}" ] || [ "$ENC_TOTAL" = "0" ]; then
-  # Не проваливаем: у свежей инсталляции физлиц может не быть вовсе.
-  log "WARN: в копии нет зашифрованных ФИО — расшифровку проверить не на чем" >&2
+  # Не проваливаем: почтой могли ещё не пользоваться.
+  log "WARN: в копии нет зашифрованных писем — расшифровку проверить не на чем" >&2
 else
   # Ключ передаём через stdin, а не аргументом: иначе он был бы виден в `ps` любому
   # процессу на хосте. В лог печатаем только длину результата, не сам текст (это ПДн).
   DEC_LEN="$(printf '%s' "
-    SELECT length(pgp_sym_decrypt(full_name_encrypted::bytea, '$PII_KEY')::text)
-    FROM clients WHERE full_name_encrypted IS NOT NULL LIMIT 1;
+    SELECT length(pgp_sym_decrypt(body_text_encrypted::bytea, '$PII_KEY')::text)
+    FROM email_messages WHERE body_text_encrypted IS NOT NULL LIMIT 1;
   " | docker exec -i "$CONTAINER" psql -U "$PGUSER_" -d "$TESTDB" -At -f - 2>/dev/null)"
 
   if [ -z "${DEC_LEN:-}" ] || ! [ "$DEC_LEN" -gt 0 ] 2>/dev/null; then
-    log "VERIFY FAILED: ПДн НЕ РАСШИФРОВЫВАЮТСЯ ($ENC_TOTAL зашифрованных ФИО в копии)." >&2
-    log "  Ключ PII_ENCRYPTION_KEY не подходит к этой копии. Данные физлиц из неё" >&2
-    log "  восстановить НЕЛЬЗЯ. Найдите верный ключ, пока живой сервер ещё работает." >&2
+    log "VERIFY FAILED: ПЕРЕПИСКА НЕ РАСШИФРОВЫВАЕТСЯ ($ENC_TOTAL писем в копии)." >&2
+    log "  Ключ PII_ENCRYPTION_KEY не подходит к этой копии. Письма из неё восстановить" >&2
+    log "  НЕЛЬЗЯ. Найдите верный ключ, пока живой сервер ещё работает." >&2
     exit 1
   fi
-  log "OK: ПДн расшифровываются (проверено на 1 из $ENC_TOTAL, длина ФИО $DEC_LEN симв.)"
+  log "OK: переписка расшифровывается (1 из $ENC_TOTAL, длина письма $DEC_LEN симв.)"
 fi
 
-log "VERIFY OK: $LATEST разворачивается начисто, с данными и с читаемыми ПДн"
+log "VERIFY OK: $LATEST разворачивается начисто, с данными и с читаемой перепиской"

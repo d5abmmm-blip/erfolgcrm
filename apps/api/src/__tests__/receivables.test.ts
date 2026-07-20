@@ -19,7 +19,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { eq, like } from 'drizzle-orm';
 import {
   getDb,
-  getTenantEncryptionKey,
   invoices,
   payments,
   tickets,
@@ -45,7 +44,6 @@ import type { ResolvedTenant } from '../lib/tenant';
 import type { SessionData } from '../lib/session';
 
 let erfolgId = '';
-let encKey = '';
 let seedUserId = '';
 let clientSeq = 0;
 
@@ -56,7 +54,6 @@ const sentMail: Array<{ to: string; subject: string }> = [];
 beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
-  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
   // Любой активный пользователь тенанта — для userId в CmdCtx (аудит ручного напоминания).
   const [u] = await withTenantTx(getDb(), erfolgId, (tx) =>
     tx.select({ id: users.id }).from(users).where(eq(users.tenantId, erfolgId)).limit(1),
@@ -91,7 +88,7 @@ async function clearTestData(): Promise<void> {
 
 async function makeDebtorClient(email: string | null): Promise<string> {
   clientSeq += 1;
-  const { id } = await createClient(getDb(), erfolgId, encKey, {
+  const { id } = await createClient(getDb(), erfolgId, {
     type: 'legal',
     displayName: `${TEST_PREFIX}debtor-${Date.now()}-${clientSeq}`,
     email,

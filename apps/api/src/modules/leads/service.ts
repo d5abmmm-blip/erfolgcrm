@@ -7,7 +7,7 @@
  * - convertToClient — создаёт клиента и помечает лид won (атомарно в repository).
  */
 import { TRPCError } from '@trpc/server';
-import { getTenantEncryptionKey, type Db } from '@erfolg/db';
+import { type Db } from '@erfolg/db';
 import type { LeadStatus } from '@erfolg/shared';
 import { writeAudit } from '../../lib/audit';
 import { calculateLeadScore } from './scoring';
@@ -176,8 +176,7 @@ export async function convertLeadToClientCmd(
     });
   }
 
-  const key = getTenantEncryptionKey({ id: ctx.tenant.id, kmsKeyId: null });
-  const result = await convertLeadToClient(ctx.db, ctx.tenant.id, key, input.leadId, {
+  const result = await convertLeadToClient(ctx.db, ctx.tenant.id, input.leadId, {
     clientType: input.clientType,
     inn: input.inn,
     kpp: input.kpp,
