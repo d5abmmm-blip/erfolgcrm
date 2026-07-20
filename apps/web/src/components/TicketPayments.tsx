@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,7 +7,7 @@ import type { PaymentMethod } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { kopecksToRub } from '../lib/money';
-import { SILENT_ERROR } from '../lib/error-message';
+import { humanizeError, SILENT_ERROR } from '../lib/error-message';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
 interface Props {
@@ -28,19 +28,59 @@ const paymentSchema = z.object({
     .positive('Сумма должна быть больше 0'),
   method: z.enum(['cash', 'card', 'bank_transfer']),
   comment: z.string().trim().max(500),
+  /** Счёт, который гасит платёж. Пустая строка — платёж без счёта. */
+  invoiceId: z.string(),
 });
 
 type PaymentFormValues = z.infer<typeof paymentSchema>;
+
+/**
+ * Счета, которые ждут денег. Ровно этот набор попадает в дебиторку и именно по
+ * нему робот шлёт напоминания (`invoices/repository.ts`, RECEIVABLE_INVOICE_STATUSES).
+ * Черновик и отменённый оплатить нельзя — сервер их отклоняет.
+ */
+const PAYABLE_STATUSES = ['issued', 'partially_paid', 'overdue'] as const;
+
+export const NO_INVOICE = '';
+
+/** Счета заявки, которые ещё можно погасить платежом. */
+export function payableInvoices<T extends { status: string }>(list: readonly T[]): T[] {
+  return list.filter((i) => (PAYABLE_STATUSES as readonly string[]).includes(i.status));
+}
+
+/**
+ * Какой счёт подставить в форму. Если ждёт денег ровно один — подставляем его:
+ * это обычный случай (счёт по заявке один), и именно на нём терялась привязка.
+ * Если счетов несколько — выбирает человек, угадывать нельзя.
+ */
+export function defaultInvoiceId(payable: readonly { id: string }[]): string {
+  return payable.length === 1 ? payable[0]!.id : NO_INVOICE;
+}
 
 export function TicketPayments({ ticketId, canManage }: Props) {
   const utils = trpc.useUtils();
   const list = trpc.payments.listByTicket.useQuery({ ticketId });
   const totals = trpc.payments.getTotals.useQuery({ ticketId });
+  const invoices = trpc.invoices.listByTicket.useQuery({ ticketId });
+
+  /** Счета этой заявки, которые ещё ждут денег. */
+  const payable = useMemo(() => payableInvoices(invoices.data ?? []), [invoices.data]);
+
+  /** Номера счетов для истории платежей — включая уже оплаченные и отменённые. */
+  const invoiceNumberById = useMemo(
+    () => new Map((invoices.data ?? []).map((i) => [i.id, i.invoiceNumber])),
+    [invoices.data],
+  );
 
   const invalidate = () => {
     void utils.payments.listByTicket.invalidate({ ticketId });
     void utils.payments.getTotals.invalidate({ ticketId });
     void utils.workOrders.getByTicket.invalidate({ ticketId });
+    // Статус счёта пересчитан на сервере — обновляем и счёт, и дебиторку,
+    // иначе оплаченный счёт продолжит висеть в долгах на экране.
+    void utils.invoices.listByTicket.invalidate({ ticketId });
+    void utils.invoices.receivables.invalidate();
+    void utils.invoices.listForTenant.invalidate();
   };
 
   const add = trpc.payments.add.useMutation({ onSuccess: invalidate, meta: SILENT_ERROR });
@@ -60,23 +100,34 @@ export function TicketPayments({ ticketId, canManage }: Props) {
 
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
-    defaultValues: { amountRub: 0, method: 'cash', comment: '' },
+    defaultValues: { amountRub: 0, method: 'cash', comment: '', invoiceId: NO_INVOICE },
   });
+
+  // Счёт по заявке обычно один — подставляем его сам, чтобы оплату не забыли
+  // привязать. Раньше связь не заполнялась никогда: счёт оставался в долгах и
+  // робот слал напоминания уже заплатившему клиенту.
+  const { setValue } = form;
+  const preselected = defaultInvoiceId(payable);
+  useEffect(() => {
+    if (preselected) setValue('invoiceId', preselected);
+  }, [preselected, setValue]);
+
+  const resetForm = () =>
+    form.reset({ amountRub: 0, method: 'cash', comment: '', invoiceId: preselected });
 
   const onSubmit = (values: PaymentFormValues) => {
     setError(null);
     add.mutate(
       {
         ticketId,
+        invoiceId: values.invoiceId ? values.invoiceId : null,
         amountRub: values.amountRub,
         method: values.method,
         comment: values.comment ? values.comment : null,
       },
       {
-        onSuccess: () => {
-          form.reset({ amountRub: 0, method: 'cash', comment: '' });
-        },
-        onError: (err) => setError(err.message),
+        onSuccess: resetForm,
+        onError: (err) => setError(humanizeError(err)),
       },
     );
   };
@@ -102,6 +153,34 @@ export function TicketPayments({ ticketId, canManage }: Props) {
             <Receipt className="h-4 w-4" />
             Внести платёж
           </h3>
+
+          {payable.length > 0 && (
+            <label className="mb-2 block">
+              <span className="text-muted-foreground text-xs font-medium">Гасит счёт</span>
+              <select
+                {...form.register('invoiceId')}
+                className="bg-background mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {payable.map((inv) => (
+                  <option key={inv.id} value={inv.id}>
+                    Счёт {inv.invoiceNumber} — осталось{' '}
+                    {kopecksToRub(
+                      (
+                        BigInt(inv.totalAmountKopecks) - BigInt(inv.paidAmountKopecks)
+                      ).toString(),
+                    )}{' '}
+                    ₽
+                  </option>
+                ))}
+                <option value={NO_INVOICE}>Без счёта</option>
+              </select>
+              <span className="text-muted-foreground mt-1 block text-[11px]">
+                Пока платёж не привязан к счёту, счёт считается неоплаченным и по нему
+                уходят напоминания клиенту.
+              </span>
+            </label>
+          )}
+
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <input
               type="number"
@@ -156,6 +235,7 @@ export function TicketPayments({ ticketId, canManage }: Props) {
                 <th className="px-3 py-2 text-left font-medium">Дата</th>
                 <th className="px-3 py-2 text-left font-medium">Метод</th>
                 <th className="px-3 py-2 text-right font-medium">Сумма ₽</th>
+                <th className="px-3 py-2 text-left font-medium">Счёт</th>
                 <th className="px-3 py-2 text-left font-medium">Комментарий</th>
                 {canManage && <th className="px-2 py-2"></th>}
               </tr>
@@ -169,6 +249,13 @@ export function TicketPayments({ ticketId, canManage }: Props) {
                   <td className="px-3 py-2">{METHOD_LABEL[p.method]}</td>
                   <td className="px-3 py-2 text-right font-medium tabular-nums">
                     {kopecksToRub(p.amountKopecks)}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {p.invoiceId ? (
+                      <span className="font-mono">{invoiceNumberById.get(p.invoiceId) ?? '—'}</span>
+                    ) : (
+                      <span className="text-muted-foreground">без счёта</span>
+                    )}
                   </td>
                   <td className="text-muted-foreground px-3 py-2 text-xs">{p.comment ?? '—'}</td>
                   {canManage && (
