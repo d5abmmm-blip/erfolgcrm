@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, afterAll, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import { clients, getDb, leads, withTenantTx } from '@erfolg/db';
+import { clients, getDb, getTenantEncryptionKey, leads, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   archiveLead,
@@ -22,9 +22,38 @@ import {
   listLeads,
 } from '../modules/leads/repository';
 import { calculateLeadScore } from '../modules/leads/scoring';
+import { getClient } from '../modules/clients/repository';
+import { convertLeadToClientCmd } from '../modules/leads/service';
+import type { ResolvedTenant } from '../lib/tenant';
+import type { SessionData } from '../lib/session';
+
+/** Минимальный CmdCtx для проверки серверной валидации конвертации. */
+function makeCmdCtx() {
+  return {
+    db: getDb(),
+    tenant: {
+      id: erfolgId,
+      subdomain: 'erfolg',
+      displayName: 'ООО Эрфольг',
+      status: 'active',
+      timezone: 'Europe/Moscow',
+      kmsKeyId: null,
+    } as ResolvedTenant,
+    session: {
+      tenantId: erfolgId,
+      userId: null,
+      username: 'director',
+      role: 'director',
+      fullName: 'Director',
+      expiresAt: Date.now() + 60_000,
+    } as unknown as SessionData,
+    audit: { ip: null, userAgent: null },
+  };
+}
 
 let erfolgId = '';
 let demoId = '';
+let encKey = '';
 
 const TEST_PREFIX = 'TEST-LEAD-';
 
@@ -32,6 +61,7 @@ beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
   demoId = seed.demoId;
+  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
 });
 
 async function clearTestData(): Promise<void> {
@@ -123,7 +153,7 @@ describe('leads — конвертация и воронка', () => {
       score: 60,
     });
 
-    const res = await convertLeadToClient(getDb(), erfolgId, id, {
+    const res = await convertLeadToClient(getDb(), erfolgId, encKey, id, {
       clientType: 'legal',
       inn: '7712345678',
       kpp: '771201001',
@@ -135,7 +165,9 @@ describe('leads — конвертация и воронка', () => {
     expect(lead?.convertedClientId).toBe(res!.clientId);
 
     // повторная конвертация — null (идемпотентность)
-    expect(await convertLeadToClient(getDb(), erfolgId, id, { clientType: 'legal' })).toBeNull();
+    expect(
+      await convertLeadToClient(getDb(), erfolgId, encKey, id, { clientType: 'legal' }),
+    ).toBeNull();
 
     // клиент реально создан в том же тенанте с реквизитами лида
     const client = await withTenantTx(getDb(), erfolgId, (tx) =>
@@ -143,6 +175,61 @@ describe('leads — конвертация и воронка', () => {
     );
     expect(client[0]?.displayName).toBe(`${TEST_PREFIX}ConvertMe`);
     expect(client[0]?.inn).toBe('7712345678');
+  });
+
+  it('физлицо: ФИО шифруется, телефон и адрес переносятся, имя — инициалами', async () => {
+    // Ветка individual раньше не была покрыта — она и дала баг: телефон, адрес
+    // и email обнулялись явно, ФИО не заполнялось вовсе, карточка выходила
+    // пустой и звонить было некуда.
+    const { id } = await createLead(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}Заявка с сайта`,
+      phone: '+79281234567',
+      email: 'petrov@example.test',
+      address: 'г. Грозный, ул. Победы, 1',
+      source: 'website',
+      score: 40,
+    });
+
+    const res = await convertLeadToClient(getDb(), erfolgId, encKey, id, {
+      clientType: 'individual',
+      individualFullName: 'Петров Пётр Петрович',
+    });
+    expect(res).not.toBeNull();
+
+    const dto = await getClient(getDb(), erfolgId, encKey, res!.clientId);
+    expect(dto?.individualFullName).toBe('Петров Пётр Петрович');
+    expect(dto?.individualPhone).toBe('+79281234567');
+    expect(dto?.individualAddress).toBe('г. Грозный, ул. Победы, 1');
+    expect(dto?.email).toBe('petrov@example.test');
+    // Имя карточки — из ФИО, а не «Заявка с сайта».
+    expect(dto?.displayName).toBe('Петров П.П.');
+
+    // ПДн лежат зашифрованными, а не открытым текстом.
+    const raw = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({ enc: clients.fullNameEncrypted })
+        .from(clients)
+        .where(eq(clients.id, res!.clientId)),
+    );
+    const buf = raw[0]?.enc as unknown as Buffer | null;
+    expect(buf).toBeTruthy();
+    expect(buf!.toString('utf8')).not.toContain('Петров');
+  });
+
+  it('физлицо без ФИО не создаётся — инвариант больше не обходится', async () => {
+    const { id } = await createLead(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}БезФИО`,
+      source: 'website',
+      score: 10,
+    });
+
+    await expect(
+      convertLeadToClientCmd(makeCmdCtx(), { leadId: id, clientType: 'individual' }),
+    ).rejects.toThrow(/Для физлица обязательно ФИО/);
+
+    // Лид не помечен сконвертированным — можно повторить с ФИО.
+    const lead = await getLeadById(getDb(), erfolgId, id);
+    expect(lead?.convertedClientId).toBeNull();
   });
 
   it('leadFunnelStats считает стадии', async () => {

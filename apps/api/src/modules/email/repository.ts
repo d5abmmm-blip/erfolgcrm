@@ -6,6 +6,7 @@
  * пароли — только флагом hasPassword, тело/тема/адрес — расшифрованными через decryptSql.
  */
 import { and, asc, count, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { ruIlike } from '../../lib/ru-search';
 import {
   clients,
   contacts,
@@ -285,8 +286,15 @@ export async function listMessages(
   }
   if (opts.search && opts.search.trim()) {
     const q = `%${opts.search.trim()}%`;
+    // ruIlike вместо ILIKE: база в локали «C», где ILIKE сворачивает регистр
+    // только для латиницы. «Гастроскоп» по запросу «гастроскоп» не находился
+    // вообще — не «иногда», а никогда. Почта осталась единственным модулем,
+    // выпавшим из этой правки при аудите 2026-06-11.
+    // Поле «От кого» в поиск сознательно НЕ добавлено: каждое условие — это
+    // ещё один pgp_sym_decrypt на строку, а фильтр и так выполняется дважды
+    // (страница + count).
     filters.push(
-      sql`(${decryptSql(emailMessages.subjectEnc, key)} ILIKE ${q} OR ${decryptSql(emailMessages.toAddrEnc, key)} ILIKE ${q})`,
+      sql`(${ruIlike(decryptSql(emailMessages.subjectEnc, key), q)} OR ${ruIlike(decryptSql(emailMessages.toAddrEnc, key), q)})`,
     );
   }
   const where = filters.length ? and(...filters) : undefined;

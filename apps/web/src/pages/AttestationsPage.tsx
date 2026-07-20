@@ -119,7 +119,18 @@ export function AttestationsPage() {
                 </td>
               </tr>
             )}
-            {listQ.data?.length === 0 && (
+            {/* Без этой ветки сбой загрузки выглядел как пустая таблица, и
+                директор читал её как «допусков не заведено». */}
+            {listQ.error && (
+              <tr>
+                <td colSpan={isDirector ? 6 : 5} className="p-6">
+                  <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-3 text-sm">
+                    Не удалось загрузить аттестации: {listQ.error.message}
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!listQ.error && listQ.data?.length === 0 && (
               <tr>
                 <td colSpan={isDirector ? 6 : 5} className="text-muted-foreground p-6 text-center">
                   Аттестации не заведены

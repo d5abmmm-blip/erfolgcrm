@@ -41,6 +41,7 @@ export function LeadCardPage() {
   const [clientType, setClientType] = useState<'legal' | 'individual'>('legal');
   const [inn, setInn] = useState('');
   const [kpp, setKpp] = useState('');
+  const [individualFullName, setIndividualFullName] = useState('');
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   const invalidate = async () => {
@@ -265,7 +266,7 @@ export function LeadCardPage() {
                   <option value="legal">Юрлицо</option>
                   <option value="individual">Физлицо</option>
                 </select>
-                {clientType === 'legal' && (
+                {clientType === 'legal' ? (
                   <>
                     <input
                       value={inn}
@@ -280,8 +281,22 @@ export function LeadCardPage() {
                       className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
                     />
                   </>
+                ) : (
+                  /* ФИО спрашиваем, а не берём из названия лида: там столь же
+                     часто «Заявка с сайта», а поле уходит в зашифрованные ПДн. */
+                  <input
+                    value={individualFullName}
+                    onChange={(e) => setIndividualFullName(e.target.value)}
+                    placeholder="ФИО полностью"
+                    className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 sm:col-span-2"
+                  />
                 )}
               </div>
+              {clientType === 'individual' && (
+                <div className="text-muted-foreground text-xs">
+                  Телефон и адрес перенесутся из лида автоматически.
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -292,13 +307,18 @@ export function LeadCardPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={convert.isPending}
+                  disabled={
+                    convert.isPending ||
+                    (clientType === 'individual' && !individualFullName.trim())
+                  }
                   onClick={() =>
                     convert.mutate({
                       leadId: id,
                       clientType,
                       inn: clientType === 'legal' ? inn.trim() || null : null,
                       kpp: clientType === 'legal' ? kpp.trim() || null : null,
+                      individualFullName:
+                        clientType === 'individual' ? individualFullName.trim() : null,
                     })
                   }
                   className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"

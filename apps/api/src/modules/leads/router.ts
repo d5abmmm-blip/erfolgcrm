@@ -88,6 +88,8 @@ export const leadsRouter = router({
         clientType: z.enum(['legal', 'individual']).default('legal'),
         inn: z.string().trim().max(12).nullable().optional(),
         kpp: z.string().trim().max(9).nullable().optional(),
+        /** Обязательно для физлица — проверяется в сервисе. */
+        individualFullName: z.string().trim().max(200).nullable().optional(),
       }),
     )
     .mutation(({ ctx, input }) => convertLeadToClientCmd(buildCmdCtx(ctx), input)),

@@ -7,7 +7,7 @@
  * - convertToClient — создаёт клиента и помечает лид won (атомарно в repository).
  */
 import { TRPCError } from '@trpc/server';
-import type { Db } from '@erfolg/db';
+import { getTenantEncryptionKey, type Db } from '@erfolg/db';
 import type { LeadStatus } from '@erfolg/shared';
 import { writeAudit } from '../../lib/audit';
 import { calculateLeadScore } from './scoring';
@@ -165,10 +165,23 @@ export async function convertLeadToClientCmd(
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Лид уже сконвертирован в клиента' });
   }
 
-  const result = await convertLeadToClient(ctx.db, ctx.tenant.id, input.leadId, {
+  // Тот же инвариант, что в clients/service.ts («Для физлица обязательно ФИО»).
+  // Дублируем сознательно: звать createClientCmd отсюда нельзя, иначе развалится
+  // единая транзакция «создать клиента + пометить лид» и повторный клик заведёт
+  // второго клиента.
+  if (input.clientType === 'individual' && !input.individualFullName?.trim()) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Для физлица обязательно ФИО',
+    });
+  }
+
+  const key = getTenantEncryptionKey({ id: ctx.tenant.id, kmsKeyId: null });
+  const result = await convertLeadToClient(ctx.db, ctx.tenant.id, key, input.leadId, {
     clientType: input.clientType,
     inn: input.inn,
     kpp: input.kpp,
+    individualFullName: input.individualFullName,
   });
   if (!result) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Не удалось сконвертировать лид' });
