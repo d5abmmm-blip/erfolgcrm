@@ -347,6 +347,58 @@ async function resolveLineCost(
   return last[0]?.cost ?? 0n;
 }
 
+/**
+ * Себестоимость при ПРАВКЕ строки: пересчитать или сохранить снимок.
+ *
+ * Правило одно: пересчитываем только тогда, когда пользователь сам сообщил
+ * что-то, от чего себестоимость зависит. Во всех остальных случаях снимок
+ * сохраняется — пересчёт «по текущему состоянию» подставил бы СЕГОДНЯШНИЕ
+ * цифры в наряд двухлетней давности (средневзвешенная по нынешним партиям
+ * склада, нынешняя ставка инженера). Это тихая подмена истории, она хуже
+ * честного нуля.
+ *
+ *   • expense  — себестоимость это и есть цена, пересчитываем всегда,
+ *                иначе у внутреннего расхода появится выдуманная маржа;
+ *   • сменился тип строки — старый снимок бессмыслен, считаем заново;
+ *   • work + прислали ДРУГОГО инженера — пользователь явно утверждает,
+ *                что работу делал другой, снимок пересчитываем по нему;
+ *   • во всех прочих случаях — СОХРАНЯЕМ.
+ *
+ * Настоящую себестоимость запчасти проставляет только выдача со склада
+ * (inventory-movements/repository.ts — средневзвешенная по фактически
+ * списанным партиям). Ниоткуда больше её взять нельзя: денежных колонок
+ * в inventory_movements нет.
+ */
+async function resolveCostForUpdate(
+  tx: Tx,
+  input: UpsertLineInput,
+  existing:
+    | { lineType: WorkOrderLineType; engineerId: string | null; costPerUnitKopecks: bigint }
+    | undefined,
+): Promise<bigint> {
+  if (input.lineType === 'expense') return input.unitPriceKopecks;
+  if (!existing) {
+    return resolveLineCost(tx, {
+      lineType: input.lineType,
+      inventoryItemId: undefined,
+      engineerId: input.engineerId ?? null,
+      unitPriceKopecks: input.unitPriceKopecks,
+    });
+  }
+  const typeChanged = existing.lineType !== input.lineType;
+  const engineerChanged =
+    input.engineerId !== undefined && input.engineerId !== existing.engineerId;
+  if (typeChanged || (input.lineType === 'work' && engineerChanged)) {
+    return resolveLineCost(tx, {
+      lineType: input.lineType,
+      inventoryItemId: undefined,
+      engineerId: input.engineerId ?? null,
+      unitPriceKopecks: input.unitPriceKopecks,
+    });
+  }
+  return existing.costPerUnitKopecks;
+}
+
 export async function upsertLine(
   db: Db,
   tenantId: string,
@@ -356,16 +408,23 @@ export async function upsertLine(
 ): Promise<{ id: string }> {
   const amount = calcAmountKopecks(input.quantity, input.unitPriceKopecks);
   return withTenantTx(db, tenantId, async (tx) => {
-    // 8.C: snapshot cost. На update — только если меняется тип/инженер/itemId/unitPrice
-    // (т.е. при любом изменении пересчитываем — простота важнее микро-оптимизации).
-    const costPerUnit = await resolveLineCost(tx, {
-      lineType: input.lineType,
-      inventoryItemId: undefined,
-      engineerId: input.engineerId ?? null,
-      unitPriceKopecks: input.unitPriceKopecks,
-    });
     let resultId: string;
     if (lineId) {
+      // Правка строки — ЧАСТИЧНАЯ. Веб шлёт только name/unit/quantity/unitPrice
+      // (WorkOrderEditor), поэтому полная перезапись затирала бы то, чего в
+      // запросе нет: себестоимость, инженера строки и комментарий.
+      const [existing] = await tx
+        .select({
+          lineType: workOrderLines.lineType,
+          engineerId: workOrderLines.engineerId,
+          costPerUnitKopecks: workOrderLines.costPerUnitKopecks,
+        })
+        .from(workOrderLines)
+        .where(and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)))
+        .limit(1);
+
+      const costPerUnit = await resolveCostForUpdate(tx, input, existing);
+
       await tx
         .update(workOrderLines)
         .set({
@@ -376,8 +435,10 @@ export async function upsertLine(
           unitPriceKopecks: input.unitPriceKopecks,
           amountKopecks: amount,
           costPerUnitKopecks: costPerUnit,
-          engineerId: input.engineerId ?? null,
-          comment: input.comment ?? null,
+          // undefined = поле не прислали → не трогаем колонку.
+          // Явный null = «убрать» и приходит только осознанно.
+          ...(input.engineerId !== undefined ? { engineerId: input.engineerId } : {}),
+          ...(input.comment !== undefined ? { comment: input.comment } : {}),
           ...(input.orderIdx !== undefined ? { orderIdx: input.orderIdx } : {}),
         })
         .where(
@@ -385,6 +446,12 @@ export async function upsertLine(
         );
       resultId = lineId;
     } else {
+      const costPerUnit = await resolveLineCost(tx, {
+        lineType: input.lineType,
+        inventoryItemId: undefined,
+        engineerId: input.engineerId ?? null,
+        unitPriceKopecks: input.unitPriceKopecks,
+      });
       const inserted = await tx
         .insert(workOrderLines)
         .values({

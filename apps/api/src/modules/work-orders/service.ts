@@ -169,8 +169,8 @@ export async function upsertLineCmd(
       unit: input.unit,
       quantity: input.quantity,
       unitPriceKopecks: input.unitPriceKopecks,
-      engineerId: input.engineerId ?? null,
-      comment: input.comment ?? null,
+      engineerId: input.engineerId,
+      comment: input.comment,
       orderIdx: input.orderIdx,
     },
   );

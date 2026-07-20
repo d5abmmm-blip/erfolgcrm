@@ -71,8 +71,10 @@ export const workOrdersRouter = router({
         unit: input.line.unit,
         quantity: input.line.quantity,
         unitPriceKopecks: BigInt(input.line.unitPriceRub) * 100n,
-        engineerId: input.line.engineerId ?? null,
-        comment: input.line.comment ?? null,
+        // Без `?? null`: «поле не прислали» должно отличаться от «сбросить в
+        // пусто», иначе правка строки из веба затирает инженера и комментарий.
+        engineerId: input.line.engineerId,
+        comment: input.line.comment,
         orderIdx: input.line.orderIdx,
       }),
     ),
