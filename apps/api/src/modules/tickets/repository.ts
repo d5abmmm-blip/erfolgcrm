@@ -517,6 +517,7 @@ export async function searchTickets(
     assetModel: string | null;
   }>
 > {
+  const exact = q.trim().toLowerCase();
   const query = `%${q.trim()}%`;
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
@@ -534,13 +535,21 @@ export async function searchTickets(
           isNull(tickets.deletedAt),
           or(
             ruIlike(tickets.ticketNumber, query),
+            ruIlike(tickets.barcode, query),
             ruIlike(clients.displayName, query),
             ruIlike(assets.model, query),
             ruIlike(assets.serialNumber, query),
           ),
         ),
       )
-      .orderBy(desc(tickets.receivedAt))
+      // Сканер (/m/scan) молча открывает ПЕРВУЮ найденную заявку, а поиск
+      // подстрочный: короткий код может оказаться частью длинного
+      // (импортированные WSP-123 ⊂ WSP-1234). Точное совпадение по штрих-коду
+      // поднимаем наверх, иначе инженер попадёт в более свежую чужую заявку.
+      .orderBy(
+        sql`case when lower(${tickets.barcode} COLLATE "ru-x-icu") = ${exact} then 0 else 1 end`,
+        desc(tickets.receivedAt),
+      )
       .limit(10);
     return rows.map((r) => ({ ...r, clientDisplayName: r.clientDisplayName ?? '' }));
   });
