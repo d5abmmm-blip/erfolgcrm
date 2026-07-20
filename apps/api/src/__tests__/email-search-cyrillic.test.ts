@@ -7,12 +7,13 @@
  * что заявки и клиенты в аудите 2026-06-11. Почта осталась единственным
  * модулем, выпавшим из той волны.
  *
- * Поля письма зашифрованы, поэтому фильтр идёт по pgp_sym_decrypt — ruIlike
- * поверх расшифровки работает, это и проверяем.
+ * С миграции 0079 поля письма лежат ОТКРЫТО, и ruIlike работает прямо по колонке.
+ * Раньше фильтр шёл через pgp_sym_decrypt на каждой строке — по этой же причине
+ * поле «От кого» в поиск не включали вовсе (см. тесты ниже).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { getDb, getTenantEncryptionKey, withTenantTx } from '@erfolg/db';
+import { getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { insertEmailMessage } from '../lib/email-journal';
 import { listMessages } from '../modules/email/repository';
@@ -20,20 +21,18 @@ import { listMessages } from '../modules/email/repository';
 const TEST_PREFIX = 'TESTMAILRU-';
 
 let erfolgId = '';
-let encKey = '';
 const stamp = String(Date.now()).slice(-8);
 
 beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
-  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
 });
 
 async function clearTestData(): Promise<void> {
   await withTenantTx(getDb(), erfolgId, async (tx) => {
     await tx.execute(sql`
       DELETE FROM email_messages
-       WHERE pgp_sym_decrypt(subject_encrypted::bytea, ${encKey})::text LIKE ${`${TEST_PREFIX}%`}
+       WHERE subject LIKE ${`${TEST_PREFIX}%`} OR from_addr LIKE ${`${TEST_PREFIX}%`}
     `);
   });
 }
@@ -50,7 +49,7 @@ describe('поиск по почте: русский регистр', () => {
       sentAt: new Date(),
     });
 
-    const found = await listMessages(getDb(), erfolgId, encKey, {
+    const found = await listMessages(getDb(), erfolgId, {
       search: `гастроскоп ${stamp}`,
       pageSize: 50,
     });
@@ -67,7 +66,7 @@ describe('поиск по почте: русский регистр', () => {
       sentAt: new Date(),
     });
 
-    const found = await listMessages(getDb(), erfolgId, encKey, {
+    const found = await listMessages(getDb(), erfolgId, {
       search: `СЧЁТ НА ОПЛАТУ ${stamp}`,
       pageSize: 50,
     });
@@ -83,7 +82,7 @@ describe('поиск по почте: русский регистр', () => {
       sentAt: new Date(),
     });
 
-    const found = await listMessages(getDb(), erfolgId, encKey, {
+    const found = await listMessages(getDb(), erfolgId, {
       search: `гастроскоп ${stamp}`,
       pageSize: 50,
     });
@@ -100,7 +99,7 @@ describe('поиск по почте: русский регистр', () => {
       sentAt: new Date(),
     });
 
-    const found = await listMessages(getDb(), erfolgId, encKey, {
+    const found = await listMessages(getDb(), erfolgId, {
       search: `invoice ${stamp}`,
       pageSize: 50,
     });

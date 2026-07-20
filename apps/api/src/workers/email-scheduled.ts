@@ -59,7 +59,7 @@ export async function processScheduledSend(payload: ScheduledPayload): Promise<v
   const db = getDb();
   const key = getTenantEncryptionKey({ id: tenantId, kmsKeyId: null });
 
-  const msg = await getMessage(db, tenantId, key, messageId);
+  const msg = await getMessage(db, tenantId, messageId);
   // Идемпотентность: шлём только если письмо всё ещё запланировано.
   if (!msg || msg.status !== 'scheduled') {
     logger.info({ tenantId, messageId, status: msg?.status }, 'email-scheduled: пропуск (не scheduled)');
@@ -105,7 +105,7 @@ export async function processScheduledSend(payload: ScheduledPayload): Promise<v
 
   const threadId = computeThreadId(msg.inReplyTo ?? null, msg.references ?? null, sentMessageId);
 
-  await finalizeMessageSend(db, tenantId, key, messageId, {
+  await finalizeMessageSend(db, tenantId, messageId, {
     status,
     to: msg.to,
     from: transport?.from ?? cfg?.from ?? null,

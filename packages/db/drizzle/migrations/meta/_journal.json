@@ -491,6 +491,13 @@
       "when": 1778501700000,
       "tag": "0078_plaintext_client_pii",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1778501800000,
+      "tag": "0079_plaintext_email",
+      "breakpoints": true
     }
   ]
 }

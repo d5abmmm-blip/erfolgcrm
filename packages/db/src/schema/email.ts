@@ -64,7 +64,23 @@ export const emailMessages = pgTable(
       .$type<'sent' | 'skipped' | 'failed' | 'received' | 'draft' | 'scheduled'>()
       .notNull(),
 
-    // ПДн — шифруются (152-ФЗ). Читаются только через decryptSql, наружу сырой bytea не отдаём.
+    /**
+     * Переписка с клиентами. Хранится ОТКРЫТО — см. миграцию 0079.
+     * Ключ шифрования лежал на том же сервере, что и база, поэтому от её кражи
+     * не защищал, а его потеря делала переписку нечитаемой навсегда. Вдобавок
+     * фильтр поиска расшифровывал каждую строку дважды за запрос (~9 сек на 5000 писем).
+     */
+    toAddr: text('to_addr'),
+    fromAddr: text('from_addr'),
+    subject: text('subject'),
+    bodyText: text('body_text'),
+    bodyHtml: text('body_html'),
+
+    /**
+     * @deprecated Шифрованные колонки-предшественники. Данные перенесены скриптом
+     * `decrypt-pii`, код их больше не читает и не пишет. Оставлены до миграции-уборки,
+     * чтобы откат стоил ноль. НЕ использовать в новом коде.
+     */
     toAddrEnc: encryptedText('to_addr_encrypted'),
     fromAddrEnc: encryptedText('from_addr_encrypted'),
     subjectEnc: encryptedText('subject_encrypted'),
@@ -99,9 +115,12 @@ export const emailMessages = pgTable(
 
     // ── Полноценный клиент (0045): черновики, отложенная отправка, копии ──
     // Корзина — через стандартный deletedAt из ...timestamps (мягкое удаление).
-    /** Копия (CC) — ПДн, шифруется как to/from. */
+    /** Копия (CC). Открыто, как и остальная переписка — см. миграцию 0079. */
+    ccAddr: text('cc_addr'),
+    /** Скрытая копия (BCC). Открыто. */
+    bccAddr: text('bcc_addr'),
+    /** @deprecated Предшественники ccAddr/bccAddr, ждут миграции-уборки. */
     ccAddrEnc: encryptedText('cc_addr_encrypted'),
-    /** Скрытая копия (BCC) — ПДн, шифруется. */
     bccAddrEnc: encryptedText('bcc_addr_encrypted'),
     /** Время отложенной отправки (status='scheduled'); NULL у обычных писем. */
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
