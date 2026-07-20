@@ -11,6 +11,7 @@ import { getTenantEncryptionKey, type Db } from '@erfolg/db';
 import { writeAudit } from '../../lib/audit';
 import {
   archiveClient as repoArchiveClient,
+  unarchiveClient as repoUnarchiveClient,
   createClient as repoCreateClient,
   createContact as repoCreateContact,
   deleteContact as repoDeleteContact,
@@ -132,6 +133,30 @@ export async function archiveClientCmd(
     entityType: 'client',
     entityId: id,
     context: reason ? { reason } : null,
+    ip: audit.ip ?? null,
+    userAgent: audit.userAgent ?? null,
+  });
+}
+
+export async function unarchiveClientCmd(
+  db: Db,
+  tenant: ResolvedTenant,
+  session: SessionData,
+  audit: AuditCtx,
+  id: string,
+): Promise<void> {
+  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
+  const before = await repoGetClient(db, tenant.id, key, id);
+  if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
+  // Идемпотентно: повторный возврат уже активного клиента не ошибка, а «ничего
+  // делать не надо». Так безопаснее для двойного клика по кнопке.
+  if (before.status === 'active') return;
+  await repoUnarchiveClient(db, tenant.id, id);
+  await writeAudit(db, tenant.id, {
+    userId: session.userId,
+    action: 'restore',
+    entityType: 'client',
+    entityId: id,
     ip: audit.ip ?? null,
     userAgent: audit.userAgent ?? null,
   });

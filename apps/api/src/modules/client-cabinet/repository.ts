@@ -176,6 +176,22 @@ export async function findClientUserByEmail(
   });
 }
 
+/** Клиент в архиве? Кабинет архивного клиента работать не должен. */
+export async function isClientArchived(
+  db: Db,
+  tenantId: string,
+  clientId: string,
+): Promise<boolean> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ status: clients.status })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .limit(1);
+    return rows[0]?.status === 'archived';
+  });
+}
+
 export async function getClientUserById(
   db: Db,
   tenantId: string,

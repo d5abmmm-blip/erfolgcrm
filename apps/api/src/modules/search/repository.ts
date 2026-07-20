@@ -40,6 +40,13 @@ export interface ClientHit {
   displayName: string;
   type: 'legal' | 'individual';
   inn: string | null;
+  /**
+   * Архивных из выдачи НЕ убираем: список клиентов уже умеет их показывать
+   * (вкладка «Архив»), а глобальный поиск — самый быстрый способ понять,
+   * почему клиент не выбирается в новой заявке. Прятать значит отвечать
+   * «не найдено» на существующего клиента. Вместо этого помечаем.
+   */
+  status: 'active' | 'archived';
 }
 
 export interface AssetHit {
@@ -132,6 +139,7 @@ async function searchClientsHits(
         displayName: clients.displayName,
         type: clients.type,
         inn: clients.inn,
+        status: clients.status,
       })
       .from(clients)
       .where(
