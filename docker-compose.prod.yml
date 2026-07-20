@@ -1,10 +1,12 @@
-# Production-каркас для ErfolgCRM v2.
+# Production-конфигурация ErfolgCRM v2.
 #
-# Это БАЗОВЫЙ скелет — реальный продакшн обычно идёт в systemd на bare-metal
-# (см. docs/deploy-checklist.md), но этот compose-файл полезен для:
-#   - staging-окружения на отдельном сервере;
-#   - быстрого восстановления конфигурации после rebuild;
-#   - локальной репродукции prod-багов.
+# ЭТИМ ФАЙЛОМ ПОДНЯТ БОЕВОЙ СЕРВЕР (crm.erfolgmt.ru). Он применяется вместе с
+# серверным оверлеем `docker-compose.server.yml`, который лежит ТОЛЬКО на сервере
+# (в репозитории его нет) и задаёт публичный адрес API и том для вложений:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.server.yml up -d
+#
+# TLS и внешний доступ — Caddy на хосте. Порядок деплоя и восстановления:
+# docs/backup-runbook.md и docs/disaster-recovery.md.
 #
 # Запуск:
 #   1. Скопировать .env.example в .env и заполнить ВСЕ production-секреты.
@@ -94,7 +96,7 @@ services:
 
   web:
     # Статика React+Vite, раздаётся nginx-контейнером.
-    # Альтернатива — раздавать напрямую с хостового nginx (см. deploy-checklist.md).
+    # Наружу его публикует Caddy на хосте (он же терминирует TLS).
     build:
       context: .
       dockerfile: apps/web/Dockerfile
