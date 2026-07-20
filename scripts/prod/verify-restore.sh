@@ -9,6 +9,11 @@
 # Зачем: ночной backup-db.sh проверяет дамп лишь на «непустой + валидный архив», но не на
 # то, что он реально РАЗВОРАЧИВАЕТСЯ с данными. Этот скрипт закрывает пробел.
 #
+# Отдельно проверяется РАСШИФРОВКА ПДн. Раньше скрипт считал только количество строк и
+# писал «VERIFY OK» — то есть горел зелёным даже в случае, когда ФИО и телефоны физлиц
+# уже нечитаемы, потому что ключ (PII_ENCRYPTION_KEY) не тот или потерян. Обнаружилось бы
+# это только в катастрофе, когда чинить поздно. Теперь несовпадение ключа = VERIFY FAILED.
+#
 # Еженедельный крон (РАЗОВО):
 #   chmod +x /root/erfolgcrm/scripts/prod/verify-restore.sh
 #   ( crontab -l 2>/dev/null; \
@@ -17,9 +22,12 @@
 set -uo pipefail
 
 CONTAINER="${BACKUP_PG_CONTAINER:-erfolgcrm-postgres-prod}"
+API_CONTAINER="${BACKUP_API_CONTAINER:-erfolgcrm-api-prod}"
 PGUSER_="${BACKUP_PG_USER:-erfolg}"
 DIR="${BACKUP_DIR:-/root/backups}"
 TESTDB="${VERIFY_TEST_DB:-erfolg_restore_verify}"
+# Корень проекта: скрипт лежит в <корень>/scripts/prod/, поэтому поднимаемся на два уровня.
+PROJECT_DIR="${BACKUP_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 log() { echo "$(date '+%F %T') $*"; }
 
@@ -86,4 +94,47 @@ if [ "$FAILED" -ne 0 ]; then
   log "VERIFY FAILED: $LATEST восстанавливается, но ключевые таблицы пусты/битые" >&2
   exit 1
 fi
-log "VERIFY OK: $LATEST разворачивается начисто и с данными"
+
+# ───────── Расшифровка ПДн: главная проверка ─────────
+# Строки в таблицах — ещё не «данные вернулись». ФИО и телефоны физлиц лежат
+# зашифрованными (pgp_sym_encrypt ключом PII_ENCRYPTION_KEY). Не тот ключ — pgp_sym_decrypt
+# падает с ошибкой, и это единственный способ узнать заранее, что данные уже не восстановить.
+#
+# Ключ берём ИЗ ЖИВОГО api-контейнера: так проверяется именно тот ключ, которым
+# приложение шифрует сейчас. Фолбэк — .env проекта, затем переменная окружения.
+PII_KEY="$(docker exec "$API_CONTAINER" printenv PII_ENCRYPTION_KEY 2>/dev/null)"
+if [ -z "${PII_KEY:-}" ] && [ -f "$PROJECT_DIR/.env" ]; then
+  PII_KEY="$(grep -E '^PII_ENCRYPTION_KEY=' "$PROJECT_DIR/.env" | head -1 | cut -d= -f2- | tr -d '"'"'"'')"
+fi
+[ -z "${PII_KEY:-}" ] && PII_KEY="${PII_ENCRYPTION_KEY:-}"
+
+if [ -z "${PII_KEY:-}" ]; then
+  log "VERIFY FAILED: не удалось получить PII_ENCRYPTION_KEY — расшифровку ПДн проверить нечем" >&2
+  exit 1
+fi
+
+# Сколько всего зашифрованных ФИО физлиц есть в копии.
+ENC_TOTAL="$(docker exec "$CONTAINER" psql -U "$PGUSER_" -d "$TESTDB" -At \
+  -c "SELECT count(*) FROM clients WHERE full_name_encrypted IS NOT NULL" 2>/dev/null)"
+
+if [ -z "${ENC_TOTAL:-}" ] || [ "$ENC_TOTAL" = "0" ]; then
+  # Не проваливаем: у свежей инсталляции физлиц может не быть вовсе.
+  log "WARN: в копии нет зашифрованных ФИО — расшифровку проверить не на чем" >&2
+else
+  # Ключ передаём через stdin, а не аргументом: иначе он был бы виден в `ps` любому
+  # процессу на хосте. В лог печатаем только длину результата, не сам текст (это ПДн).
+  DEC_LEN="$(printf '%s' "
+    SELECT length(pgp_sym_decrypt(full_name_encrypted::bytea, '$PII_KEY')::text)
+    FROM clients WHERE full_name_encrypted IS NOT NULL LIMIT 1;
+  " | docker exec -i "$CONTAINER" psql -U "$PGUSER_" -d "$TESTDB" -At -f - 2>/dev/null)"
+
+  if [ -z "${DEC_LEN:-}" ] || ! [ "$DEC_LEN" -gt 0 ] 2>/dev/null; then
+    log "VERIFY FAILED: ПДн НЕ РАСШИФРОВЫВАЮТСЯ ($ENC_TOTAL зашифрованных ФИО в копии)." >&2
+    log "  Ключ PII_ENCRYPTION_KEY не подходит к этой копии. Данные физлиц из неё" >&2
+    log "  восстановить НЕЛЬЗЯ. Найдите верный ключ, пока живой сервер ещё работает." >&2
+    exit 1
+  fi
+  log "OK: ПДн расшифровываются (проверено на 1 из $ENC_TOTAL, длина ФИО $DEC_LEN симв.)"
+fi
+
+log "VERIFY OK: $LATEST разворачивается начисто, с данными и с читаемыми ПДн"
