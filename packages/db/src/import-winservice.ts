@@ -17,7 +17,7 @@
  * Маппинг и компромиссы — см. README рядом с экспортом и комментарии ниже.
  */
 import 'dotenv/config';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,13 +52,18 @@ const DATABASE_URL =
   'postgresql://erfolg:dev_only_password@localhost:5432/erfolg_dev';
 
 /**
- * Пароль-заглушка для перенесённых сотрудников. Аккаунты создаются НЕАКТИВНЫМИ
- * (isActive:false): они нужны как ссылки «кто делал наряд/менял статус», но войти нельзя,
- * пока директор явно не активирует нужного человека и не задаст ему нормальный пароль.
- * Так на боевой базе не появляется пачка живых логинов с общим паролем (в старой базе
- * несколько «Администраторов» → роль director с полным доступом к финансам и ПДн).
+ * У перенесённых сотрудников НЕТ известного пароля: каждому кладём СВОЙ случайный,
+ * который нигде не печатается и никуда не сохраняется. Аккаунты нужны как ссылки
+ * «кто делал наряд/менял статус» и создаются НЕАКТИВНЫМИ (isActive:false).
+ *
+ * Раньше здесь лежал один общий пароль открытым текстом в репозитории. Пока аккаунты
+ * заблокированы, войти нельзя, но в момент активации у человека сразу появлялся рабочий
+ * вход с общеизвестным паролем — и в старой базе несколько таких были «Администраторами»
+ * (роль director: полный доступ к финансам и ПДн).
+ *
+ * Пароль сотруднику выдаёт директор при активации — `users.setActive` генерирует новый
+ * и показывает его один раз (см. apps/api/src/modules/users/repository.ts).
  */
-const TEMP_PASSWORD = 'Erfolg-Import-2026';
 
 // ───────────────────────── helpers ─────────────────────────
 type Row = Record<string, unknown>;
@@ -228,11 +233,14 @@ async function main(): Promise<void> {
   const positionOf = (role: string): string =>
     role === 'director' ? 'Администратор' : role === 'dispatcher' ? 'Приёмщик' : 'Инженер';
 
-  const passwordHash = DRY_RUN ? 'dryrun' : await argonHash(TEMP_PASSWORD);
   const userRows: Array<typeof users.$inferInsert> = [];
   for (const u of T.OUSER ?? []) {
     const oldId = int(u.ID);
     if (oldId == null) continue;
+    // Свой неугадываемый пароль каждому — общего пароля не существует ни у кого.
+    // Читаемость не нужна: этот пароль никто никогда не вводит, при активации
+    // директор получает новый (см. users.setActive).
+    const passwordHash = DRY_RUN ? 'dryrun' : await argonHash(randomUUID());
     const fullName = clip(u.DESCRIPTION, 200) ?? `Сотрудник ${oldId}`;
     const role = roleOf(int(u.OROLEID));
     let base = translit(fullName) || `user${oldId}`;
