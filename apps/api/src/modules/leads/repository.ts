@@ -8,8 +8,9 @@
  * Имя ответственного резолвится left join'ом на users.full_name.
  */
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
-import { clients, leads, users, withTenantTx, type Db } from '@erfolg/db';
+import { leads, users, withTenantTx, type Db } from '@erfolg/db';
 import { ruIlike } from '../../lib/ru-search';
+import { buildDisplayNameFromFio } from '../../lib/person-name';
 import type { LeadLostReason, LeadSource, LeadStatus } from '@erfolg/shared';
 
 export interface LeadDto {
@@ -88,6 +89,12 @@ export interface ConvertOpts {
   clientType: 'legal' | 'individual';
   inn?: string | null;
   kpp?: string | null;
+  /**
+   * ФИО физлица. Обязательно для clientType='individual' — проверяется в
+   * convertLeadToClientCmd. Из lead.name не берём: там столь же часто лежит
+   * «Заявка с сайта», а это поле уходит в зашифрованные ПДн, которым доверяют.
+   */
+  individualFullName?: string | null;
 }
 
 export interface FunnelStats {
@@ -281,13 +288,26 @@ export async function archiveLead(db: Db, tenantId: string, id: string): Promise
 
 /**
  * Атомарно: создаёт клиента из лида + помечает лид как won/converted.
- * Для legal-клиента копирует реквизиты (inn/kpp/телефон/email/адрес) — шифрование не нужно.
- * Для individual создаёт запись с displayName (зашифрованные ПДн заполняются позже вручную).
+ *
+ * Для юрлица копирует реквизиты (inn/kpp/телефон/email/адрес) — шифрование не нужно.
+ * Для физлица телефон и адрес шифруются, ФИО берётся из opts (в lead.name лежит
+ * произвольная строка вроде «Заявка с сайта», в ПДн ей не место).
+ *
+ * Раньше у физлица терялись телефон, адрес и email, а ФИО не заполнялось вовсе —
+ * карточка выходила пустой, звонить было некуда. Инвариант «физлицо обязано
+ * иметь ФИО» тоже обходился: конвертация зовёт репозиторий напрямую, минуя
+ * clients/service.
+ *
  * Возвращает null, если лид не найден, проигран или уже сконвертирован (идемпотентность).
+ *
+ * Клиент и отметка лида пишутся в ОДНОЙ транзакции — поэтому createClientCmd
+ * отсюда звать нельзя: он открывает свою, и падение посередине оставило бы
+ * клиента-сироту при неконвертированном лиде (а повторный клик создал бы второго).
  */
 export async function convertLeadToClient(
   db: Db,
   tenantId: string,
+  key: string,
   leadId: string,
   opts: ConvertOpts,
 ): Promise<{ clientId: string } | null> {
@@ -302,21 +322,32 @@ export async function convertLeadToClient(
     if (lead.status === 'lost' || lead.convertedClientId) return null;
 
     const isLegal = opts.clientType === 'legal';
-    const insertedClient = await tx
-      .insert(clients)
-      .values({
-        tenantId,
-        type: opts.clientType,
-        subtype: isLegal ? 'commercial' : null,
-        displayName: lead.name,
-        inn: isLegal ? (opts.inn ?? null) : null,
-        kpp: isLegal ? (opts.kpp ?? null) : null,
-        legalAddress: isLegal ? (lead.address ?? null) : null,
-        phone: isLegal ? (lead.phone ?? null) : null,
-        email: isLegal ? (lead.email ?? null) : null,
-      })
-      .returning({ id: clients.id });
-    const client = insertedClient[0];
+    const fio = opts.individualFullName?.trim() || null;
+    const displayName = isLegal ? lead.name : (buildDisplayNameFromFio(fio ?? '') || lead.name);
+
+    const inserted = await tx.execute<{ id: string }>(sql`
+      INSERT INTO clients (
+        tenant_id, type, subtype, display_name,
+        inn, kpp, legal_address, phone, email,
+        full_name_encrypted, phone_encrypted, address_encrypted, status
+      ) VALUES (
+        ${tenantId}, ${opts.clientType}::client_type,
+        ${isLegal ? 'commercial' : null}::client_subtype,
+        ${displayName},
+        ${isLegal ? (opts.inn ?? null) : null},
+        ${isLegal ? (opts.kpp ?? null) : null},
+        ${isLegal ? (lead.address ?? null) : null},
+        ${isLegal ? (lead.phone ?? null) : null},
+        -- email физлица кладём в общую колонку: отдельной зашифрованной для него
+        -- в схеме нет, а терять адрес хуже.
+        ${lead.email ?? null},
+        ${!isLegal && fio ? sql`pgp_sym_encrypt(${fio}::text, ${key})` : sql`NULL`},
+        ${!isLegal && lead.phone ? sql`pgp_sym_encrypt(${lead.phone}::text, ${key})` : sql`NULL`},
+        ${!isLegal && lead.address ? sql`pgp_sym_encrypt(${lead.address}::text, ${key})` : sql`NULL`},
+        'active'
+      ) RETURNING id
+    `);
+    const client = (inserted as unknown as Array<{ id: string }>)[0];
     if (!client) throw new Error('convertLeadToClient: client insert returned nothing');
 
     await tx

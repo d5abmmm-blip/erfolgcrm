@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { ClientType, ClientSubtype, ClientStatus } from '@erfolg/shared';
 import { router, staffProcedure, directorProcedure } from '../../trpc/trpc';
+import { buildDisplayNameFromFio } from '../../lib/person-name';
 import {
   addContactCmd,
   archiveClientCmd,
@@ -53,17 +54,8 @@ const createClientSchema = z.discriminatedUnion('type', [
   individualCreateSchema,
 ]);
 
-/** Превращает «Иванов Иван Иванович» → «Иванов И.И.». Безопасно для одного слова. */
-function buildDisplayNameFromFio(fio: string): string {
-  const parts = fio.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0]!;
-  const surname = parts[0]!;
-  const initials = parts
-    .slice(1)
-    .map((p) => `${p[0]!.toUpperCase()}.`)
-    .join('');
-  return `${surname} ${initials}`;
-}
+// buildDisplayNameFromFio живёт в lib/person-name.ts — та же логика нужна при
+// переводе лида в клиента, а копий этого правила в проекте и так было три.
 
 const updateClientSchema = z
   .object({

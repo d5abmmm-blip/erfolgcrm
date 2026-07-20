@@ -10,10 +10,25 @@
  * Размещается в карточке заявки, склада, ассета. На мобильнике добавляет capture="environment".
  */
 import { useRef, useState } from 'react';
-import { Camera, Loader2, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, Camera, Loader2, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from './ui';
+
+/**
+ * Человеческий текст вместо «Failed to fetch» и «storage PUT 403».
+ * Инженер в поле должен понимать, что делать, а не что сломалось.
+ */
+export function humanUploadError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  if (!navigator.onLine || raw.includes('Failed to fetch') || raw.includes('NetworkError')) {
+    return 'Нет связи — фото не отправлено';
+  }
+  if (/storage PUT (401|403)/.test(raw)) return 'Хранилище отклонило файл — позовите администратора';
+  if (/storage PUT 4\d\d/.test(raw)) return 'Файл не принят хранилищем';
+  if (/storage PUT 5\d\d/.test(raw)) return 'Хранилище недоступно — повторите';
+  return raw || 'Не удалось отправить фото';
+}
 
 type Kind =
   | 'ticket_photo'
@@ -58,6 +73,16 @@ export function PhotoUploader({
   const cameraRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Не отправленные фото вместе с самими файлами.
+   *
+   * ВНИМАНИЕ: это память экрана, а не очередь. Уйдёте со страницы или закроете
+   * приложение — файлы пропадут. Настоящая офлайн-очередь для фото требует
+   * отдельного хранилища (ссылка на загрузку живёт 15 минут, поэтому повтор
+   * назавтра надо начинать с нуля) — это отдельная работа. Здесь задача одна:
+   * чтобы фото не исчезало МОЛЧА и его можно было переотправить сразу.
+   */
+  const [failed, setFailed] = useState<Array<{ id: string; file: File; reason: string }>>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
@@ -70,6 +95,43 @@ export function PhotoUploader({
       return utils.attachments.listByReference.invalidate({ referenceType, referenceId });
     },
   });
+
+  /**
+   * Повторная отправка одного файла. Вынесено, чтобы «Повторить» на плитке
+   * упавшего фото шло тем же путём, что и обычная загрузка.
+   */
+  const uploadOne = async (file: File): Promise<void> => {
+    const presigned = await createUrl.mutateAsync({
+      kind,
+      referenceType,
+      referenceId,
+      fileName: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    });
+    const put = await fetch(presigned.presignedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'content-type': file.type, ...presigned.headers },
+    });
+    if (!put.ok) throw new Error(`storage PUT ${put.status}`);
+    await confirm.mutateAsync({ attachmentId: presigned.attachmentId });
+  };
+
+  const retryFailed = async (id: string) => {
+    const item = failed.find((f) => f.id === id);
+    if (!item) return;
+    setFailed((prev) => prev.filter((f) => f.id !== id));
+    setPending((p) => [...p, id]);
+    try {
+      await uploadOne(item.file);
+    } catch (err) {
+      setFailed((prev) => [...prev, { ...item, reason: humanUploadError(err) }]);
+    } finally {
+      setPending((p) => p.filter((x) => x !== id));
+      await utils.attachments.listByReference.invalidate({ referenceType, referenceId });
+    }
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -87,23 +149,15 @@ export function PhotoUploader({
       const tag = `${file.name}-${file.size}-${Date.now()}`;
       setPending((p) => [...p, tag]);
       try {
-        const presigned = await createUrl.mutateAsync({
-          kind,
-          referenceType,
-          referenceId,
-          fileName: file.name,
-          mimeType: file.type,
-          sizeBytes: file.size,
-        });
-        const put = await fetch(presigned.presignedUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'content-type': file.type, ...presigned.headers },
-        });
-        if (!put.ok) throw new Error(`storage PUT ${put.status}`);
-        await confirm.mutateAsync({ attachmentId: presigned.attachmentId });
+        await uploadOne(file);
       } catch (err) {
-        setError((err as Error).message || 'Ошибка загрузки');
+        // Раньше файл здесь терялся насовсем: он жил только в замыкании, а на
+        // экране оставалась одна техническая строка вроде «Failed to fetch».
+        // Теперь держим сам File и показываем плитку с кнопкой «Повторить».
+        setFailed((prev) => [
+          ...prev,
+          { id: tag, file, reason: humanUploadError(err) },
+        ]);
       } finally {
         setPending((p) => p.filter((x) => x !== tag));
         await utils.attachments.listByReference.invalidate({ referenceType, referenceId });
@@ -175,6 +229,53 @@ export function PhotoUploader({
 
       {error && <div className="text-destructive text-sm">{error}</div>}
 
+      {/* Не отправленные фото. Раньше файл пропадал молча — спиннер снимался,
+          и экран выглядел так, будто фото и не выбирали. */}
+      {failed.length > 0 && (
+        <div className="border-destructive/30 bg-destructive/5 space-y-2 rounded-lg border p-3">
+          <div className="text-destructive flex items-center gap-1.5 text-sm font-medium">
+            <AlertTriangle className="h-4 w-4" />
+            Не отправлено: {failed.length}
+          </div>
+          <div className="text-muted-foreground text-xs">
+            Файлы держатся только на этом экране. Отправьте сейчас — если уйти со
+            страницы или закрыть приложение, их придётся снимать заново.
+          </div>
+          <ul className="space-y-1.5">
+            {failed.map((f) => (
+              <li
+                key={f.id}
+                className="bg-card flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium">{f.file.name}</div>
+                  <div className="text-destructive text-[11px]">{f.reason}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={pending.includes(f.id)}
+                    onClick={() => void retryFailed(f.id)}
+                    className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Повторить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFailed((prev) => prev.filter((x) => x.id !== f.id))}
+                    className="text-muted-foreground hover:text-foreground rounded-md p-1"
+                    aria-label="Убрать из списка"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {(items.length > 0 || pending.length > 0) && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
           {items.map((a) => (
@@ -187,7 +288,10 @@ export function PhotoUploader({
               sizeBytes={a.sizeBytes}
               canDelete={allowDelete}
               onDelete={() => {
-                if (confirm.isPending) return;
+                // Было `confirm.isPending` — это мутация ПОДТВЕРЖДЕНИЯ ЗАГРУЗКИ,
+                // а не удаления: пока грузилось любое фото, кнопка удаления
+                // молча не срабатывала. Смотреть надо на само удаление.
+                if (remove.isPending) return;
                 setDeleteTarget(a.id);
               }}
             />
