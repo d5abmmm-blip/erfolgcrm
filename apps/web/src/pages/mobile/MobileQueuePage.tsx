@@ -18,6 +18,18 @@ import { cn, getMondayOfThisWeek } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { BLOCKED_REASON_META } from '../../lib/dictionaries/tickets';
 import { PushToggle } from '../../components/PushToggle';
+import {
+  newAssignmentsCount,
+  nextPageSize,
+  readSeen,
+  rebasedSeen,
+  seenStorageKey,
+  shownOfTotal,
+} from '../../lib/queue-badge';
+
+/** Сколько заявок подгружаем за раз и максимум, который отдаёт сервер (myList). */
+const PAGE_STEP = 50;
+const MAX_PAGE_SIZE = 500;
 
 const ACTIVE_STATUSES: TicketStatus[] = [
   'received',
@@ -71,14 +83,25 @@ export function MobileQueuePage({ engineerId }: Props) {
   const utils = trpc.useUtils();
   const tenantSubdomain = getTenantSubdomain();
 
+  // Растущее окно вместо накопления страниц: запрос всегда ОДИН, поллинг
+  // перезабирает его целиком. Накопление страниц на экране с обновлением
+  // каждые 30 секунд дало бы либо дубли, либо сброс до первой страницы.
+  const [pageSize, setPageSize] = useState(PAGE_STEP);
+  useEffect(() => {
+    setPageSize(PAGE_STEP);
+  }, [tab]);
+
   const list = trpc.tickets.myList.useQuery(
     {
       statuses: tab === 'active' ? ACTIVE_STATUSES : undefined,
-      pageSize: 100,
+      pageSize,
     },
     {
-      // 30 сек поллинг — MVP-замена push-уведомлений
-      refetchInterval: 30_000,
+      // 30 сек поллинг — MVP-замена push-уведомлений. Только для активных:
+      // «Все» — это архив, он не меняется каждые полминуты, а тянуть по 400
+      // строк дважды в минуту незачем. Кнопка обновления и возврат в приложение
+      // работают на обеих вкладках.
+      refetchInterval: tab === 'active' ? 30_000 : false,
       refetchOnWindowFocus: true,
     },
   );
@@ -216,27 +239,51 @@ export function MobileQueuePage({ engineerId }: Props) {
     return m;
   }, [myTickets.data]);
 
+  const shownLabel = shownOfTotal(list.data?.items.length ?? 0, list.data?.total ?? 0);
+  const canLoadMore = pageSize < MAX_PAGE_SIZE;
+
   const todayCount = scheduleHeader === 'Сегодня по графику' ? scheduleItems.length : 0;
   const inWorkCount = (myTickets.data ?? []).filter(
     (c) => c.status === 'in_progress' || c.status === 'diagnostics',
   ).length;
 
-  // Подсчёт «новых» назначений с прошлого визита для тоста
-  const [seenCount, setSeenCount] = useState<number>(() => {
-    const v = localStorage.getItem(`m-queue-seen-${engineerId}`);
-    return v ? Number(v) : 0;
-  });
+  // «Назначено новых» считаем от числа АКТИВНЫХ заявок (myTickets — отдельный
+  // запрос без пагинации), а НЕ от total открытого списка. Иначе плашка
+  // зависела бы от выбранной вкладки и от того, сколько страниц подгрузили:
+  // отметив просмотренным архив на 480 заявок, инженер больше никогда не
+  // увидел бы её на «Активных».
+  const activeCount = myTickets.data?.length ?? null;
+  const [seenCount, setSeenCount] = useState<number | null>(() =>
+    readSeen(localStorage.getItem(seenStorageKey(engineerId))),
+  );
   const newCount = useMemo(
-    () => Math.max(0, (list.data?.total ?? 0) - seenCount),
-    [list.data?.total, seenCount],
+    () => (activeCount === null ? 0 : newAssignmentsCount(activeCount, seenCount)),
+    [activeCount, seenCount],
   );
 
   const markSeen = () => {
-    if (list.data?.total !== undefined) {
-      setSeenCount(list.data.total);
-      localStorage.setItem(`m-queue-seen-${engineerId}`, String(list.data.total));
-    }
+    if (activeCount === null) return;
+    setSeenCount(activeCount);
+    localStorage.setItem(seenStorageKey(engineerId), String(activeCount));
   };
+
+  useEffect(() => {
+    if (activeCount === null) return;
+    // Первый заход: запоминаем текущее число молча, чтобы не показывать
+    // «назначено новых: 12» человеку, который просто открыл приложение.
+    if (seenCount === null) {
+      setSeenCount(activeCount);
+      localStorage.setItem(seenStorageKey(engineerId), String(activeCount));
+      return;
+    }
+    // Заявки закрылись — опускаем отметку следом, иначе устаревший порог
+    // «съест» следующие назначения и плашка снова замолчит.
+    const rebased = rebasedSeen(activeCount, seenCount);
+    if (rebased !== null) {
+      setSeenCount(rebased);
+      localStorage.setItem(seenStorageKey(engineerId), String(rebased));
+    }
+  }, [seenCount, activeCount, engineerId]);
 
   return (
     <div className="flex flex-col">
@@ -524,6 +571,24 @@ export function MobileQueuePage({ engineerId }: Props) {
           );
         })}
       </ul>
+
+      {/* Раньше список молча обрезался на 100 заявках: ни счётчика, ни кнопки.
+          Инженер решал, что заявки нет, хотя она на следующей странице. */}
+      {shownLabel && (
+        <div className="flex flex-col items-center gap-2 px-3 pb-4">
+          <div className="text-muted-foreground text-xs">{shownLabel}</div>
+          {canLoadMore && (
+            <button
+              type="button"
+              disabled={list.isFetching}
+              onClick={() => setPageSize((n) => nextPageSize(n, PAGE_STEP, MAX_PAGE_SIZE))}
+              className="bg-card hover:bg-muted/50 h-11 w-full rounded-lg border text-sm font-semibold transition disabled:opacity-50"
+            >
+              {list.isFetching ? 'Загружаем…' : 'Показать ещё'}
+            </button>
+          )}
+        </div>
+      )}
 
       {toast && (
         <div

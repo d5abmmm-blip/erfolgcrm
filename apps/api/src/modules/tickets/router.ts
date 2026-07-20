@@ -153,7 +153,10 @@ export const ticketsRouter = router({
         .object({
           statuses: z.array(TicketStatus).optional(),
           page: z.number().int().positive().max(1000).optional(),
-          pageSize: z.number().int().positive().max(200).optional(),
+          // До 500: у действующих инженеров бывает больше 400 заявок за всю
+          // историю, и с потолком 200 вкладка «Все» не могла показать их даже
+          // по кнопке «показать ещё». Выборка своя и по одному инженеру.
+          pageSize: z.number().int().positive().max(500).optional(),
         })
         .optional(),
     )
