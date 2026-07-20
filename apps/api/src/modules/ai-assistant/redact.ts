@@ -39,12 +39,17 @@ const CLIENT_PII_KEYS = new Set<string>([
   'ownerName',
   'phone',
   'contactPhone',
+  // ФИО физлица и контактного лица. Раньше здесь стояло только `fullNameEncrypted` —
+  // имя колонки, а не поля DTO, поэтому расшифрованное ФИО проходило мимо затирания.
+  // После миграции 0078 (ПДн лежат открыто) этот пробел стал заметнее: имя колонки
+  // теперь `individual_full_name`, а старого поля не существует вовсе.
+  'individualFullName',
   'individualPhone',
   'individualAddress',
+  'fullName',
   'address',
   'email',
   'clientEmail',
-  'fullNameEncrypted',
 ]);
 
 /**

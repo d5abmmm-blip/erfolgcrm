@@ -484,6 +484,13 @@
       "when": 1778501600000,
       "tag": "0077_tenders",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1778501700000,
+      "tag": "0078_plaintext_client_pii",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,11 @@ export const logger = pino({
       '*.individualFullName',
       '*.individualPhone',
       '*.individualAddress',
+      // Те же поля именами КОЛОНОК: сырая строка из БД логируется в snake_case
+      // (миграция 0078 — ПДн лежат открыто, промахнуться здесь дороже, чем раньше).
+      '*.individual_full_name',
+      '*.individual_phone',
+      '*.individual_address',
       '*.email',
       // Ключ шифрования — никогда в логах
       '*.PII_ENCRYPTION_KEY',

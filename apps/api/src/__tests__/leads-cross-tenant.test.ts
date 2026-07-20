@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, afterAll, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import { clients, getDb, getTenantEncryptionKey, leads, withTenantTx } from '@erfolg/db';
+import { clients, getDb, leads, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   archiveLead,
@@ -53,7 +53,6 @@ function makeCmdCtx() {
 
 let erfolgId = '';
 let demoId = '';
-let encKey = '';
 
 const TEST_PREFIX = 'TEST-LEAD-';
 
@@ -61,7 +60,6 @@ beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
   demoId = seed.demoId;
-  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
 });
 
 async function clearTestData(): Promise<void> {
@@ -153,7 +151,7 @@ describe('leads — конвертация и воронка', () => {
       score: 60,
     });
 
-    const res = await convertLeadToClient(getDb(), erfolgId, encKey, id, {
+    const res = await convertLeadToClient(getDb(), erfolgId, id, {
       clientType: 'legal',
       inn: '7712345678',
       kpp: '771201001',
@@ -166,7 +164,7 @@ describe('leads — конвертация и воронка', () => {
 
     // повторная конвертация — null (идемпотентность)
     expect(
-      await convertLeadToClient(getDb(), erfolgId, encKey, id, { clientType: 'legal' }),
+      await convertLeadToClient(getDb(), erfolgId, id, { clientType: 'legal' }),
     ).toBeNull();
 
     // клиент реально создан в том же тенанте с реквизитами лида
@@ -190,13 +188,13 @@ describe('leads — конвертация и воронка', () => {
       score: 40,
     });
 
-    const res = await convertLeadToClient(getDb(), erfolgId, encKey, id, {
+    const res = await convertLeadToClient(getDb(), erfolgId, id, {
       clientType: 'individual',
       individualFullName: 'Петров Пётр Петрович',
     });
     expect(res).not.toBeNull();
 
-    const dto = await getClient(getDb(), erfolgId, encKey, res!.clientId);
+    const dto = await getClient(getDb(), erfolgId, res!.clientId);
     expect(dto?.individualFullName).toBe('Петров Пётр Петрович');
     expect(dto?.individualPhone).toBe('+79281234567');
     expect(dto?.individualAddress).toBe('г. Грозный, ул. Победы, 1');
@@ -204,16 +202,20 @@ describe('leads — конвертация и воронка', () => {
     // Имя карточки — из ФИО, а не «Заявка с сайта».
     expect(dto?.displayName).toBe('Петров П.П.');
 
-    // ПДн лежат зашифрованными, а не открытым текстом.
+    // ПДн лежат открыто (миграция 0078) — читаем колонку напрямую, минуя репозиторий.
+    // Раньше здесь проверялось обратное: что в full_name_encrypted лежат байты, а не
+    // текст. Шифрование сняли осознанно — ключ хранился на том же сервере, что и база,
+    // поэтому от её кражи не защищал, а его потеря делала картотеку нечитаемой навсегда.
+    // Проверка сохранена в перевёрнутом виде: ФИО должно доезжать до базы как есть,
+    // а старая шифрованная колонка — больше не заполняться.
     const raw = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx
-        .select({ enc: clients.fullNameEncrypted })
+        .select({ plain: clients.individualFullName, legacy: clients.fullNameEncrypted })
         .from(clients)
         .where(eq(clients.id, res!.clientId)),
     );
-    const buf = raw[0]?.enc as unknown as Buffer | null;
-    expect(buf).toBeTruthy();
-    expect(buf!.toString('utf8')).not.toContain('Петров');
+    expect(raw[0]?.plain).toBe('Петров Пётр Петрович');
+    expect(raw[0]?.legacy).toBeNull();
   });
 
   it('физлицо без ФИО не создаётся — инвариант больше не обходится', async () => {

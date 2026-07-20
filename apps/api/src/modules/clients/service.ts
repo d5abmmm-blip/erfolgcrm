@@ -7,7 +7,7 @@
  * Логируем только маркеры «*_changed» — auditLogs тоже чувствителен.
  */
 import { TRPCError } from '@trpc/server';
-import { getTenantEncryptionKey, type Db } from '@erfolg/db';
+import { type Db } from '@erfolg/db';
 import { writeAudit } from '../../lib/audit';
 import {
   archiveClient as repoArchiveClient,
@@ -56,7 +56,6 @@ export async function createClientCmd(
   audit: AuditCtx,
   input: CreateClientInput,
 ): Promise<{ id: string }> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
   // Базовая валидация: subtype только для legal
   if (input.subtype && input.type !== 'legal') {
     throw new TRPCError({
@@ -70,7 +69,7 @@ export async function createClientCmd(
       message: 'Для физлица обязательно ФИО',
     });
   }
-  const result = await repoCreateClient(db, tenant.id, key, input);
+  const result = await repoCreateClient(db, tenant.id, input);
   await writeAudit(db, tenant.id, {
     userId: session.userId,
     action: 'create',
@@ -98,10 +97,9 @@ export async function updateClientCmd(
   id: string,
   patch: UpdateClientInput,
 ): Promise<void> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
-  const before = await repoGetClient(db, tenant.id, key, id);
+  const before = await repoGetClient(db, tenant.id, id);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
-  const { updatedFields } = await repoUpdateClient(db, tenant.id, key, id, patch);
+  const { updatedFields } = await repoUpdateClient(db, tenant.id, id, patch);
   if (updatedFields.length === 0) return;
   await writeAudit(db, tenant.id, {
     userId: session.userId,
@@ -123,8 +121,7 @@ export async function archiveClientCmd(
   id: string,
   reason?: string,
 ): Promise<void> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
-  const before = await repoGetClient(db, tenant.id, key, id);
+  const before = await repoGetClient(db, tenant.id, id);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
   await repoArchiveClient(db, tenant.id, id);
   await writeAudit(db, tenant.id, {
@@ -145,8 +142,7 @@ export async function unarchiveClientCmd(
   audit: AuditCtx,
   id: string,
 ): Promise<void> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
-  const before = await repoGetClient(db, tenant.id, key, id);
+  const before = await repoGetClient(db, tenant.id, id);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
   // Идемпотентно: повторный возврат уже активного клиента не ошибка, а «ничего
   // делать не надо». Так безопаснее для двойного клика по кнопке.
@@ -175,8 +171,7 @@ export async function getClientQuery(
   tenant: ResolvedTenant,
   id: string,
 ): Promise<ClientDetailDto> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
-  const c = await repoGetClient(db, tenant.id, key, id);
+  const c = await repoGetClient(db, tenant.id, id);
   if (!c) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
   return c;
 }
@@ -196,12 +191,11 @@ export async function addContactCmd(
   audit: AuditCtx,
   input: CreateContactInput,
 ): Promise<{ id: string }> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
   // Проверяем что клиент существует и принадлежит tenant'у (RLS уже отсекает чужих,
   // но даём явный 404).
-  const owner = await repoGetClient(db, tenant.id, key, input.clientId);
+  const owner = await repoGetClient(db, tenant.id, input.clientId);
   if (!owner) throw new TRPCError({ code: 'NOT_FOUND', message: 'Клиент не найден' });
-  const result = await repoCreateContact(db, tenant.id, key, input);
+  const result = await repoCreateContact(db, tenant.id, input);
   await writeAudit(db, tenant.id, {
     userId: session.userId,
     action: 'create',
@@ -226,8 +220,7 @@ export async function updateContactCmd(
   id: string,
   patch: UpdateContactInput,
 ): Promise<void> {
-  const key = getTenantEncryptionKey({ id: tenant.id, kmsKeyId: null });
-  await repoUpdateContact(db, tenant.id, key, id, patch);
+  await repoUpdateContact(db, tenant.id, id, patch);
   await writeAudit(db, tenant.id, {
     userId: session.userId,
     action: 'update',

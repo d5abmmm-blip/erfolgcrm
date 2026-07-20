@@ -33,7 +33,6 @@ import {
   createClient as repoCreateClient,
   findIndividualClientIdByPhone,
 } from '../clients/repository';
-import { getTenantEncryptionKey } from '@erfolg/db';
 import { enqueuePushToUser } from '../notifications';
 import {
   applyAnswer,
@@ -159,11 +158,10 @@ async function createTicketFromConversation(
 
   // 1. Клиент: сначала ищем существующего по телефону (иначе каждое обращение
   //    через бота плодило бы дубликат в картотеке), создаём только если не нашли.
-  const key = getTenantEncryptionKey({ id: ctx.tenant.id, kmsKeyId: ctx.tenant.kmsKeyId });
-  let clientId = await findIndividualClientIdByPhone(ctx.db, ctx.tenant.id, key, state.phone);
+  let clientId = await findIndividualClientIdByPhone(ctx.db, ctx.tenant.id, state.phone);
   if (!clientId) {
     const initials = makeInitials(state.fullName);
-    ({ id: clientId } = await repoCreateClient(ctx.db, ctx.tenant.id, key, {
+    ({ id: clientId } = await repoCreateClient(ctx.db, ctx.tenant.id, {
       type: 'individual',
       displayName: initials,
       individualFullName: state.fullName,

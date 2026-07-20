@@ -24,7 +24,6 @@ import { fileURLToPath } from 'node:url';
 import { hash as argonHash } from 'argon2';
 import { eq, sql } from 'drizzle-orm';
 import { makeDb } from './client';
-import { getTenantEncryptionKey } from './crypto';
 import { classifyClientType, initialsDisplayName } from './import-winservice-classify';
 import {
   assetEvents,
@@ -202,7 +201,6 @@ async function main(): Promise<void> {
   // должен быть верным — иначе данные уедут в чужой/несуществующий tenant.
   const IMPORT_TENANT_ID = process.env.IMPORT_TENANT_ID?.trim() || null;
   let tenantIdValue = 'DRYRUN-TENANT';
-  let key = getTenantEncryptionKey({ id: tenantIdValue, kmsKeyId: null });
   if (db) {
     const t = IMPORT_TENANT_ID
       ? await db.select().from(tenants).where(eq(tenants.id, IMPORT_TENANT_ID)).limit(1)
@@ -215,7 +213,6 @@ async function main(): Promise<void> {
       );
     }
     tenantIdValue = t[0].id;
-    key = getTenantEncryptionKey({ id: tenantIdValue, kmsKeyId: t[0].kmsKeyId });
   }
 
   // ───────── 1. Пользователи (OUSER → users) ─────────
@@ -651,7 +648,7 @@ async function main(): Promise<void> {
   });
   console.info(`  ✓ users: ${userRows.length}`);
 
-  // 2. clients (+ fallback) через raw SQL с pgp_sym_encrypt
+  // 2. clients (+ fallback) через raw SQL
   if (needFallbackClient) {
     clientPlans.unshift({
       id: FALLBACK_CLIENT_ID,
@@ -668,24 +665,21 @@ async function main(): Promise<void> {
       INSERT INTO clients (
         id, tenant_id, type, subtype, display_name,
         inn, kpp, ogrn, legal_address, phone, email,
-        full_name_encrypted, phone_encrypted, address_encrypted,
+        individual_full_name, individual_phone, individual_address,
         notes, status
       ) VALUES (
         ${c.id}, ${tenantIdValue}, ${c.type}::client_type, ${c.subtype}::client_subtype,
         ${c.displayName}, ${c.inn}, ${c.kpp}, ${c.ogrn}, ${c.legalAddress}, ${c.phone}, ${c.email},
-        ${c.indFullName ? sql`pgp_sym_encrypt(${c.indFullName}::text, ${key})` : sql`NULL`},
-        ${c.indPhone ? sql`pgp_sym_encrypt(${c.indPhone}::text, ${key})` : sql`NULL`},
-        ${c.indAddress ? sql`pgp_sym_encrypt(${c.indAddress}::text, ${key})` : sql`NULL`},
+        ${c.indFullName}, ${c.indPhone}, ${c.indAddress},
         ${c.notes}, 'active'
       ) ON CONFLICT (id) DO NOTHING
     `);
     if (c.contact) {
       await db.execute(sql`
-        INSERT INTO contacts (id, tenant_id, client_id, full_name_encrypted, phone_encrypted, email, position, is_primary)
+        INSERT INTO contacts (id, tenant_id, client_id, full_name, phone, email, position, is_primary)
         VALUES (
           ${uuid5(`contact:${c.id}`)}, ${tenantIdValue}, ${c.id},
-          pgp_sym_encrypt(${c.contact.fullName}::text, ${key}),
-          pgp_sym_encrypt(${c.contact.phone}::text, ${key}),
+          ${c.contact.fullName}, ${c.contact.phone},
           ${null}, ${c.contact.position}, true
         ) ON CONFLICT (id) DO NOTHING
       `);

@@ -12,7 +12,6 @@ import {
   assets,
   clients,
   contacts,
-  decryptSql,
   withTenantTx,
   type Db,
 } from '@erfolg/db';
@@ -168,7 +167,6 @@ export async function listClients(
 export async function getClient(
   db: Db,
   tenantId: string,
-  key: string,
   id: string,
 ): Promise<ClientDetailDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
@@ -187,9 +185,9 @@ export async function getClient(
         treasuryAccount: clients.treasuryAccount,
         eksAccount: clients.eksAccount,
         personalAccount: clients.personalAccount,
-        individualFullName: decryptSql(clients.fullNameEncrypted, key).as('full_name_dec'),
-        individualPhone: decryptSql(clients.phoneEncrypted, key).as('phone_dec'),
-        individualAddress: decryptSql(clients.addressEncrypted, key).as('address_dec'),
+        individualFullName: clients.individualFullName,
+        individualPhone: clients.individualPhone,
+        individualAddress: clients.individualAddress,
         notes: clients.notes,
         defaultContactId: clients.defaultContactId,
         status: clients.status,
@@ -205,8 +203,8 @@ export async function getClient(
     const contactRows = await tx
       .select({
         id: contacts.id,
-        fullName: decryptSql(contacts.fullNameEncrypted, key).as('full_name_dec'),
-        phone: decryptSql(contacts.phoneEncrypted, key).as('phone_dec'),
+        fullName: contacts.fullName,
+        phone: contacts.phone,
         email: contacts.email,
         position: contacts.position,
         isPrimary: contacts.isPrimary,
@@ -236,16 +234,16 @@ export async function getClient(
       treasuryAccount: c.treasuryAccount,
       eksAccount: c.eksAccount,
       personalAccount: c.personalAccount,
-      individualFullName: (c.individualFullName as string) ?? null,
-      individualPhone: (c.individualPhone as string) ?? null,
-      individualAddress: (c.individualAddress as string) ?? null,
+      individualFullName: c.individualFullName,
+      individualPhone: c.individualPhone,
+      individualAddress: c.individualAddress,
       notes: c.notes,
       defaultContactId: c.defaultContactId,
       status: c.status,
       contacts: contactRows.map((r) => ({
         id: r.id,
-        fullName: (r.fullName as string) ?? null,
-        phone: (r.phone as string) ?? null,
+        fullName: r.fullName,
+        phone: r.phone,
         email: r.email,
         position: r.position,
         isPrimary: r.isPrimary,
@@ -256,6 +254,27 @@ export async function getClient(
       createdAt: c.createdAt,
     };
   });
+}
+
+/**
+ * Условие поиска по телефону — сравнение ТОЛЬКО цифр, с обеих сторон.
+ *
+ * Номера в базе записаны как попало: на боевых данных встретилось шесть форматов
+ * одного и того же номера — «8-928-123-45-67», «8(928) 123-45-67», «89281234567»
+ * и т.д. Поэтому поиск по подстроке работал бы, только если человек угадает
+ * формат записи. Сравниваем цифры: набранное «9281234567» найдёт номер в любом виде.
+ *
+ * Порог в 3 цифры: по одной-двум нашлась бы половина картотеки. Если цифр меньше
+ * (обычный текстовый поиск), условие вообще не добавляем — лишний regexp по строке.
+ * Индекса тут нет и не нужно: физлиц сотни, это доли миллисекунды.
+ */
+function phoneCondition(rawQuery: string): SQL[] {
+  const digits = rawQuery.replace(/\D/g, '');
+  if (digits.length < 3) return [];
+  return [
+    sql`regexp_replace(coalesce(${clients.individualPhone}, ''), '\\D', '', 'g') LIKE ${`%${digits}%`}`,
+    sql`regexp_replace(coalesce(${clients.phone}, ''), '\\D', '', 'g') LIKE ${`%${digits}%`}`,
+  ];
 }
 
 export async function searchClients(
@@ -276,7 +295,15 @@ export async function searchClients(
       .where(
         and(
           eq(clients.status, 'active'),
-          or(ruIlike(clients.displayName, query), ruIlike(clients.inn, query)),
+          or(
+            ruIlike(clients.displayName, query),
+            ruIlike(clients.inn, query),
+            // Полное ФИО физлица. Раньше сюда было не заглянуть — оно лежало
+            // зашифрованным, и найти человека можно было только по инициалам
+            // в display_name («Иванов И.И.»); отчество не искалось вовсе.
+            ruIlike(clients.individualFullName, query),
+            ...phoneCondition(q),
+          ),
         ),
       )
       .orderBy(asc(clients.displayName))
@@ -289,14 +316,14 @@ export async function searchClients(
  * самообслуживании (Telegram-бот): один человек, обратившийся трижды,
  * должен оставаться ОДНИМ клиентом в картотеке.
  *
- * Телефон хранится зашифрованным (152-ФЗ), поэтому сравниваем
- * расшифрованное значение по последним 10 цифрам — так «+7 928 …» и
- * «8928…» считаются одним номером. Физлиц немного, sequential scan ок.
+ * Сравниваем по последним 10 цифрам — так «+7 928 …» и «8928…» считаются
+ * одним номером. Выражение дословно повторяет частичный индекс
+ * `clients_individual_phone_tail_idx` (миграция 0078), иначе он не применится.
+ * Раньше здесь расшифровывалась КАЖДАЯ строка физлиц — индекс был невозможен.
  */
 export async function findIndividualClientIdByPhone(
   db: Db,
   tenantId: string,
-  key: string,
   phone: string,
 ): Promise<string | null> {
   const digits = phone.replace(/\D/g, '');
@@ -307,8 +334,8 @@ export async function findIndividualClientIdByPhone(
       SELECT id FROM clients
       WHERE type = 'individual'
         AND status = 'active'
-        AND phone_encrypted IS NOT NULL
-        AND RIGHT(regexp_replace(${decryptSql(clients.phoneEncrypted, key)}, '\\D', '', 'g'), 10) = ${tail}
+        AND individual_phone IS NOT NULL
+        AND RIGHT(regexp_replace(individual_phone, '\\D', '', 'g'), 10) = ${tail}
       ORDER BY created_at
       LIMIT 1
     `);
@@ -320,7 +347,6 @@ export async function findIndividualClientIdByPhone(
 export async function createClient(
   db: Db,
   tenantId: string,
-  key: string,
   input: CreateClientInput,
 ): Promise<{ id: string }> {
   return withTenantTx(db, tenantId, async (tx) => {
@@ -329,7 +355,7 @@ export async function createClient(
         tenant_id, type, subtype, display_name,
         inn, kpp, ogrn, legal_address, phone, email,
         treasury_account, eks_account, personal_account,
-        full_name_encrypted, phone_encrypted, address_encrypted,
+        individual_full_name, individual_phone, individual_address,
         notes, status
       ) VALUES (
         ${tenantId}, ${input.type}::client_type,
@@ -338,9 +364,7 @@ export async function createClient(
         ${input.inn ?? null}, ${input.kpp ?? null}, ${input.ogrn ?? null},
         ${input.legalAddress ?? null}, ${input.phone ?? null}, ${input.email ?? null},
         ${input.treasuryAccount ?? null}, ${input.eksAccount ?? null}, ${input.personalAccount ?? null},
-        ${input.individualFullName ? sql`pgp_sym_encrypt(${input.individualFullName}::text, ${key})` : sql`NULL`},
-        ${input.individualPhone ? sql`pgp_sym_encrypt(${input.individualPhone}::text, ${key})` : sql`NULL`},
-        ${input.individualAddress ? sql`pgp_sym_encrypt(${input.individualAddress}::text, ${key})` : sql`NULL`},
+        ${input.individualFullName || null}, ${input.individualPhone || null}, ${input.individualAddress || null},
         ${input.notes ?? null}, 'active'
       ) RETURNING id
     `);
@@ -353,7 +377,6 @@ export async function createClient(
 export async function updateClient(
   db: Db,
   tenantId: string,
-  key: string,
   id: string,
   patch: UpdateClientInput,
 ): Promise<{ updatedFields: string[] }> {
@@ -371,27 +394,12 @@ export async function updateClient(
     if (patch.eksAccount !== undefined) setClauses.push(sql`eks_account = ${patch.eksAccount}`);
     if (patch.personalAccount !== undefined) setClauses.push(sql`personal_account = ${patch.personalAccount}`);
     if (patch.notes !== undefined) setClauses.push(sql`notes = ${patch.notes}`);
-    if (patch.individualFullName !== undefined) {
-      setClauses.push(
-        patch.individualFullName == null
-          ? sql`full_name_encrypted = NULL`
-          : sql`full_name_encrypted = pgp_sym_encrypt(${patch.individualFullName}::text, ${key})`,
-      );
-    }
-    if (patch.individualPhone !== undefined) {
-      setClauses.push(
-        patch.individualPhone == null
-          ? sql`phone_encrypted = NULL`
-          : sql`phone_encrypted = pgp_sym_encrypt(${patch.individualPhone}::text, ${key})`,
-      );
-    }
-    if (patch.individualAddress !== undefined) {
-      setClauses.push(
-        patch.individualAddress == null
-          ? sql`address_encrypted = NULL`
-          : sql`address_encrypted = pgp_sym_encrypt(${patch.individualAddress}::text, ${key})`,
-      );
-    }
+    if (patch.individualFullName !== undefined)
+      setClauses.push(sql`individual_full_name = ${patch.individualFullName}`);
+    if (patch.individualPhone !== undefined)
+      setClauses.push(sql`individual_phone = ${patch.individualPhone}`);
+    if (patch.individualAddress !== undefined)
+      setClauses.push(sql`individual_address = ${patch.individualAddress}`);
     if (setClauses.length === 0) return { updatedFields: [] };
     setClauses.push(sql`updated_at = now()`);
     await tx.execute(sql`UPDATE clients SET ${sql.join(setClauses, sql`, `)} WHERE id = ${id}`);
@@ -437,7 +445,6 @@ export async function unarchiveClient(
 export async function createContact(
   db: Db,
   tenantId: string,
-  key: string,
   input: CreateContactInput,
 ): Promise<{ id: string }> {
   return withTenantTx(db, tenantId, async (tx) => {
@@ -449,12 +456,11 @@ export async function createContact(
     }
     const result = await tx.execute<{ id: string }>(sql`
       INSERT INTO contacts (
-        tenant_id, client_id, full_name_encrypted, phone_encrypted,
+        tenant_id, client_id, full_name, phone,
         email, position, is_primary
       ) VALUES (
         ${tenantId}, ${input.clientId},
-        pgp_sym_encrypt(${input.fullName}::text, ${key}),
-        pgp_sym_encrypt(${input.phone}::text, ${key}),
+        ${input.fullName}, ${input.phone},
         ${input.email ?? null}, ${input.position ?? null}, ${input.isPrimary ?? false}
       ) RETURNING id
     `);
@@ -467,7 +473,6 @@ export async function createContact(
 export async function updateContact(
   db: Db,
   tenantId: string,
-  key: string,
   id: string,
   patch: UpdateContactInput,
 ): Promise<void> {
@@ -488,10 +493,8 @@ export async function updateContact(
     }
 
     const setClauses: SQL[] = [];
-    if (patch.fullName !== undefined)
-      setClauses.push(sql`full_name_encrypted = pgp_sym_encrypt(${patch.fullName}::text, ${key})`);
-    if (patch.phone !== undefined)
-      setClauses.push(sql`phone_encrypted = pgp_sym_encrypt(${patch.phone}::text, ${key})`);
+    if (patch.fullName !== undefined) setClauses.push(sql`full_name = ${patch.fullName}`);
+    if (patch.phone !== undefined) setClauses.push(sql`phone = ${patch.phone}`);
     if (patch.email !== undefined) setClauses.push(sql`email = ${patch.email}`);
     if (patch.position !== undefined) setClauses.push(sql`position = ${patch.position}`);
     if (patch.isPrimary !== undefined) setClauses.push(sql`is_primary = ${patch.isPrimary}`);

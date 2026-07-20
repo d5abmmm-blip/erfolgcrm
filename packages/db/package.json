@@ -21,6 +21,7 @@
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "setup-rls": "tsx src/setup-rls.ts",
+    "decrypt-pii": "tsx src/decrypt-pii.ts",
     "import-repair-archive": "tsx src/import-repair-archive.ts"
   },
   "dependencies": {

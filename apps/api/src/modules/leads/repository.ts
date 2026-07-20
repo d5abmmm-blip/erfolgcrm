@@ -307,7 +307,6 @@ export async function archiveLead(db: Db, tenantId: string, id: string): Promise
 export async function convertLeadToClient(
   db: Db,
   tenantId: string,
-  key: string,
   leadId: string,
   opts: ConvertOpts,
 ): Promise<{ clientId: string } | null> {
@@ -329,7 +328,7 @@ export async function convertLeadToClient(
       INSERT INTO clients (
         tenant_id, type, subtype, display_name,
         inn, kpp, legal_address, phone, email,
-        full_name_encrypted, phone_encrypted, address_encrypted, status
+        individual_full_name, individual_phone, individual_address, status
       ) VALUES (
         ${tenantId}, ${opts.clientType}::client_type,
         ${isLegal ? 'commercial' : null}::client_subtype,
@@ -338,12 +337,12 @@ export async function convertLeadToClient(
         ${isLegal ? (opts.kpp ?? null) : null},
         ${isLegal ? (lead.address ?? null) : null},
         ${isLegal ? (lead.phone ?? null) : null},
-        -- email физлица кладём в общую колонку: отдельной зашифрованной для него
-        -- в схеме нет, а терять адрес хуже.
+        -- email физлица кладём в ту же общую колонку: отдельной для него в схеме нет,
+        -- а терять адрес хуже.
         ${lead.email ?? null},
-        ${!isLegal && fio ? sql`pgp_sym_encrypt(${fio}::text, ${key})` : sql`NULL`},
-        ${!isLegal && lead.phone ? sql`pgp_sym_encrypt(${lead.phone}::text, ${key})` : sql`NULL`},
-        ${!isLegal && lead.address ? sql`pgp_sym_encrypt(${lead.address}::text, ${key})` : sql`NULL`},
+        ${!isLegal ? fio : null},
+        ${!isLegal ? (lead.phone ?? null) : null},
+        ${!isLegal ? (lead.address ?? null) : null},
         'active'
       ) RETURNING id
     `);

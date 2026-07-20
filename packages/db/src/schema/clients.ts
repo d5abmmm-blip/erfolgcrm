@@ -4,12 +4,19 @@
  * Типы клиентов:
  * - legal/commercial — коммерческое юрлицо (ООО, ИП), счёт по реквизитам
  * - legal/budget     — бюджетная организация (ГБУ, ФГБУ, ГАУ), три счёта казначейства
- * - individual       — физлицо. ФИО, телефон, адрес шифруются через pgcrypto.
+ * - individual       — физлицо: ФИО, личный телефон, домашний адрес.
  *
  * subtype применим только к type='legal' (DB CHECK constraint).
  *
  * contacts — представители клиники (главный инженер, начальник отдела закупок и т.п.).
- * Их ФИО и личный телефон по 152-ФЗ — персональные данные, шифруются.
+ *
+ * ⚠️ ПДн ЗДЕСЬ ЛЕЖАТ ОТКРЫТО (миграция 0078). Это осознанное решение, не упущение:
+ * шифрование pgcrypto осталось от времён SaaS, ключ хранился в .env на том же сервере,
+ * что и база, поэтому от кражи сервера не защищал — зато его потеря делала ФИО и
+ * телефоны нечитаемыми навсегда при целой базе. Защита копии перенесена на уровень
+ * файла бэкапа. Колонки *_encrypted помечены deprecated и ждут миграции-уборки.
+ * Шифрование СОХРАНЕНО там, где потеря ключа не смертельна и восстановима вводом
+ * заново: пароли почты, токен Telegram-бота, ключ ИИ, секреты 2FA.
  */
 import {
   boolean,
@@ -51,7 +58,7 @@ export const clients = pgTable(
     kpp: varchar('kpp', { length: 9 }),
     ogrn: varchar('ogrn', { length: 15 }),
     legalAddress: text('legal_address'),
-    /** Рабочий телефон организации (plain). Для individual — NULL, реальный телефон в phoneEncrypted. */
+    /** Рабочий телефон организации. Для individual — NULL, личный телефон в individualPhone. */
     phone: varchar('phone', { length: 50 }),
     /** Рабочий email организации (plain). */
     email: varchar('email', { length: 200 }),
@@ -61,7 +68,21 @@ export const clients = pgTable(
     eksAccount: varchar('eks_account', { length: 20 }),
     personalAccount: varchar('personal_account', { length: 20 }),
 
-    /** ПДн физлица — шифрование через pgcrypto, заполняются только при type='individual' */
+    /**
+     * ПДн физлица (заполняются только при type='individual').
+     * Хранятся открыто — см. миграцию 0078: ключ шифрования лежал на том же сервере,
+     * что и база, поэтому от кражи сервера не защищал, а потеря ключа делала эти поля
+     * нечитаемыми навсегда. Защита копии — на уровне файла бэкапа.
+     */
+    individualFullName: text('individual_full_name'),
+    individualPhone: varchar('individual_phone', { length: 50 }),
+    individualAddress: text('individual_address'),
+
+    /**
+     * @deprecated Шифрованные колонки-предшественники. Данные перенесены скриптом
+     * `decrypt-pii`, код их больше не читает и не пишет. Оставлены до отдельной
+     * миграции-уборки, чтобы откат стоил ноль. НЕ использовать в новом коде.
+     */
     fullNameEncrypted: encryptedText('full_name_encrypted'),
     phoneEncrypted: encryptedText('phone_encrypted'),
     addressEncrypted: encryptedText('address_encrypted'),
@@ -100,7 +121,18 @@ export const contacts = pgTable(
     tenantId: tenantId(),
     clientId: fkUuid('client_id'),
 
-    /** ПДн контактного лица — обязательны и зашифрованы */
+    /**
+     * ПДн контактного лица — обязательны на уровне приложения.
+     * В базе nullable: колонки добавлены миграцией 0078 к уже существующим строкам,
+     * NOT NULL повесить можно будет только миграцией-уборкой, после переноса данных.
+     */
+    fullName: varchar('full_name', { length: 200 }),
+    phone: varchar('phone', { length: 50 }),
+
+    /**
+     * @deprecated Шифрованные колонки-предшественники, см. clients выше и миграцию 0078.
+     * Ещё NOT NULL — снимается миграцией-уборкой вместе с удалением.
+     */
     fullNameEncrypted: encryptedText('full_name_encrypted').notNull(),
     phoneEncrypted: encryptedText('phone_encrypted').notNull(),
 

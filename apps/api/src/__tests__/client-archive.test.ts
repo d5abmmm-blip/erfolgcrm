@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import { clients, getDb, getTenantEncryptionKey, withTenantTx } from '@erfolg/db';
+import { clients, getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   archiveClient,
@@ -26,12 +26,10 @@ import {
 const TEST_PREFIX = 'TESTARCH-';
 
 let erfolgId = '';
-let encKey = '';
 
 beforeAll(async () => {
   const seed = await ensureSeed();
   erfolgId = seed.erfolgId;
-  encKey = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
 });
 
 async function clearTestData(): Promise<void> {
@@ -43,7 +41,7 @@ afterAll(clearTestData);
 
 async function makeClient(tag: string): Promise<{ id: string; name: string }> {
   const name = `${TEST_PREFIX}${tag}-${Date.now()}`;
-  const { id } = await createClient(getDb(), erfolgId, encKey, {
+  const { id } = await createClient(getDb(), erfolgId, {
     type: 'legal',
     displayName: name,
   });

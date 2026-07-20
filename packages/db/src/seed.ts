@@ -15,7 +15,6 @@ import 'dotenv/config';
 import { hash } from 'argon2';
 import { and, eq, sql } from 'drizzle-orm';
 import { makeDb } from './client';
-import { getTenantEncryptionKey } from './crypto';
 import {
   assetEvents,
   assets,
@@ -248,9 +247,6 @@ async function seedClientsAndAssets(
   tenantIdValue: string,
   prefix: string,
 ): Promise<void> {
-  // Для шифрования нужен tenant. Передаём минимум — { id, kmsKeyId }.
-  const key = getTenantEncryptionKey({ id: tenantIdValue, kmsKeyId: null });
-
   type ContactSeed = {
     fullName: string;
     phone: string;
@@ -513,7 +509,7 @@ async function seedClientsAndAssets(
           tenant_id, type, subtype, display_name,
           inn, kpp, ogrn, legal_address, phone, email,
           treasury_account, eks_account, personal_account,
-          full_name_encrypted, phone_encrypted, address_encrypted,
+          individual_full_name, individual_phone, individual_address,
           notes, status
         ) VALUES (
           ${tenantIdValue}, ${seed.type}::client_type, ${seed.subtype ?? null}::client_subtype,
@@ -521,9 +517,7 @@ async function seedClientsAndAssets(
           ${seed.inn ?? null}, ${seed.kpp ?? null}, ${seed.ogrn ?? null},
           ${seed.legalAddress ?? null}, ${seed.phone ?? null}, ${seed.email ?? null},
           ${seed.treasuryAccount ?? null}, ${seed.eksAccount ?? null}, ${seed.personalAccount ?? null},
-          ${seed.individualFullName ? sql`pgp_sym_encrypt(${seed.individualFullName}::text, ${key})` : sql`NULL`},
-          ${seed.individualPhone ? sql`pgp_sym_encrypt(${seed.individualPhone}::text, ${key})` : sql`NULL`},
-          ${seed.individualAddress ? sql`pgp_sym_encrypt(${seed.individualAddress}::text, ${key})` : sql`NULL`},
+          ${seed.individualFullName ?? null}, ${seed.individualPhone ?? null}, ${seed.individualAddress ?? null},
           ${seed.notes ?? null}, 'active'
         ) RETURNING id
       `);
@@ -543,12 +537,11 @@ async function seedClientsAndAssets(
 
       await db.execute(sql`
         INSERT INTO contacts (
-          tenant_id, client_id, full_name_encrypted, phone_encrypted,
+          tenant_id, client_id, full_name, phone,
           email, position, is_primary
         ) VALUES (
           ${tenantIdValue}, ${clientId},
-          pgp_sym_encrypt(${c.fullName}::text, ${key}),
-          pgp_sym_encrypt(${c.phone}::text, ${key}),
+          ${c.fullName}, ${c.phone},
           ${c.email ?? null}, ${c.position ?? null}, ${c.isPrimary ?? false}
         )
       `);
