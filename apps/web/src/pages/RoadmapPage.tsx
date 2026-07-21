@@ -9,6 +9,7 @@ import { trpc } from '../lib/trpc';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Tooltip } from '../components/ui/Tooltip';
+import { QueryError } from '../components/QueryError';
 
 type Quarter = 'Q1' | 'Q2' | 'Q3' | 'Q4';
 type Category = 'revenue' | 'clients' | 'processes' | 'team' | 'product';
@@ -164,6 +165,13 @@ export function RoadmapPage() {
 
       {list.isLoading ? (
         <p className="text-muted-foreground text-sm">Загрузка…</p>
+      ) : list.error ? (
+        <QueryError
+          error={list.error}
+          paused={list.fetchStatus === 'paused'}
+          what="цели компании"
+          onRetry={() => void list.refetch()}
+        />
       ) : goals.length === 0 ? (
         <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
           Целей на {year} год пока нет. Нажмите «Новая цель», чтобы добавить первую.

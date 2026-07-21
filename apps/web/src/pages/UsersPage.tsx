@@ -22,6 +22,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
 import { EngineerProfileSection } from '../components/EngineerProfileSection';
+import { QueryErrorRow } from '../components/QueryError';
 
 type Role = 'director' | 'dispatcher' | 'engineer';
 const ROLE_LABEL: Record<Role, string> = {
@@ -117,7 +118,14 @@ export function UsersPage() {
                 </td>
               </tr>
             )}
-            {usersQ.data?.length === 0 && (
+            <QueryErrorRow
+              error={usersQ.error}
+              paused={usersQ.fetchStatus === 'paused'}
+              what="список пользователей"
+              colSpan={6}
+              onRetry={() => void usersQ.refetch()}
+            />
+            {!usersQ.error && usersQ.fetchStatus !== 'paused' && usersQ.data?.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-muted-foreground p-6 text-center">
                   Пользователи не найдены

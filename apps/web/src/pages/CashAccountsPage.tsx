@@ -9,6 +9,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { formatRub } from '../lib/money';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { QueryError } from '../components/QueryError';
 import { FinanceTabs } from '../components/finance/FinanceTabs';
 import { CASH_ACCOUNT_KIND_LABEL, PAYMENT_METHOD_LABEL } from '../lib/dictionaries';
 
@@ -61,6 +62,14 @@ export function CashAccountsPage() {
           </div>
           {accountsQ.isLoading ? (
             <div className="text-muted-foreground p-6 text-sm">Загружаем…</div>
+          ) : accountsQ.error ? (
+            <QueryError
+              error={accountsQ.error}
+              paused={accountsQ.fetchStatus === 'paused'}
+              what="счета кассы"
+              onRetry={() => void accountsQ.refetch()}
+              className="m-4"
+            />
           ) : accounts.length === 0 ? (
             <div className="text-muted-foreground p-6 text-sm">Счетов пока нет.</div>
           ) : (

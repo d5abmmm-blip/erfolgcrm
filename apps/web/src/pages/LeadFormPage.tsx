@@ -9,6 +9,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { Link, useLocation, useRoute } from 'wouter';
 import { ChevronLeft } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { QueryError } from '../components/QueryError';
 import { LEAD_SOURCE_LABEL, type LeadSource } from './leads.shared';
 
 interface FormValues {
@@ -113,6 +114,35 @@ export function LeadFormPage() {
   };
 
   const isPending = create.isPending || update.isPending;
+
+  // Пока записи НЕТ — форму не показываем. Условие именно «нет данных», а не «есть
+  // ошибка»: при потере связи react-query не роняет запрос, а ставит его на паузу,
+  // и error остаётся пустым НАВСЕГДА (проверено в браузере: fetchStatus 'paused').
+  // Форма в этот момент показывала бы пустые поля с рабочей кнопкой «Сохранить», и
+  // патч ушёл бы со ВСЕМИ полями, затерев то, что лежит в базе.
+  if (editId && !existing.data) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
+        <Link
+          href={`/leads/${editId}`}
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+        >
+          <ChevronLeft className="h-4 w-4" /> К карточке лида
+        </Link>
+        <QueryError
+          error={existing.error}
+          paused={existing.fetchStatus === 'paused'}
+          what="карточку лида"
+          onRetry={() => void existing.refetch()}
+        />
+        {/* Пока данные ещё едут — ошибки нет, и QueryError молчит. Без этой строки
+            человек видел бы пустую страницу без единого слова. */}
+        {!existing.error && existing.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Загрузка…</div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">

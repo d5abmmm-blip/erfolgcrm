@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { Bot, CheckCircle2, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { QueryError } from '../components/QueryError';
 
 export function TelegramSettingsPage() {
   const cfg = trpc.telegram.getConfig.useQuery();
@@ -46,6 +47,16 @@ export function TelegramSettingsPage() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Загрузка…
         </div>
+      ) : cfg.error ? (
+        // Экран прячем целиком: иначе он уверял бы, что бот не настроен, и звал
+        // заводить нового у @BotFather.
+        <QueryError
+          error={cfg.error}
+          paused={cfg.fetchStatus === 'paused'}
+          what="настройки Telegram-бота"
+          onRetry={() => void cfg.refetch()}
+          className="mt-6"
+        />
       ) : (
         <div className="mt-6 space-y-6">
           {cfg.data && cfg.data.hasToken ? (

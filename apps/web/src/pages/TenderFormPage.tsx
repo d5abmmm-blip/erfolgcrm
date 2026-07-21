@@ -13,6 +13,7 @@ import { ClientPicker } from '../components/ClientPicker';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TENDER_STATUS_META, type TenderStatus } from '../lib/dictionaries';
+import { QueryError } from '../components/QueryError';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -162,6 +163,35 @@ export function TenderFormPage() {
   }
 
   const rest = t ? BigInt(t.restKopecks) : 0n;
+
+  // Пока записи НЕТ — форму не показываем. Условие именно «нет данных», а не «есть
+  // ошибка»: при потере связи react-query не роняет запрос, а ставит его на паузу,
+  // и error остаётся пустым НАВСЕГДА (проверено в браузере: fetchStatus 'paused').
+  // Форма в этот момент показывала бы пустые поля с рабочей кнопкой «Сохранить», и
+  // патч ушёл бы со ВСЕМИ полями, затерев то, что лежит в базе.
+  if (isEdit && !detail.data) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
+        <Link
+          href="/tenders"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> К списку тендеров
+        </Link>
+        <QueryError
+          error={detail.error}
+          paused={detail.fetchStatus === 'paused'}
+          what="тендер"
+          onRetry={() => void detail.refetch()}
+        />
+        {/* Пока данные ещё едут — ошибки нет, и QueryError молчит. Без этой строки
+            человек видел бы пустую страницу без единого слова. */}
+        {!detail.error && detail.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Загрузка…</div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">

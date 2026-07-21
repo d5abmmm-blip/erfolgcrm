@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { QueryError } from '../../components/QueryError';
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Черновик',
@@ -35,6 +36,20 @@ export function ClientInvoicesPage() {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  // Плашка до ветки «Счетов пока нет»: клиент не должен принять сбой за отсутствие
+  // долга — по неоплаченному счёту ему всё равно уйдёт напоминание.
+  if (list.error) {
+    return (
+      <div className="p-6">
+        <QueryError
+          error={list.error}
+          paused={list.fetchStatus === 'paused'}
+          what="список счетов"
+          onRetry={() => void list.refetch()}
+        />
       </div>
     );
   }

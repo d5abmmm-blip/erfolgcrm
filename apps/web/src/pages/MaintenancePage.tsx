@@ -5,6 +5,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { MaintenanceScheduleForm } from '../components/MaintenanceScheduleForm';
 import { MaintenanceRecordForm } from '../components/MaintenanceRecordForm';
+import { QueryError } from '../components/QueryError';
 
 type Tab = 'overdue' | 'due_soon' | 'all_active' | 'log';
 
@@ -80,6 +81,14 @@ export function MaintenancePage() {
         <section className="bg-card overflow-hidden rounded-lg border">
           {schedules.isLoading ? (
             <div className="text-muted-foreground p-8 text-center text-sm">Загрузка…</div>
+          ) : schedules.error ? (
+            <QueryError
+              error={schedules.error}
+              paused={schedules.fetchStatus === 'paused'}
+              what="план ТО"
+              onRetry={() => void schedules.refetch()}
+              className="m-4"
+            />
           ) : schedules.data && schedules.data.length > 0 ? (
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
@@ -152,7 +161,15 @@ export function MaintenancePage() {
         </section>
       ) : (
         <section className="bg-card overflow-hidden rounded-lg border">
-          {log.data && log.data.length > 0 ? (
+          {log.error ? (
+            <QueryError
+              error={log.error}
+              paused={log.fetchStatus === 'paused'}
+              what="журнал ТО"
+              onRetry={() => void log.refetch()}
+              className="m-4"
+            />
+          ) : log.data && log.data.length > 0 ? (
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
                 <tr>
