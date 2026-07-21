@@ -88,7 +88,11 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
       );
       if (res.outcome === 'sent') {
         stats.remindersSent++;
-      } else if (res.outcome === 'skipped_no_email' || res.outcome === 'skipped_mail') {
+      } else if (
+        res.outcome === 'skipped_no_email' ||
+        res.outcome === 'skipped_archived' ||
+        res.outcome === 'skipped_mail'
+      ) {
         stats.remindersSkipped++;
       }
       // outcome==='error' — не помечаем lastReminderSentAt; повторим в следующий тик.

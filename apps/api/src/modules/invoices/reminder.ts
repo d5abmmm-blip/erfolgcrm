@@ -17,8 +17,19 @@ import { sendMailForTenant } from '../email/auto-send';
 import { tryJournalEmail } from '../../lib/email-journal';
 import { markReminderSent, type InvoiceDto } from './repository';
 
-/** Исход одной попытки напоминания. */
-export type ReminderOutcome = 'sent' | 'skipped_no_email' | 'skipped_mail' | 'error';
+/**
+ * Исход одной попытки напоминания.
+ *
+ * `skipped_archived` — карточка клиента в архиве. Отдельный исход, а не «ошибка»:
+ * вызывающий обязан показать это человеку как норму (см. sendReminderCmd), иначе
+ * директор увидит красное «не удалось отправить» и будет жать кнопку повторно.
+ */
+export type ReminderOutcome =
+  | 'sent'
+  | 'skipped_no_email'
+  | 'skipped_archived'
+  | 'skipped_mail'
+  | 'error';
 
 export interface ReminderResult {
   invoiceId: string;
@@ -71,19 +82,29 @@ export async function getTenantDisplayName(db: Db, tenantId: string): Promise<st
   return r?.legalName ?? r?.displayName ?? 'Сервисный центр';
 }
 
-/** Email клиента (plain-поле), null если не задан. */
-async function getClientEmail(
+/**
+ * Карточка клиента для письма: адрес (plain-поле) + не в архиве ли она.
+ *
+ * Архив в этой системе — ДВА поля сразу: `status='archived'` И `deleted_at`
+ * (их вместе ставит archiveClient и вместе снимает unarchiveClient). Проверяем оба:
+ * по одному только status часть карточек проскочила бы.
+ */
+async function getClientForReminder(
   db: Db,
   tenantId: string,
   clientId: string,
-): Promise<string | null> {
+): Promise<{ email: string | null; archived: boolean }> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select({ email: clients.email })
+      .select({ email: clients.email, status: clients.status, deletedAt: clients.deletedAt })
       .from(clients)
       .where(eq(clients.id, clientId))
       .limit(1);
-    return rows[0]?.email ?? null;
+    const row = rows[0];
+    return {
+      email: row?.email ?? null,
+      archived: row ? row.status === 'archived' || row.deletedAt !== null : false,
+    };
   });
 }
 
@@ -99,7 +120,14 @@ export async function sendInvoiceReminder(
   invoice: InvoiceDto,
   opts: { dryRun: boolean },
 ): Promise<ReminderResult> {
-  const email = await getClientEmail(db, tenant.id, invoice.clientId);
+  const { email, archived } = await getClientForReminder(db, tenant.id, invoice.clientId);
+  if (archived) {
+    // Клиент в архиве — письмо наружу не уходит. Долг при этом СОЗНАТЕЛЬНО остаётся
+    // виден в отчёте «Дебиторка» (архивацию здесь используют как суррогат слияния
+    // дублей, и счета на такой карточке настоящие). reminderCount не трогаем —
+    // вернут клиента из архива, напоминание уйдёт как обычно.
+    return { invoiceId: invoice.id, outcome: 'skipped_archived' };
+  }
   if (!email) {
     // Без email напомнить нельзя — reminderCount НЕ трогаем, чтобы как только email
     // появится, напоминание ушло.

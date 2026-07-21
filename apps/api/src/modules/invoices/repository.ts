@@ -748,6 +748,11 @@ export interface ReceivablesDebtor {
   clientId: string;
   clientName: string | null;
   clientEmail: string | null;
+  /**
+   * Карточка клиента в архиве. Строка при этом ОСТАЁТСЯ в отчёте с теми же суммами —
+   * прячется не долг, а только исходящее письмо (робот и кнопка «Напомнить»).
+   */
+  clientArchived: boolean;
   /** Всего должен (остаток по всем неоплаченным счетам), копейки-строка. */
   totalOwedKopecks: string;
   /** Из них просрочено (due_date в прошлом), копейки-строка. */
@@ -783,6 +788,7 @@ interface DebtorRow {
   client_id: string;
   client_name: string | null;
   client_email: string | null;
+  client_archived: boolean | null;
   total_owed: string;
   overdue_owed: string;
   max_days_overdue: number;
@@ -819,6 +825,12 @@ export async function receivablesReport(
         i.client_id,
         c.display_name AS client_name,
         c.email        AS client_email,
+        -- ТОЛЬКО пометка, БЕЗ фильтра. Долг архивного клиента обязан остаться на экране
+        -- теми же суммами: архивацию используют как суррогат слияния дублей, счета на
+        -- такой карточке настоящие. Убрать строку = стереть реальный долг (а шапка
+        -- экрана считается из aging-корзин, которые clients вообще не джойнят, —
+        -- фильтр здесь ещё и развалил бы сходимость «итого» с таблицей).
+        (c.status = 'archived' OR c.deleted_at IS NOT NULL) AS client_archived,
         SUM(i.total_amount_kopecks - i.paid_amount_kopecks)::text AS total_owed,
         SUM(CASE WHEN i.due_date::date < CURRENT_DATE
                  THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END)::text AS overdue_owed,
@@ -833,7 +845,7 @@ export async function receivablesReport(
       WHERE i.deleted_at IS NULL
         AND i.status IN ${RECEIVABLE_INVOICE_STATUSES}
         AND i.total_amount_kopecks > i.paid_amount_kopecks
-      GROUP BY i.client_id, c.display_name, c.email
+      GROUP BY i.client_id, c.display_name, c.email, c.status, c.deleted_at
       ORDER BY
         SUM(CASE WHEN i.due_date::date < CURRENT_DATE
                  THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END) DESC,
@@ -873,6 +885,8 @@ export async function receivablesReport(
       clientId: r.client_id,
       clientName: r.client_name,
       clientEmail: r.client_email,
+      // LEFT JOIN: карточки может не быть вовсе → считаем «не в архиве».
+      clientArchived: r.client_archived === true,
       totalOwedKopecks: r.total_owed,
       overdueOwedKopecks: r.overdue_owed,
       maxDaysOverdue: r.max_days_overdue,
