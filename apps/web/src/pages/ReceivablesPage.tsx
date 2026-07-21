@@ -93,7 +93,7 @@ export function ReceivablesPage() {
     setSendingClientId(clientId);
     try {
       const res = await remind.mutateAsync({ clientId });
-      const problems = res.skippedNoEmail + res.notConfigured + res.failed;
+      const problems = res.skippedNoEmail + res.skippedArchived + res.notConfigured + res.failed;
       if (res.sent > 0 && problems === 0) {
         const cd = res.skippedCooldown > 0 ? `, ${res.skippedCooldown} пропущено (недавно)` : '';
         setToast({
@@ -106,6 +106,11 @@ export function ReceivablesPage() {
       } else if (res.skippedCooldown === res.total) {
         // Все счета в cooldown — это нормальный исход, не ошибка (защита от дублей).
         setToast({ tone: 'success', msg: 'Недавно уже напоминали — повтор не отправляли' });
+      } else if (res.skippedArchived > 0) {
+        // Кнопка по архивным и так погашена — сюда попадаем, только если клиента
+        // заархивировали в другой вкладке уже после отрисовки списка. Это не сбой
+        // отправки, поэтому текст объясняет причину, а не пугает «попробуйте позже».
+        setToast({ tone: 'error', msg: 'Клиент в архиве — письма ему не отправляются' });
       } else if (res.skippedNoEmail > 0) {
         setToast({ tone: 'error', msg: 'У клиента не указан email' });
       } else if (res.notConfigured > 0) {
@@ -237,16 +242,26 @@ export function ReceivablesPage() {
                     {data.debtors.map((d) => {
                       const overdue = safeBig(d.overdueOwedKopecks) > 0n;
                       const hasEmail = Boolean(d.clientEmail);
+                      // Архивным письма не уходят (сервер вернёт skipped_archived) —
+                      // гасим кнопку заранее, чтобы клик не выглядел как сбой почты.
+                      const canRemind = hasEmail && !d.clientArchived;
                       const sending = sendingClientId === d.clientId;
                       const lastReminder = daysAgoLabel(d.lastReminderSentAt);
                       return (
                         <tr key={d.clientId} className="hover:bg-muted/40">
                           <td className="p-3">
-                            <div className="font-medium">{d.clientName ?? 'Без названия'}</div>
+                            <div className="flex items-center gap-2 font-medium">
+                              {d.clientName ?? 'Без названия'}
+                              {d.clientArchived && (
+                                <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-normal">
+                                  В архиве
+                                </span>
+                              )}
+                            </div>
                             <div className="text-muted-foreground text-xs">
                               {d.invoiceCount} {pluralInvoices(d.invoiceCount)}
                               {hasEmail ? ` · ${d.clientEmail}` : ''}
-                              {!hasEmail && (
+                              {!hasEmail && !d.clientArchived && (
                                 <span className="text-destructive ml-1 inline-flex items-center gap-1">
                                   <MailX className="h-3 w-3" /> нет email
                                 </span>
@@ -281,7 +296,7 @@ export function ReceivablesPage() {
                             {overdue ? (
                               <button
                                 type="button"
-                                disabled={!hasEmail || sending}
+                                disabled={!canRemind || sending}
                                 onClick={() =>
                                   setConfirmTarget({
                                     clientId: d.clientId,
@@ -289,10 +304,16 @@ export function ReceivablesPage() {
                                     count: d.overdueInvoiceCount,
                                   })
                                 }
-                                title={hasEmail ? undefined : 'У клиента не указан email'}
+                                title={
+                                  d.clientArchived
+                                    ? 'Клиент в архиве — письма ему не отправляются. Долг виден, но напомнить о нём можно только вручную'
+                                    : hasEmail
+                                      ? undefined
+                                      : 'У клиента не указан email'
+                                }
                                 className={cn(
                                   'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition',
-                                  hasEmail && !sending
+                                  canRemind && !sending
                                     ? 'hover:bg-muted'
                                     : 'cursor-not-allowed opacity-50',
                                 )}

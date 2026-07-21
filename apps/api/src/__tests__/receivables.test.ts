@@ -26,7 +26,7 @@ import {
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import { createClient } from '../modules/clients/repository';
+import { archiveClient, createClient } from '../modules/clients/repository';
 import { createTicket } from '../modules/tickets/repository';
 import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
@@ -270,6 +270,105 @@ describe('receivables — Дебиторка (фича №10)', () => {
       tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
     );
     expect(row?.count).toBe(0);
+  });
+});
+
+/**
+ * Архивный клиент: писем НЕ шлём, но долг из отчёта НЕ убираем.
+ *
+ * Асимметрия сознательная. Архивацию здесь используют как суррогат слияния дублей:
+ * карточку-дубль прячут, а счета на ней настоящие. Поэтому цена двух ошибок разная —
+ * лишнее письмо по дублю портит отношения, а спрятанный долг = прямой убыток.
+ * Отсюда: письмо гасим, деньги в отчёте не трогаем ни одной цифрой.
+ */
+describe('архивный клиент: письма гасим, долг оставляем видимым', () => {
+  beforeEach(clearTestData);
+
+  it('sendInvoiceReminder НЕ пишет архивному клиенту', async () => {
+    const clientId = await makeDebtorClient('archived-nomail@example.com');
+    await makeInvoice(clientId, -5);
+    const [inv] = await listClientOverdueInvoices(getDb(), erfolgId, clientId);
+    expect(inv).toBeDefined();
+    if (!inv) return;
+
+    await archiveClient(getDb(), erfolgId, clientId);
+
+    const res = await sendInvoiceReminder(
+      getDb(),
+      { id: erfolgId, name: 'ТестКомпания' },
+      inv,
+      { dryRun: false },
+    );
+    expect(res.outcome).toBe('skipped_archived');
+    expect(sentMail.some((m) => m.to === 'archived-nomail@example.com')).toBe(false);
+
+    // reminderCount НЕ трогаем: вернут клиента из архива — напоминание уйдёт как обычно.
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
+    );
+    expect(row?.count).toBe(0);
+  });
+
+  it('ручная кнопка «Напомнить» по архивному — это НЕ ошибка отправки', async () => {
+    const clientId = await makeDebtorClient('archived-manual@example.com');
+    await makeInvoice(clientId, -5);
+    await archiveClient(getDb(), erfolgId, clientId);
+
+    const r = await sendReminderCmd(makeCmdCtx(erfolgId), clientId);
+    expect(r.sent).toBe(0);
+    expect(r.skippedArchived).toBe(1);
+    // Ключевое: не failed. Иначе директор увидит красное «Не удалось отправить»
+    // и будет жать кнопку повторно, думая что сломалась почта.
+    expect(r.failed).toBe(0);
+  });
+
+  it('ДЕНЬГИ: долг архивного клиента остаётся в дебиторке теми же суммами, с пометкой', async () => {
+    const clientId = await makeDebtorClient('archived-debt@example.com');
+    await makeInvoice(clientId, -5);
+    await makeInvoice(clientId, -40);
+
+    const before = await receivablesReport(getDb(), erfolgId);
+    const rowBefore = before.debtors.find((d) => d.clientId === clientId);
+    expect(rowBefore).toBeDefined();
+    expect(rowBefore?.clientArchived).toBe(false);
+
+    await archiveClient(getDb(), erfolgId, clientId);
+
+    const after = await receivablesReport(getDb(), erfolgId);
+    const rowAfter = after.debtors.find((d) => d.clientId === clientId);
+
+    // Строка на месте — долг не исчез с экрана.
+    expect(rowAfter).toBeDefined();
+    // Пометка появилась — человек видит, ПОЧЕМУ письма по ней не уходят.
+    expect(rowAfter?.clientArchived).toBe(true);
+    // И ни одна цифра не поехала.
+    expect(rowAfter?.totalOwedKopecks).toBe(rowBefore?.totalOwedKopecks);
+    expect(rowAfter?.overdueOwedKopecks).toBe(rowBefore?.overdueOwedKopecks);
+    expect(rowAfter?.invoiceCount).toBe(rowBefore?.invoiceCount);
+    expect(rowAfter?.overdueInvoiceCount).toBe(rowBefore?.overdueInvoiceCount);
+  });
+
+  it('ДЕНЬГИ: архивация не уменьшает сводку и корзины сроков', async () => {
+    const clientId = await makeDebtorClient('archived-aging@example.com');
+    await makeInvoice(clientId, -5);
+
+    const before = await receivablesReport(getDb(), erfolgId);
+    await archiveClient(getDb(), erfolgId, clientId);
+    const after = await receivablesReport(getDb(), erfolgId);
+
+    // Шапка экрана («Всего должны» / «Просрочено») считается из корзин, а корзины
+    // клиентов вообще не джойнят. Если кто-то однажды «оптимизирует» отчёт фильтром
+    // по архиву — эти четыре строки упадут первыми.
+    expect(BigInt(after.summary.totalOutstandingKopecks)).toBeGreaterThanOrEqual(
+      BigInt(before.summary.totalOutstandingKopecks),
+    );
+    expect(BigInt(after.summary.overdueOutstandingKopecks)).toBeGreaterThanOrEqual(
+      BigInt(before.summary.overdueOutstandingKopecks),
+    );
+    expect(after.summary.debtorCount).toBeGreaterThanOrEqual(before.summary.debtorCount);
+    expect(BigInt(after.aging.d1_30.sumKopecks)).toBeGreaterThanOrEqual(
+      BigInt(before.aging.d1_30.sumKopecks),
+    );
   });
 });
 

@@ -83,6 +83,8 @@ export interface SendReminderResult {
   sent: number;
   /** Пропущено: у клиента не указан email. */
   skippedNoEmail: number;
+  /** Пропущено: карточка клиента в архиве — наружу не пишем. Это НЕ ошибка. */
+  skippedArchived: number;
   /** Пропущено: почта tenant'а не настроена (транспорт недоступен). */
   notConfigured: number;
   /** Сбой отправки (SMTP отдал ошибку) — в отличие от «почта не настроена». */
@@ -133,6 +135,7 @@ export async function sendReminderCmd(
   const result: SendReminderResult = {
     sent: 0,
     skippedNoEmail: 0,
+    skippedArchived: 0,
     notConfigured: 0,
     failed: 0,
     skippedCooldown: 0,
@@ -168,6 +171,9 @@ export async function sendReminderCmd(
     );
     if (res.outcome === 'sent') result.sent++;
     else if (res.outcome === 'skipped_no_email') result.skippedNoEmail++;
+    // Архив — НОРМАЛЬНЫЙ исход, не failed: иначе директор увидит «Не удалось отправить»
+    // и будет жать кнопку повторно, думая что сломалась почта.
+    else if (res.outcome === 'skipped_archived') result.skippedArchived++;
     else if (res.outcome === 'skipped_mail') result.notConfigured++;
     else result.failed++; // outcome === 'error'
     // Не отправилось (нет email / почта не настроена / ошибка) → снимаем claim сразу,
