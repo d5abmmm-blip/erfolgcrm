@@ -22,10 +22,19 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 };
 
 const paymentSchema = z.object({
+  /**
+   * Рубли с копейками. Зеркало серверной проверки в payments/router.ts —
+   * счёт на 1 498,50 ₽ раньше нельзя было закрыть вообще.
+   * Точнее копейки не принимаем: молчаливое округление вверх упёрлось бы
+   * в ограничение базы «оплачено не больше суммы счёта».
+   */
   amountRub: z
     .number({ invalid_type_error: 'Введите сумму' })
-    .int('Сумма должна быть целой')
-    .positive('Сумма должна быть больше 0'),
+    .positive('Сумма должна быть больше 0')
+    .refine(
+      (v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6,
+      'Сумма не может быть точнее копейки',
+    ),
   method: z.enum(['cash', 'card', 'bank_transfer']),
   comment: z.string().trim().max(500),
   /** Счёт, который гасит платёж. Пустая строка — платёж без счёта. */
@@ -184,7 +193,7 @@ export function TicketPayments({ ticketId, canManage }: Props) {
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <input
               type="number"
-              step="1"
+              step="0.01"
               min="0"
               {...form.register('amountRub', { valueAsNumber: true })}
               placeholder="Сумма ₽"
