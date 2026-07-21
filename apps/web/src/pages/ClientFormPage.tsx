@@ -9,6 +9,7 @@ import {
 import { ChevronLeft, Lock } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { QueryError } from '../components/QueryError';
 
 type ClientType = 'legal' | 'individual';
 
@@ -164,6 +165,35 @@ export function ClientFormPage() {
   };
 
   const isPending = create.isPending || update.isPending;
+
+  // Пока записи НЕТ — форму не показываем. Условие именно «нет данных», а не «есть
+  // ошибка»: при потере связи react-query не роняет запрос, а ставит его на паузу,
+  // и error остаётся пустым НАВСЕГДА (проверено в браузере: fetchStatus 'paused').
+  // Форма в этот момент показывала бы пустые поля с рабочей кнопкой «Сохранить», и
+  // патч ушёл бы со ВСЕМИ полями, затерев то, что лежит в базе.
+  if (isEdit && !existing.data) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
+        <Link
+          href={`/clients/${editingId}`}
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+        >
+          <ChevronLeft className="h-4 w-4" />К карточке клиента
+        </Link>
+        <QueryError
+          error={existing.error}
+          paused={existing.fetchStatus === 'paused'}
+          what="карточку клиента"
+          onRetry={() => void existing.refetch()}
+        />
+        {/* Пока данные ещё едут — ошибки нет, и QueryError молчит. Без этой строки
+            человек видел бы пустую страницу без единого слова. */}
+        {!existing.error && existing.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Загрузка…</div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
@@ -391,11 +421,17 @@ function Label({
   );
 }
 
+/**
+ * Значок «ПДн» у полей ФИО/телефона/адреса физлица.
+ * Подсказка раньше обещала «хранится в зашифрованном виде» — после миграции 0078
+ * это неправда, поля лежат открыто. Сам значок оставлен: он о том, что данные
+ * личные и обращаться с ними надо бережно, а это по-прежнему верно.
+ */
 function PiiBadge() {
   return (
     <span
       className="bg-muted text-muted-foreground ml-1 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px]"
-      title="Хранится в зашифрованном виде (pgcrypto)"
+      title="Персональные данные — 152-ФЗ. Не пересылайте их во внешние сервисы"
     >
       <Lock className="h-2.5 w-2.5" />
       ПДн

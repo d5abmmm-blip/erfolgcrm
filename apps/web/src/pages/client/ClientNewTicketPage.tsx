@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useLocation } from 'wouter';
 import { Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { QueryError } from '../../components/QueryError';
 
 export function ClientNewTicketPage() {
   const [, navigate] = useLocation();
@@ -48,6 +49,13 @@ export function ClientNewTicketPage() {
         <Field label="Техника">
           {assets.isLoading ? (
             <div className="text-muted-foreground text-sm">Загрузка списка…</div>
+          ) : assets.error ? (
+            <QueryError
+              error={assets.error}
+              paused={assets.fetchStatus === 'paused'}
+              what="список вашей техники"
+              onRetry={() => void assets.refetch()}
+            />
           ) : (
             <select
               value={assetId}

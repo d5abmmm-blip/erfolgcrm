@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { AlertCircle, Package, Search } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { cn } from '../../lib/utils';
+import { QueryError } from '../../components/QueryError';
 
 /**
  * Мобильная страница склада: поиск + остатки.
@@ -39,6 +40,13 @@ export function MobileInventoryPage() {
 
       {list.isLoading ? (
         <div className="text-muted-foreground py-8 text-center text-sm">Загрузка…</div>
+      ) : list.error ? (
+        <QueryError
+          error={list.error}
+          paused={list.fetchStatus === 'paused'}
+          what="остатки склада"
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <div className="text-muted-foreground py-8 text-center text-sm">Ничего не найдено</div>
       ) : (

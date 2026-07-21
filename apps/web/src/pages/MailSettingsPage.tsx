@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, Mail, Send } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { QueryError } from '../components/QueryError';
 
 function numOrNull(v: string): number | null {
   const n = Number(v);
@@ -118,6 +119,15 @@ export function MailSettingsPage() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Загрузка…
         </div>
+      ) : cfg.error ? (
+        // Форму прячем целиком: поля остались бы пустыми, и «Сохранить» затёрло бы
+        // реальные реквизиты ящика — почта замолчала бы.
+        <QueryError
+          error={cfg.error}
+          paused={cfg.fetchStatus === 'paused'}
+          what="настройки почты"
+          onRetry={() => void cfg.refetch()}
+        />
       ) : (
         <div className="space-y-4">
           {/* Enable toggle */}

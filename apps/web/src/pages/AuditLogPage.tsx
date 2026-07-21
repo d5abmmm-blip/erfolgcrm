@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { QueryErrorRow } from '../components/QueryError';
 
 type Action =
   | 'create'
@@ -343,7 +344,16 @@ export function AuditLogPage() {
                 </td>
               </tr>
             )}
-            {!listQ.isLoading && rows.length === 0 && (
+            {/* Без этой строки сбой загрузки выглядел как «Событий нет» — то есть
+                журнал нарушений сам себе выдавал справку, что нарушений не было. */}
+            <QueryErrorRow
+              error={listQ.error}
+              paused={listQ.fetchStatus === 'paused'}
+              what="журнал действий"
+              colSpan={7}
+              onRetry={() => void listQ.refetch()}
+            />
+            {!listQ.isLoading && !listQ.error && listQ.fetchStatus !== 'paused' && rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="text-muted-foreground p-6 text-center">
                   Событий нет.

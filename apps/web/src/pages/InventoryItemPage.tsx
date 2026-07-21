@@ -7,6 +7,7 @@ import { kopecksToRub } from '../lib/money';
 import { InventoryBatchForm } from '../components/InventoryBatchForm';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { ConfirmDialog } from '../components/ui';
+import { QueryError } from '../components/QueryError';
 
 export function InventoryItemPage() {
   const [match, params] = useRoute('/inventory/:id');
@@ -41,6 +42,20 @@ export function InventoryItemPage() {
 
   if (!match) return null;
   if (item.isLoading) return <div className="p-6 text-muted-foreground text-sm">Загрузка…</div>;
+  // Без этой ветки сбой загрузки выглядел как «Позиция не найдена» — то есть склад
+  // сообщал об удалении позиции, которая на самом деле на месте.
+  if (item.error) {
+    return (
+      <div className="p-6">
+        <QueryError
+          error={item.error}
+          paused={item.fetchStatus === 'paused'}
+          what="позицию склада"
+          onRetry={() => void item.refetch()}
+        />
+      </div>
+    );
+  }
   if (!item.data) return <div className="p-6 text-destructive text-sm">Позиция не найдена</div>;
 
   const it = item.data;

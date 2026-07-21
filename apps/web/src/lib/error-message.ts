@@ -30,6 +30,55 @@ const BY_MACHINE_CODE: Record<string, string> = {
 const FALLBACK = 'Не удалось сохранить изменение';
 
 /**
+ * Те же коды, но для СБОЯ ЗАГРУЗКИ, а не сохранения.
+ *
+ * Отдельный список нужен из-за концовки: «Изменение не сохранено» после неудачной
+ * загрузки — вранье, ничего и не сохранялось. Человек должен понять другое: то,
+ * что он видит на экране, — не данные, а пустота из-за ошибки.
+ */
+const LOAD_BY_CODE: Record<string, string> = {
+  UNAUTHORIZED: 'Сессия истекла — войдите заново, чтобы увидеть данные',
+  FORBIDDEN: 'Недостаточно прав, чтобы посмотреть эти данные',
+  NOT_FOUND: 'Запись не найдена — возможно, её удалил другой сотрудник',
+  TIMEOUT: 'Сервер не ответил вовремя — данные не загружены',
+  TOO_MANY_REQUESTS: 'Слишком часто — подождите немного и обновите страницу',
+  INTERNAL_SERVER_ERROR: 'Ошибка на сервере — данные не загружены',
+};
+
+const LOAD_FALLBACK = 'Не удалось загрузить данные';
+
+/**
+ * Превращает ошибку ЗАГРУЗКИ (useQuery) в короткую фразу для человека.
+ *
+ * Зачем отдельно от `humanizeError`: тот написан под мутации и всюду обещает
+ * «Изменение не сохранено». Здесь важно не это, а то, что **пустой экран — это
+ * ошибка, а не отсутствие данных**. Пустая таблица журнала аудита без такой
+ * фразы читается как «нарушений не было».
+ */
+export function humanizeLoadError(err: unknown): string {
+  if (isOfflineError(err)) {
+    return 'Нет связи с сервером — данные не загружены';
+  }
+
+  if (err instanceof TRPCClientError) {
+    const code = (err.data as { code?: string } | null | undefined)?.code;
+    const raw = firstLine(err.message);
+    if (raw && BY_MACHINE_CODE[raw]) return BY_MACHINE_CODE[raw];
+    if (code && LOAD_BY_CODE[code]) return LOAD_BY_CODE[code];
+    // SQL из INTERNAL_SERVER_ERROR и JSON от Zod наружу не выпускаем.
+    if (looksTechnical(raw)) return LOAD_FALLBACK;
+    return raw || LOAD_FALLBACK;
+  }
+
+  if (err instanceof Error) {
+    const raw = firstLine(err.message);
+    return looksTechnical(raw) ? LOAD_FALLBACK : raw || LOAD_FALLBACK;
+  }
+
+  return LOAD_FALLBACK;
+}
+
+/**
  * Пометка для useMutation: экран показывает ошибку сам (рядом с полем или
  * в диалоге), глобальный тост дублировать не нужно. Читается в main.tsx.
  */

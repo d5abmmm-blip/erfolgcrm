@@ -14,6 +14,7 @@ import { trpc } from '../lib/trpc';
 import { getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
+import { QueryError } from '../components/QueryError';
 
 const EXCHANGE_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   pending: { label: 'В процессе', cls: 'bg-warning/15 text-warning' },
@@ -143,6 +144,15 @@ export function OnecSettingsPage() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Загрузка…
         </div>
+      ) : cfg.error ? (
+        // Настройки прячем целиком: иначе тумблер выглядел бы выключенным, а токен —
+        // не выданным, хотя на сервере они есть.
+        <QueryError
+          error={cfg.error}
+          paused={cfg.fetchStatus === 'paused'}
+          what="настройки обмена с 1С"
+          onRetry={() => void cfg.refetch()}
+        />
       ) : (
         <div className="space-y-4">
           {/* Enable toggle */}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import { Loader2, Plus } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { QueryError } from '../../components/QueryError';
 
 const STATUS_LABEL: Record<string, string> = {
   received: 'Принята',
@@ -54,6 +55,13 @@ export function ClientTicketsPage() {
         <div className="flex items-center justify-center py-10">
           <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
         </div>
+      ) : list.error ? (
+        <QueryError
+          error={list.error}
+          paused={list.fetchStatus === 'paused'}
+          what="список ваших заявок"
+          onRetry={() => void list.refetch()}
+        />
       ) : list.data && list.data.length > 0 ? (
         <div className="bg-card overflow-hidden rounded-md border">
           <table className="w-full text-sm">
