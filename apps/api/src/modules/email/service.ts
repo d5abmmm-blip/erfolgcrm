@@ -180,7 +180,7 @@ export async function sendEmailCmd(
     // При ошибке строку НЕ трогаем — она остаётся черновиком, можно повторить отправку.
     if (status !== 'failed') {
       try {
-        await finalizeMessageSend(ctx.db, ctx.tenant.id, key, input.fromDraftId, {
+        await finalizeMessageSend(ctx.db, ctx.tenant.id, input.fromDraftId, {
           status,
           to: input.to,
           from: fromAddr,
@@ -254,8 +254,7 @@ export interface SaveDraftInput {
 
 /** Создать/обновить черновик. Возвращает id (для последующих сохранений и отправки). */
 export async function saveDraftCmd(ctx: CmdCtx, input: SaveDraftInput): Promise<{ id: string }> {
-  const key = getTenantEncryptionKey(ctx.tenant);
-  const id = await upsertOutbox(ctx.db, ctx.tenant.id, key, {
+  const id = await upsertOutbox(ctx.db, ctx.tenant.id, {
     id: input.id,
     status: 'draft',
     to: input.to ?? null,
@@ -288,8 +287,7 @@ export async function scheduleEmailCmd(
       message: 'Время отправки должно быть в будущем (хотя бы через минуту).',
     });
   }
-  const key = getTenantEncryptionKey(ctx.tenant);
-  const id = await upsertOutbox(ctx.db, ctx.tenant.id, key, {
+  const id = await upsertOutbox(ctx.db, ctx.tenant.id, {
     id: input.fromDraftId,
     status: 'scheduled',
     scheduledAt: input.scheduledAt,
@@ -321,8 +319,7 @@ export async function sendScheduledNowCmd(
   ctx: CmdCtx,
   id: string,
 ): Promise<{ status: 'sent' | 'skipped'; messageId: string | null }> {
-  const key = getTenantEncryptionKey(ctx.tenant);
-  const msg = await getMessage(ctx.db, ctx.tenant.id, key, id);
+  const msg = await getMessage(ctx.db, ctx.tenant.id, id);
   if (!msg || msg.status !== 'scheduled') {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Письмо не запланировано.' });
   }
@@ -350,8 +347,7 @@ export async function trashCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> {
 /** Восстановить из корзины. Запланированному вернуть задачу (или в черновики, если срок прошёл). */
 export async function restoreCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> {
   await restoreMessage(ctx.db, ctx.tenant.id, id);
-  const key = getTenantEncryptionKey(ctx.tenant);
-  const msg = await getMessage(ctx.db, ctx.tenant.id, key, id);
+  const msg = await getMessage(ctx.db, ctx.tenant.id, id);
   if (msg?.status === 'scheduled' && msg.scheduledAt) {
     const when = new Date(msg.scheduledAt);
     if (when.getTime() > Date.now() + 60_000) {
@@ -415,8 +411,7 @@ export function listMessagesQuery(
     spam?: boolean;
   },
 ): Promise<{ items: EmailMessageDto[]; total: number }> {
-  const key = getTenantEncryptionKey(tenant);
-  return listMessages(db, tenant.id, key, input);
+  return listMessages(db, tenant.id, input);
 }
 
 export function getMessageQuery(
@@ -424,8 +419,7 @@ export function getMessageQuery(
   tenant: ResolvedTenant,
   id: string,
 ): Promise<EmailMessageFull | null> {
-  const key = getTenantEncryptionKey(tenant);
-  return getMessage(db, tenant.id, key, id);
+  return getMessage(db, tenant.id, id);
 }
 
 /**
@@ -438,12 +432,11 @@ export async function getThreadQuery(
   tenant: ResolvedTenant,
   messageId: string,
 ): Promise<ThreadMessageDto[]> {
-  const key = getTenantEncryptionKey(tenant);
-  const target = await getMessage(db, tenant.id, key, messageId);
+  const target = await getMessage(db, tenant.id, messageId);
   if (!target) return [];
 
   const msgs = target.threadId
-    ? await getThread(db, tenant.id, key, target.threadId)
+    ? await getThread(db, tenant.id, target.threadId)
     : [target];
 
   const storage = getObjectStorage();
@@ -520,8 +513,7 @@ export async function draftTicketFromEmailQuery(
   tenant: ResolvedTenant,
   emailId: string,
 ): Promise<EmailTicketDraftDto> {
-  const key = getTenantEncryptionKey(tenant);
-  const msg = await getMessage(db, tenant.id, key, emailId);
+  const msg = await getMessage(db, tenant.id, emailId);
   if (!msg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Письмо не найдено.' });
 
   // Клиент — детерминированно: сперва привязанный при приёме, иначе по адресу отправителя.
@@ -585,8 +577,7 @@ export async function draftReplyQuery(
   tenant: ResolvedTenant,
   emailId: string,
 ): Promise<{ text: string; aiUsed: boolean }> {
-  const key = getTenantEncryptionKey(tenant);
-  const msg = await getMessage(db, tenant.id, key, emailId);
+  const msg = await getMessage(db, tenant.id, emailId);
   if (!msg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Письмо не найдено.' });
   const body = (msg.bodyText && msg.bodyText.trim()) || stripHtmlToText(msg.bodyHtml);
   return draftReplyText(db, tenant, { subject: msg.subject, body });

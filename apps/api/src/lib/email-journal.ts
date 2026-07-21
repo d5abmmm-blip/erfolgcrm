@@ -2,14 +2,14 @@
  * Журнал писем (email_messages): запись с шифрованием ПДн через pgcrypto.
  *
  * Единая точка записи и для ручных писем (модуль email), и для автоматических
- * (воркеры invoice-reminder / ticket-status-notify). Тема/тело/адреса — персональные
- * данные (152-ФЗ), поэтому шифруются на вставке (pgp_sym_encrypt), читаются только
- * через decryptSql. Сырой bytea наружу не отдаём.
+ * (воркеры invoice-reminder / ticket-status-notify). Тема, тело и адреса хранятся
+ * ОТКРЫТО — см. миграцию 0079: ключ шифрования лежал на том же сервере, что и база,
+ * а расшифровка каждой строки делала поиск по почте неприемлемо медленным.
+ * Зашифрованными остались только пароли ящика в email_configs.
  *
  * Зависит только от @erfolg/db (никаких импортов из modules/) — lib остаётся самодостаточным.
  */
 import {
-  getTenantEncryptionKey,
   withTenantTx,
   type Db,
 } from '@erfolg/db';
@@ -53,9 +53,6 @@ export async function insertEmailMessage(
   tenantId: string,
   entry: JournalEntry,
 ): Promise<string | null> {
-  const key = getTenantEncryptionKey({ id: tenantId, kmsKeyId: null });
-  const enc = (v: string | null | undefined) =>
-    v == null ? sql`NULL` : sql`pgp_sym_encrypt(${v}::text, ${key})`;
   const ts = (d: Date | null | undefined) =>
     d == null ? sql`NULL` : sql`${d.toISOString()}::timestamptz`;
 
@@ -63,15 +60,15 @@ export async function insertEmailMessage(
     const result = await tx.execute<{ id: string }>(sql`
       INSERT INTO email_messages (
         tenant_id, direction, status,
-        to_addr_encrypted, from_addr_encrypted, cc_addr_encrypted, bcc_addr_encrypted, subject_encrypted,
-        body_text_encrypted, body_html_encrypted,
+        to_addr, from_addr, cc_addr, bcc_addr, subject,
+        body_text, body_html,
         message_id, in_reply_to, references_list, thread_id,
         related_ticket_id, related_client_id,
         attachment_name, attachment_kind, is_spam, error, sent_by_user_id, sent_at, received_at
       ) VALUES (
         ${tenantId}, ${entry.direction ?? 'out'}, ${entry.status},
-        ${enc(entry.to)}, ${enc(entry.from)}, ${enc(entry.cc)}, ${enc(entry.bcc)}, ${enc(entry.subject)},
-        ${enc(entry.bodyText)}, ${enc(entry.bodyHtml)},
+        ${entry.to ?? null}, ${entry.from ?? null}, ${entry.cc ?? null}, ${entry.bcc ?? null}, ${entry.subject ?? null},
+        ${entry.bodyText ?? null}, ${entry.bodyHtml ?? null},
         ${entry.messageId ?? null}, ${entry.inReplyTo ?? null}, ${entry.references ?? null}, ${entry.threadId ?? null},
         ${entry.relatedTicketId ?? null}, ${entry.relatedClientId ?? null},
         ${entry.attachmentName ?? null}, ${entry.attachmentKind ?? null}, ${entry.isSpam ?? false},

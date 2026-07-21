@@ -1,18 +1,20 @@
 /**
- * Разовый перенос ПДн клиентов и контактов из шифрованных колонок в открытые.
+ * Разовый перенос ПДн из шифрованных колонок в открытые.
  *
- * Пара к миграции 0078: миграция создала пустые открытые колонки, этот скрипт их наполняет.
- * Ключ шифрования в .sql-файл не передать, поэтому расшифровка живёт отдельно, здесь.
+ * Пара к миграциям 0078 (клиенты и контакты) и 0079 (переписка): миграции создают
+ * пустые открытые колонки, этот скрипт их наполняет. Ключ шифрования в .sql-файл
+ * не передать, поэтому расшифровка живёт отдельно, здесь.
  *
- * ЧТО ПЕРЕНОСИТ:
- *   clients.full_name_encrypted  → clients.individual_full_name
- *   clients.phone_encrypted      → clients.individual_phone
- *   clients.address_encrypted    → clients.individual_address
- *   contacts.full_name_encrypted → contacts.full_name
- *   contacts.phone_encrypted     → contacts.phone
+ * ЧТО ПЕРЕНОСИТ: см. список MOVES ниже — ПДн клиентов, контактных лиц и переписку.
  *
- * ЧЕГО НЕ ДЕЛАЕТ: не удаляет шифрованные колонки (это отдельная миграция-уборка, после
- * того как перенос проверен) и не трогает почту (email_messages — отдельная задача).
+ * ⚠️ ЧЕГО НЕ ТРОГАЕТ СОЗНАТЕЛЬНО — служебные секреты, они ОСТАЮТСЯ зашифрованными:
+ *   email_configs.smtp_password_encrypted / imap_password_encrypted,
+ *   telegram_bot_configs.*, llm_configs.api_key_encrypted, секреты 2FA в users.
+ *   Их потеря лечится повторным вводом, в отличие от писем и картотеки.
+ *   Поэтому PII_ENCRYPTION_KEY нужен и после переноса — просто перестаёт быть смертельным.
+ *
+ * ЧЕГО НЕ ДЕЛАЕТ: не удаляет шифрованные колонки — это отдельная миграция-уборка,
+ * после того как перенос проверен. Пока они на месте, откат стоит ноль.
  *
  * БЕЗОПАСНОСТЬ: расшифрованные значения — это ПДн живых людей. Скрипт НЕ печатает их
  * ни при каких флагах: в отчёт идут только количества. Данные не покидают базу — вся
@@ -57,17 +59,28 @@ type Db = ReturnType<typeof makeDb>;
 
 /** Одна колонка к переносу: откуда, куда, в какой таблице. */
 interface Move {
-  table: 'clients' | 'contacts';
+  table: 'clients' | 'contacts' | 'email_messages';
   from: string;
   to: string;
 }
 
 const MOVES: Move[] = [
+  // Миграция 0078 — ПДн клиентов и контактов.
   { table: 'clients', from: 'full_name_encrypted', to: 'individual_full_name' },
   { table: 'clients', from: 'phone_encrypted', to: 'individual_phone' },
   { table: 'clients', from: 'address_encrypted', to: 'individual_address' },
   { table: 'contacts', from: 'full_name_encrypted', to: 'full_name' },
   { table: 'contacts', from: 'phone_encrypted', to: 'phone' },
+  // Миграция 0079 — переписка с клиентами.
+  // ⚠️ Пароли ящика (email_configs.smtp/imap_password_encrypted) НЕ переносятся
+  // сознательно: это секреты доступа, а не переписка, и они остаются зашифрованными.
+  { table: 'email_messages', from: 'to_addr_encrypted', to: 'to_addr' },
+  { table: 'email_messages', from: 'from_addr_encrypted', to: 'from_addr' },
+  { table: 'email_messages', from: 'subject_encrypted', to: 'subject' },
+  { table: 'email_messages', from: 'body_text_encrypted', to: 'body_text' },
+  { table: 'email_messages', from: 'body_html_encrypted', to: 'body_html' },
+  { table: 'email_messages', from: 'cc_addr_encrypted', to: 'cc_addr' },
+  { table: 'email_messages', from: 'bcc_addr_encrypted', to: 'bcc_addr' },
 ];
 
 /**
@@ -139,7 +152,7 @@ async function main(): Promise<void> {
     for (const m of MOVES) before.push(await countPending(db, m));
 
     console.info('\nК переносу:');
-    MOVES.forEach((m, i) => console.info(`  ${m.table}.${m.to.padEnd(21)} ${before[i]}`));
+    MOVES.forEach((m, i) => console.info(`  ${(m.table + '.' + m.to).padEnd(38)} ${before[i]}`));
     const total = before.reduce((a, b) => a + b, 0);
     if (total === 0) {
       // Переносить нечего — значит скрипт уже отработал. Повторный запуск в этом
@@ -180,7 +193,7 @@ async function main(): Promise<void> {
     console.info('\nПеренесено:');
     MOVES.forEach((m, i) => {
       const moved = (before[i] ?? 0) - (after[i] ?? 0);
-      console.info(`  ${m.table}.${m.to.padEnd(21)} ${moved} (осталось ${after[i] ?? 0})`);
+      console.info(`  ${(m.table + '.' + m.to).padEnd(38)} ${moved} (осталось ${after[i] ?? 0})`);
     });
 
     const left = after.reduce((a, b) => a + b, 0);
@@ -199,7 +212,8 @@ async function main(): Promise<void> {
       );
     }
     console.info('\nСверка: все перенесённые значения совпали с расшифровкой старых колонок.');
-    console.info('Готово. ПДн клиентов и контактов лежат открыто.');
+    console.info('Готово. Картотека клиентов и переписка лежат открыто.');
+    console.info('Служебные пароли (почта, бот, ИИ, 2FA) остались зашифрованными — так и задумано.');
   } finally {
     await db.$client.end();
   }

@@ -256,11 +256,10 @@ export async function upsertConfig(
   });
 }
 
-/** Журнал писем. Поиск (по теме/адресу) — по расшифрованным значениям (seq scan, объём мал). */
+/** Журнал писем. Поиск — по теме, «кому» и «от кого» (открытые колонки, миграция 0079). */
 export async function listMessages(
   db: Db,
   tenantId: string,
-  key: string,
   opts: {
     page?: number;
     pageSize?: number;
@@ -288,13 +287,16 @@ export async function listMessages(
     const q = `%${opts.search.trim()}%`;
     // ruIlike вместо ILIKE: база в локали «C», где ILIKE сворачивает регистр
     // только для латиницы. «Гастроскоп» по запросу «гастроскоп» не находился
-    // вообще — не «иногда», а никогда. Почта осталась единственным модулем,
-    // выпавшим из этой правки при аудите 2026-06-11.
-    // Поле «От кого» в поиск сознательно НЕ добавлено: каждое условие — это
-    // ещё один pgp_sym_decrypt на строку, а фильтр и так выполняется дважды
-    // (страница + count).
+    // вообще — не «иногда», а никогда.
+    //
+    // «От кого» здесь ПОЯВИЛОСЬ вместе с миграцией 0079. Раньше его не добавляли
+    // сознательно: каждое условие стоило ещё одного pgp_sym_decrypt на строку,
+    // а фильтр выполняется ДВАЖДЫ (страница + счётчик) — на 5000 писем это были
+    // секунды ожидания. Теперь поля открытые, и цена условия обычная.
+    // Искать по ТЕЛУ письма всё равно не стали: это меняет смысл поиска
+    // (найдётся всё, где слово упомянуто вскользь) — отдельное решение, не побочный эффект.
     filters.push(
-      sql`(${ruIlike(decryptSql(emailMessages.subjectEnc, key), q)} OR ${ruIlike(decryptSql(emailMessages.toAddrEnc, key), q)})`,
+      sql`(${ruIlike(emailMessages.subject, q)} OR ${ruIlike(emailMessages.toAddr, q)} OR ${ruIlike(emailMessages.fromAddr, q)})`,
     );
   }
   const where = filters.length ? and(...filters) : undefined;
@@ -305,9 +307,9 @@ export async function listMessages(
         id: emailMessages.id,
         direction: emailMessages.direction,
         status: emailMessages.status,
-        to: decryptSql(emailMessages.toAddrEnc, key).as('to_dec'),
-        from: decryptSql(emailMessages.fromAddrEnc, key).as('from_dec'),
-        subject: decryptSql(emailMessages.subjectEnc, key).as('subject_dec'),
+        to: emailMessages.toAddr,
+        from: emailMessages.fromAddr,
+        subject: emailMessages.subject,
         messageId: emailMessages.messageId,
         threadId: emailMessages.threadId,
         relatedTicketId: emailMessages.relatedTicketId,
@@ -337,9 +339,9 @@ export async function listMessages(
         id: r.id,
         direction: r.direction,
         status: r.status,
-        to: (r.to as string | null) ?? null,
-        from: (r.from as string | null) ?? null,
-        subject: (r.subject as string | null) ?? null,
+        to: r.to,
+        from: r.from,
+        subject: r.subject,
         messageId: r.messageId,
         threadId: r.threadId,
         relatedTicketId: r.relatedTicketId,
@@ -372,18 +374,18 @@ export interface EmailMessageFull extends EmailMessageDto {
 }
 
 /** Проекция полного письма (тело + заголовки треда). Общая для getMessage/getThread. */
-function fullSelection(key: string) {
+function fullSelection() {
   return {
     id: emailMessages.id,
     direction: emailMessages.direction,
     status: emailMessages.status,
-    to: decryptSql(emailMessages.toAddrEnc, key).as('to_dec'),
-    from: decryptSql(emailMessages.fromAddrEnc, key).as('from_dec'),
-    subject: decryptSql(emailMessages.subjectEnc, key).as('subject_dec'),
-    bodyText: decryptSql(emailMessages.bodyTextEnc, key).as('body_text_dec'),
-    bodyHtml: decryptSql(emailMessages.bodyHtmlEnc, key).as('body_html_dec'),
-    cc: decryptSql(emailMessages.ccAddrEnc, key).as('cc_dec'),
-    bcc: decryptSql(emailMessages.bccAddrEnc, key).as('bcc_dec'),
+    to: emailMessages.toAddr,
+    from: emailMessages.fromAddr,
+    subject: emailMessages.subject,
+    bodyText: emailMessages.bodyText,
+    bodyHtml: emailMessages.bodyHtml,
+    cc: emailMessages.ccAddr,
+    bcc: emailMessages.bccAddr,
     messageId: emailMessages.messageId,
     inReplyTo: emailMessages.inReplyTo,
     references: emailMessages.references,
@@ -469,12 +471,11 @@ function mapFull(r: FullRow): EmailMessageFull {
 export async function getMessage(
   db: Db,
   tenantId: string,
-  key: string,
   id: string,
 ): Promise<EmailMessageFull | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select(fullSelection(key))
+      .select(fullSelection())
       .from(emailMessages)
       .where(eq(emailMessages.id, id))
       .limit(1);
@@ -484,16 +485,15 @@ export async function getMessage(
   });
 }
 
-/** Все письма треда (по thread_id), от старых к новым. Расшифрованы (как getMessage). */
+/** Все письма треда (по thread_id), от старых к новым. */
 export async function getThread(
   db: Db,
   tenantId: string,
-  key: string,
   threadId: string,
 ): Promise<EmailMessageFull[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select(fullSelection(key))
+      .select(fullSelection())
       .from(emailMessages)
       .where(eq(emailMessages.threadId, threadId))
       .orderBy(asc(emailMessages.createdAt));
@@ -707,11 +707,8 @@ export interface OutboxFields extends DraftFields {
 export async function upsertOutbox(
   db: Db,
   tenantId: string,
-  key: string,
   input: OutboxFields & { id?: string },
 ): Promise<string> {
-  const enc = (v: string | null | undefined) =>
-    v == null ? sql`NULL` : sql`pgp_sym_encrypt(${v}::text, ${key})`;
   const ts = (d: Date | null | undefined) =>
     d == null ? sql`NULL` : sql`${d.toISOString()}::timestamptz`;
   const status = input.status ?? 'draft';
@@ -720,12 +717,12 @@ export async function upsertOutbox(
       const upd = (await tx.execute<{ id: string }>(sql`
         UPDATE email_messages SET
           status = ${status},
-          to_addr_encrypted = ${enc(input.to)},
-          cc_addr_encrypted = ${enc(input.cc)},
-          bcc_addr_encrypted = ${enc(input.bcc)},
-          subject_encrypted = ${enc(input.subject)},
-          body_text_encrypted = ${enc(input.bodyText)},
-          body_html_encrypted = ${enc(input.bodyHtml)},
+          to_addr = ${input.to ?? null},
+          cc_addr = ${input.cc ?? null},
+          bcc_addr = ${input.bcc ?? null},
+          subject = ${input.subject ?? null},
+          body_text = ${input.bodyText ?? null},
+          body_html = ${input.bodyHtml ?? null},
           related_ticket_id = ${input.relatedTicketId ?? null},
           related_client_id = ${input.relatedClientId ?? null},
           in_reply_to = ${input.inReplyTo ?? null},
@@ -740,13 +737,13 @@ export async function upsertOutbox(
     const ins = (await tx.execute<{ id: string }>(sql`
       INSERT INTO email_messages (
         tenant_id, direction, status,
-        to_addr_encrypted, cc_addr_encrypted, bcc_addr_encrypted, subject_encrypted,
-        body_text_encrypted, body_html_encrypted,
+        to_addr, cc_addr, bcc_addr, subject,
+        body_text, body_html,
         related_ticket_id, related_client_id, in_reply_to, references_list, scheduled_at, sent_by_user_id
       ) VALUES (
         ${tenantId}, 'out', ${status},
-        ${enc(input.to)}, ${enc(input.cc)}, ${enc(input.bcc)}, ${enc(input.subject)},
-        ${enc(input.bodyText)}, ${enc(input.bodyHtml)},
+        ${input.to ?? null}, ${input.cc ?? null}, ${input.bcc ?? null}, ${input.subject ?? null},
+        ${input.bodyText ?? null}, ${input.bodyHtml ?? null},
         ${input.relatedTicketId ?? null}, ${input.relatedClientId ?? null},
         ${input.inReplyTo ?? null}, ${input.references ?? null}, ${ts(input.scheduledAt)}, ${input.sentByUserId ?? null}
       ) RETURNING id
@@ -831,25 +828,22 @@ export interface FinalizeSendFields {
 export async function finalizeMessageSend(
   db: Db,
   tenantId: string,
-  key: string,
   id: string,
   fields: FinalizeSendFields,
 ): Promise<void> {
-  const enc = (v: string | null | undefined) =>
-    v == null ? sql`NULL` : sql`pgp_sym_encrypt(${v}::text, ${key})`;
   const ts = (d: Date | null | undefined) =>
     d == null ? sql`NULL` : sql`${d.toISOString()}::timestamptz`;
   await withTenantTx(db, tenantId, async (tx) => {
     await tx.execute(sql`
       UPDATE email_messages SET
         status = ${fields.status},
-        to_addr_encrypted = ${enc(fields.to)},
-        from_addr_encrypted = ${enc(fields.from)},
-        cc_addr_encrypted = ${enc(fields.cc)},
-        bcc_addr_encrypted = ${enc(fields.bcc)},
-        subject_encrypted = ${enc(fields.subject)},
-        body_text_encrypted = ${enc(fields.bodyText)},
-        body_html_encrypted = ${enc(fields.bodyHtml)},
+        to_addr = ${fields.to ?? null},
+        from_addr = ${fields.from ?? null},
+        cc_addr = ${fields.cc ?? null},
+        bcc_addr = ${fields.bcc ?? null},
+        subject = ${fields.subject ?? null},
+        body_text = ${fields.bodyText ?? null},
+        body_html = ${fields.bodyHtml ?? null},
         message_id = ${fields.messageId ?? null},
         in_reply_to = ${fields.inReplyTo ?? null},
         references_list = ${fields.references ?? null},
