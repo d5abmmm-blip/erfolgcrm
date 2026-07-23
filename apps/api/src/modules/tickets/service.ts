@@ -90,23 +90,28 @@ async function ensureRefsExist(
 }
 
 /**
- * Контракт обязателен для бюджетных юрлиц (44-ФЗ): без него заявку нельзя ни создать,
- * ни сохранить с патчем, который убирает contractId. Проверка по subtype текущего клиента.
+ * Контракт у бюджетной организации — ПРЕДУПРЕЖДЕНИЕ, а не запрет (решение владельца
+ * 2026-07-23). Возвращает текст плашки или null; создание/сохранение НЕ блокирует.
+ *
+ * ⚠️ РАНЬШЕ ЗДЕСЬ БЫЛ ЗАПРЕТ (44-ФЗ), и он закрывал работу. По боевым данным:
+ * госучреждений 122, договоров заведено 0 (ни одного), их заявок 4589 = 76,5 % всей
+ * работы — и все без контракта, они приехали из старой программы. То есть менеджер
+ * не мог завести заявку НИ ОДНОМУ госучреждению. Сам контракт при этом дальше нигде
+ * не используется: ни в счетах, ни в документах, ни в отчётах — это поле-ссылка.
+ *
+ * Сделано по образцу предупреждения об аттестации инженера: показываем плашку,
+ * но человеку не мешаем.
  */
-async function ensureContractRequirement(
+async function contractWarningFor(
   db: Db,
   tenantId: string,
   clientId: string,
   contractId: string | null | undefined,
-): Promise<void> {
-  if (contractId) return;
+): Promise<string | null> {
+  if (contractId) return null;
   const subtype = await clientSubtype(db, tenantId, clientId);
-  if (subtype === 'budget') {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Для бюджетной организации требуется контракт',
-    });
-  }
+  if (subtype !== 'budget') return null;
+  return 'У бюджетной организации не указан контракт — проверьте, нужен ли он для этой работы';
 }
 
 /**
@@ -134,6 +139,13 @@ export interface CreateTicketResult {
   barcode: string;
   /** Stage 10'.I — ненулевое сообщение если инженер назначен без действующей аттестации. */
   attestationWarning: string | null;
+  /**
+   * Мягкая подсказка: у бюджетной организации не указан контракт. Работу НЕ блокирует.
+   * Веб плашкой её при СОЗДАНИИ не показывает — там подсказка стоит прямо в форме,
+   * рядом с полем «Договор», и человек видит её ДО отправки. Поле возвращаем для
+   * симметрии с update и для мобильного клиента.
+   */
+  contractWarning: string | null;
 }
 
 export async function createTicketCmd(
@@ -147,7 +159,7 @@ export async function createTicketCmd(
     engineerId: input.assignedEngineerId ?? null,
     contractId: input.contractId ?? null,
   });
-  await ensureContractRequirement(
+  const contractWarning = await contractWarningFor(
     ctx.db,
     ctx.tenant.id,
     input.clientId,
@@ -191,12 +203,14 @@ export async function createTicketCmd(
     ip: ctx.audit.ip ?? null,
     userAgent: ctx.audit.userAgent ?? null,
   });
-  return { ...result, attestationWarning };
+  return { ...result, attestationWarning, contractWarning };
 }
 
 export interface UpdateTicketResult {
   /** Stage 10'.I — предупреждение, если инженер назначен/переназначен без аттестации. */
   attestationWarning: string | null;
+  /** Мягкая подсказка: у бюджетной организации не указан контракт. Работу НЕ блокирует. */
+  contractWarning: string | null;
 }
 
 export async function updateTicketCmd(
@@ -214,12 +228,14 @@ export async function updateTicketCmd(
     engineerId: patch.assignedEngineerId ?? null,
     contractId: patch.contractId ?? null,
   });
-  // Если меняем клиента или явно убираем контракт — проверим обязательность для бюджетников.
+  // Меняем клиента или контракт — считаем подсказку заново по итоговым значениям.
+  // Не блокируем: у госучреждения контракта может не быть, и это нормально.
+  let contractWarning: string | null = null;
   if (patch.clientId !== undefined || patch.contractId !== undefined) {
     const effectiveClientId = patch.clientId ?? before.clientId;
     const effectiveContractId =
       patch.contractId !== undefined ? patch.contractId : before.contractId;
-    await ensureContractRequirement(
+    contractWarning = await contractWarningFor(
       ctx.db,
       ctx.tenant.id,
       effectiveClientId,
@@ -278,7 +294,7 @@ export async function updateTicketCmd(
     ip: ctx.audit.ip ?? null,
     userAgent: ctx.audit.userAgent ?? null,
   });
-  return { attestationWarning };
+  return { attestationWarning, contractWarning };
 }
 
 const REOPEN_STATUSES: ReadonlySet<TicketStatus> = new Set([

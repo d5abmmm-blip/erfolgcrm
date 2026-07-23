@@ -156,6 +156,11 @@ export function TicketCardPage() {
       if (data && 'attestationWarning' in data && data.attestationWarning) {
         setAttestationWarning(String(data.attestationWarning));
       }
+      // Та же плашка используется для подсказки про контракт госучреждения:
+      // это не ошибка и не запрет, сохранение уже прошло.
+      if (data && 'contractWarning' in data && data.contractWarning) {
+        setAttestationWarning(String(data.contractWarning));
+      }
     },
   });
   const addNote = trpc.tickets.addNote.useMutation({ onSuccess: invalidateAll });
