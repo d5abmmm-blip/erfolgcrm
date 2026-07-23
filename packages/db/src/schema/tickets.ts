@@ -282,6 +282,34 @@ export interface TicketEventPayload {
   role?: 'engineer' | 'dispatcher';
 }
 
+/**
+ * ПОМОЩНИКИ по заявке — второй, третий инженер на одну работу.
+ *
+ * Устройство намеренно АСИММЕТРИЧНОЕ: ОТВЕТСТВЕННЫЙ живёт там же, где жил всегда —
+ * в `tickets.assigned_engineer_id`. Здесь только помощники. Благодаря этому график,
+ * напоминания и отчёты загрузки, завязанные на «инженера заявки» (около 75 мест
+ * в коде), продолжают работать без переделки, а «кто ещё работает» стало списком.
+ *
+ * Инвариант «один человек не помощник дважды» держит уникальный индекс в БД.
+ * Инвариант «помощник ≠ ответственный» держит код (tickets/repository.ts) — в БД
+ * его не выразить, там нет ссылки на assigned_engineer_id.
+ */
+export const ticketEngineers = pgTable(
+  'ticket_engineers',
+  {
+    id: pk(),
+    tenantId: tenantId(),
+    ticketId: fkUuid('ticket_id'),
+    userId: fkUuid('user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ticket_engineers_uniq').on(t.tenantId, t.ticketId, t.userId),
+    index('ticket_engineers_tenant_user_idx').on(t.tenantId, t.userId),
+    index('ticket_engineers_tenant_ticket_idx').on(t.tenantId, t.ticketId),
+  ],
+);
+
 /** Append-only хронология. Никаких update/delete. */
 export const ticketEvents = pgTable(
   'ticket_events',

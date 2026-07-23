@@ -47,6 +47,7 @@ import {
   setBlockedReasonCmd,
   setWaitingForPartCmd,
   searchTicketsQuery,
+  setTicketEngineersCmd,
   unscheduleCmd,
   updateTicketCmd,
   weeklyScheduleQuery,
@@ -354,6 +355,23 @@ export const ticketsRouter = router({
     .input(z.object({ ticketId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       unscheduleCmd(buildCmdCtx(ctx), { ticketId: input.ticketId }),
+    ),
+
+  /**
+   * Помощники по заявке — второй, третий инженер на одной работе.
+   * Список приходит ЦЕЛИКОМ (как галочки в форме): что прислали — то и стало.
+   * Ответственный назначается по-старому, полем assignedEngineerId в update.
+   * Потолок 10: на одну работу больше и не выезжает, а без лимита это дыра.
+   */
+  setEngineers: staffProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        userIds: z.array(z.string().uuid()).max(10),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      setTicketEngineersCmd(buildCmdCtx(ctx), input.ticketId, input.userIds),
     ),
 
   weeklySchedule: staffProcedure

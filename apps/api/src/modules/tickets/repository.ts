@@ -33,6 +33,7 @@ import {
   contracts,
   users,
   tickets,
+  ticketEngineers,
   ticketEvents,
   workOrders,
   invoices,
@@ -109,6 +110,11 @@ export interface TicketDetailDto extends TicketListItem {
   /** Доска — структурная причина простоя и когда он начался. */
   blockedReason: TicketBlockedReason | null;
   blockedSince: Date | null;
+  /**
+   * Помощники — второй, третий инженер на этой же работе. Ответственный сюда НЕ входит,
+   * он остаётся в assignedEngineerId. Пустой массив = работает один человек.
+   */
+  helperEngineers: TicketEngineerDto[];
 }
 
 export interface TicketEventDto {
@@ -229,8 +235,11 @@ export function generateBarcode(): string {
   return `T${uuidv7().replace(/-/g, '').toUpperCase()}`;
 }
 
-/** Хелпер: построение WHERE для listTickets. Вынесен чтобы не раздувать функцию. */
-function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
+/**
+ * Хелпер: построение WHERE для listTickets. Вынесен чтобы не раздувать функцию.
+ * `helperTicketIds` — заявки, где запрошенный инженер ПОМОЩНИК (см. ticket_engineers).
+ */
+function buildListFilters(opts: ListTicketsOpts, helperTicketIds: string[] = []): SQL | undefined {
   const filters: SQL[] = [];
   // Мягко удалённые заявки (deleted_at) не показываем никогда.
   filters.push(isNull(tickets.deletedAt));
@@ -244,7 +253,14 @@ function buildListFilters(opts: ListTicketsOpts): SQL | undefined {
   if (opts.unassigned === true) {
     filters.push(isNull(tickets.assignedEngineerId));
   } else if (opts.engineerId) {
-    filters.push(eq(tickets.assignedEngineerId, opts.engineerId));
+    // Заявка «моя», если я ответственный ИЛИ помощник. Второе — новое: раньше
+    // второй инженер на выезде свою же заявку в кабинете не видел.
+    const mine = eq(tickets.assignedEngineerId, opts.engineerId);
+    filters.push(
+      helperTicketIds.length > 0
+        ? (or(mine, inArray(tickets.id, helperTicketIds)) as SQL)
+        : mine,
+    );
   }
   if (opts.clientId) filters.push(eq(tickets.clientId, opts.clientId));
   if (opts.contractId) filters.push(eq(tickets.contractId, opts.contractId));
@@ -296,6 +312,81 @@ function buildListOrder(sort: TicketListSort | undefined): SQL[] {
   ];
 }
 
+export interface TicketEngineerDto {
+  userId: string;
+  fullName: string | null;
+}
+
+/**
+ * Помощники по заявке — второй, третий инженер на одной работе.
+ * ОТВЕТСТВЕННЫЙ здесь НЕ лежит: он остаётся в `tickets.assigned_engineer_id`.
+ */
+export async function listTicketEngineers(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<TicketEngineerDto[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ userId: ticketEngineers.userId, fullName: users.fullName })
+      .from(ticketEngineers)
+      .leftJoin(users, eq(users.id, ticketEngineers.userId))
+      .where(eq(ticketEngineers.ticketId, ticketId))
+      .orderBy(asc(ticketEngineers.createdAt));
+    return rows.map((r) => ({ userId: r.userId, fullName: r.fullName ?? null }));
+  });
+}
+
+/**
+ * Заменяет список помощников целиком (как чекбоксы в форме: пришло — то и стало).
+ *
+ * ⚠️ Ответственный из списка ВЫБРАСЫВАЕТСЯ. Иначе он оказался бы в заявке дважды —
+ * и как ответственный, и как помощник, — а значит задвоился бы везде, где мы
+ * собираем «кто работал»: в акте, в отчёте загрузки, в будущем делении зарплаты.
+ */
+export async function setTicketEngineers(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+  userIds: string[],
+): Promise<void> {
+  await withTenantTx(db, tenantId, async (tx) => {
+    const [ticket] = await tx
+      .select({ assignedEngineerId: tickets.assignedEngineerId })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+    if (!ticket) throw new TicketNotFoundError(ticketId);
+
+    const wanted = [...new Set(userIds)].filter((id) => id !== ticket.assignedEngineerId);
+
+    await tx.delete(ticketEngineers).where(eq(ticketEngineers.ticketId, ticketId));
+    if (wanted.length > 0) {
+      await tx
+        .insert(ticketEngineers)
+        .values(wanted.map((userId) => ({ tenantId, ticketId, userId })));
+    }
+  });
+}
+
+/** id заявок, где этот инженер — ПОМОЩНИК (не ответственный). Для фильтров «мои заявки». */
+async function helperTicketIds(tx: Tx, userId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ ticketId: ticketEngineers.ticketId })
+    .from(ticketEngineers)
+    .where(eq(ticketEngineers.userId, userId));
+  return rows.map((r) => r.ticketId);
+}
+
+/** То же снаружи транзакции — для «Моего дня» и других мест, где нет своего tx. */
+export async function listHelperTicketIds(
+  db: Db,
+  tenantId: string,
+  userId: string,
+): Promise<string[]> {
+  return withTenantTx(db, tenantId, (tx) => helperTicketIds(tx, userId));
+}
+
 export async function listTickets(
   db: Db,
   tenantId: string,
@@ -304,9 +395,16 @@ export async function listTickets(
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? PAGE_SIZE_DEFAULT));
   const offset = (page - 1) * pageSize;
-  const whereClause = buildListFilters(opts);
 
   return withTenantTx(db, tenantId, async (tx) => {
+    // «Мои заявки» инженера = где он ОТВЕТСТВЕННЫЙ или где он ПОМОЩНИК.
+    // Список id берём заранее: фильтр строится синхронно, а помощники лежат
+    // в отдельной таблице. Заявок у одного инженера сотни — список короткий.
+    const helperIds =
+      opts.engineerId && opts.unassigned !== true
+        ? await helperTicketIds(tx, opts.engineerId)
+        : [];
+    const whereClause = buildListFilters(opts, helperIds);
     const items = await tx
       .select({
         id: tickets.id,
@@ -435,9 +533,19 @@ export async function getTicket(
       .limit(1);
     const row = rows[0];
     if (!row) return null;
+    const helpers = await tx
+      .select({ userId: ticketEngineers.userId, fullName: users.fullName })
+      .from(ticketEngineers)
+      .leftJoin(users, eq(users.id, ticketEngineers.userId))
+      .where(eq(ticketEngineers.ticketId, id))
+      .orderBy(asc(ticketEngineers.createdAt));
     return {
       ...row,
       clientDisplayName: row.clientDisplayName ?? '',
+      helperEngineers: helpers.map((h) => ({
+        userId: h.userId,
+        fullName: h.fullName ?? null,
+      })),
     };
   });
 }

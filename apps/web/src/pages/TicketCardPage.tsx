@@ -29,6 +29,7 @@ import {
   Tag,
   User,
   UserCog,
+  Users,
   Wrench,
   XCircle,
   Trash2,
@@ -1086,10 +1087,12 @@ function ActionsPanel({
   pending,
 }: {
   t: {
+    id: string;
     status: TicketStatus;
     priority: TicketPriority;
     assignedEngineerId: string | null;
     assignedDispatcherId: string | null;
+    helperEngineers: Array<{ userId: string; fullName: string | null }>;
   };
   role?: 'director' | 'dispatcher' | 'engineer';
   isDirector: boolean;
@@ -1240,6 +1243,13 @@ function ActionsPanel({
           <EngineerAttestationBadge
             engineerId={t.assignedEngineerId}
             requiredCategory={requiredAttestationCategory}
+          />
+          <HelperEngineersPicker
+            ticketId={t.id}
+            assignedEngineerId={t.assignedEngineerId}
+            helpers={t.helperEngineers}
+            options={engineerOptions}
+            disabled={pending}
           />
         </div>
       )}
@@ -1475,6 +1485,91 @@ function EngineerAttestationBadge({
     <div className="bg-warning/15 text-warning inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]">
       <AlertTriangle className="h-3 w-3" />
       {q.data}
+    </div>
+  );
+}
+
+/**
+ * Помощники — второй, третий инженер на той же работе.
+ *
+ * Ответственный выбирается выше отдельным полем и в этом списке НЕ показывается:
+ * иначе один человек оказался бы в заявке дважды. Список отправляется целиком,
+ * как галочки в форме, — сервер заменяет им прежний.
+ */
+function HelperEngineersPicker({
+  ticketId,
+  assignedEngineerId,
+  helpers,
+  options,
+  disabled,
+}: {
+  ticketId: string;
+  assignedEngineerId: string | null;
+  helpers: Array<{ userId: string; fullName: string | null }>;
+  options: Array<{ id: string; fullName: string; isActive: boolean }>;
+  disabled: boolean;
+}) {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const setEngineers = trpc.tickets.setEngineers.useMutation({
+    onSuccess: () => {
+      void utils.tickets.get.invalidate({ id: ticketId });
+    },
+  });
+  const selected = new Set(helpers.map((h) => h.userId));
+  const pickable = options.filter((u) => u.id !== assignedEngineerId);
+
+  function toggle(userId: string) {
+    const next = new Set(selected);
+    if (next.has(userId)) next.delete(userId);
+    else next.add(userId);
+    setEngineers.mutate({ ticketId, userIds: [...next] });
+  }
+
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
+      >
+        <Users className="h-3 w-3" />
+        {helpers.length > 0 ? `Ещё работают: ${helpers.length}` : 'Добавить помощников'}
+      </button>
+
+      {helpers.length > 0 && !open && (
+        <p className="text-muted-foreground mt-1 text-xs">
+          {helpers.map((h) => h.fullName ?? 'без имени').join(', ')}
+        </p>
+      )}
+
+      {open && (
+        <div className="mt-2 space-y-1 rounded-md border p-2">
+          {pickable.length === 0 ? (
+            <p className="text-muted-foreground text-xs">Других инженеров нет</p>
+          ) : (
+            pickable.map((u) => (
+              <label key={u.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.has(u.id)}
+                  disabled={disabled || setEngineers.isPending}
+                  onChange={() => toggle(u.id)}
+                  className="h-4 w-4 rounded border"
+                />
+                <span>
+                  {u.fullName}
+                  {u.isActive ? '' : ' (заблокирован)'}
+                </span>
+              </label>
+            ))
+          )}
+          {setEngineers.error && (
+            <p className="text-destructive text-xs">{setEngineers.error.message}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
