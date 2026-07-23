@@ -28,6 +28,9 @@ import {
   getOrCreateTrackToken as repoGetOrCreateTrackToken,
   getTicket as repoGetTicket,
   listEvents as repoListEvents,
+  listHelperTicketIds as repoListHelperTicketIds,
+  listTicketEngineers as repoListTicketEngineers,
+  setTicketEngineers as repoSetTicketEngineers,
   revokeTrackToken as repoRevokeTrackToken,
   listTickets as repoListTickets,
   partsWaitingList as repoPartsWaitingList,
@@ -651,7 +654,61 @@ export async function myTicketsQuery(
   engineerId: string,
 ): Promise<BoardTicketDto[]> {
   const all = await repoBoardTickets(db, tenant.id);
-  return all.filter((t) => t.assignedEngineerId === engineerId);
+  // «Мой день» показывает и заявки, где инженер ПОМОЩНИК: он на них так же выезжает.
+  const helperIds = new Set(await repoListHelperTicketIds(db, tenant.id, engineerId));
+  return all.filter((t) => t.assignedEngineerId === engineerId || helperIds.has(t.id));
+}
+
+export interface SetTicketEngineersResult {
+  /** Кто теперь помощники — уже без ответственного, если его прислали по ошибке. */
+  helperEngineers: Array<{ userId: string; fullName: string | null }>;
+}
+
+/**
+ * Заменяет список ПОМОЩНИКОВ по заявке целиком.
+ *
+ * Ответственный назначается по-старому (полем assignedEngineerId) и в этот список
+ * не входит — см. setTicketEngineers в репозитории: если его прислали, он молча
+ * выбрасывается, чтобы человек не оказался в заявке дважды.
+ *
+ * Аттестацию помощников НЕ проверяем намеренно: она обязательна тому, кто отвечает
+ * за работу, а помощник может быть учеником или второй парой рук. Предупреждение
+ * по ответственному продолжает работать как раньше.
+ */
+export async function setTicketEngineersCmd(
+  ctx: CmdCtx,
+  ticketId: string,
+  userIds: string[],
+): Promise<SetTicketEngineersResult> {
+  const before = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
+  if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+
+  // Каждый помощник должен быть живым пользователем этого тенанта: иначе в заявку
+  // можно было бы вписать чужой id и «подсветить» ему чужие данные.
+  for (const userId of userIds) {
+    const ok = await userBelongsToTenant(ctx.db, ctx.tenant.id, userId);
+    if (!ok) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Инженер не найден в tenant' });
+  }
+
+  try {
+    await repoSetTicketEngineers(ctx.db, ctx.tenant.id, ticketId, userIds);
+  } catch (err) {
+    throw toTRPCError(err);
+  }
+  const helperEngineers = await repoListTicketEngineers(ctx.db, ctx.tenant.id, ticketId);
+
+  await writeAudit(ctx.db, ctx.tenant.id, {
+    userId: ctx.session.userId,
+    action: 'update',
+    entityType: 'ticket',
+    entityId: ticketId,
+    before: { helperEngineerIds: before.helperEngineers.map((e) => e.userId) },
+    after: { helperEngineerIds: helperEngineers.map((e) => e.userId) },
+    ip: ctx.audit.ip ?? null,
+    userAgent: ctx.audit.userAgent ?? null,
+  });
+
+  return { helperEngineers };
 }
 
 /** Реакция инженера одной кнопкой (Telegram / web-push / «Мой день»). */
@@ -671,9 +728,9 @@ export interface EngineerReactResult {
  *            (письмо клиенту, push диспетчеру «позвоните клиенту»);
  *   part   — причина простоя «ждём запчасть» на доске.
  *
- * RBAC: инженер может реагировать ТОЛЬКО на свою заявку (assignedEngineerId);
- * director/dispatcher — на любую. Вызывается из tRPC-роутера и из Telegram-вебхука
- * (там ctx собирается синтетически из привязанного пользователя).
+ * RBAC: инженер может реагировать ТОЛЬКО на свою заявку — где он ответственный
+ * ИЛИ помощник; director/dispatcher — на любую. Вызывается из tRPC-роутера и из
+ * Telegram-вебхука (там ctx собирается синтетически из привязанного пользователя).
  */
 export async function engineerReactCmd(
   ctx: CmdCtx,
@@ -682,8 +739,13 @@ export async function engineerReactCmd(
 ): Promise<EngineerReactResult> {
   const before = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
-  if (ctx.session.role === 'engineer' && before.assignedEngineerId !== ctx.session.userId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Это не ваша заявка' });
+  if (ctx.session.role === 'engineer') {
+    const isMine =
+      before.assignedEngineerId === ctx.session.userId ||
+      before.helperEngineers.some((e) => e.userId === ctx.session.userId);
+    if (!isMine) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Это не ваша заявка' });
+    }
   }
   if (before.status === 'closed' || before.status === 'cancelled') {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Заявка уже закрыта' });
@@ -759,9 +821,13 @@ export async function recordPrintEventCmd(
   documentKind: 'intake_act' | 'invoice' | 'work_act' | 'defect_act' | 'tech_condition_act',
 ): Promise<{ id: string }> {
   // Инженер фиксирует печать только по своим заявкам (см. assertEngineerOwnsTicket).
+  // «Свои» — где он ответственный ИЛИ помощник.
   const ticket = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
   if (!ticket) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
-  assertEngineerOwnsTicket(ctx.session, ticket);
+  assertEngineerOwnsTicket(ctx.session, {
+    assignedEngineerId: ticket.assignedEngineerId,
+    helperEngineerIds: ticket.helperEngineers.map((e) => e.userId),
+  });
 
   const result = await repoRecordPrint(
     ctx.db,
@@ -797,10 +863,13 @@ type ActorSession = { role: 'director' | 'dispatcher' | 'engineer'; userId: stri
  */
 export function assertEngineerOwnsTicket(
   session: ActorSession,
-  ticket: { assignedEngineerId: string | null },
+  ticket: { assignedEngineerId: string | null; helperEngineerIds?: string[] },
 ): void {
   if (session.role !== 'engineer') return;
-  if (ticket.assignedEngineerId !== session.userId) {
+  // Помощник ремонт выполнял наравне с ответственным — значит и акт печатает.
+  // Без этой ветки он видел бы заявку у себя и упирался в «не ваша заявка».
+  const isHelper = (ticket.helperEngineerIds ?? []).includes(session.userId);
+  if (ticket.assignedEngineerId !== session.userId && !isHelper) {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'Документы по заявке доступны только назначенному инженеру',
@@ -822,7 +891,10 @@ export async function documentClientQuery(
 ) {
   const t = await repoGetTicket(db, tenant.id, ticketId);
   if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
-  assertEngineerOwnsTicket(session, t);
+  assertEngineerOwnsTicket(session, {
+    assignedEngineerId: t.assignedEngineerId,
+    helperEngineerIds: t.helperEngineers.map((e) => e.userId),
+  });
 
   const client = await getClientQuery(db, tenant, t.clientId);
   const contact =
