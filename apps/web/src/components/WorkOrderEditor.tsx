@@ -41,6 +41,13 @@ interface LineDraft {
   unit: string;
   quantity: string;
   unitPriceRub: string;
+  /**
+   * Кто выполнял эту работу. Заполняется только у строк «Работы»: именно по нему
+   * ведомость ЗП делит деньги между инженерами (payroll группирует по
+   * COALESCE(line.engineer_id, work_order.engineer_id)). Пусто = вся строка уходит
+   * инженеру наряда, как было раньше.
+   */
+  engineerId: string | null;
   /** Строка лежит в оффлайн-очереди и ждёт связи. */
   queued?: boolean;
 }
@@ -369,11 +376,30 @@ function LineTable({
     unitPriceKopecks: string;
     amountKopecks: string;
     inventoryItemId: string | null;
+    engineerId: string | null;
   }>;
   canEdit: boolean;
 }) {
   const utils = trpc.useUtils();
   const tenantSubdomain = getTenantSubdomain();
+  // Список для колонки «Кто делал». Грузим только там, где он нужен — у работ.
+  //
+  // ⚠️ Просим и ЗАБЛОКИРОВАННЫХ, но показываем лишь тех из них, кто уже стоит в строках
+  // этого наряда. Причина: у импортированных нарядов инженер — исторический аккаунт из
+  // старой программы (заблокирован). Таких строк 2218. Отфильтруй их — и менеджер увидит
+  // «инженер наряда» там, где на самом деле стоит конкретный человек, то есть ЛОЖЬ.
+  // Тот же приём уже применён у выбора инженера на карточке заявки.
+  const engineersQ = trpc.users.list.useQuery(
+    { onlyEngineers: true, includeBlocked: true },
+    { enabled: lineType === 'work' },
+  );
+  const usedEngineerIds = new Set(lines.map((l) => l.engineerId).filter(Boolean));
+  const engineerOptions = (engineersQ.data ?? [])
+    .filter((u) => u.isActive || usedEngineerIds.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      fullName: u.isActive ? u.fullName : `${u.fullName} (уволен)`,
+    }));
   // Ошибку и «легло в очередь» показываем сами — глобальный тост молчит (main.tsx).
   const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
   const remove = trpc.workOrders.deleteLine.useMutation({ meta: SILENT_ERROR });
@@ -434,6 +460,7 @@ function LineTable({
         unit: 'шт',
         quantity: '1',
         unitPriceRub: '0',
+        engineerId: null,
       },
     ]);
   };
@@ -461,6 +488,10 @@ function LineTable({
           unit: line.unit.trim() || 'шт',
           quantity: line.quantity.trim() || '0',
           unitPriceRub: Math.max(0, Math.round(Number(line.unitPriceRub) || 0)),
+          // Только для работ. У запчастей и расходов инженер на зарплату не влияет
+          // (payroll считает по строкам line_type='work'), а слать его вслепую нельзя:
+          // сервер отличает «поле не прислали» от «сбросить в пусто».
+          ...(lineType === 'work' ? { engineerId: line.engineerId } : {}),
         },
       },
       (p) => upsert.mutateAsync(p),
@@ -529,6 +560,9 @@ function LineTable({
           <thead className="bg-muted/40 text-muted-foreground text-[11px] uppercase tracking-wide">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Наименование</th>
+              {lineType === 'work' && (
+                <th className="w-48 px-3 py-2 text-left font-medium">Кто делал</th>
+              )}
               <th className="w-20 px-3 py-2 text-left font-medium">Ед.</th>
               <th className="w-24 px-3 py-2 text-right font-medium">Кол-во</th>
               <th className="w-32 px-3 py-2 text-right font-medium">Цена ₽</th>
@@ -539,7 +573,10 @@ function LineTable({
           <tbody className="divide-y">
             {lines.length === 0 && drafts.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-muted-foreground p-3 text-center text-xs">
+                <td
+                  colSpan={lineType === 'work' ? 7 : 6}
+                  className="text-muted-foreground p-3 text-center text-xs"
+                >
                   пусто
                 </td>
               </tr>
@@ -551,6 +588,7 @@ function LineTable({
                 ticketId={ticketId}
                 lineType={lineType}
                 canEdit={canEdit}
+                engineerOptions={engineerOptions}
                 onDelete={() => void deleteLine(l.id)}
               />
             ))}
@@ -558,6 +596,7 @@ function LineTable({
               <DraftRow
                 key={d.uid}
                 draft={d}
+                engineerOptions={engineerOptions}
                 onChange={(patch) =>
                   patchDrafts((prev) =>
                     prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)),
@@ -634,6 +673,7 @@ function ExistingRow({
   ticketId,
   lineType,
   canEdit,
+  engineerOptions,
   onDelete,
 }: {
   line: {
@@ -643,10 +683,12 @@ function ExistingRow({
     quantity: string;
     unitPriceKopecks: string;
     amountKopecks: string;
+    engineerId: string | null;
   };
   ticketId: string;
   lineType: WorkOrderLineType;
   canEdit: boolean;
+  engineerOptions: Array<{ id: string; fullName: string }>;
   onDelete: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -660,21 +702,12 @@ function ExistingRow({
     [line.unitPriceKopecks],
   );
 
-  const handleBlur = (
-    field: 'name' | 'unit' | 'quantity' | 'unitPriceRub',
-    value: string,
+  /** Общая отправка строки. `engineerId` шлём только у работ (см. saveLine). */
+  const sendLine = (
     extras: { name: string; unit: string; quantity: string; unitPriceRub: string },
+    engineerId: string | null,
   ) => {
-    if (!extras.name.trim()) return;
     const priceRub = Math.max(0, Math.round(Number(extras.unitPriceRub) || 0));
-    // не отправляем если ничего не изменилось
-    const changed =
-      (field === 'name' && value !== line.name) ||
-      (field === 'unit' && value !== line.unit) ||
-      (field === 'quantity' && value !== line.quantity) ||
-      (field === 'unitPriceRub' && Number(value) !== Number(initialPriceRub));
-    if (!changed) return;
-
     void (async () => {
       const res = await executeOrQueue(
         'workOrders.upsertLine',
@@ -687,11 +720,11 @@ function ExistingRow({
             unit: extras.unit.trim() || 'шт',
             quantity: extras.quantity.trim() || '0',
             unitPriceRub: priceRub,
+            ...(lineType === 'work' ? { engineerId } : {}),
           },
         },
         (p) => upsert.mutateAsync(p),
         tenantSubdomain,
-        // Строка уже с номером: повторные правки перезаписывают запись в очереди.
         lineDedupeKey(ticketId, line.id),
       );
       if (res.status === 'ok') {
@@ -704,6 +737,22 @@ function ExistingRow({
         showToast('error', humanizeError(res.error));
       }
     })();
+  };
+
+  const handleBlur = (
+    field: 'name' | 'unit' | 'quantity' | 'unitPriceRub',
+    value: string,
+    extras: { name: string; unit: string; quantity: string; unitPriceRub: string },
+  ) => {
+    if (!extras.name.trim()) return;
+    // не отправляем если ничего не изменилось
+    const changed =
+      (field === 'name' && value !== line.name) ||
+      (field === 'unit' && value !== line.unit) ||
+      (field === 'quantity' && value !== line.quantity) ||
+      (field === 'unitPriceRub' && Number(value) !== Number(initialPriceRub));
+    if (!changed) return;
+    sendLine(extras, line.engineerId);
   };
 
   return (
@@ -720,17 +769,39 @@ function ExistingRow({
       onFieldBlur={handleBlur}
       onDelete={onDelete}
       isQueued={queued}
+      engineer={
+        lineType === 'work'
+          ? {
+              value: line.engineerId,
+              options: engineerOptions,
+              // Смена инженера сохраняется сразу: это не текстовое поле, ждать
+              // ухода курсора не с чего.
+              onChange: (id) =>
+                sendLine(
+                  {
+                    name: line.name,
+                    unit: line.unit,
+                    quantity: line.quantity,
+                    unitPriceRub: initialPriceRub,
+                  },
+                  id,
+                ),
+            }
+          : undefined
+      }
     />
   );
 }
 
 function DraftRow({
   draft,
+  engineerOptions,
   onChange,
   onSave,
   onCancel,
 }: {
   draft: LineDraft;
+  engineerOptions: Array<{ id: string; fullName: string }>;
   onChange: (patch: Partial<LineDraft>) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -756,6 +827,15 @@ function DraftRow({
       onDelete={onCancel}
       isDraft
       isQueued={draft.queued}
+      engineer={
+        draft.lineType === 'work'
+          ? {
+              value: draft.engineerId,
+              options: engineerOptions,
+              onChange: (id) => onChange({ engineerId: id }),
+            }
+          : undefined
+      }
     />
   );
 }
@@ -770,6 +850,7 @@ function RowInputs({
   onDelete,
   isDraft,
   isQueued,
+  engineer,
 }: {
   initial: { name: string; unit: string; quantity: string; unitPriceRub: string };
   amountKopecks: string;
@@ -785,6 +866,15 @@ function RowInputs({
   isDraft?: boolean;
   /** Строка лежит в оффлайн-очереди — покажем это прямо в таблице. */
   isQueued?: boolean;
+  /**
+   * Колонка «Кто делал» — только у работ. Если не передана, колонки нет вовсе:
+   * у запчастей и расходов инженер на зарплату не влияет.
+   */
+  engineer?: {
+    value: string | null;
+    options: Array<{ id: string; fullName: string }>;
+    onChange: (id: string | null) => void;
+  };
 }) {
   const [vals, setVals] = useState(initial);
   // Если приходят новые значения снаружи (после mutation refetch) — синхронизируем
@@ -816,6 +906,23 @@ function RowInputs({
           </span>
         )}
       </td>
+      {engineer && (
+        <td className="px-3 py-1.5">
+          <select
+            value={engineer.value ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => engineer.onChange(e.target.value || null)}
+            className="bg-background w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+          >
+            <option value="">— инженер наряда —</option>
+            {engineer.options.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName}
+              </option>
+            ))}
+          </select>
+        </td>
+      )}
       <td className="px-3 py-1.5">
         <input
           type="text"
