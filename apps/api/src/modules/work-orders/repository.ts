@@ -243,10 +243,91 @@ function calcAmountKopecks(quantity: string, unitPrice: bigint): bigint {
   return sign * rounded;
 }
 
+/**
+ * Сумма себестоимости по строкам наряда, в целых копейках.
+ * Считается ДО правки строки — по ней потом видно, несли строки себестоимость или нет
+ * (см. защиту импортированной себестоимости в recalcTotals).
+ */
+export async function sumLineCostKopecks(tx: Tx, workOrderId: string): Promise<bigint> {
+  const [row] = await tx
+    .select({
+      sumCost: sql<string>`COALESCE(SUM(${workOrderLines.costPerUnitKopecks} * ${workOrderLines.quantity}), 0)`,
+    })
+    .from(workOrderLines)
+    .where(eq(workOrderLines.workOrderId, workOrderId));
+  return BigInt(Math.round(Number(row?.sumCost ?? 0)));
+}
+
+/**
+ * Себестоимость, которую записываем в шапку наряда.
+ *
+ * ЗАЩИТА ИМПОРТИРОВАННЫХ НАРЯДОВ. Наряды из старой системы (WinServisePro) хранят
+ * себестоимость в ШАПКЕ (`import-winservice.ts` кладёт туда `EXPENSESSUM`), а по строкам
+ * её нет вовсе — старая программа так не умела. Обычный пересчёт «сумма по строкам»
+ * такое число молча обнулял, а вместе с ним портил маржу в отчёте «Рентабельность».
+ * На боевой базе это 22 наряда на 137 056 ₽ — вся себестоимость, какая есть в системе.
+ *
+ * Признак «число пришло НЕ из строк»: строки не несли себестоимости ни ДО операции,
+ * ни ПОСЛЕ. Тогда шапку не трогаем.
+ *
+ * ⚠️ Условие «ни до, ни после» здесь принципиально. Если проверять только «после»,
+ * себестоимость станет ЛИПКОЙ: удалили единственную платную строку — цифра осталась
+ * висеть, хотя стоять за ней уже нечему.
+ */
+async function resolveHeaderCost(
+  tx: Tx,
+  tenantId: string,
+  workOrderId: string,
+  costFromLines: bigint,
+  lineCostBefore: bigint,
+): Promise<bigint> {
+  if (costFromLines !== 0n || lineCostBefore !== 0n) return costFromLines;
+  const [header] = await tx
+    .select({ cost: workOrders.costAmountKopecks })
+    .from(workOrders)
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+  return header && header.cost > 0n ? header.cost : costFromLines;
+}
+
+/**
+ * Пересчитывает в шапке ТОЛЬКО себестоимость и маржу — с той же защитой импортированного
+ * числа, что и recalcTotals. Нужен второму писателю этих колонок: выдаче запчасти со
+ * склада (`inventory-movements/repository.ts`), которая суммы работ и запчастей не трогает.
+ * Раньше та выдача пересчитывала себестоимость своим SQL и мимо всякой защиты — партия
+ * с нулевой ценой закупки обнуляла историческую себестоимость ровно так же.
+ */
+export async function recalcWorkOrderCostFromLines(
+  tx: Tx,
+  tenantId: string,
+  workOrderId: string,
+  lineCostBefore: bigint,
+): Promise<void> {
+  const costFromLines = await sumLineCostKopecks(tx, workOrderId);
+  const headerCost = await resolveHeaderCost(
+    tx,
+    tenantId,
+    workOrderId,
+    costFromLines,
+    lineCostBefore,
+  );
+  const [wo] = await tx
+    .select({ total: workOrders.totalAmountKopecks })
+    .from(workOrders)
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+  await tx
+    .update(workOrders)
+    .set({
+      costAmountKopecks: headerCost,
+      marginAmountKopecks: (wo?.total ?? 0n) - headerCost,
+    })
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+}
+
 async function recalcTotals(
   tx: Tx,
   tenantId: string,
   workOrderId: string,
+  lineCostBefore: bigint,
 ): Promise<void> {
   const sums = await tx
     .select({
@@ -274,6 +355,7 @@ async function recalcTotals(
     cost += costPart;
   }
   const total = works + parts + expenses;
+  const headerCost = await resolveHeaderCost(tx, tenantId, workOrderId, cost, lineCostBefore);
   await tx
     .update(workOrders)
     .set({
@@ -281,8 +363,8 @@ async function recalcTotals(
       partsAmountKopecks: parts,
       expensesAmountKopecks: expenses,
       totalAmountKopecks: total,
-      costAmountKopecks: cost,
-      marginAmountKopecks: total - cost,
+      costAmountKopecks: headerCost,
+      marginAmountKopecks: total - headerCost,
     })
     .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
 }
@@ -408,6 +490,9 @@ export async function upsertLine(
 ): Promise<{ id: string }> {
   const amount = calcAmountKopecks(input.quantity, input.unitPriceKopecks);
   return withTenantTx(db, tenantId, async (tx) => {
+    // Снимок «несли ли строки себестоимость» ДО правки — по нему recalcTotals отличает
+    // историческую себестоимость из шапки от посчитанной по строкам.
+    const lineCostBefore = await sumLineCostKopecks(tx, workOrderId);
     let resultId: string;
     if (lineId) {
       // Правка строки — ЧАСТИЧНАЯ. Веб шлёт только name/unit/quantity/unitPrice
@@ -473,7 +558,7 @@ export async function upsertLine(
       if (!newId) throw new Error('upsertLine: insert returned nothing');
       resultId = newId;
     }
-    await recalcTotals(tx, tenantId, workOrderId);
+    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);
     return { id: resultId };
   });
 }
@@ -485,12 +570,13 @@ export async function deleteLine(
   lineId: string,
 ): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
+    const lineCostBefore = await sumLineCostKopecks(tx, workOrderId);
     await tx
       .delete(workOrderLines)
       .where(
         and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)),
       );
-    await recalcTotals(tx, tenantId, workOrderId);
+    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);
   });
 }
 
