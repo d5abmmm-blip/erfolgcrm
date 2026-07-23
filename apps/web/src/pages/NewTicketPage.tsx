@@ -128,8 +128,10 @@ export function NewTicketPage() {
 
   // Инженеры для назначения — выпадающий список вместо ручного ввода UUID.
   const engineers = trpc.users.list.useQuery({ onlyEngineers: true });
+  // Контракт у госучреждения — ПОДСКАЗКА, а не требование (решение владельца 2026-07-23).
+  // Раньше форма не давала завести заявку без контракта, и работа вставала: договоров
+  // в базе заведено 0, а госучреждения — три четверти всех заявок.
   const isBudgetClient = clientDetail.data?.subtype === 'budget';
-  const contractRequired = isBudgetClient;
 
   const assignedEngineerId = form.watch('assignedEngineerId');
   // Тип техники для подсказок при назначении: из сохранённой единицы (по assetId)
@@ -242,10 +244,6 @@ export function NewTicketPage() {
     }
     if (!v.symptom.trim()) {
       setServerError('Опишите симптом со слов клиента');
-      return;
-    }
-    if (contractRequired && !v.contractId) {
-      setServerError('Для бюджетной организации требуется контракт');
       return;
     }
 
@@ -497,7 +495,7 @@ export function NewTicketPage() {
         </div>
 
         <div>
-          <Label required={contractRequired}>Договор</Label>
+          <Label>Договор</Label>
           <select
             {...form.register('contractId')}
             disabled={!clientId}
@@ -512,11 +510,12 @@ export function NewTicketPage() {
           </select>
           {!clientId ? (
             <p className="text-muted-foreground mt-1 text-xs">Сначала выберите клиента</p>
-          ) : contractRequired ? (
+          ) : isBudgetClient ? (
             <p className="text-warning mt-1 text-xs">
-              Бюджетная организация — контракт обязателен по 44-ФЗ.{' '}
+              Бюджетная организация — обычно работают по контракту (44-ФЗ). Если контракта
+              нет, заявку всё равно можно завести.{' '}
               <Link href="/contracts/new" className="underline hover:text-primary">
-                Создать новый
+                Создать договор
               </Link>
             </p>
           ) : (

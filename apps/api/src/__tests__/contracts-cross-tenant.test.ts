@@ -8,7 +8,8 @@
  *   4. contractExistsInTenant отказывает для чужого id.
  *   5. attachments.verifyReferenceBelongsToTenant: case 'contract' уважает RLS.
  *   6. createTicket с contract_id из другого tenant'а — TRPCError BAD_REQUEST.
- *   7. ensureContractRequirement бросает для бюджетников без контракта.
+ *   7. бюджетник без контракта — заявка создаётся, приходит лишь предупреждение
+ *      (запрет снят 2026-07-23, см. budget-contract-warning.test.ts).
  *   8. UNIQUE (tenant_id, contract_number) WHERE deleted_at IS NULL — два tenant'а могут иметь
  *      одинаковый номер; внутри одного tenant'а второй активный с тем же номером падает.
  */
@@ -255,16 +256,17 @@ describe('contracts cross-tenant изоляция', () => {
     ).rejects.toBeInstanceOf(TRPCError);
   });
 
-  it('budget client требует contract — без contractId выбрасывает BAD_REQUEST', async () => {
+  it('budget client БЕЗ contract — заявка создаётся, приходит только предупреждение', async () => {
+    // Раньше здесь был запрет (44-ФЗ). Снят по решению владельца 2026-07-23: на боевых
+    // данных договоров заведено 0, а госучреждения — 76,5 % всех заявок, то есть правило
+    // закрывало работу. Подробности — в budget-contract-warning.test.ts.
     const ctx = makeCmdCtx(erfolgId, erfolgDispatcherId);
-    await expect(
-      createTicketCmd(ctx, {
-        clientId: erfolgBudgetClientId,
-        symptom: `${TEST_PREFIX}budget-fail`,
-      }),
-    ).rejects.toMatchObject({
-      message: expect.stringContaining('бюджетной'),
+    const res = await createTicketCmd(ctx, {
+      clientId: erfolgBudgetClientId,
+      symptom: `${TEST_PREFIX}budget-no-contract`,
     });
+    expect(res.ticketNumber).toMatch(/^T-\d{4}-\d{6}$/);
+    expect(res.contractWarning).toContain('контракт');
   });
 
   it('budget client с активным contract проходит', async () => {
