@@ -348,6 +348,31 @@ describe('архивный клиент: письма гасим, долг ос�
     expect(rowAfter?.overdueInvoiceCount).toBe(rowBefore?.overdueInvoiceCount);
   });
 
+  it('в поле почты НЕ адрес — письмо не шлём и НЕ считаем это ошибкой', async () => {
+    // Та же дыра, что у писем о смене статуса: проверка «не пусто» пропускает
+    // имя или телефон из старой базы, а падает уже почтовый сервер — сырой ошибкой.
+    const clientId = await makeDebtorClient('Магомед');
+    await makeInvoice(clientId, -5);
+    const [inv] = await listClientOverdueInvoices(getDb(), erfolgId, clientId);
+    expect(inv).toBeDefined();
+    if (!inv) return;
+
+    const res = await sendInvoiceReminder(
+      getDb(),
+      { id: erfolgId, name: 'ТестКомпания' },
+      inv,
+      { dryRun: false },
+    );
+    expect(res.outcome).toBe('skipped_bad_email');
+    expect(sentMail.some((m) => m.to === 'Магомед')).toBe(false);
+
+    // Директор жмёт «Напомнить» — это не сбой почты, а испорченная карточка.
+    const cmd = await sendReminderCmd(makeCmdCtx(erfolgId), clientId);
+    expect(cmd.sent).toBe(0);
+    expect(cmd.skippedBadEmail).toBe(1);
+    expect(cmd.failed).toBe(0);
+  });
+
   it('ДЕНЬГИ: архивация не уменьшает сводку и корзины сроков', async () => {
     const clientId = await makeDebtorClient('archived-aging@example.com');
     await makeInvoice(clientId, -5);

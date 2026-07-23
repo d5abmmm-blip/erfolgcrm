@@ -83,6 +83,9 @@ export interface SendReminderResult {
   sent: number;
   /** Пропущено: у клиента не указан email. */
   skippedNoEmail: number;
+  /** Пропущено: в поле почты не адрес (имя/телефон из старой системы). Это НЕ ошибка
+   *  почты — испорчена карточка клиента, и текст в UI должен вести именно туда. */
+  skippedBadEmail: number;
   /** Пропущено: карточка клиента в архиве — наружу не пишем. Это НЕ ошибка. */
   skippedArchived: number;
   /** Пропущено: почта tenant'а не настроена (транспорт недоступен). */
@@ -135,6 +138,7 @@ export async function sendReminderCmd(
   const result: SendReminderResult = {
     sent: 0,
     skippedNoEmail: 0,
+    skippedBadEmail: 0,
     skippedArchived: 0,
     notConfigured: 0,
     failed: 0,
@@ -171,6 +175,10 @@ export async function sendReminderCmd(
     );
     if (res.outcome === 'sent') result.sent++;
     else if (res.outcome === 'skipped_no_email') result.skippedNoEmail++;
+    // Мусор в поле почты — тоже НОРМАЛЬНЫЙ исход, не failed. Своя ветка обязательна:
+    // без неё сработал бы `else result.failed++` ниже, и человек увидел бы «Не удалось
+    // отправить — попробуйте позже», хотя повторять бессмысленно, пока не поправят карточку.
+    else if (res.outcome === 'skipped_bad_email') result.skippedBadEmail++;
     // Архив — НОРМАЛЬНЫЙ исход, не failed: иначе директор увидит «Не удалось отправить»
     // и будет жать кнопку повторно, думая что сломалась почта.
     else if (res.outcome === 'skipped_archived') result.skippedArchived++;

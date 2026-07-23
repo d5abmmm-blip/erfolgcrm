@@ -250,6 +250,36 @@ describe('processTicketStatusNotify (worker)', () => {
     });
   });
 
+  it('skipped если в поле почты лежит НЕ адрес (имя или телефон из старой базы)', async () => {
+    // Боевой случай: из WinServisePro в clients.email приехал свободный текст.
+    // На проде 2026-07-22 таких значений было 39 из 43 непустых. Проверка «не пусто»
+    // их пропускала, nodemailer падал с `No recipients defined`, задача уходила
+    // в ретраи — 24 ошибки в логах из пяти смен статуса.
+    for (const musor of ['Магомед', '89640000000', 'Анзор Хасанов']) {
+      const { id } = await createTestTicket();
+      await withTenantTx(getDb(), erfolgId, async (tx) => {
+        await tx.update(clients).set({ email: musor }).where(eq(clients.id, primaryClientId));
+      });
+      const result = await processTicketStatusNotify({
+        tenantId: erfolgId,
+        ticketId: id,
+        oldStatus: 'in_progress',
+        newStatus: 'act_pending',
+      });
+      expect(result.status).toBe('skipped');
+      // Отдельная причина, а не 'no-email': адрес ЕСТЬ, он просто не адрес.
+      // Иначе менеджер никогда не поймёт, что надо править карточку клиента.
+      expect(result.reason).toBe('invalid-email');
+      expect(sentMail.length).toBe(0);
+    }
+    await withTenantTx(getDb(), erfolgId, async (tx) => {
+      await tx
+        .update(clients)
+        .set({ email: 'notify-target@example.com' })
+        .where(eq(clients.id, primaryClientId));
+    });
+  });
+
   it('skipped если ticket не найден', async () => {
     const result = await processTicketStatusNotify({
       tenantId: erfolgId,
