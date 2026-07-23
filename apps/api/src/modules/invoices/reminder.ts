@@ -13,6 +13,7 @@
 import { eq } from 'drizzle-orm';
 import { clients, tenants, withTenantTx, type Db } from '@erfolg/db';
 import { logger } from '../../lib/logger';
+import { normalizeEmailAddress } from '../../lib/email-address';
 import { sendMailForTenant } from '../email/auto-send';
 import { tryJournalEmail } from '../../lib/email-journal';
 import { markReminderSent, type InvoiceDto } from './repository';
@@ -23,10 +24,16 @@ import { markReminderSent, type InvoiceDto } from './repository';
  * `skipped_archived` — карточка клиента в архиве. Отдельный исход, а не «ошибка»:
  * вызывающий обязан показать это человеку как норму (см. sendReminderCmd), иначе
  * директор увидит красное «не удалось отправить» и будет жать кнопку повторно.
+ *
+ * `skipped_bad_email` — в поле почты лежит НЕ адрес (имя, телефон — свободный текст
+ * из старой системы). Тоже отдельный исход, и отдельный ОТ `skipped_no_email`: адрес
+ * вроде бы есть, поэтому «у клиента не указан email» сбило бы с толку. Чинить надо
+ * карточку клиента, и человек должен это понять с первого раза.
  */
 export type ReminderOutcome =
   | 'sent'
   | 'skipped_no_email'
+  | 'skipped_bad_email'
   | 'skipped_archived'
   | 'skipped_mail'
   | 'error';
@@ -128,9 +135,15 @@ export async function sendInvoiceReminder(
     // вернут клиента из архива, напоминание уйдёт как обычно.
     return { invoiceId: invoice.id, outcome: 'skipped_archived' };
   }
-  if (!email) {
-    // Без email напомнить нельзя — reminderCount НЕ трогаем, чтобы как только email
-    // появится, напоминание ушло.
+  const to = normalizeEmailAddress(email);
+  if (!to) {
+    // reminderCount в обоих случаях НЕ трогаем: как только адрес появится (или его
+    // поправят в карточке) — напоминание уйдёт.
+    if (email && email.trim().length > 0) {
+      // В поле почты что-то есть, но это не адрес: имя или телефон из старой системы.
+      // Раньше такой мусор уходил в nodemailer и ронял отправку сырой ошибкой.
+      return { invoiceId: invoice.id, outcome: 'skipped_bad_email' };
+    }
     return { invoiceId: invoice.id, outcome: 'skipped_no_email' };
   }
   const subject = reminderSubject(invoice.invoiceNumber);
@@ -143,7 +156,7 @@ export async function sendInvoiceReminder(
   });
   try {
     const result = await sendMailForTenant(db, tenant.id, {
-      to: email,
+      to,
       subject,
       text,
       dryRun: opts.dryRun,
@@ -152,7 +165,7 @@ export async function sendInvoiceReminder(
       await tryJournalEmail(db, tenant.id, {
         direction: 'out',
         status: 'skipped',
-        to: email,
+        to,
         subject,
         bodyText: text,
         relatedClientId: invoice.clientId,
@@ -163,7 +176,7 @@ export async function sendInvoiceReminder(
     await tryJournalEmail(db, tenant.id, {
       direction: 'out',
       status: 'sent',
-      to: email,
+      to,
       subject,
       bodyText: text,
       messageId: result.messageId ?? null,

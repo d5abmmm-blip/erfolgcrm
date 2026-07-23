@@ -90,6 +90,7 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
         stats.remindersSent++;
       } else if (
         res.outcome === 'skipped_no_email' ||
+        res.outcome === 'skipped_bad_email' ||
         res.outcome === 'skipped_archived' ||
         res.outcome === 'skipped_mail'
       ) {

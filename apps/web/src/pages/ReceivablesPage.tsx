@@ -93,7 +93,12 @@ export function ReceivablesPage() {
     setSendingClientId(clientId);
     try {
       const res = await remind.mutateAsync({ clientId });
-      const problems = res.skippedNoEmail + res.skippedArchived + res.notConfigured + res.failed;
+      const problems =
+        res.skippedNoEmail +
+        res.skippedBadEmail +
+        res.skippedArchived +
+        res.notConfigured +
+        res.failed;
       if (res.sent > 0 && problems === 0) {
         const cd = res.skippedCooldown > 0 ? `, ${res.skippedCooldown} пропущено (недавно)` : '';
         setToast({
@@ -111,6 +116,14 @@ export function ReceivablesPage() {
         // заархивировали в другой вкладке уже после отрисовки списка. Это не сбой
         // отправки, поэтому текст объясняет причину, а не пугает «попробуйте позже».
         setToast({ tone: 'error', msg: 'Клиент в архиве — письма ему не отправляются' });
+      } else if (res.skippedBadEmail > 0) {
+        // Отдельно от «не указан email»: адрес вроде бы есть, но это имя или телефон
+        // (свободный текст из старой системы). Повторный клик не поможет — текст
+        // должен вести человека в карточку клиента, а не в «попробуйте позже».
+        setToast({
+          tone: 'error',
+          msg: 'В карточке клиента вместо почты — не адрес. Исправьте почту в карточке',
+        });
       } else if (res.skippedNoEmail > 0) {
         setToast({ tone: 'error', msg: 'У клиента не указан email' });
       } else if (res.notConfigured > 0) {

@@ -25,6 +25,7 @@ import {
   withTenantTx,
 } from '@erfolg/db';
 import { logger } from '../lib/logger';
+import { normalizeEmailAddress } from '../lib/email-address';
 import { maskEmail } from '../lib/mask';
 import { sendMailForTenant } from '../modules/email/auto-send';
 import { tryJournalEmail } from '../lib/email-journal';
@@ -157,11 +158,22 @@ async function loadTenantDisplayName(tenantId: string): Promise<string> {
 }
 
 /** Кому шлём письмо: для физлица берём его «индивидуальный» email из clients.email
- *  (он plain text — см. schema/clients.ts), для юрлица — рабочий email организации. */
+ *  (он plain text — см. schema/clients.ts), для юрлица — рабочий email организации.
+ *
+ *  Проверки «поле не пустое» здесь НЕДОСТАТОЧНО. Из старой системы (WinServisePro) в это
+ *  поле приехал свободный текст — имена и телефоны; на проде 2026-07-22 из 43 непустых
+ *  значений 39 были без «@». Такой мусор доезжал до nodemailer, тот падал с
+ *  `No recipients defined`, BullMQ уводил задачу в ретраи — и пять смен статуса за утро
+ *  дали 24 ошибки в логах. */
 function resolveRecipient(loaded: LoadedTicket): string | null {
-  return loaded.clientEmail && loaded.clientEmail.trim().length > 0
-    ? loaded.clientEmail.trim()
-    : null;
+  return normalizeEmailAddress(loaded.clientEmail);
+}
+
+/** Есть ли в карточке хоть что-то в поле почты. Нужно, чтобы отличить «почта не указана»
+ *  от «указано, но это не адрес»: во втором случае чинить надо КАРТОЧКУ КЛИЕНТА, и
+ *  причина пропуска должна об этом говорить. */
+function hasEmailValue(loaded: LoadedTicket): boolean {
+  return (loaded.clientEmail ?? '').trim().length > 0;
 }
 
 /** Имя клиента для приветствия. Для физлица — расшифрованное ФИО (если есть),
@@ -212,6 +224,19 @@ export async function processTicketStatusNotify(
 
   const to = resolveRecipient(loaded);
   if (!to) {
+    // Само значение в лог НЕ пишем — там лежит ФИО клиента (ПДн). Пишем clientId,
+    // по нему карточку находят и правят.
+    if (hasEmailValue(loaded)) {
+      logger.info(
+        {
+          ticketId: payload.ticketId,
+          ticketNumber: loaded.ticketNumber,
+          clientId: loaded.clientId,
+        },
+        'ticket-status-notify: client email is not an address, skipping',
+      );
+      return { status: 'skipped', reason: 'invalid-email' };
+    }
     logger.info(
       { ticketId: payload.ticketId, ticketNumber: loaded.ticketNumber },
       'ticket-status-notify: client has no email, skipping',
