@@ -71,6 +71,12 @@ export interface WorkOrderLine {
   quantity: number;
   unitPriceKopecks: number;
   amountKopecks: number;
+  /**
+   * Кто выполнял эту работу. Есть только у строк «Работы» и только если инженер
+   * задан в строке явно; иначе работу выполнял инженер наряда. Нужен, чтобы в акте
+   * было видно всех, кто работал, когда на технику выезжали вдвоём.
+   */
+  engineerName?: string | null;
 }
 
 export interface WorkOrderData {

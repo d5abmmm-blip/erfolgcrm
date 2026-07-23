@@ -252,6 +252,7 @@ export function TicketCardPage() {
             quantity: Number(l.quantity),
             unitPriceKopecks: Number(l.unitPriceKopecks),
             amountKopecks: Number(l.amountKopecks),
+            engineerName: l.engineerName ?? null,
           })),
         }
       : null;
