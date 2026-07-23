@@ -1,9 +1,14 @@
 /**
- * Этап 8.E — invoice-reminder worker:
+ * Этап 8.E — ночной тик по счетам:
  *   • markOverdueAsOf переводит просроченные invoices в overdue.
  *   • listOverdueForReminder отдаёт overdue, по которым прошёл cooldown.
  *   • markReminderSent инкрементирует reminder_count + ставит lastReminderSentAt.
- *   • processInvoiceReminderTick: markOverdue + send + markReminderSent для invoices с email.
+ *   • processInvoiceReminderTick: ТОЛЬКО markOverdue — рассылка отключена по решению
+ *     владельца (2026-07-23), письма уходят лишь по кнопке человека.
+ *
+ * ⚠️ listOverdueForReminder и markReminderSent продолжают тестироваться: первая осталась
+ * от выключенной рассылки (пригодится, если её вернут), вторую использует РУЧНАЯ кнопка
+ * «Напомнить» — она живая.
  *
  * sendMail замокан через __setTransporterForTesting (jest-style).
  */
@@ -151,49 +156,38 @@ describe('invoice-reminder worker (8.E)', () => {
     expect(row?.last).toBeInstanceOf(Date);
   });
 
-  it('processInvoiceReminderTick отправляет email и помечает invoice', async () => {
+  it('processInvoiceReminderTick помечает просроченным и НИЧЕГО НЕ ШЛЁТ', async () => {
+    // Раньше этот тест проверял обратное — что тик отправляет письмо. Рассылку
+    // выключили по решению владельца (2026-07-23), тик оставлен ради пометки просрочки.
     const { invoiceId } = await setupOverdueInvoice();
     const stats = await processInvoiceReminderTick();
+
+    // Пометка — единственное, что тик теперь делает, и она обязана работать:
+    // от статуса «просрочен» зависят дашборд, отчёты и кабинет клиента.
     expect(stats.overdueMarked).toBeGreaterThanOrEqual(1);
-    expect(stats.remindersSent).toBeGreaterThanOrEqual(1);
-    expect(sentMail.some((m) => m.to === testEmail)).toBe(true);
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx
-        .select({ count: invoices.reminderCount, last: invoices.lastReminderSentAt })
+        .select({
+          status: invoices.status,
+          count: invoices.reminderCount,
+          last: invoices.lastReminderSentAt,
+        })
         .from(invoices)
         .where(eq(invoices.id, invoiceId)),
     );
-    expect(row?.count).toBe(1);
-    expect(row?.last).toBeInstanceOf(Date);
-  });
+    expect(row?.status).toBe('overdue');
 
-  it('повторный tick не отправляет (cooldown по дефолту 7 дней)', async () => {
-    await setupOverdueInvoice();
-    await processInvoiceReminderTick();
-    sentMail.length = 0;
-    const stats = await processInvoiceReminderTick();
+    // Писем нет — при том, что у клиента настоящий адрес и счёт реально просрочен.
     expect(stats.remindersSent).toBe(0);
-    expect(sentMail).toHaveLength(0);
-  });
-
-  it('не отправляет если у клиента нет email', async () => {
-    const { invoiceId } = await setupOverdueInvoice();
-    // Снимаем email с клиента
-    await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx.update(clients).set({ email: null }).where(eq(clients.id, primaryClientId));
-    });
-    sentMail.length = 0;
-    const stats = await processInvoiceReminderTick();
-    expect(stats.remindersSent).toBe(0);
-    expect(stats.remindersSkipped).toBeGreaterThanOrEqual(1);
-    // reminderCount не должен инкрементироваться (так как не отправили)
-    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, invoiceId)),
-    );
+    expect(sentMail.some((m) => m.to === testEmail)).toBe(false);
+    // И счётчик напоминаний не тронут: робот не «израсходовал» напоминание молча,
+    // человек по-прежнему может отправить его кнопкой из Дебиторки.
     expect(row?.count).toBe(0);
-    // Восстанавливаем email для следующих тестов
-    await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx.update(clients).set({ email: testEmail }).where(eq(clients.id, primaryClientId));
-    });
+    expect(row?.last).toBeNull();
   });
+
+  // Здесь были ещё два теста рассылки — «повторный tick не отправляет (cooldown)» и
+  // «не отправляет если у клиента нет email». Оба удалены вместе с рассылкой: теперь
+  // тик не шлёт НИКОГДА, и такие тесты проходили бы по тривиальной причине, создавая
+  // ложное впечатление, что защиты живы. Cooldown ручной кнопки живёт в invoices/service.ts.
 });

@@ -581,6 +581,12 @@ export async function markOverdueAsOf(
  * Список счетов, по которым нужно отправить email-напоминание.
  * Критерии: status IN (overdue), last_reminder_sent_at NULL или старше cooldown часов.
  */
+/**
+ * ⛔ СЕЙЧАС НЕ ИСПОЛЬЗУЕТСЯ в рабочем коде: её звал ночной робот-рассыльщик, а
+ * рассылка отключена (решение владельца 2026-07-23, см. workers/invoice-reminder.ts).
+ * Оставлена вместе с остальной выключенной рассылкой — если её вернут, брать отсюда.
+ * Ручная кнопка «Напомнить» пользуется другой выборкой — listClientOverdueInvoices.
+ */
 export async function listOverdueForReminder(
   db: Db,
   tenantId: string,

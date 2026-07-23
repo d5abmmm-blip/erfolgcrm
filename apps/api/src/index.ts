@@ -26,7 +26,6 @@ import {
   enqueueInvoiceReminderSchedule,
   registerInvoiceReminderWorker,
 } from './workers/invoice-reminder';
-import { registerTicketStatusNotifyWorker } from './workers/ticket-status-notify';
 import {
   enqueueCalendarReminderSchedule,
   registerCalendarReminderWorker,
@@ -209,7 +208,10 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerStorageCleanupWorker();
   registerPushSendWorker();
   registerInvoiceReminderWorker();
-  registerTicketStatusNotifyWorker();
+  // ⛔ registerTicketStatusNotifyWorker() НЕ вызывается — письма клиенту о смене
+  // статуса отключены (решение владельца 2026-07-23). Воркер снят с регистрации
+  // НАМЕРЕННО, а не только отключён продюсер: задачи, зависшие в очереди на момент
+  // выката, иначе доиграли бы уже после деплоя и письма всё-таки ушли бы.
   registerCalendarReminderWorker();
   registerTaskReminderWorker();
   registerEmailInboundWorker();

@@ -1,28 +1,27 @@
 /**
- * Воркер ночных напоминаний о просроченных счетах (Этап 8.E).
+ * Ночной тик по счетам (Этап 8.E).
  *
- * Шаги для одного «тика» (раз в день, по умолчанию 9:00):
- *   1. Для каждого активного tenant'а:
- *      a. markOverdueAsOf(now) — переводит issued/partially_paid в overdue,
- *         если due_date < сегодня.
- *      b. listOverdueForReminder(tenantId, cooldownHours) — выбирает overdue,
- *         по которым прошло >= cooldownHours с последнего напоминания.
- *      c. Для каждого: resolve client.email → sendMail → markReminderSent.
+ * ⛔ РАССЫЛКА ОТКЛЮЧЕНА (решение владельца 2026-07-23: «почта автоматически ничего
+ * не должна отправлять сама»). Раньше тик ещё и слал клиентам письма о просрочке.
+ *
+ * ⚠️ ПОЧЕМУ ТИК ВСЁ-ТАКИ ЖИВ, а не удалён целиком: кроме писем он делает нужную
+ * работу — `markOverdueAsOf` переводит issued/partially_paid в overdue, когда
+ * срок оплаты прошёл. От статуса «просрочен» зависят дашборд («Просроченные
+ * счета»), отчёты, AI-итог месяца и кабинет клиента. Убрать тик = эти цифры
+ * молча обнулятся, хотя долги никуда не денутся.
+ *
+ * Что делает тик сейчас (раз в день, по умолчанию 9:00):
+ *   для каждого активного tenant'а — markOverdueAsOf(now), и всё.
  *
  * ENV:
- *   INVOICE_REMINDER_COOLDOWN_HOURS=168 (7 дней между напоминаниями)
  *   INVOICE_REMINDER_CRON='0 9 * * *' (каждый день в 9:00 серверного времени)
- *   INVOICE_REMINDER_DRY_RUN=true (не шлёт реально, для отладки)
+ *   INVOICE_REMINDER_ENABLED=true — без неё расписание вообще не ставится (index.ts)
  *
  * Добавление repeatable job: enqueueInvoiceReminderSchedule() — идемпотентно по jobId
  * (BullMQ сам деаплицирует repeat по pattern + jobId).
  */
 import { getDb, tenants } from '@erfolg/db';
-import {
-  listOverdueForReminder,
-  markOverdueAsOf,
-  sendInvoiceReminder,
-} from '../modules/invoices';
+import { markOverdueAsOf } from '../modules/invoices';
 import { logger } from '../lib/logger';
 import { getQueue, registerWorker } from '../lib/queue';
 
@@ -34,14 +33,9 @@ interface TickPayload {
   reason: 'cron' | 'manual';
 }
 
-function cooldownHours(): number {
-  const v = Number(process.env.INVOICE_REMINDER_COOLDOWN_HOURS ?? '168');
-  return Number.isFinite(v) && v > 0 ? v : 168;
-}
-
-function dryRun(): boolean {
-  return process.env.INVOICE_REMINDER_DRY_RUN === 'true';
-}
+// Здесь были cooldownHours() и dryRun() — настройки рассылки. Удалены вместе с ней:
+// переменные INVOICE_REMINDER_COOLDOWN_HOURS и INVOICE_REMINDER_DRY_RUN больше ни на
+// что не влияют. Cooldown ручной кнопки «Напомнить» живёт отдельно, в invoices/service.ts.
 
 interface TenantDetails {
   id: string;
@@ -78,28 +72,14 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
     stats.tenants++;
     const marked = await markOverdueAsOf(getDb(), tenant.id, new Date());
     stats.overdueMarked += marked;
-    const overdue = await listOverdueForReminder(getDb(), tenant.id, cooldownHours());
-    for (const invoice of overdue) {
-      const res = await sendInvoiceReminder(
-        getDb(),
-        { id: tenant.id, name: tenant.name },
-        invoice,
-        { dryRun: dryRun() },
-      );
-      if (res.outcome === 'sent') {
-        stats.remindersSent++;
-      } else if (
-        res.outcome === 'skipped_no_email' ||
-        res.outcome === 'skipped_bad_email' ||
-        res.outcome === 'skipped_archived' ||
-        res.outcome === 'skipped_mail'
-      ) {
-        stats.remindersSkipped++;
-      }
-      // outcome==='error' — не помечаем lastReminderSentAt; повторим в следующий тик.
-    }
+    // ⛔ РАССЫЛКА ОТКЛЮЧЕНА (решение владельца 2026-07-23). Здесь был цикл по
+    // просроченным счетам с sendInvoiceReminder — робот сам писал клиентам.
+    // Напомнить теперь можно только руками: кнопка «Напомнить» в Дебиторке
+    // (invoices.sendReminder → sendReminderCmd), она использует тот же текст письма.
+    // remindersSent/remindersSkipped остаются нулями — поля не убраны, чтобы не
+    // ломать чтение статистики; при возврате рассылки заполнятся снова.
   }
-  logger.info(stats, 'invoice-reminder tick complete');
+  logger.info(stats, 'invoice-reminder tick complete: только пометка просрочки, рассылка отключена');
   return stats;
 }
 

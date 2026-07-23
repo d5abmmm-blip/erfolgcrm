@@ -15,7 +15,6 @@ import { getClientQuery } from '../clients/service';
 import { checkAttestationForAssignment } from '../attestations';
 import { enqueuePushToUser } from '../notifications';
 import { logger } from '../../lib/logger';
-import { enqueueTicketStatusNotify } from '../../workers/ticket-status-notify';
 import {
   addNote as repoAddNote,
   assetBelongsToTenant,
@@ -389,20 +388,16 @@ export async function changeStatusCmd(
     userAgent: ctx.audit.userAgent ?? null,
   });
 
-  // Email клиенту о смене статуса. Не блокируем мутацию — отдаём в BullMQ.
-  // Воркер сам решит, надо ли слать (фильтр статусов + наличие email).
-  // Идемпотентность: переход в тот же статус (no-op) — пропускаем продюсер,
-  // чтобы не плодить лишние jobs.
+  // ⛔ ПИСЬМО КЛИЕНТУ О СМЕНЕ СТАТУСА ОТКЛЮЧЕНО (решение владельца 2026-07-23:
+  // «почта автоматически ничего не должна отправлять сама»). Раньше здесь ставилась
+  // задача `enqueueTicketStatusNotify`, и робот писал клиенту на семи статусах.
+  // Письмо теперь отправляет только человек — руками из раздела «Почта».
+  // Чтобы вернуть: снова вызвать enqueueTicketStatusNotify здесь И зарегистрировать
+  // воркер в index.ts (сам воркер и шаблоны письма никуда не делись).
+  //
+  // Push-уведомление НИЖЕ — это НЕ почта: оно приходит своему же менеджеру
+  // в браузер, наружу ничего не уходит. Поэтому оставлено.
   if (result.from !== result.to) {
-    enqueueTicketStatusNotify({
-      tenantId: ctx.tenant.id,
-      ticketId: id,
-      oldStatus: result.from,
-      newStatus: result.to,
-    }).catch((err: unknown) => {
-      logger.warn({ err, ticketId: id }, 'enqueue ticket-status-notify failed');
-    });
-
     // Заявка готова к выдаче → push менеджеру «позвонить клиенту» (доставится, когда
     // на проде включён VAPID web-push). Шлём назначенному диспетчеру, если он задан.
     if (result.to === 'act_pending' && before.assignedDispatcherId) {
