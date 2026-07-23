@@ -20,9 +20,12 @@ import {
   inventoryMovements,
   withTenantTx,
   workOrderLines,
-  workOrders,
   type Db,
 } from '@erfolg/db';
+import {
+  recalcWorkOrderCostFromLines,
+  sumLineCostKopecks,
+} from '../work-orders/repository';
 
 export class NotEnoughStockError extends Error {
   constructor(
@@ -174,33 +177,27 @@ export async function issueToWorkOrder(
     const costPerUnit =
       costDenominator > 0n ? (costNumerator + costDenominator / 2n) / costDenominator : 0n;
 
+    // Наряд строки и снимок «несли ли строки себестоимость» ДО правки — нужны, чтобы
+    // пересчёт не стёр историческую себестоимость импортированного наряда.
+    const [woRow] = await tx
+      .select({ workOrderId: workOrderLines.workOrderId, tenantId: workOrderLines.tenantId })
+      .from(workOrderLines)
+      .where(eq(workOrderLines.id, input.workOrderLineId))
+      .limit(1);
+    const lineCostBefore = woRow
+      ? await sumLineCostKopecks(tx, woRow.workOrderId)
+      : 0n;
+
     // Привязываем item к строке наряда + snapshot cost (8.C).
     await tx
       .update(workOrderLines)
       .set({ inventoryItemId: input.itemId, costPerUnitKopecks: costPerUnit })
       .where(eq(workOrderLines.id, input.workOrderLineId));
 
-    // Пересчёт totals work_order'а (cost_amount/margin меняются от новой cost линии).
-    const [woRow] = await tx
-      .select({ workOrderId: workOrderLines.workOrderId, tenantId: workOrderLines.tenantId })
-      .from(workOrderLines)
-      .where(eq(workOrderLines.id, input.workOrderLineId))
-      .limit(1);
+    // Пересчёт cost_amount/margin наряда — общей функцией, с защитой импортированной
+    // себестоимости (раньше здесь был свой SQL мимо всякой защиты).
     if (woRow) {
-      await tx.execute(sql`
-        UPDATE ${workOrders}
-           SET cost_amount_kopecks = COALESCE((
-             SELECT ROUND(SUM(${workOrderLines.costPerUnitKopecks} * ${workOrderLines.quantity}))
-               FROM ${workOrderLines}
-              WHERE ${workOrderLines.workOrderId} = ${woRow.workOrderId}
-           ), 0),
-               margin_amount_kopecks = total_amount_kopecks - COALESCE((
-             SELECT ROUND(SUM(${workOrderLines.costPerUnitKopecks} * ${workOrderLines.quantity}))
-               FROM ${workOrderLines}
-              WHERE ${workOrderLines.workOrderId} = ${woRow.workOrderId}
-           ), 0)
-         WHERE id = ${woRow.workOrderId}
-      `);
+      await recalcWorkOrderCostFromLines(tx, woRow.tenantId, woRow.workOrderId, lineCostBefore);
     }
 
     return { consumed };
