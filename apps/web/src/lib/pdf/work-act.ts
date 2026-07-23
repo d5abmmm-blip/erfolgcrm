@@ -15,7 +15,7 @@ import {
   vatRateLabel,
 } from './shared';
 
-interface BuildWorkActInput extends PrintWorkActInput {
+export interface BuildWorkActInput extends PrintWorkActInput {
   /** PNG data URL or empty string. */
   barcodeDataUrl: string;
   /** Optional act issue date ISO; defaults to ticket.receivedAt. */
@@ -236,6 +236,37 @@ function diagnosisBlock(input: BuildWorkActInput): Content | null {
   return sections.length > 0 ? { stack: sections } : null;
 }
 
+/**
+ * «Работы выполнили: …» — кто из инженеров участвовал.
+ *
+ * ⚠️ Это СПРАВОЧНАЯ строка, а не юридическая: «Исполнитель» по акту — организация,
+ * и подпись ставит директор (см. partiesBlock и signaturesBlock). Их не трогаем.
+ * Сюда попадают только инженеры, явно проставленные в строках работ; если ни у одной
+ * строки инженера нет — блока нет вовсе, и акт выглядит ровно как раньше.
+ */
+function performersBlock(input: BuildWorkActInput): Content | null {
+  const names = [
+    ...new Set(
+      input.workOrder.lines
+        .filter((l) => l.lineType === ('work' as LineType))
+        .map((l) => l.engineerName?.trim())
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
+  if (names.length === 0) return null;
+  return {
+    margin: [0, 6, 0, 0],
+    stack: [
+      { text: names.length > 1 ? 'Работы выполнили:' : 'Работы выполнил:', bold: true, fontSize: 10 },
+      {
+        text: names.join(', '),
+        fontSize: 9,
+        margin: [0, 2, 0, 0] as [number, number, number, number],
+      },
+    ],
+  };
+}
+
 function warrantyBlock(hasParts: boolean): Content {
   // Гарантия даётся ТОЛЬКО на установленные запчасти (6 месяцев). На сами работы
   // (ремонт без замены з/ч) гарантия не предоставляется. Если запчастей не было —
@@ -344,6 +375,9 @@ export function buildWorkActDoc(input: BuildWorkActInput): TDocumentDefinitions 
 
   const diag = diagnosisBlock(input);
   if (diag) content.push(diag);
+
+  const performers = performersBlock(input);
+  if (performers) content.push(performers);
 
   content.push(warrantyBlock(parts.length > 0));
 
