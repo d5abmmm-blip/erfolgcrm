@@ -283,7 +283,84 @@ export interface UserPayoutConfig {
 }
 
 function hasPersonalRule(cfg: UserPayoutConfig | undefined): cfg is UserPayoutConfig {
-  return !!cfg && (cfg.baseSalaryKopecks !== null || cfg.bonusPercent !== null);
+  // isActive: личный оклад/бонус — свойство РАБОТАЮЩЕГО сотрудника. Уволенный считается
+  // по общему правилу (так же фильтрует loadUserPayoutConfigs: AND is_active = true).
+  return !!cfg && cfg.isActive && (cfg.baseSalaryKopecks !== null || cfg.bonusPercent !== null);
+}
+
+/**
+ * Процент от работ, по которому сотруднику платят за конкретную работу.
+ *
+ * 🔴 ЕДИНСТВЕННОЕ ОПРЕДЕЛЕНИЕ НА ВСЮ СИСТЕМУ. Им пользуются двое:
+ *   1) расчёт зарплаты — `computeRow` ниже;
+ *   2) себестоимость труда в строке наряда — `work-orders/repository.ts:resolveLineCost`.
+ * Заведёте второе определение — себестоимость перестанет сходиться с выплатой.
+ */
+export function resolveWorkPercent(rule: PayrollRule, cfg?: UserPayoutConfig): number {
+  if (hasPersonalRule(cfg)) return cfg.bonusPercent ?? 0;
+  return rule.mode === 'piecework' ? rule.pieceworkPercent : rule.bonusPercent;
+}
+
+/**
+ * Себестоимость ЕДИНИЦЫ работы = процент инженера от её цены.
+ *
+ * Почему не «ставка × часы»: на бою все строки работ заведены в «шт», а не в «час»
+ * (замер 2026-07-24), поэтому часовая ставка умножалась бы на 1 и приравнивала
+ * замену предохранителя к капремонту. Процент же — ровно те деньги, которые
+ * инженер получит именно за эту работу.
+ *
+ * Усечение вниз — как в зарплате. Из-за хранения «на единицу» итог по строке может
+ * отличаться от выплаты меньше чем на копейку за единицу, и всегда в меньшую сторону.
+ */
+export function laborCostPerUnitKopecks(unitPriceKopecks: bigint, percent: number): bigint {
+  if (percent <= 0 || unitPriceKopecks <= 0n) return 0n;
+  return (unitPriceKopecks * BigInt(percent)) / 100n;
+}
+
+/**
+ * Процент конкретного сотрудника внутри УЖЕ ОТКРЫТОЙ транзакции тенанта.
+ * Нужен себестоимости строки наряда, которая считается в той же транзакции,
+ * что и сама строка. Читает то же и так же, что `getRule` + `loadUserPayoutConfigs`.
+ */
+export async function getEngineerWorkPercentTx(
+  tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
+  engineerId: string,
+): Promise<number> {
+  const ruleRows = await tx.select().from(engineerPayoutRules).limit(1);
+  const rule: PayrollRule = ruleRows[0]
+    ? toRuleDto(ruleRows[0])
+    : { tenantId: '', ...DEFAULT_RULE, updatedAt: new Date(0) };
+
+  const userRows = (await tx.execute(sql`
+    SELECT id,
+           full_name,
+           is_active,
+           payout_base_salary_kopecks::text AS base,
+           payout_bonus_percent AS bonus
+      FROM users
+     WHERE id = ${engineerId}::uuid
+       AND deleted_at IS NULL
+     LIMIT 1
+  `)) as unknown as Array<{
+    id: string;
+    full_name: string;
+    is_active: boolean;
+    base: string | null;
+    bonus: number | null;
+  }>;
+
+  const u = userRows[0];
+  const cfg: UserPayoutConfig | undefined = u
+    ? {
+        userId: u.id,
+        fullName: u.full_name,
+        isActive: u.is_active,
+        baseSalaryKopecks: u.base !== null ? BigInt(u.base) : null,
+        bonusPercent: u.bonus,
+      }
+    : undefined;
+
+  return resolveWorkPercent(rule, cfg);
 }
 
 /**
@@ -302,18 +379,14 @@ function computeRow(
   cfg?: UserPayoutConfig,
 ): PayoutBreakdown {
   const works = agg.worksAmount;
-  let base: bigint;
-  let piecework: bigint;
-  if (hasPersonalRule(cfg)) {
-    base = cfg.baseSalaryKopecks ?? 0n;
-    piecework = (works * BigInt(cfg.bonusPercent ?? 0)) / 100n;
-  } else {
-    const piecePercent = BigInt(
-      rule.mode === 'piecework' ? rule.pieceworkPercent : rule.bonusPercent,
-    );
-    piecework = (works * piecePercent) / 100n;
-    base = rule.mode === 'salary_bonus' ? BigInt(rule.baseSalaryKopecks) : 0n;
-  }
+  // Процент берём ТОЛЬКО через общее определение — та же цифра идёт в себестоимость
+  // труда в наряде (work-orders/resolveLineCost). Второго определения быть не должно.
+  const piecework = (works * BigInt(resolveWorkPercent(rule, cfg))) / 100n;
+  const base = hasPersonalRule(cfg)
+    ? (cfg.baseSalaryKopecks ?? 0n)
+    : rule.mode === 'salary_bonus'
+      ? BigInt(rule.baseSalaryKopecks)
+      : 0n;
   const total = base + piecework;
   return {
     engineerId: agg.engineerId,

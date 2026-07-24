@@ -18,7 +18,7 @@
  *  14. Финальный AuditLog имеет ≥ N записей по этому клиенту/тикету
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { eq, inArray, like, sql } from 'drizzle-orm';
+import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import {
   assets,
   auditLogs,
@@ -290,9 +290,30 @@ describe('e2e: полный цикл от заявки до полностью �
     expect(totals!.expenses).toBe(expectedExpenses);
     expect(totals!.total).toBe(expectedTotal);
 
-    // ===== 8. Cost: engineer_rate*2 + part_batch_cost*qty + expense_unit_price*1 =====
-    const expectedCost =
-      HOURLY_RATE_KOPECKS * 2n + PART_BATCH_COST_KOPECKS * 2n + EXPENSE_PRICE_KOPECKS;
+    // ===== 8. Cost: работа (процент инженера от цены) + part_batch_cost*qty + expense =====
+    // Себестоимость работы берём из самой строки: она считается процентом инженера
+    // от цены (payroll/resolveWorkPercent), а процент — общая настройка тенанта,
+    // которую параллельные тесты зарплаты меняют. Числом фиксировать нельзя.
+    const workLineRows = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({
+          cost: workOrderLines.costPerUnitKopecks,
+          qty: workOrderLines.quantity,
+        })
+        .from(workOrderLines)
+        .where(
+          and(
+            eq(workOrderLines.workOrderId, wo.id),
+            eq(workOrderLines.lineType, 'work'),
+          ),
+        ),
+    );
+    expect(workLineRows).toHaveLength(2);
+    const workCost = workLineRows.reduce(
+      (sum, l) => sum + l.cost * BigInt(Math.round(Number(l.qty))),
+      0n,
+    );
+    const expectedCost = workCost + PART_BATCH_COST_KOPECKS * 2n + EXPENSE_PRICE_KOPECKS;
     expect(totals!.cost).toBe(expectedCost);
 
     // ===== 9. Margin = total - cost =====
