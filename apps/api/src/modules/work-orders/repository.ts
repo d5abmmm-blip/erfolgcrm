@@ -20,6 +20,10 @@ import {
   type Db,
 } from '@erfolg/db';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
+import {
+  getEngineerWorkPercentTx,
+  laborCostPerUnitKopecks,
+} from '../payroll/repository';
 
 type Tx = PgTransaction<never, never, never>;
 
@@ -369,19 +373,37 @@ async function recalcTotals(
     .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
 }
 
+/** Ответственный инженер наряда — на него падает работа, у которой нет своего исполнителя. */
+async function workOrderEngineerId(tx: Tx, workOrderId: string): Promise<string | null> {
+  const rows = await tx
+    .select({ engineerId: workOrders.engineerId })
+    .from(workOrders)
+    .where(eq(workOrders.id, workOrderId))
+    .limit(1);
+  return rows[0]?.engineerId ?? null;
+}
+
 /**
  * 8.C: snapshot себестоимости единицы для строки наряда.
- *   - 'work':    users.hourly_cost_rate_kopecks инженера (за час). Если engineer не задан → 0.
+ *   - 'work':    ПРОЦЕНТ инженера от цены работы (его личный, иначе общее правило ЗП).
+ *     Инженер берётся как в зарплате: строка → иначе ответственный по наряду.
+ *     Инженера нет вовсе → 0.
  *   - 'part' c inventory_item_id: средневзвешенная цена закупки активных партий (quantity_remaining > 0).
  *     Если активных партий нет — берём cost из последней (по received_at) batch для item.
  *     Если партий вообще нет — 0.
  *   - 'part' БЕЗ item_id: 0 (свободная строка).
  *   - 'expense': unit_price (внутренний расход = его же цена; маржа таких строк = 0).
+ *
+ * ⚠️ Себестоимость работы БОЛЬШЕ НЕ ЗАВИСИТ от `users.hourly_cost_rate_kopecks`.
+ * Причина — на бою все строки работ заведены в «шт», а не в «час» (замер 2026-07-24),
+ * поэтому часовая ставка приравнивала бы 15-минутную работу к трёхдневной.
+ * Колонка оставлена в базе, но ни на что не влияет.
  */
 async function resolveLineCost(
   tx: Tx,
   input: {
     lineType: WorkOrderLineType;
+    workOrderId: string;
     inventoryItemId?: string | null;
     engineerId?: string | null;
     unitPriceKopecks: bigint;
@@ -390,13 +412,12 @@ async function resolveLineCost(
   if (input.lineType === 'expense') return input.unitPriceKopecks;
 
   if (input.lineType === 'work') {
-    if (!input.engineerId) return 0n;
-    const rows = await tx
-      .select({ rate: users.hourlyCostRateKopecks })
-      .from(users)
-      .where(eq(users.id, input.engineerId))
-      .limit(1);
-    return rows[0]?.rate ?? 0n;
+    // Тот же порядок, что в расчёте ЗП: COALESCE(line.engineer_id, work_orders.engineer_id).
+    // Иначе у строки без своего исполнителя себестоимость была бы 0, хотя деньги платятся.
+    const engineerId = input.engineerId ?? (await workOrderEngineerId(tx, input.workOrderId));
+    if (!engineerId) return 0n;
+    const percent = await getEngineerWorkPercentTx(tx, engineerId);
+    return laborCostPerUnitKopecks(input.unitPriceKopecks, percent);
   }
 
   // part
@@ -453,15 +474,22 @@ async function resolveLineCost(
  */
 async function resolveCostForUpdate(
   tx: Tx,
+  workOrderId: string,
   input: UpsertLineInput,
   existing:
-    | { lineType: WorkOrderLineType; engineerId: string | null; costPerUnitKopecks: bigint }
+    | {
+        lineType: WorkOrderLineType;
+        engineerId: string | null;
+        unitPriceKopecks: bigint;
+        costPerUnitKopecks: bigint;
+      }
     | undefined,
 ): Promise<bigint> {
   if (input.lineType === 'expense') return input.unitPriceKopecks;
   if (!existing) {
     return resolveLineCost(tx, {
       lineType: input.lineType,
+      workOrderId,
       inventoryItemId: undefined,
       engineerId: input.engineerId ?? null,
       unitPriceKopecks: input.unitPriceKopecks,
@@ -470,11 +498,18 @@ async function resolveCostForUpdate(
   const typeChanged = existing.lineType !== input.lineType;
   const engineerChanged =
     input.engineerId !== undefined && input.engineerId !== existing.engineerId;
-  if (typeChanged || (input.lineType === 'work' && engineerChanged)) {
+  // Себестоимость работы — ПРОЦЕНТ ОТ ЦЕНЫ, поэтому правка цены обязана её пересчитать.
+  // При старой часовой ставке цена на себестоимость не влияла, и пересчёта не требовалось;
+  // без этой ветки исправление цены оставило бы себестоимость от прежней суммы.
+  const priceChanged = existing.unitPriceKopecks !== input.unitPriceKopecks;
+  if (typeChanged || (input.lineType === 'work' && (engineerChanged || priceChanged))) {
     return resolveLineCost(tx, {
       lineType: input.lineType,
+      workOrderId,
       inventoryItemId: undefined,
-      engineerId: input.engineerId ?? null,
+      // Поле не прислали → инженер строки НЕ меняется, берём прежнего.
+      // Иначе правка одной только цены сбросила бы исполнителя на ответственного по наряду.
+      engineerId: input.engineerId !== undefined ? input.engineerId : existing.engineerId,
       unitPriceKopecks: input.unitPriceKopecks,
     });
   }
@@ -502,13 +537,14 @@ export async function upsertLine(
         .select({
           lineType: workOrderLines.lineType,
           engineerId: workOrderLines.engineerId,
+          unitPriceKopecks: workOrderLines.unitPriceKopecks,
           costPerUnitKopecks: workOrderLines.costPerUnitKopecks,
         })
         .from(workOrderLines)
         .where(and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)))
         .limit(1);
 
-      const costPerUnit = await resolveCostForUpdate(tx, input, existing);
+      const costPerUnit = await resolveCostForUpdate(tx, workOrderId, input, existing);
 
       await tx
         .update(workOrderLines)
@@ -533,6 +569,7 @@ export async function upsertLine(
     } else {
       const costPerUnit = await resolveLineCost(tx, {
         lineType: input.lineType,
+        workOrderId,
         inventoryItemId: undefined,
         engineerId: input.engineerId ?? null,
         unitPriceKopecks: input.unitPriceKopecks,

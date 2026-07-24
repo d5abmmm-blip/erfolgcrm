@@ -167,14 +167,10 @@ function EngineerEarnings() {
 export function PayrollSettingsPage() {
   const utils = trpc.useUtils();
   const ruleQ = trpc.payroll.getRule.useQuery();
-  const usersQ = trpc.users.list.useQuery({ onlyEngineers: true });
   const staffQ = trpc.users.list.useQuery();
 
   const setRuleM = trpc.payroll.setRule.useMutation({
     onSuccess: () => utils.payroll.getRule.invalidate(),
-  });
-  const setRateM = trpc.users.setHourlyCostRate.useMutation({
-    onSuccess: () => utils.users.list.invalidate(),
   });
   const setUserPayoutM = trpc.users.setUserPayout.useMutation({
     onSuccess: () => utils.users.list.invalidate(),
@@ -347,6 +343,11 @@ export function PayrollSettingsPage() {
             У каждого — свой оклад (₽/мес) и бонус % от выполненных работ. Пусто в обеих
             ячейках — действует правило по умолчанию выше.
           </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Этот же процент идёт в себестоимость работ: в отчёте «Рентабельность» работа
+            инженера считается по нему. Оклад в себестоимость заявки не входит — он
+            постоянный расход и виден в кассе.
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -389,49 +390,13 @@ export function PayrollSettingsPage() {
         </div>
       </section>
 
-      <section className="bg-card rounded-lg border">
-        <div className="border-b p-4">
-          <h3 className="font-semibold">Внутренняя ставка инженеров (₽/час)</h3>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Используется для расчёта себестоимости работ (cost). На ЗП напрямую не влияет.
-          </p>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
-            <tr>
-              <th className="p-3 text-left font-medium">Инженер</th>
-              <th className="p-3 text-left font-medium">Логин</th>
-              <th className="p-3 text-right font-medium">Ставка, ₽/ч</th>
-              <th className="p-3 text-right font-medium" />
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {usersQ.data?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="text-muted-foreground p-6 text-center">
-                  Инженеры не заведены
-                </td>
-              </tr>
-            )}
-            {usersQ.data?.map((u) => (
-              <UserRateRow
-                key={u.id}
-                userId={u.id}
-                fullName={u.fullName}
-                username={u.username}
-                rateKopecks={u.hourlyCostRateKopecks}
-                onSave={(rateRub) =>
-                  setRateM.mutateAsync({
-                    userId: u.id,
-                    rateKopecks: rubToKopecksString(rateRub),
-                  })
-                }
-                isSaving={setRateM.isPending && setRateM.variables?.userId === u.id}
-              />
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {/*
+        Раздел «Внутренняя ставка инженеров (₽/час)» убран: себестоимость работы теперь
+        считается процентом инженера от цены работы, а не ставкой за час. Причина — работу
+        в нарядах пишут в «шт», а не в «час», поэтому ставка приравнивала 15-минутную
+        работу к трёхдневной. Поле осталось в базе, но ни на что не влияет — держать
+        в интерфейсе орган управления, который ничего не меняет, нельзя.
+      */}
     </div>
   );
 }
@@ -461,57 +426,6 @@ function ModeOption({
       <div className="font-medium">{title}</div>
       <div className="text-muted-foreground text-xs">{description}</div>
     </button>
-  );
-}
-
-function UserRateRow({
-  userId,
-  fullName,
-  username,
-  rateKopecks,
-  onSave,
-  isSaving,
-}: {
-  userId: string;
-  fullName: string;
-  username: string;
-  rateKopecks: string;
-  onSave: (rateRub: string) => Promise<unknown>;
-  isSaving: boolean;
-}) {
-  const initialRub = (Number(rateKopecks) / 100).toString();
-  const [val, setVal] = useState(initialRub);
-  const dirty = val !== initialRub;
-  return (
-    <tr className="hover:bg-muted/30">
-      <td className="p-3 font-medium">{fullName}</td>
-      <td className="text-muted-foreground p-3 font-mono text-xs">{username}</td>
-      <td className="p-3 text-right">
-        <input
-          type="text"
-          inputMode="decimal"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          className="border-input bg-background w-28 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
-          data-userid={userId}
-        />
-      </td>
-      <td className="p-3 text-right">
-        <button
-          type="button"
-          disabled={!dirty || isSaving}
-          onClick={() => void onSave(val)}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-50"
-        >
-          {isSaving ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Save className="h-3 w-3" />
-          )}
-          Сохранить
-        </button>
-      </td>
-    </tr>
   );
 }
 

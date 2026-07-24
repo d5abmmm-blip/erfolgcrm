@@ -251,9 +251,11 @@ describe('правка строки наряда: инженер и коммен
       comment: 'важное примечание',
     });
 
-    expect((await readLine(line.id))?.engineerId).toBe(engineerA);
+    const before = await readLine(line.id);
+    expect(before?.engineerId).toBe(engineerA);
 
-    // Веб шлёт только имя/количество/цену.
+    // Веб шлёт только имя/количество/цену. Цена НЕ меняется → себестоимость единицы
+    // остаётся прежней (пересчитывать нечего).
     await upsertLine(
       getDb(),
       erfolgId,
@@ -270,33 +272,70 @@ describe('правка строки наряда: инженер и коммен
     const after = await readLine(line.id);
     expect(after?.engineerId).toBe(engineerA);
     expect(after?.comment).toBe('важное примечание');
-    expect(after?.cost).toBe(40_000n); // ставка инженера A, не пересчитана
+    expect(after?.cost).toBe(before?.cost);
   });
 
-  it('явно присланный другой инженер — себестоимость пересчитывается по нему', async () => {
+  it('правка ТОЛЬКО цены пересчитывает себестоимость работы (она — процент от цены)', async () => {
     const workOrderId = await freshOrder();
     const line = await upsertLine(getDb(), erfolgId, workOrderId, null, {
       lineType: 'work',
       name: `${TEST_PREFIX}работа`,
-      unit: 'час',
+      unit: 'шт',
       quantity: '1',
       unitPriceKopecks: 100_000n,
       engineerId: engineerA,
     });
-    expect((await readLine(line.id))?.cost).toBe(40_000n);
+    const before = await readLine(line.id);
 
+    // Менеджер поправил цену вдвое. Инженера веб не шлёт вовсе.
+    await upsertLine(
+      getDb(),
+      erfolgId,
+      workOrderId,
+      line.id,
+      webPatch({
+        lineType: 'work',
+        name: `${TEST_PREFIX}работа`,
+        quantity: '1',
+        unitPriceKopecks: 200_000n,
+      }),
+    );
+
+    const after = await readLine(line.id);
+    // 🔴 БЕЗ пересчёта себестоимость осталась бы от прежней цены и маржа поехала бы.
+    expect(after?.cost).toBe((before?.cost ?? 0n) * 2n);
+    // И инженер строки при этом НЕ должен потеряться.
+    expect(after?.engineerId).toBe(engineerA);
+  });
+
+  it('явно присланный другой инженер записывается, себестоимость пересчитывается', async () => {
+    const workOrderId = await freshOrder();
+    const line = await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'work',
+      name: `${TEST_PREFIX}работа`,
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 100_000n,
+      engineerId: engineerA,
+    });
+    const before = await readLine(line.id);
+
+    // Сменили исполнителя И цену разом.
     await upsertLine(getDb(), erfolgId, workOrderId, line.id, {
       lineType: 'work',
       name: `${TEST_PREFIX}работа`,
-      unit: 'час',
+      unit: 'шт',
       quantity: '1',
-      unitPriceKopecks: 100_000n,
+      unitPriceKopecks: 200_000n,
       engineerId: engineerB,
     });
 
     const after = await readLine(line.id);
     expect(after?.engineerId).toBe(engineerB);
-    expect(after?.cost).toBe(70_000n);
+    // Себестоимость пересчитана от новой цены. Точный процент здесь не фиксируем:
+    // у A и B он одинаков, пока не заданы личные правила, а payroll.test их обнуляет
+    // параллельно — цифры проверены чистыми тестами labor-cost-percent.test.ts.
+    expect(after?.cost).toBe((before?.cost ?? 0n) * 2n);
   });
 
   it('явный null инженера — сбрасывает и его, и себестоимость', async () => {

@@ -1,6 +1,7 @@
 /**
  * Этап 8.C — себестоимость и маржа work_order:
- *   • work-строка: cost = engineer.hourly_cost_rate × qty (часы)
+ *   • work-строка: cost = процент инженера от цены работы × qty
+ *     (раньше была часовая ставка; на бою работу пишут в «шт», а не в «час»)
  *   • part-строка БЕЗ inventory_item_id: cost = 0
  *   • part-строка с FEFO-выдачей: cost = weighted-avg unit_cost списанных партий × qty
  *   • expense-строка: cost = unit_price × qty (расход = себестоимость, маржа 0)
@@ -33,7 +34,6 @@ import { issueToWorkOrder } from '../modules/inventory-movements/repository';
 let erfolgId = '';
 let primaryClientId = '';
 let engineerId = '';
-let originalEngineerRate: bigint = 0n;
 
 const TEST_PREFIX = 'TEST8C-';
 
@@ -46,19 +46,12 @@ beforeAll(async () => {
   if (!c) throw new Error('seed missing client');
   primaryClientId = c.id;
   const [e] = await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx
-      .select({ id: users.id, rate: users.hourlyCostRateKopecks })
-      .from(users)
-      .where(eq(users.role, 'engineer'))
-      .limit(1),
+    tx.select({ id: users.id }).from(users).where(eq(users.role, 'engineer')).limit(1),
   );
   if (!e) throw new Error('seed missing engineer');
   engineerId = e.id;
-  originalEngineerRate = e.rate;
-  // Фиксированная ставка 50000 коп/час (500 ₽/час) на время этого suite'а.
-  await withTenantTx(getDb(), erfolgId, async (tx) => {
-    await tx.update(users).set({ hourlyCostRateKopecks: 50_000n }).where(eq(users.id, engineerId));
-  });
+  // Часовую ставку больше НЕ трогаем: себестоимость работы считается процентом от
+  // цены (см. payroll/resolveWorkPercent), колонка hourly_cost_rate ни на что не влияет.
 });
 
 async function clearTestData(): Promise<void> {
@@ -105,20 +98,45 @@ async function selectTotals(workOrderId: string) {
 describe('work-order cost & margin (8.C)', () => {
   beforeEach(clearTestData);
 
-  it('work-строка с engineer: cost = hourly_rate × qty, margin = total - cost', async () => {
+  it('work-строка с engineer: cost = доля ЦЕНЫ работы (процент инженера), margin = total - cost', async () => {
     const { workOrderId } = await freshOrder();
+    // Две работы ОДНОГО инженера, вторая ровно вдвое дороже.
     await upsertLine(getDb(), erfolgId, workOrderId, null, {
       lineType: 'work',
-      name: `${TEST_PREFIX}diag`,
-      unit: 'час',
+      name: `${TEST_PREFIX}diag-1`,
+      unit: 'шт',
       quantity: '2',
-      unitPriceKopecks: 100_000n, // клиенту 1000₽/час
+      unitPriceKopecks: 100_000n,
       engineerId,
     });
+    await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'work',
+      name: `${TEST_PREFIX}diag-2`,
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 200_000n,
+      engineerId,
+    });
+
+    const lines = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select().from(workOrderLines).where(eq(workOrderLines.workOrderId, workOrderId)),
+    );
+    const cheap = lines.find((l) => l.name.endsWith('diag-1'));
+    const pricey = lines.find((l) => l.name.endsWith('diag-2'));
+    if (!cheap || !pricey) throw new Error('work lines missing');
+
+    // 🔴 СУТЬ ПРАВКИ: себестоимость зависит от ЦЕНЫ работы.
+    // При старой часовой ставке обе строки стоили бы ОДИНАКОВО (ставка × 1),
+    // и это равенство не выполнилось бы. Конкретный процент здесь намеренно не
+    // фиксируем: payroll.test в beforeEach обнуляет payout_* у всех пользователей,
+    // а vitest гоняет файлы параллельно — точные цифры проверены чистыми тестами
+    // в labor-cost-percent.test.ts.
+    expect(pricey.costPerUnitKopecks).toBe(cheap.costPerUnitKopecks * 2n);
+
     const t = await selectTotals(workOrderId);
-    expect(t?.total).toBe(200_000n);
-    expect(t?.cost).toBe(100_000n); // 2 × 50000
-    expect(t?.margin).toBe(100_000n);
+    expect(t?.total).toBe(400_000n);
+    expect(t?.cost).toBe(cheap.costPerUnitKopecks * 2n + pricey.costPerUnitKopecks);
+    expect(t?.margin).toBe(400_000n - (t?.cost ?? 0n));
   });
 
   it('work-строка БЕЗ engineer: cost = 0, margin = total', async () => {
@@ -240,30 +258,24 @@ describe('work-order cost & margin (8.C)', () => {
       quantity: '1',
       unitPriceKopecks: 30_000n,
     });
-    const before = await selectTotals(workOrderId);
-    expect(before?.cost).toBe(80_000n);
-    expect(before?.margin).toBe(50_000n);
-
     const lines = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx.select().from(workOrderLines).where(eq(workOrderLines.workOrderId, workOrderId)),
     );
+    const workLine = lines.find((l) => l.lineType === 'work');
     const expLine = lines.find((l) => l.lineType === 'expense');
-    if (!expLine) throw new Error('exp line');
+    if (!workLine || !expLine) throw new Error('lines missing');
+    // Себестоимость работы берём из самой строки — она зависит от процента инженера,
+    // фиксировать её числом нельзя (см. пояснение выше).
+    const workCost = workLine.costPerUnitKopecks;
+
+    const before = await selectTotals(workOrderId);
+    expect(before?.cost).toBe(workCost + 30_000n);
+    expect(before?.margin).toBe(130_000n - (before?.cost ?? 0n));
+
     await deleteLine(getDb(), erfolgId, workOrderId, expLine.id);
 
     const after = await selectTotals(workOrderId);
-    expect(after?.cost).toBe(50_000n);
-    expect(after?.margin).toBe(50_000n);
-  });
-
-  // Оригинальная ставка инженера (на случай других тестов)
-  it('teardown: восстанавливаем ставку', async () => {
-    await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx
-        .update(users)
-        .set({ hourlyCostRateKopecks: originalEngineerRate })
-        .where(eq(users.id, engineerId));
-    });
-    expect(true).toBe(true);
+    expect(after?.cost).toBe(workCost);
+    expect(after?.margin).toBe(100_000n - workCost);
   });
 });
