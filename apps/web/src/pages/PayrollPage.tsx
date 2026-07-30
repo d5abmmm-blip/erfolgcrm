@@ -18,6 +18,7 @@ import {
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { SILENT_ERROR } from '../lib/error-message';
+import { vedomostNetTotal } from '../lib/payroll-total';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
@@ -722,7 +723,13 @@ function PayrollVedomost() {
       advance += parseRubNumber(r.advance);
       bonus += parseRubNumber(r.bonus);
     }
-    return { piecework, salary, advance, bonus, total: piecework + salary + advance + bonus };
+    return {
+      piecework,
+      salary,
+      advance,
+      bonus,
+      total: vedomostNetTotal({ piecework, salary, advance, bonus }),
+    };
   }, [rows]);
 
   const buildEntries = () =>
@@ -773,7 +780,14 @@ function PayrollVedomost() {
   const savedTotalKop = useMemo(() => {
     if (!savedSheet) return 0;
     return savedSheet.entries.reduce(
-      (s, e) => s + e.salaryKopecks + (e.pieceworkKopecks ?? 0) + e.advanceKopecks + e.bonusKopecks,
+      (s, e) =>
+        s +
+        vedomostNetTotal({
+          salary: e.salaryKopecks,
+          piecework: e.pieceworkKopecks ?? 0,
+          bonus: e.bonusKopecks,
+          advance: e.advanceKopecks,
+        }),
       0,
     );
   }, [savedSheet]);
@@ -799,8 +813,12 @@ function PayrollVedomost() {
       const mIdx = Number(s.month.slice(5, 7)) - 1;
       if (mIdx < 0 || mIdx > 11) continue;
       for (const e of s.entries) {
-        const kop =
-          e.salaryKopecks + (e.pieceworkKopecks ?? 0) + e.advanceKopecks + e.bonusKopecks;
+        const kop = vedomostNetTotal({
+          salary: e.salaryKopecks,
+          piecework: e.pieceworkKopecks ?? 0,
+          bonus: e.bonusKopecks,
+          advance: e.advanceKopecks,
+        });
         let rec = map.get(e.employeeId);
         if (!rec) {
           rec = { name: e.employeeName, months: Array.from({ length: 12 }, () => 0) };
@@ -1030,11 +1048,12 @@ function PayrollVedomost() {
               ) : (
                 rows.map((r, idx) => {
                   const worksKop = worksByEmployee.get(r.employeeId);
-                  const rowTotal =
-                    parseRubNumber(r.piecework) +
-                    parseRubNumber(r.salary) +
-                    parseRubNumber(r.advance) +
-                    parseRubNumber(r.bonus);
+                  const rowTotal = vedomostNetTotal({
+                    piecework: parseRubNumber(r.piecework),
+                    salary: parseRubNumber(r.salary),
+                    advance: parseRubNumber(r.advance),
+                    bonus: parseRubNumber(r.bonus),
+                  });
                   return (
                     <tr key={`${r.employeeId}-${idx}`} className="hover:bg-muted/30">
                       <td className="p-2">

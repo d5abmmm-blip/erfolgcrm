@@ -227,6 +227,58 @@ describe('payroll sheets — проведение в кассу', () => {
     }
   });
 
+  it('аванс вычитается из суммы к проведению, а не прибавляется', async () => {
+    const [acc] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .insert(cashAccounts)
+        .values({
+          tenantId: erfolgId,
+          name: 'ТЕСТ-ЗП-аванс',
+          kind: 'cash',
+          openingBalanceKopecks: 1_000_000n,
+          balanceKopecks: 1_000_000n,
+        })
+        .returning({ id: cashAccounts.id }),
+    );
+    const accountId = acc!.id;
+    try {
+      // Начислено: оклад 5000 + сделка 3000 + премия 1000 = 9000.
+      // Аванс 2000 уже выдан → остаток к выплате = 9000 − 2000 = 7000.
+      await saveSheet(ctxFor(erfolgId), {
+        month: '2099-06',
+        entries: [
+          {
+            employeeId: 'manual_adv',
+            employeeName: 'Сидоров',
+            salaryKopecks: 500_000,
+            pieceworkKopecks: 300_000,
+            advanceKopecks: 200_000,
+            bonusKopecks: 100_000,
+          },
+        ],
+      });
+
+      const posted = await postToCash(ctxFor(erfolgId), '2099-06', accountId);
+      // 7000 ₽ = 700 000 коп. Если бы аванс прибавлялся — было бы 1 100 000.
+      expect(posted.postedAmountKopecks).toBe('700000');
+
+      // Остаток счёта: 1 000 000 − 700 000 = 300 000.
+      const [a1] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx
+          .select({ b: cashAccounts.balanceKopecks })
+          .from(cashAccounts)
+          .where(eq(cashAccounts.id, accountId))
+          .limit(1),
+      );
+      expect(String(a1?.b)).toBe('300000');
+    } finally {
+      await withTenantTx(getDb(), erfolgId, async (tx) => {
+        await tx.delete(cashTransactions).where(eq(cashTransactions.accountId, accountId));
+        await tx.delete(cashAccounts).where(eq(cashAccounts.id, accountId));
+      });
+    }
+  });
+
   it('нельзя провести несохранённую ведомость (NOT_FOUND)', async () => {
     const [acc] = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx
