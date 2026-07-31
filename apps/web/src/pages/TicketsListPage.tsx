@@ -14,6 +14,7 @@ import type { TicketStatus, TicketPriority } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { useDebounce } from '../lib/hooks/useDebounce';
+import { assetIdentifierLine } from '../lib/asset-identifiers';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
@@ -41,6 +42,7 @@ interface TicketRow {
   assetId: string | null;
   assetModel: string | null;
   assetSerialNumber: string | null;
+  assetInventoryNumber: string | null;
   assignedEngineerId: string | null;
   assignedEngineerName: string | null;
   slaTargetAt: Date | null;
@@ -110,8 +112,13 @@ export function TicketsListPage() {
     {
       key: 'asset',
       label: 'Техника',
-      render: (t) =>
-        t.assetModel ? (
+      render: (t) => {
+        if (!t.assetModel) return <span className="text-muted-foreground">—</span>;
+        const ids = assetIdentifierLine({
+          serialNumber: t.assetSerialNumber,
+          inventoryNumber: t.assetInventoryNumber,
+        });
+        return (
           <div>
             <Link
               href={`/assets/${t.assetId}`}
@@ -119,15 +126,10 @@ export function TicketsListPage() {
             >
               {t.assetModel}
             </Link>
-            {t.assetSerialNumber && (
-              <div className="text-muted-foreground font-mono text-xs">
-                s/n {t.assetSerialNumber}
-              </div>
-            )}
+            {ids && <div className="text-muted-foreground font-mono text-xs">{ids}</div>}
           </div>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
+        );
+      },
     },
     {
       key: 'status',

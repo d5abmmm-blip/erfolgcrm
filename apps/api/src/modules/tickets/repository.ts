@@ -68,6 +68,12 @@ export interface TicketListItem {
   assetId: string | null;
   assetModel: string | null;
   assetSerialNumber: string | null;
+  /**
+   * Инвентарный номер аппарата у клиента. Отдаём рядом с серийником, а не вместо:
+   * у бюджетников (военные части, госбольницы) серийника в заявке часто НЕТ вообще,
+   * и без этого поля инженеру нечем опознать аппарат на выезде.
+   */
+  assetInventoryNumber: string | null;
   assignedEngineerId: string | null;
   assignedEngineerName: string | null;
   slaTargetAt: Date | null;
@@ -417,6 +423,7 @@ export async function listTickets(
         assetId: tickets.assetId,
         assetModel: assets.model,
         assetSerialNumber: assets.serialNumber,
+        assetInventoryNumber: assets.inventoryNumber,
         assignedEngineerId: tickets.assignedEngineerId,
         assignedEngineerName: users.fullName,
         slaTargetAt: tickets.slaTargetAt,
@@ -483,6 +490,7 @@ export async function getTicket(
         assetId: tickets.assetId,
         assetModel: assets.model,
         assetSerialNumber: assets.serialNumber,
+        assetInventoryNumber: assets.inventoryNumber,
         assignedEngineerId: tickets.assignedEngineerId,
         assignedEngineerName: engineerUser.fullName,
         assignedDispatcherId: tickets.assignedDispatcherId,
@@ -647,6 +655,9 @@ export async function searchTickets(
             ruIlike(clients.displayName, query),
             ruIlike(assets.model, query),
             ruIlike(assets.serialNumber, query),
+            // Инвентарный номер — единственный номер у «военных» заказчиков:
+            // без него сканер/поиск инженера для них не находит ничего.
+            ruIlike(assets.inventoryNumber, query),
           ),
         ),
       )

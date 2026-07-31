@@ -25,6 +25,7 @@ import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
 import { PhotoUploader } from '../../components/PhotoUploader';
 import { RepairArchiveBlock } from '../../components/RepairArchiveBlock';
+import { assetIdentifierLine } from '../../lib/asset-identifiers';
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   received: 'Принята',
@@ -131,6 +132,11 @@ export function MobileTicketPage() {
   }
   const t = ticket.data;
   const tenantSubdomain = getTenantSubdomain();
+  // Серийный и/или инвентарный — чем аппарат опознаётся на месте.
+  const assetIds = assetIdentifierLine({
+    serialNumber: t.assetSerialNumber,
+    inventoryNumber: t.assetInventoryNumber,
+  });
 
   /**
    * Сформировать акт (выполненных работ / дефектный) в PDF прямо с телефона.
@@ -320,9 +326,7 @@ export function MobileTicketPage() {
           {t.assetModel && (
             <Row icon={Wrench} label="Техника">
               {t.assetModel}
-              {t.assetSerialNumber && (
-                <span className="text-muted-foreground"> · S/N {t.assetSerialNumber}</span>
-              )}
+              {assetIds && <span className="text-muted-foreground"> · {assetIds}</span>}
             </Row>
           )}
           {t.barcode && (
@@ -345,7 +349,7 @@ export function MobileTicketPage() {
                   model: t.assetModel ?? '—',
                   manufacturer: null,
                   serialNumber: t.assetSerialNumber ?? null,
-                  inventoryNumber: null,
+                  inventoryNumber: t.assetInventoryNumber ?? null,
                   riskClass: null,
                 },
                 ticket: t.barcode

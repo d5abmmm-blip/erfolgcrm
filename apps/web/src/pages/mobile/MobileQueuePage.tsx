@@ -17,6 +17,7 @@ import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { cn, getMondayOfThisWeek } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { BLOCKED_REASON_META } from '../../lib/dictionaries/tickets';
+import { assetIdentifierLine } from '../../lib/asset-identifiers';
 import { PushToggle } from '../../components/PushToggle';
 import {
   newAssignmentsCount,
@@ -500,6 +501,11 @@ export function MobileQueuePage({ engineerId }: Props) {
           const overdue =
             t.deadlineAt && new Date(t.deadlineAt).getTime() < Date.now() && t.status !== 'closed';
           const reason = reasonById.get(t.id);
+          // Серийный и/или инвентарный — у «инвентарных» заказчиков второй единственный.
+          const assetIds = assetIdentifierLine({
+            serialNumber: t.assetSerialNumber,
+            inventoryNumber: t.assetInventoryNumber,
+          });
           return (
             <li key={t.id}>
               <Link
@@ -545,7 +551,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                       <span className="inline-flex items-center gap-1">
                         <Wrench className="h-3 w-3" />
                         {t.assetModel}
-                        {t.assetSerialNumber && ` · ${t.assetSerialNumber}`}
+                        {assetIds && ` · ${assetIds}`}
                       </span>
                     )}
                   </div>
