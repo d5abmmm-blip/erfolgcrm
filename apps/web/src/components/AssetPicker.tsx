@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { assetIdentifierLine } from '../lib/asset-identifiers';
 
 interface Props {
   value: string | null;
@@ -21,7 +22,7 @@ export function AssetPicker({
   value,
   onChange,
   ownerClientId = null,
-  placeholder = 'Поиск техники по модели или s/n…',
+  placeholder = 'Поиск техники по модели, s/n или инв. №…',
 }: Props) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -68,7 +69,7 @@ export function AssetPicker({
         <li key={a.id}>
           <ItemBtn
             primary={a.model}
-            secondary={a.serialNumber ?? ''}
+            secondary={assetIdentifierLine(a)}
             onClick={() => {
               onChange(a.id, a.model);
               setOpen(false);
@@ -96,7 +97,7 @@ export function AssetPicker({
       <li key={a.id}>
         <ItemBtn
           primary={a.model}
-          secondary={a.serialNumber ?? ''}
+          secondary={assetIdentifierLine(a)}
           onClick={() => {
             onChange(a.id, a.model);
             setOpen(false);
@@ -113,9 +114,9 @@ export function AssetPicker({
         <div className="bg-muted/50 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
           <div>
             <div className="font-medium">{selected.data.model}</div>
-            {selected.data.serialNumber && (
+            {assetIdentifierLine(selected.data) && (
               <div className="text-muted-foreground font-mono text-xs">
-                s/n {selected.data.serialNumber}
+                {assetIdentifierLine(selected.data)}
               </div>
             )}
           </div>
@@ -187,9 +188,7 @@ function ItemBtn({
       onClick={onClick}
     >
       <div className="font-medium">{primary}</div>
-      {secondary && (
-        <div className="text-muted-foreground font-mono text-xs">s/n {secondary}</div>
-      )}
+      {secondary && <div className="text-muted-foreground font-mono text-xs">{secondary}</div>}
     </button>
   );
 }

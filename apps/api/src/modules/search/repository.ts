@@ -53,6 +53,8 @@ export interface AssetHit {
   id: string;
   model: string;
   serialNumber: string | null;
+  /** Ищем по нему давно (см. условие ниже), но до этого не показывали в выдаче. */
+  inventoryNumber: string | null;
   ownerClientName: string | null;
 }
 
@@ -166,6 +168,7 @@ async function searchAssetsHits(
         id: assets.id,
         model: assets.model,
         serialNumber: assets.serialNumber,
+        inventoryNumber: assets.inventoryNumber,
         ownerClientName: ownerClient.displayName,
       })
       .from(assets)

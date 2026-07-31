@@ -3,7 +3,7 @@
  *
  * Содержимое:
  *   - Линия бренда сверху (BRAND_PRIMARY).
- *   - Модель + производитель + S/N (компактно).
+ *   - Модель + производитель + S/N + инвентарный № (компактно).
  *   - Code-128 штрих-код по ticket.barcode либо asset.id.
  *   - Номер заявки и дата приёма (если ярлык печатается в момент оформления).
  */
@@ -56,7 +56,18 @@ export function buildAssetLabelDoc(input: BuildLabelInput): TDocumentDefinitions
       alignment: 'center',
     },
     {
-      text: clipText([a.manufacturer, a.serialNumber ? `s/n ${a.serialNumber}` : null].filter(Boolean).join(' · ') || ' ', 38),
+      // Инвентарный номер печатаем рядом с серийником: у бюджетников он часто
+      // единственный, и без него ярлык выходил вообще без номера аппарата.
+      text: clipText(
+        [
+          a.manufacturer,
+          a.serialNumber ? `s/n ${a.serialNumber}` : null,
+          a.inventoryNumber ? `инв. ${a.inventoryNumber}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || ' ',
+        38,
+      ),
       fontSize: 7,
       color: BRAND_GREY,
       alignment: 'center',

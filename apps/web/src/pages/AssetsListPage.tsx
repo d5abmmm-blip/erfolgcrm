@@ -26,6 +26,7 @@ interface AssetRow {
   manufacturer: string | null;
   deviceType: string | null;
   serialNumber: string | null;
+  inventoryNumber: string | null;
   ownerClientId: string | null;
   ownerDisplayName: string | null;
   lifecycleStatus: AssetLifecycleStatus;
@@ -72,9 +73,19 @@ export function AssetsListPage() {
     },
     {
       key: 'serialNumber',
-      label: 'Серийный №',
+      // У бюджетников серийника нет вообще — колонка «Серийный №» у них была
+      // сплошным прочерком, хотя инвентарный номер в базе есть.
+      label: 'Серийный / инв. №',
       className: 'font-mono text-xs',
-      render: (a) => a.serialNumber ?? <span className="text-muted-foreground">—</span>,
+      render: (a) =>
+        a.serialNumber || a.inventoryNumber ? (
+          <div>
+            {a.serialNumber && <div>{a.serialNumber}</div>}
+            {a.inventoryNumber && <div>инв. № {a.inventoryNumber}</div>}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
     {
       key: 'owner',

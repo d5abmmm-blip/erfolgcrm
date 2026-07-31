@@ -232,7 +232,14 @@ export async function searchAssets(
   db: Db,
   tenantId: string,
   q: string,
-): Promise<Array<Pick<AssetListItem, 'id' | 'model' | 'serialNumber' | 'ownerClientId' | 'ownerDisplayName'>>> {
+): Promise<
+  Array<
+    Pick<
+      AssetListItem,
+      'id' | 'model' | 'serialNumber' | 'inventoryNumber' | 'ownerClientId' | 'ownerDisplayName'
+    >
+  >
+> {
   const query = `%${q.trim()}%`;
   return withTenantTx(db, tenantId, async (tx) => {
     return tx
@@ -240,6 +247,9 @@ export async function searchAssets(
         id: assets.id,
         model: assets.model,
         serialNumber: assets.serialNumber,
+        // Ищем по инвентарному номеру давно, а в выдаче его не было: находка
+        // выглядела как «совпало непонятно с чем».
+        inventoryNumber: assets.inventoryNumber,
         ownerClientId: assets.ownerClientId,
         ownerDisplayName: clients.displayName,
       })

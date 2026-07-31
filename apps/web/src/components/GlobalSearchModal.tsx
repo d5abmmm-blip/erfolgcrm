@@ -13,6 +13,7 @@ import { Search, X, Loader2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { kopecksToRub } from '../lib/money';
+import { assetIdentifierLine } from '../lib/asset-identifiers';
 
 interface GlobalSearchModalProps {
   open: boolean;
@@ -114,7 +115,7 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
         key: `a:${a.id}`,
         href: `/assets/${a.id}`,
         title: a.model,
-        subtitle: [a.serialNumber ? `S/N ${a.serialNumber}` : null, a.ownerClientName]
+        subtitle: [assetIdentifierLine(a) || null, a.ownerClientName]
           .filter(Boolean)
           .join(' · ') || null,
         group: 'Техника',
