@@ -12,6 +12,7 @@ import {
 import { trpc } from '../../lib/trpc';
 import { formatRubWhole } from '../../lib/money';
 import { useOutbox } from '../../lib/offline/useOutbox';
+import { markEngineerWantsDesktop } from '../../lib/engineer-redirect';
 import { TelegramLinkSection } from '../../components/TelegramLinkSection';
 
 const ROLE_LABEL: Record<'director' | 'dispatcher' | 'engineer', string> = {
@@ -117,8 +118,11 @@ export function MobileProfilePage() {
         </div>
       </div>
 
+      {/* Явное намерение: без флага автопереход инженера с '/' вернул бы его
+          обратно в очередь, и полная версия осталась бы недостижимой. */}
       <Link
         href="/"
+        onClick={markEngineerWantsDesktop}
         className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 text-sm"
       >
         <span className="inline-flex items-center gap-2">

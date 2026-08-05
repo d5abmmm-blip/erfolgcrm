@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Route, Switch, Link, useLocation } from 'wouter';
 import { Loader2, EyeOff } from 'lucide-react';
 import { AppShell } from './components/AppShell';
@@ -87,7 +87,11 @@ import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
 import { isPathDisabled } from './lib/modules';
 import { useIsMobile } from './lib/use-is-mobile';
-import { shouldAutoOpenEngineerQueue } from './lib/engineer-redirect';
+import {
+  clearEngineerWantsDesktop,
+  engineerWantsDesktop,
+  shouldAutoOpenEngineerQueue,
+} from './lib/engineer-redirect';
 
 export default function App() {
   const [location] = useLocation();
@@ -132,15 +136,15 @@ function StaffApp() {
     }
   };
 
-  // Разовый (на сессию вкладки) автопереход инженера с корня в /m/queue.
-  // Раньше редирект был «вечным», и кнопка «Открыть полную версию» из мобильного
-  // профиля пружинила обратно в очередь — см. lib/engineer-redirect.
-  const engineerAutoRedirected = useRef(false);
+  // Автопереход инженера с корня в /m/queue уступает явному намерению: кнопка
+  // «Открыть полную версию» в мобильном профиле ставит флаг, иначе редирект
+  // пружинил обратно и полная версия была недостижима — см. lib/engineer-redirect.
   useEffect(() => {
     if (!me.data) return;
     const role = me.data.user.role;
-    if (shouldAutoOpenEngineerQueue(role, location, engineerAutoRedirected.current)) {
-      engineerAutoRedirected.current = true;
+    // Вернулся в мобильный кабинет — намерение исчерпано, корень снова уводит в очередь.
+    if (role === 'engineer' && isMobileRoute) clearEngineerWantsDesktop();
+    if (shouldAutoOpenEngineerQueue(role, location, engineerWantsDesktop())) {
       navigate('/m/queue');
     } else if (role !== 'engineer' && isMobileRoute) {
       // Директор/диспетчер не работают в инженерном мобильном приложении /m/* —
