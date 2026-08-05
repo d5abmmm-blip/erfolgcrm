@@ -49,6 +49,41 @@ export function isTicketStale(status: TicketStatus, idleDays: number): boolean {
   return idleDays >= STALE_TICKET_DAYS;
 }
 
+/**
+ * Мобильные классы статуса: точка в очереди и пилюля в карточке заявки.
+ * Раньше жили копиями внутри /m-страниц — новый статус пришлось бы не забыть
+ * в нескольких файлах.
+ */
+export const TICKET_STATUS_DOT: Record<TicketStatus, string> = {
+  received: 'bg-primary',
+  diagnostics: 'bg-primary',
+  estimate: 'bg-primary',
+  approval: 'bg-warning',
+  in_progress: 'bg-warning',
+  act_pending: 'bg-accent',
+  closed: 'bg-success',
+  cancelled: 'bg-destructive',
+};
+
+export const TICKET_STATUS_PILL: Record<TicketStatus, string> = {
+  received: 'bg-primary/10 text-primary',
+  diagnostics: 'bg-primary/10 text-primary',
+  estimate: 'bg-primary/10 text-primary',
+  approval: 'bg-warning/15 text-warning',
+  in_progress: 'bg-warning/15 text-warning',
+  act_pending: 'bg-accent/10 text-accent',
+  closed: 'bg-success/10 text-success',
+  cancelled: 'bg-destructive/10 text-destructive',
+};
+
+/** Бейдж приоритета в мобильных списках; label '' = не показывать (normal). */
+export const TICKET_PRIORITY_PILL: Record<TicketPriority, { label: string; cls: string }> = {
+  low: { label: 'низкий', cls: 'text-muted-foreground' },
+  normal: { label: '', cls: '' },
+  high: { label: 'высокий', cls: 'bg-warning/15 text-warning' },
+  urgent: { label: 'срочный', cls: 'bg-destructive/15 text-destructive' },
+};
+
 /** Метаданные приоритета заявки. */
 export const TICKET_PRIORITY_META: Record<TicketPriority, MetaEntry> = {
   low: { label: 'низкий', variant: 'muted' },

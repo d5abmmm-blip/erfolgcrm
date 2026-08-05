@@ -1,14 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import type { IScannerControls } from '@zxing/browser';
-import { Camera, Loader2, ScanLine, Type, X, AlertTriangle } from 'lucide-react';
+import {
+  Camera,
+  ChevronRight,
+  Flashlight,
+  FlashlightOff,
+  Loader2,
+  ScanLine,
+  Type,
+  X,
+  AlertTriangle,
+} from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { pickScanResult, type ScanMatch } from '../../lib/scan-pick';
+
+/** Capabilities/constraints фонарика в TS DOM не описаны — сужаем сами. */
+type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean };
 
 /**
  * /m/scan — камера → распознавание Code-128 на ticket.barcode → редирект на карточку.
  *
  * Если камера не разрешена / нет — даём fallback ввести код руками.
  * После распознавания ищем заявку через trpc.tickets.search (по barcode).
+ * Штрих-код уникален и открывается сразу; ручной ввод серийника может найти
+ * несколько заявок — тогда показываем список на выбор (раньше молча
+ * открывалась первая попавшаяся). Для тёмных углов — фонарик, если камера умеет.
  *
  * Замечание: zxing работает в browser через MediaDevices API. На iOS Safari
  * нужен HTTPS, иначе getUserMedia вернёт NotAllowedError. В деве с http://localhost
@@ -18,27 +35,36 @@ export function MobileScanPage() {
   const [, navigate] = useLocation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manual, setManual] = useState('');
   const [searching, setSearching] = useState(false);
+  const [matches, setMatches] = useState<ScanMatch[] | null>(null);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const utils = trpc.useUtils();
 
   useEffect(() => {
     return () => {
       controlsRef.current?.stop();
       controlsRef.current = null;
+      trackRef.current = null;
     };
   }, []);
 
   const handleHit = async (text: string) => {
     if (searching) return;
     setSearching(true);
+    setError(null);
+    setMatches(null);
     try {
-      const matches = await utils.tickets.search.fetch({ q: text });
-      const match = matches[0];
-      if (match) {
-        navigate(`/m/tickets/${match.id}`);
+      const found = await utils.tickets.search.fetch({ q: text });
+      const pick = pickScanResult(found);
+      if (pick.kind === 'one') {
+        navigate(`/m/tickets/${pick.id}`);
+      } else if (pick.kind === 'many') {
+        setMatches(pick.matches);
       } else {
         setError(`Не нашли заявку по коду «${text}»`);
       }
@@ -51,6 +77,7 @@ export function MobileScanPage() {
 
   const startCamera = async () => {
     setError(null);
+    setMatches(null);
     setScanning(true);
     try {
       const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([
@@ -74,12 +101,24 @@ export function MobileScanPage() {
           if (result) {
             ctrl.stop();
             controlsRef.current = null;
+            trackRef.current = null;
             setScanning(false);
+            setTorchOn(false);
+            setTorchSupported(false);
             void handleHit(result.getText());
           }
         },
       );
       controlsRef.current = controls;
+      // Фонарик: смотрим capabilities живого трека — поддерживают не все камеры.
+      const stream = video.srcObject;
+      const track = stream instanceof MediaStream ? (stream.getVideoTracks()[0] ?? null) : null;
+      trackRef.current = track;
+      const caps =
+        track && typeof track.getCapabilities === 'function'
+          ? (track.getCapabilities() as TorchCapabilities)
+          : undefined;
+      setTorchSupported(Boolean(caps?.torch));
     } catch (e) {
       setScanning(false);
       const msg =
@@ -95,7 +134,24 @@ export function MobileScanPage() {
   const stopCamera = () => {
     controlsRef.current?.stop();
     controlsRef.current = null;
+    trackRef.current = null;
     setScanning(false);
+    setTorchOn(false);
+    setTorchSupported(false);
+  };
+
+  const toggleTorch = async () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      const torchConstraint = { torch: next } as MediaTrackConstraintSet;
+      await track.applyConstraints({ advanced: [torchConstraint] });
+      setTorchOn(next);
+    } catch {
+      // Камера заявила torch, но не смогла — просто прячем кнопку.
+      setTorchSupported(false);
+    }
   };
 
   const onSubmitManual = (e: React.FormEvent) => {
@@ -124,7 +180,7 @@ export function MobileScanPage() {
           )}
         </div>
 
-        <div className="bg-black relative aspect-[3/4] w-full">
+        <div className="relative aspect-[3/4] w-full bg-black">
           <video
             ref={videoRef}
             playsInline
@@ -145,7 +201,17 @@ export function MobileScanPage() {
             </div>
           )}
           {scanning && (
-            <div className="pointer-events-none absolute inset-x-8 top-1/3 bottom-1/3 rounded-lg border-2 border-primary/80 shadow-[0_0_0_2000px_rgba(0,0,0,0.4)]" />
+            <div className="border-primary/80 pointer-events-none absolute inset-x-8 top-1/3 bottom-1/3 rounded-lg border-2 shadow-[0_0_0_2000px_rgba(0,0,0,0.4)]" />
+          )}
+          {scanning && torchSupported && (
+            <button
+              type="button"
+              onClick={() => void toggleTorch()}
+              aria-label={torchOn ? 'Выключить фонарик' : 'Включить фонарик'}
+              className="absolute top-3 right-3 grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white"
+            >
+              {torchOn ? <FlashlightOff className="h-5 w-5" /> : <Flashlight className="h-5 w-5" />}
+            </button>
           )}
         </div>
 
@@ -157,6 +223,32 @@ export function MobileScanPage() {
         )}
       </div>
 
+      {matches && (
+        <div className="bg-card overflow-hidden rounded-lg border">
+          <div className="border-b px-3 py-2 text-sm font-semibold">
+            Найдено несколько заявок — выберите
+          </div>
+          <ul className="divide-y">
+            {matches.map((m) => (
+              <li key={m.id}>
+                <Link
+                  href={`/m/tickets/${m.id}`}
+                  className="hover:bg-muted/40 active:bg-muted/60 flex items-center justify-between gap-2 px-3 py-2.5 transition"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm font-semibold">{m.ticketNumber}</div>
+                    <div className="text-muted-foreground truncate text-xs">
+                      {[m.clientDisplayName, m.assetModel].filter(Boolean).join(' · ') || '—'}
+                    </div>
+                  </div>
+                  <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <form onSubmit={onSubmitManual} className="bg-card space-y-2 rounded-lg border p-3">
         <label className="text-muted-foreground text-[11px] font-medium uppercase">
           Или введите код вручную
@@ -166,7 +258,7 @@ export function MobileScanPage() {
             value={manual}
             onChange={(e) => setManual(e.target.value)}
             placeholder="T-2026-000001 или штрих-код"
-            className="border-input bg-background flex-1 rounded-md border px-3 py-2 text-sm font-mono"
+            className="border-input bg-background flex-1 rounded-md border px-3 py-2 font-mono text-sm"
           />
           <button
             type="submit"

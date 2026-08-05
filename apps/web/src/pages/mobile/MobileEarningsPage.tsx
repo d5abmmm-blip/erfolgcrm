@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { formatRubWhole } from '../../lib/money';
-import { cn } from '../../lib/utils';
+import { QueryError } from '../../components/QueryError';
+import { SegmentedTabs } from '../../components/SegmentedTabs';
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
 
@@ -69,7 +70,15 @@ export function MobileEarningsPage() {
         </div>
       </div>
 
-      <PeriodTabs value={period} onChange={setPeriod} />
+      <SegmentedTabs
+        grow
+        options={(['today', 'week', 'month', 'quarter'] as const).map((p) => ({
+          value: p,
+          label: PERIOD_LABEL[p],
+        }))}
+        value={period}
+        onChange={setPeriod}
+      />
 
       {q.isLoading && (
         <div className="bg-card flex items-center gap-3 rounded-lg border p-4">
@@ -78,10 +87,13 @@ export function MobileEarningsPage() {
         </div>
       )}
 
-      {q.error && (
-        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-lg border p-4 text-sm">
-          {q.error.message}
-        </div>
+      {(q.error || (q.fetchStatus === 'paused' && !q.data)) && (
+        <QueryError
+          error={q.error}
+          paused={q.fetchStatus === 'paused'}
+          what="заработок"
+          onRetry={() => void q.refetch()}
+        />
       )}
 
       {disabled && (
@@ -172,27 +184,6 @@ export function MobileEarningsPage() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function PeriodTabs({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
-  const periods: Period[] = ['today', 'week', 'month', 'quarter'];
-  return (
-    <div className="bg-secondary text-secondary-foreground grid grid-cols-4 gap-0.5 rounded-lg p-0.5 text-sm">
-      {periods.map((p) => (
-        <button
-          key={p}
-          type="button"
-          onClick={() => onChange(p)}
-          className={cn(
-            'rounded-md py-1.5 font-medium transition',
-            p === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-          )}
-        >
-          {PERIOD_LABEL[p]}
-        </button>
-      ))}
     </div>
   );
 }

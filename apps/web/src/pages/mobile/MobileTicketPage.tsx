@@ -4,6 +4,8 @@ import {
   ChevronLeft,
   Clock,
   Loader2,
+  MapPin,
+  Phone,
   User,
   Wrench,
   ScanLine,
@@ -11,8 +13,6 @@ import {
   Stethoscope,
   ClipboardCheck,
   StickyNote,
-  CheckCircle2,
-  AlertCircle,
   Tag,
   Printer,
   FileWarning,
@@ -23,31 +23,16 @@ import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { openPrintWindow } from '../../lib/open-print-window';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
+import { TICKET_STATUS_META, TICKET_STATUS_PILL } from '../../lib/dictionaries/tickets';
+import { engineerOwnsTicket } from '../../lib/engineer-ticket-access';
+import { contactLine, mapsHref, telHref } from '../../lib/client-contact';
+import { describeTicketEvent } from '../../lib/ticket-events';
+import { fmtScheduleSlot, fmtShortDateTime } from '../../lib/dates';
+import { showToast } from '../../lib/toast';
+import { QueryError } from '../../components/QueryError';
 import { PhotoUploader } from '../../components/PhotoUploader';
 import { RepairArchiveBlock } from '../../components/RepairArchiveBlock';
 import { assetIdentifierLine } from '../../lib/asset-identifiers';
-
-const STATUS_LABEL: Record<TicketStatus, string> = {
-  received: 'Принята',
-  diagnostics: 'Диагностика',
-  estimate: 'Смета',
-  approval: 'Согласование',
-  in_progress: 'В работе',
-  act_pending: 'Ожидает акта',
-  closed: 'Закрыта',
-  cancelled: 'Отменена',
-};
-
-const STATUS_PILL: Record<TicketStatus, string> = {
-  received: 'bg-primary/10 text-primary',
-  diagnostics: 'bg-primary/10 text-primary',
-  estimate: 'bg-primary/10 text-primary',
-  approval: 'bg-warning/15 text-warning',
-  in_progress: 'bg-warning/15 text-warning',
-  act_pending: 'bg-accent/10 text-accent',
-  closed: 'bg-success/10 text-success',
-  cancelled: 'bg-destructive/10 text-destructive',
-};
 
 interface ActionDef {
   /** Кнопка-цель (ставит этот status). */
@@ -94,11 +79,13 @@ export function MobileTicketPage() {
   const changeStatusM = trpc.tickets.changeStatus.useMutation();
   const addNoteM = trpc.tickets.addNote.useMutation();
 
-  // Печать актов инженером прямо с телефона. Инженеру — только по своим заявкам
-  // (то же правило продублировано на сервере в tickets.documentClient/recordPrint).
-  const canPrintActs =
-    !!ticket.data &&
-    (me.data?.user.role !== 'engineer' || ticket.data.assignedEngineerId === me.data.user.id);
+  // Печать актов и реквизиты клиента — по «своим» заявкам инженера: он
+  // ответственный ИЛИ помощник, как на сервере в assertEngineerOwnsTicket.
+  // (Раньше проверялся только ответственный — помощник не видел кнопок актов.)
+  const canPrintActs = engineerOwnsTicket(
+    me.data ? { id: me.data.user.id, role: me.data.user.role } : undefined,
+    ticket.data ?? undefined,
+  );
   const assetFull = trpc.assets.get.useQuery(
     { id: ticket.data?.assetId ?? '' },
     { enabled: !!ticket.data?.assetId },
@@ -108,10 +95,12 @@ export function MobileTicketPage() {
     { enabled: !!id && canPrintActs },
   );
   const recordPrintM = trpc.tickets.recordPrint.useMutation();
+  // История заявки: комментарии (свои и диспетчерские) и события — раньше
+  // инженер писал комментарий «в пустоту», не видя ленты.
+  const events = trpc.tickets.events.useQuery({ ticketId: id, limit: 10 }, { enabled: !!id });
 
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(null);
 
   if (ticket.isLoading) {
     return (
@@ -123,10 +112,16 @@ export function MobileTicketPage() {
   }
   if (ticket.error || !ticket.data) {
     return (
-      <div className="m-3">
-        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-3 text-sm">
-          {ticket.error?.message ?? 'Заявка не найдена'}
-        </div>
+      <div className="m-3 space-y-2">
+        <QueryError
+          error={ticket.error}
+          paused={ticket.fetchStatus === 'paused'}
+          what="заявку"
+          onRetry={() => void ticket.refetch()}
+        />
+        {!ticket.error && ticket.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Заявка не найдена</div>
+        )}
       </div>
     );
   }
@@ -137,6 +132,12 @@ export function MobileTicketPage() {
     serialNumber: t.assetSerialNumber,
     inventoryNumber: t.assetInventoryNumber,
   });
+  // Контакт клиента: позвонить и открыть адрес на карте одним тапом.
+  // Сервер отдаёт documentClient только по «своим» заявкам (см. canPrintActs).
+  const clientInfo = clientDoc.data;
+  const clientPhoneHref = telHref(clientInfo?.phone);
+  const clientMapsHref = mapsHref(clientInfo?.legalAddress);
+  const clientContact = contactLine(clientInfo?.contactName, clientInfo?.contactPosition);
 
   /**
    * Сформировать акт (выполненных работ / дефектный) в PDF прямо с телефона.
@@ -147,7 +148,7 @@ export function MobileTicketPage() {
     // Акт работ и дефектный требуют наряд; акт тех.состояния можно печатать и без него
     // (пустой бланк под заполнение от руки прямо в поле).
     if (!woData && kind !== 'tech_condition_act') {
-      setToast({ kind: 'error', text: 'Наряд ещё не создан — акт сформировать нельзя' });
+      showToast('error', 'Наряд ещё не создан — акт сформировать нельзя');
       return;
     }
     const win = openPrintWindow();
@@ -219,13 +220,8 @@ export function MobileTicketPage() {
     } catch (err) {
       win?.close();
       console.error('[print]', err);
-      setToast({ kind: 'error', text: 'Не удалось сформировать PDF' });
+      showToast('error', 'Не удалось сформировать PDF');
     }
-  };
-
-  const showToast = (toastData: NonNullable<typeof toast>) => {
-    setToast(toastData);
-    setTimeout(() => setToast(null), 3000);
   };
 
   const onAction = async (target: TicketStatus, label: string) => {
@@ -242,14 +238,11 @@ export function MobileTicketPage() {
         utils.tickets.get.invalidate({ id: t.id }),
         utils.tickets.list.invalidate(),
       ]);
-      showToast({ kind: 'ok', text: `Статус изменён: ${label}` });
+      showToast('ok', `Статус изменён: ${label}`);
     } else if (result.status === 'queued') {
-      showToast({
-        kind: 'queued',
-        text: 'Нет связи — изменение сохранено в очередь, отправится автоматически',
-      });
+      showToast('queued', 'Нет связи — изменение сохранено в очередь, отправится автоматически');
     } else {
-      showToast({ kind: 'error', text: result.error.message });
+      showToast('error', result.error.message);
     }
   };
 
@@ -266,12 +259,12 @@ export function MobileTicketPage() {
     if (result.status === 'ok') {
       setComment('');
       await utils.tickets.events.invalidate({ ticketId: t.id });
-      showToast({ kind: 'ok', text: 'Комментарий добавлен' });
+      showToast('ok', 'Комментарий добавлен');
     } else if (result.status === 'queued') {
       setComment('');
-      showToast({ kind: 'queued', text: 'Сохранено в очередь' });
+      showToast('queued', 'Сохранено в очередь');
     } else {
-      showToast({ kind: 'error', text: result.error.message });
+      showToast('error', result.error.message);
     }
   };
 
@@ -299,16 +292,16 @@ export function MobileTicketPage() {
           <div>
             <div className="font-mono text-base font-semibold">{t.ticketNumber}</div>
             <div className="text-muted-foreground text-xs">
-              принята {fmtDate(t.receivedAt)}
+              принята {fmtShortDateTime(t.receivedAt)}
             </div>
           </div>
           <span
             className={cn(
               'rounded-full px-3 py-1 text-xs font-medium',
-              STATUS_PILL[t.status],
+              TICKET_STATUS_PILL[t.status],
             )}
           >
-            {STATUS_LABEL[t.status]}
+            {TICKET_STATUS_META[t.status].label}
           </span>
         </div>
 
@@ -335,6 +328,46 @@ export function MobileTicketPage() {
             </Row>
           )}
         </div>
+
+        {clientInfo && (clientContact || clientInfo.phone || clientInfo.legalAddress) && (
+          <div className="space-y-2 border-t pt-3 text-sm">
+            {clientContact && (
+              <Row icon={User} label="Контакт">
+                {clientContact}
+              </Row>
+            )}
+            {clientInfo.phone && (
+              <Row icon={Phone} label="Телефон">
+                {clientPhoneHref ? (
+                  <a
+                    href={clientPhoneHref}
+                    className="text-primary font-medium underline-offset-2 hover:underline"
+                  >
+                    {clientInfo.phone}
+                  </a>
+                ) : (
+                  clientInfo.phone
+                )}
+              </Row>
+            )}
+            {clientInfo.legalAddress && (
+              <Row icon={MapPin} label="Адрес (юр.)">
+                {clientMapsHref ? (
+                  <a
+                    href={clientMapsHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    {clientInfo.legalAddress}
+                  </a>
+                ) : (
+                  clientInfo.legalAddress
+                )}
+              </Row>
+            )}
+          </div>
+        )}
         {t.assetModel && (
           <button
             type="button"
@@ -484,6 +517,37 @@ export function MobileTicketPage() {
         </button>
       </div>
 
+      {(events.data ?? []).length > 0 && (
+        <div className="bg-card space-y-2 rounded-lg border p-3">
+          <div className="text-muted-foreground text-[11px] font-medium uppercase">История</div>
+          <ul className="space-y-3">
+            {(events.data ?? []).map((e) => {
+              const d = describeTicketEvent(e);
+              return (
+                <li key={e.id} className="text-sm">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">{d.title}</span>
+                    <span className="text-muted-foreground shrink-0 text-[11px]">
+                      {fmtShortDateTime(e.createdAt)}
+                    </span>
+                  </div>
+                  {d.body && (
+                    <div className="text-muted-foreground mt-0.5 text-xs whitespace-pre-wrap">
+                      {d.body}
+                    </div>
+                  )}
+                  {e.userFullName && (
+                    <div className="text-muted-foreground/80 mt-0.5 text-[11px]">
+                      {e.userFullName}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="bg-card rounded-2xl border p-4">
         <div className="text-foreground mb-3 text-sm font-semibold">Фото</div>
         <PhotoUploader
@@ -496,24 +560,6 @@ export function MobileTicketPage() {
         />
       </div>
 
-      {toast && (
-        <div
-          className={cn(
-            'fixed inset-x-3 bottom-24 z-40 rounded-lg p-3 text-sm shadow-lg',
-            toast.kind === 'ok' && 'bg-success text-success-foreground',
-            toast.kind === 'queued' && 'bg-warning text-warning-foreground',
-            toast.kind === 'error' && 'bg-destructive text-destructive-foreground',
-          )}
-          role="status"
-        >
-          <div className="flex items-center gap-2">
-            {toast.kind === 'ok' && <CheckCircle2 className="h-4 w-4" />}
-            {toast.kind === 'queued' && <AlertCircle className="h-4 w-4" />}
-            {toast.kind === 'error' && <AlertCircle className="h-4 w-4" />}
-            <span>{toast.text}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -536,27 +582,4 @@ function Row({
       </div>
     </div>
   );
-}
-
-function fmtDate(d: Date | string): string {
-  const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/**
- * Stage 11 — формат окна «5 мая, 14:00 – 15:30» или «5 мая, 14:00» если end не задан.
- */
-function fmtScheduleSlot(start: Date | string, end: Date | string | null): string {
-  const s = typeof start === 'string' ? new Date(start) : start;
-  const dayLabel = s.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  const startTime = s.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  if (!end) return `${dayLabel}, ${startTime}`;
-  const e = typeof end === 'string' ? new Date(end) : end;
-  const endTime = e.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  return `${dayLabel}, ${startTime} – ${endTime}`;
 }

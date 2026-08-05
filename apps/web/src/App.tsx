@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Route, Switch, Link, useLocation } from 'wouter';
 import { Loader2, EyeOff } from 'lucide-react';
 import { AppShell } from './components/AppShell';
@@ -64,6 +64,7 @@ import { MailSettingsPage } from './pages/MailSettingsPage';
 import { AiSettingsPage } from './pages/AiSettingsPage';
 import { NotificationsSettingsPage } from './pages/NotificationsSettingsPage';
 import { MobileInventoryPage } from './pages/mobile/MobileInventoryPage';
+import { MobileInventoryItemPage } from './pages/mobile/MobileInventoryItemPage';
 import { MobileQueuePage } from './pages/mobile/MobileQueuePage';
 import { MobileTicketPage } from './pages/mobile/MobileTicketPage';
 import { MobileWorkLogPage } from './pages/mobile/MobileWorkLogPage';
@@ -86,6 +87,7 @@ import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
 import { isPathDisabled } from './lib/modules';
 import { useIsMobile } from './lib/use-is-mobile';
+import { shouldAutoOpenEngineerQueue } from './lib/engineer-redirect';
 
 export default function App() {
   const [location] = useLocation();
@@ -130,12 +132,15 @@ function StaffApp() {
     }
   };
 
-  // После логина инженера — однократный редирект на /m/queue, если он на корне.
-  // Не делаем «вечный» редирект, чтобы инженер мог сознательно зайти на полную версию.
+  // Разовый (на сессию вкладки) автопереход инженера с корня в /m/queue.
+  // Раньше редирект был «вечным», и кнопка «Открыть полную версию» из мобильного
+  // профиля пружинила обратно в очередь — см. lib/engineer-redirect.
+  const engineerAutoRedirected = useRef(false);
   useEffect(() => {
     if (!me.data) return;
     const role = me.data.user.role;
-    if (role === 'engineer' && location === '/') {
+    if (shouldAutoOpenEngineerQueue(role, location, engineerAutoRedirected.current)) {
+      engineerAutoRedirected.current = true;
       navigate('/m/queue');
     } else if (role !== 'engineer' && isMobileRoute) {
       // Директор/диспетчер не работают в инженерном мобильном приложении /m/* —
@@ -178,6 +183,7 @@ function StaffApp() {
             <Route path="/m/scan" component={MobileScanPage} />
             <Route path="/m/profile" component={MobileProfilePage} />
             <Route path="/m/earnings" component={MobileEarningsPage} />
+            <Route path="/m/inventory/:id" component={MobileInventoryItemPage} />
             <Route path="/m/inventory" component={MobileInventoryPage} />
             <Route path="/m/tickets/:id/work-log" component={MobileWorkLogPage} />
             <Route path="/m/tickets/:id" component={MobileTicketPage} />
