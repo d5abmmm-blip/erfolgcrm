@@ -1,7 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ClipboardList, ListChecks, Package, ScanLine, User, LogOut, CloudOff, Cloud } from 'lucide-react';
-import { trpc } from '../lib/trpc';
+import { ClipboardList, ListChecks, Package, ScanLine, User, CloudOff, Cloud } from 'lucide-react';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useAppViewportLock } from '../lib/use-app-viewport-lock';
 import { cn } from '../lib/utils';
@@ -39,8 +38,6 @@ const NAV: Array<{
 
 export function MobileShell({ children, session }: Props) {
   const [location] = useLocation();
-  const utils = trpc.useUtils();
-  const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
   const outbox = useOutbox();
 
   // Экран ведёт себя как приложение: без зума пальцами и «резинового» отскока.
@@ -113,8 +110,10 @@ export function MobileShell({ children, session }: Props) {
         className="bg-card fixed inset-x-0 bottom-0 z-30 grid h-16 border-t"
         style={{
           paddingBottom: 'env(safe-area-inset-bottom)',
-          // +1 колонка под кнопку «Выйти». Сетка ужимается при скрытых вкладках.
-          gridTemplateColumns: `repeat(${visibleNav.length + 1}, minmax(0, 1fr))`,
+          // Сетка ужимается при скрытых вкладках. «Выйти» здесь больше нет:
+          // случайный тап по крайней вкладке разлогинивал инженера в поле,
+          // а кнопка выхода и так есть в «Профиле».
+          gridTemplateColumns: `repeat(${visibleNav.length}, minmax(0, 1fr))`,
         }}
       >
         {visibleNav.map((n) => {
@@ -143,16 +142,6 @@ export function MobileShell({ children, session }: Props) {
             </Link>
           );
         })}
-        <button
-          type="button"
-          onClick={() => logout.mutate()}
-          className="text-muted-foreground hover:text-foreground flex flex-col items-center justify-center gap-0.5 transition"
-        >
-          <span className="grid h-8 w-12 place-items-center rounded-xl">
-            <LogOut className="h-5.5 w-5.5" />
-          </span>
-          <span className="text-[11px] font-medium">Выйти</span>
-        </button>
       </nav>
     </div>
   );

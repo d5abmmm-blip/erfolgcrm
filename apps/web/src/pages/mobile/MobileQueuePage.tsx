@@ -8,16 +8,28 @@ import {
   Clock,
   Loader2,
   Package,
+  Search,
   Sparkles,
   Wrench,
-  RefreshCw,
 } from 'lucide-react';
-import type { TicketStatus, TicketPriority } from '@erfolg/shared';
+import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { cn, getMondayOfThisWeek } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
-import { BLOCKED_REASON_META } from '../../lib/dictionaries/tickets';
+import {
+  BLOCKED_REASON_META,
+  TICKET_PRIORITY_PILL,
+  TICKET_STATUS_DOT,
+  TICKET_STATUS_META,
+} from '../../lib/dictionaries/tickets';
 import { assetIdentifierLine } from '../../lib/asset-identifiers';
+import { fmtDeadline } from '../../lib/deadline';
+import { addDays, fmtTime, inDayRange, startOfDay } from '../../lib/dates';
+import { filterQueue } from '../../lib/queue-filter';
+import { showToast } from '../../lib/toast';
+import { MobileListToolbar } from '../../components/MobileListToolbar';
+import { SegmentedTabs } from '../../components/SegmentedTabs';
+import { QueryError } from '../../components/QueryError';
 import { PushToggle } from '../../components/PushToggle';
 import {
   newAssignmentsCount,
@@ -39,35 +51,6 @@ const ACTIVE_STATUSES: TicketStatus[] = [
   'act_pending',
 ];
 
-const STATUS_LABEL: Record<TicketStatus, string> = {
-  received: 'Принята',
-  diagnostics: 'Диагностика',
-  estimate: 'Смета',
-  approval: 'Согласование',
-  in_progress: 'В работе',
-  act_pending: 'Ожидает акта',
-  closed: 'Закрыта',
-  cancelled: 'Отменена',
-};
-
-const STATUS_DOT: Record<TicketStatus, string> = {
-  received: 'bg-primary',
-  diagnostics: 'bg-primary',
-  estimate: 'bg-primary',
-  approval: 'bg-warning',
-  in_progress: 'bg-warning',
-  act_pending: 'bg-accent',
-  closed: 'bg-success',
-  cancelled: 'bg-destructive',
-};
-
-const PRIORITY_BADGE: Record<TicketPriority, { label: string; cls: string }> = {
-  low: { label: 'низкий', cls: 'text-muted-foreground' },
-  normal: { label: '', cls: '' },
-  high: { label: 'высокий', cls: 'bg-warning/15 text-warning' },
-  urgent: { label: 'срочный', cls: 'bg-destructive/15 text-destructive' },
-};
-
 type ReactAction = 'inwork' | 'ready' | 'part';
 
 interface Props {
@@ -81,6 +64,7 @@ interface Props {
  */
 export function MobileQueuePage({ engineerId }: Props) {
   const [tab, setTab] = useState<'active' | 'all'>('active');
+  const [searchText, setSearchText] = useState('');
   const utils = trpc.useUtils();
   const tenantSubdomain = getTenantSubdomain();
 
@@ -128,21 +112,6 @@ export function MobileQueuePage({ engineerId }: Props) {
   // «Ещё в работе» не сбрасывает дни простоя на доске (так задумано), поэтому
   // карточку после ответа прячем локально — иначе кнопка выглядит «неработающей».
   const [reactedIds, setReactedIds] = useState<Set<string>>(() => new Set());
-  const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(
-    null,
-  );
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = (t: NonNullable<typeof toast>) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(t);
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
-  };
-  useEffect(
-    () => () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    },
-    [],
-  );
 
   const onReact = async (ticketId: string, action: ReactAction) => {
     setBusyTicket(ticketId);
@@ -159,12 +128,12 @@ export function MobileQueuePage({ engineerId }: Props) {
         utils.tickets.myTickets.invalidate(),
         utils.tickets.myList.invalidate(),
       ]);
-      showToast({ kind: 'ok', text: result.data.message });
+      showToast('ok', result.data.message);
     } else if (result.status === 'queued') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
-      showToast({ kind: 'queued', text: 'Нет связи — ответ сохранён и отправится сам' });
+      showToast('queued', 'Нет связи — ответ сохранён и отправится сам');
     } else {
-      showToast({ kind: 'error', text: result.error.message });
+      showToast('error', result.error.message);
     }
   };
 
@@ -193,7 +162,7 @@ export function MobileQueuePage({ engineerId }: Props) {
     const dayAfterTomorrow = addDays(today, 2);
 
     const todayItems = items
-      .filter((s) => isSameDay(new Date(s.scheduledStartAt), today, tomorrow))
+      .filter((s) => inDayRange(new Date(s.scheduledStartAt), today, tomorrow))
       .sort(
         (a, b) =>
           new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
@@ -202,7 +171,7 @@ export function MobileQueuePage({ engineerId }: Props) {
       return { scheduleHeader: 'Сегодня по графику' as const, scheduleItems: todayItems };
     }
     const tomorrowItems = items
-      .filter((s) => isSameDay(new Date(s.scheduledStartAt), tomorrow, dayAfterTomorrow))
+      .filter((s) => inDayRange(new Date(s.scheduledStartAt), tomorrow, dayAfterTomorrow))
       .sort(
         (a, b) =>
           new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
@@ -242,6 +211,8 @@ export function MobileQueuePage({ engineerId }: Props) {
 
   const shownLabel = shownOfTotal(list.data?.items.length ?? 0, list.data?.total ?? 0);
   const canLoadMore = pageSize < MAX_PAGE_SIZE;
+  // Локальный фильтр по уже загруженному списку: работает офлайн, сервер не дёргает.
+  const visibleItems = filterQueue(list.data?.items ?? [], searchText);
 
   const todayCount = scheduleHeader === 'Сегодня по графику' ? scheduleItems.length : 0;
   const inWorkCount = (myTickets.data ?? []).filter(
@@ -288,45 +259,38 @@ export function MobileQueuePage({ engineerId }: Props) {
 
   return (
     <div className="flex flex-col">
-      <div className="bg-card sticky top-14 z-20 flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="bg-secondary text-secondary-foreground inline-flex rounded-md p-0.5 text-sm">
-          <button
-            type="button"
-            onClick={() => setTab('active')}
-            className={cn(
-              'rounded px-3 py-1.5 transition',
-              tab === 'active' ? 'bg-background shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            Активные
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('all')}
-            className={cn(
-              'rounded px-3 py-1.5 transition',
-              tab === 'all' ? 'bg-background shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            Все
-          </button>
+      <MobileListToolbar
+        onRefresh={() => {
+          void list.refetch();
+          void myTickets.refetch();
+        }}
+        refreshing={list.isFetching}
+      >
+        <SegmentedTabs
+          options={
+            [
+              { value: 'active', label: 'Активные' },
+              { value: 'all', label: 'Все' },
+            ] as const
+          }
+          value={tab}
+          onChange={setTab}
+        />
+      </MobileListToolbar>
+
+      {/* Поиск по загруженной очереди: номер, клиент, модель, серийный/инв. номер. */}
+      <div className="px-3 pt-3">
+        <div className="relative">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <input
+            type="search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Номер, клиент, модель, серийный или инв."
+            className="focus:ring-primary/40 bg-background w-full rounded-lg border py-2.5 pr-3 pl-9 text-sm outline-none focus:ring-2"
+            autoComplete="off"
+          />
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void list.refetch();
-            void myTickets.refetch();
-          }}
-          className="text-muted-foreground hover:text-foreground hover:bg-muted grid h-9 w-9 place-items-center rounded transition"
-          aria-label="Обновить"
-          disabled={list.isFetching}
-        >
-          {list.isFetching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-        </button>
       </div>
 
       <PushToggle />
@@ -382,14 +346,14 @@ export function MobileQueuePage({ engineerId }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm font-semibold">{s.ticketNumber}</span>
-                      {PRIORITY_BADGE[s.priority].label && (
+                      {TICKET_PRIORITY_PILL[s.priority].label && (
                         <span
                           className={cn(
                             'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                            PRIORITY_BADGE[s.priority].cls,
+                            TICKET_PRIORITY_PILL[s.priority].cls,
                           )}
                         >
-                          {PRIORITY_BADGE[s.priority].label}
+                          {TICKET_PRIORITY_PILL[s.priority].label}
                         </span>
                       )}
                     </div>
@@ -479,9 +443,14 @@ export function MobileQueuePage({ engineerId }: Props) {
         </div>
       )}
 
-      {list.error && (
-        <div className="bg-destructive/10 text-destructive border-destructive/30 m-3 rounded-md border p-3 text-sm">
-          {list.error.message}
+      {(list.error || (list.fetchStatus === 'paused' && !list.data)) && (
+        <div className="m-3">
+          <QueryError
+            error={list.error}
+            paused={list.fetchStatus === 'paused'}
+            what="очередь заявок"
+            onRetry={() => void list.refetch()}
+          />
         </div>
       )}
 
@@ -496,8 +465,14 @@ export function MobileQueuePage({ engineerId }: Props) {
         </div>
       )}
 
+      {list.data && list.data.items.length > 0 && visibleItems.length === 0 && (
+        <div className="text-muted-foreground px-3 py-10 text-center text-sm">
+          Среди загруженных ничего не найдено. Уточните запрос или подгрузите ещё.
+        </div>
+      )}
+
       <ul className="space-y-2 p-3">
-        {list.data?.items.map((t) => {
+        {visibleItems.map((t) => {
           const overdue =
             t.deadlineAt && new Date(t.deadlineAt).getTime() < Date.now() && t.status !== 'closed';
           const reason = reasonById.get(t.id);
@@ -515,21 +490,21 @@ export function MobileQueuePage({ engineerId }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span
-                      className={cn('h-2.5 w-2.5 rounded-full', STATUS_DOT[t.status])}
+                      className={cn('h-2.5 w-2.5 rounded-full', TICKET_STATUS_DOT[t.status])}
                       aria-hidden
                     />
                     <span className="font-mono text-sm font-semibold">{t.ticketNumber}</span>
                     <span className="text-muted-foreground text-xs">
-                      · {STATUS_LABEL[t.status]}
+                      · {TICKET_STATUS_META[t.status].label}
                     </span>
-                    {PRIORITY_BADGE[t.priority].label && (
+                    {TICKET_PRIORITY_PILL[t.priority].label && (
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                          PRIORITY_BADGE[t.priority].cls,
+                          TICKET_PRIORITY_PILL[t.priority].cls,
                         )}
                       >
-                        {PRIORITY_BADGE[t.priority].label}
+                        {TICKET_PRIORITY_PILL[t.priority].label}
                       </span>
                     )}
                     {reason && (
@@ -596,53 +571,6 @@ export function MobileQueuePage({ engineerId }: Props) {
         </div>
       )}
 
-      {toast && (
-        <div
-          className={cn(
-            'fixed inset-x-3 bottom-24 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg',
-            toast.kind === 'ok' && 'bg-success text-white',
-            toast.kind === 'queued' && 'bg-warning text-white',
-            toast.kind === 'error' && 'bg-destructive text-white',
-          )}
-        >
-          {toast.text}
-        </div>
-      )}
     </div>
   );
-}
-
-function fmtDeadline(d: Date | string | null): string {
-  if (!d) return '';
-  const date = typeof d === 'string' ? new Date(d) : d;
-  const now = Date.now();
-  const diffMs = date.getTime() - now;
-  const diffH = Math.round(diffMs / 3_600_000);
-  if (diffH < 0) return `просрочено на ${Math.abs(diffH)} ч`;
-  if (diffH < 24) return `осталось ${diffH} ч`;
-  const days = Math.round(diffH / 24);
-  return `осталось ${days} дн`;
-}
-
-function fmtTime(d: Date | string): string {
-  const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function addDays(d: Date, days: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-
-/** [start, end) — включительно start, исключая end. */
-function isSameDay(d: Date, start: Date, end: Date): boolean {
-  const t = d.getTime();
-  return t >= start.getTime() && t < end.getTime();
 }

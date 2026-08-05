@@ -64,6 +64,7 @@ import { MailSettingsPage } from './pages/MailSettingsPage';
 import { AiSettingsPage } from './pages/AiSettingsPage';
 import { NotificationsSettingsPage } from './pages/NotificationsSettingsPage';
 import { MobileInventoryPage } from './pages/mobile/MobileInventoryPage';
+import { MobileInventoryItemPage } from './pages/mobile/MobileInventoryItemPage';
 import { MobileQueuePage } from './pages/mobile/MobileQueuePage';
 import { MobileTicketPage } from './pages/mobile/MobileTicketPage';
 import { MobileWorkLogPage } from './pages/mobile/MobileWorkLogPage';
@@ -86,6 +87,11 @@ import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
 import { isPathDisabled } from './lib/modules';
 import { useIsMobile } from './lib/use-is-mobile';
+import {
+  clearEngineerWantsDesktop,
+  engineerWantsDesktop,
+  shouldAutoOpenEngineerQueue,
+} from './lib/engineer-redirect';
 
 export default function App() {
   const [location] = useLocation();
@@ -130,12 +136,15 @@ function StaffApp() {
     }
   };
 
-  // После логина инженера — однократный редирект на /m/queue, если он на корне.
-  // Не делаем «вечный» редирект, чтобы инженер мог сознательно зайти на полную версию.
+  // Автопереход инженера с корня в /m/queue уступает явному намерению: кнопка
+  // «Открыть полную версию» в мобильном профиле ставит флаг, иначе редирект
+  // пружинил обратно и полная версия была недостижима — см. lib/engineer-redirect.
   useEffect(() => {
     if (!me.data) return;
     const role = me.data.user.role;
-    if (role === 'engineer' && location === '/') {
+    // Вернулся в мобильный кабинет — намерение исчерпано, корень снова уводит в очередь.
+    if (role === 'engineer' && isMobileRoute) clearEngineerWantsDesktop();
+    if (shouldAutoOpenEngineerQueue(role, location, engineerWantsDesktop())) {
       navigate('/m/queue');
     } else if (role !== 'engineer' && isMobileRoute) {
       // Директор/диспетчер не работают в инженерном мобильном приложении /m/* —
@@ -178,6 +187,7 @@ function StaffApp() {
             <Route path="/m/scan" component={MobileScanPage} />
             <Route path="/m/profile" component={MobileProfilePage} />
             <Route path="/m/earnings" component={MobileEarningsPage} />
+            <Route path="/m/inventory/:id" component={MobileInventoryItemPage} />
             <Route path="/m/inventory" component={MobileInventoryPage} />
             <Route path="/m/tickets/:id/work-log" component={MobileWorkLogPage} />
             <Route path="/m/tickets/:id" component={MobileTicketPage} />

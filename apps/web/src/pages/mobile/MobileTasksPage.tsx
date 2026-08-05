@@ -3,11 +3,16 @@
  * Поллинг 30 сек. Отметка «сделано» оффлайн-безопасна (executeOrQueue → Outbox).
  * Заголовок шапки даёт MobileShell (пункт навигации «Задачи»).
  */
-import { useEffect, useRef, useState } from 'react';
-import { CalendarClock, CheckCircle2, Circle, ClipboardList, Loader2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarClock, CheckCircle2, Circle, ClipboardList, Loader2 } from 'lucide-react';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { cn } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
+import { fmtDue } from '../../lib/dates';
+import { showToast } from '../../lib/toast';
+import { MobileListToolbar } from '../../components/MobileListToolbar';
+import { SegmentedTabs } from '../../components/SegmentedTabs';
+import { QueryError } from '../../components/QueryError';
 
 interface Task {
   id: string;
@@ -16,12 +21,6 @@ interface Task {
   dueDate: string | null;
   dueTime: string | null;
   isDone: boolean;
-}
-
-function fmtDue(dueDate: string | null, dueTime: string | null): string {
-  if (!dueDate) return 'без даты';
-  const [, m, d] = dueDate.split('-');
-  return dueTime ? `${d}.${m} · ${dueTime}` : `${d}.${m}`;
 }
 
 function isOverdue(dueDate: string | null, isDone: boolean): boolean {
@@ -55,16 +54,6 @@ export function MobileTasksPage() {
       delete n[id];
       return n;
     });
-  const [toast, setToast] = useState<{ kind: 'ok' | 'queued' | 'error'; text: string } | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = (t: NonNullable<typeof toast>) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(t);
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
-  };
-  useEffect(() => () => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-  }, []);
 
   const onToggle = async (id: string, next: boolean) => {
     setBusy(id);
@@ -79,51 +68,30 @@ export function MobileTasksPage() {
     if (result.status === 'ok') {
       await utils.tasks.myList.invalidate(); // дождались свежих данных
       clearOverride(id); // сервер — источник правды
-      showToast({ kind: 'ok', text: next ? 'Задача отмечена сделанной' : 'Отметка снята' });
+      showToast('ok', next ? 'Задача отмечена сделанной' : 'Отметка снята');
     } else if (result.status === 'queued') {
       // Нет связи: держим оптимистичную отметку до синхронизации.
-      showToast({ kind: 'queued', text: 'Нет связи — отметка сохранена и отправится сама' });
+      showToast('queued', 'Нет связи — отметка сохранена и отправится сама');
     } else {
       clearOverride(id); // откат к серверному состоянию
-      showToast({ kind: 'error', text: result.error.message });
+      showToast('error', result.error.message);
     }
   };
 
   return (
     <div className="flex flex-col">
-      <div className="bg-card sticky top-14 z-20 flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="bg-secondary text-secondary-foreground inline-flex rounded-md p-0.5 text-sm">
-          <button
-            type="button"
-            onClick={() => setTab('active')}
-            className={cn(
-              'rounded px-3 py-1.5 transition',
-              tab === 'active' ? 'bg-background shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            Открытые
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('all')}
-            className={cn(
-              'rounded px-3 py-1.5 transition',
-              tab === 'all' ? 'bg-background shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            Все
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => void list.refetch()}
-          className="text-muted-foreground hover:text-foreground hover:bg-muted grid h-9 w-9 place-items-center rounded transition"
-          aria-label="Обновить"
-          disabled={list.isFetching}
-        >
-          {list.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-        </button>
-      </div>
+      <MobileListToolbar onRefresh={() => void list.refetch()} refreshing={list.isFetching}>
+        <SegmentedTabs
+          options={
+            [
+              { value: 'active', label: 'Открытые' },
+              { value: 'all', label: 'Все' },
+            ] as const
+          }
+          value={tab}
+          onChange={setTab}
+        />
+      </MobileListToolbar>
 
       {list.isLoading && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm">
@@ -132,9 +100,14 @@ export function MobileTasksPage() {
         </div>
       )}
 
-      {list.error && (
-        <div className="bg-destructive/10 text-destructive border-destructive/30 m-3 rounded-md border p-3 text-sm">
-          {list.error.message}
+      {(list.error || (list.fetchStatus === 'paused' && !list.data)) && (
+        <div className="m-3">
+          <QueryError
+            error={list.error}
+            paused={list.fetchStatus === 'paused'}
+            what="задачи"
+            onRetry={() => void list.refetch()}
+          />
         </div>
       )}
 
@@ -189,18 +162,6 @@ export function MobileTasksPage() {
         })}
       </ul>
 
-      {toast && (
-        <div
-          className={cn(
-            'fixed inset-x-3 bottom-24 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg',
-            toast.kind === 'ok' && 'bg-success text-white',
-            toast.kind === 'queued' && 'bg-warning text-white',
-            toast.kind === 'error' && 'bg-destructive text-white',
-          )}
-        >
-          {toast.text}
-        </div>
-      )}
     </div>
   );
 }

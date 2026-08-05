@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { AlertCircle, Package, Search } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { cn } from '../../lib/utils';
+import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { QueryError } from '../../components/QueryError';
 
 /**
@@ -11,9 +12,11 @@ import { QueryError } from '../../components/QueryError';
  */
 export function MobileInventoryPage() {
   const [search, setSearch] = useState('');
+  // Debounce: раньше запрос уходил на сервер на каждую введённую букву.
+  const debouncedSearch = useDebouncedValue(search.trim());
 
   const list = trpc.inventoryItems.list.useQuery({
-    search: search.trim() || undefined,
+    search: debouncedSearch || undefined,
     pageSize: 100,
   });
 
@@ -58,7 +61,7 @@ export function MobileInventoryPage() {
             return (
               <li key={it.id}>
                 <Link
-                  href={`/inventory/${it.id}`}
+                  href={`/m/inventory/${it.id}`}
                   className="bg-card hover:bg-muted/30 flex items-center justify-between rounded-lg border p-3 transition active:scale-[0.99]"
                 >
                   <div className="min-w-0 flex-1 pr-3">
