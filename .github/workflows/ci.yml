@@ -39,9 +39,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Версию pnpm НЕ задаём здесь: она уже объявлена в package.json
+      # ("packageManager": "pnpm@10.30.0"), и action-setup читает её оттуда.
+      # Если указать оба места, свежие версии плагина обрывают прогон с
+      # «Multiple versions of pnpm specified» ещё до установки зависимостей —
+      # именно из-за этого CI был красным на всех прогонах с 20.06.2026.
+      # Одно место правды: package.json, там же его видит corepack локально.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
