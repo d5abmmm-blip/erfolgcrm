@@ -254,8 +254,7 @@ export function ComposeEmailModal({
     });
   };
 
-  const busy =
-    building || send.isPending || saveDraft.isPending || scheduleSend.isPending;
+  const busy = building || send.isPending || saveDraft.isPending || scheduleSend.isPending;
   const canSend = to.trim().length > 0 && subject.trim().length > 0 && body.trim().length > 0;
   const canSaveDraft = to.trim().length > 0 || subject.trim().length > 0 || body.trim().length > 0;
 

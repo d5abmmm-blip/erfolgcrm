@@ -117,10 +117,7 @@ export async function updateContractCmd(
   return updated;
 }
 
-export async function archiveContractCmd(
-  ctx: CmdCtx,
-  id: string,
-): Promise<{ ok: true }> {
+export async function archiveContractCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> {
   const ok = await archiveContract(ctx.db, ctx.tenant.id, id);
   if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'Контракт не найден' });
   await writeAudit(ctx.db, ctx.tenant.id, {

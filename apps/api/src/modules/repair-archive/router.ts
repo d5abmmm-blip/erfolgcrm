@@ -19,9 +19,7 @@ const baseInput = z
   })
   .refine(
     (v) =>
-      Boolean(
-        v.ticketId || (v.symptom && v.symptom.length > 0) || (v.model && v.model.length > 0),
-      ),
+      Boolean(v.ticketId || (v.symptom && v.symptom.length > 0) || (v.model && v.model.length > 0)),
     { message: 'Нужен хотя бы один из параметров: ticketId, symptom или model' },
   );
 
@@ -34,9 +32,7 @@ const searchInput = z
   })
   .refine(
     (v) =>
-      Boolean(
-        v.ticketId || (v.symptom && v.symptom.length > 0) || (v.model && v.model.length > 0),
-      ),
+      Boolean(v.ticketId || (v.symptom && v.symptom.length > 0) || (v.model && v.model.length > 0)),
     { message: 'Нужен хотя бы один из параметров: ticketId, symptom или model' },
   );
 

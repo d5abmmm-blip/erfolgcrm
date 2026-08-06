@@ -45,7 +45,12 @@ function payeeBox(input: BuildInvoiceInput): Content {
       body: rows.map(
         ([k, v]) =>
           [
-            { text: k, fontSize: 9, color: BRAND_GREY, margin: [4, 3, 4, 3] as [number, number, number, number] },
+            {
+              text: k,
+              fontSize: 9,
+              color: BRAND_GREY,
+              margin: [4, 3, 4, 3] as [number, number, number, number],
+            },
             { text: v, fontSize: 10, margin: [4, 3, 4, 3] as [number, number, number, number] },
           ] as TableCell[],
       ),
@@ -96,10 +101,7 @@ function linesTable(input: BuildInvoiceInput): Content {
     alignment,
     margin: [4, 4, 4, 4],
   });
-  const cell = (
-    text: string,
-    alignment: 'left' | 'right' | 'center' = 'left',
-  ): Content => ({
+  const cell = (text: string, alignment: 'left' | 'right' | 'center' = 'left'): Content => ({
     text,
     fontSize: 9,
     alignment,
@@ -165,9 +167,8 @@ function totalsBlock(input: BuildInvoiceInput): Content {
   const total = input.workOrder.totalAmountKopecks;
   const vatPercent = vatRatePercent(input.workOrder.vatRate);
   const isWithoutVat = input.workOrder.vatRate === 'without_vat';
-  const vatAmount = isWithoutVat || vatPercent === 0
-    ? 0
-    : Math.round((total * vatPercent) / (100 + vatPercent));
+  const vatAmount =
+    isWithoutVat || vatPercent === 0 ? 0 : Math.round((total * vatPercent) / (100 + vatPercent));
 
   const lineCount = input.workOrder.lines.length;
   return {
@@ -202,21 +203,32 @@ function signaturesBlock(input: BuildInvoiceInput): Content {
         width: '*',
         stack: [
           { text: 'Руководитель', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
           {
             text: input.tenant.director || '',
             fontSize: 9,
             color: BRAND_GREY,
             margin: [0, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            text: 'М.П.',
+            fontSize: 9,
+            color: BRAND_GREY,
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
         width: '*',
         stack: [
           { text: 'Главный бухгалтер', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
         ],
       },
     ],
@@ -245,9 +257,20 @@ function headerBlock(input: BuildInvoiceInput): Content {
             color: BRAND_PRIMARY,
           },
           ...(t.slogan
-            ? [{ text: t.slogan, fontSize: 9, color: BRAND_GREY, margin: [0, 2, 0, 0] as [number, number, number, number] }]
+            ? [
+                {
+                  text: t.slogan,
+                  fontSize: 9,
+                  color: BRAND_GREY,
+                  margin: [0, 2, 0, 0] as [number, number, number, number],
+                },
+              ]
             : []),
-          { text: t.legalName, fontSize: 9, margin: [0, 4, 0, 0] as [number, number, number, number] },
+          {
+            text: t.legalName,
+            fontSize: 9,
+            margin: [0, 4, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {

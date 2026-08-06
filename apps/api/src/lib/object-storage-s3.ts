@@ -52,7 +52,16 @@ function readConfig(): S3Config {
   if (!defaultBucket && !bucketTemplate) {
     throw new Error('S3 driver: задайте S3_BUCKET или S3_BUCKET_TEMPLATE');
   }
-  return { endpoint, region, accessKeyId, secretAccessKey, defaultBucket, bucketTemplate, forcePathStyle, kmsKeyId };
+  return {
+    endpoint,
+    region,
+    accessKeyId,
+    secretAccessKey,
+    defaultBucket,
+    bucketTemplate,
+    forcePathStyle,
+    kmsKeyId,
+  };
 }
 
 let _client: S3Client | null = null;
@@ -133,9 +142,7 @@ export const s3ObjectStorage: ObjectStorage = {
         Key: key,
         Body: data,
         ContentType: mimeType,
-        ...(cfg.kmsKeyId
-          ? { ServerSideEncryption: 'aws:kms', SSEKMSKeyId: cfg.kmsKeyId }
-          : {}),
+        ...(cfg.kmsKeyId ? { ServerSideEncryption: 'aws:kms', SSEKMSKeyId: cfg.kmsKeyId } : {}),
       }),
     );
   },

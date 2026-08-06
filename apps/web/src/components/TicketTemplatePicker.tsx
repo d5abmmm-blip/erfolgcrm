@@ -42,10 +42,7 @@ interface Props {
 }
 
 export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
-  const list = trpc.ticketTemplates.list.useQuery(
-    { includeArchived: false },
-    { enabled: open },
-  );
+  const list = trpc.ticketTemplates.list.useQuery({ includeArchived: false }, { enabled: open });
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -68,9 +65,7 @@ export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
     if (!search.trim()) return data;
     const q = search.trim().toLowerCase();
     return data.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (t.description ?? '').toLowerCase().includes(q),
+      (t) => t.name.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q),
     );
   }, [list.data, search]);
 
@@ -111,7 +106,7 @@ export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
             placeholder="Поиск по названию или описанию"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
@@ -122,9 +117,7 @@ export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
               Загрузка шаблонов…
             </div>
           ) : list.error ? (
-            <div className="text-destructive p-4 text-sm">
-              Ошибка: {list.error.message}
-            </div>
+            <div className="text-destructive p-4 text-sm">Ошибка: {list.error.message}</div>
           ) : items.length === 0 ? (
             <div className="text-muted-foreground space-y-2 p-6 text-center text-sm">
               {(list.data ?? []).length === 0 ? (
@@ -163,14 +156,10 @@ export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">{t.name}</span>
-                      <span className="text-muted-foreground text-xs">
-                        строк: {t.linesCount}
-                      </span>
+                      <span className="text-muted-foreground text-xs">строк: {t.linesCount}</span>
                     </div>
                     {t.description && (
-                      <p className="text-muted-foreground line-clamp-2 text-xs">
-                        {t.description}
-                      </p>
+                      <p className="text-muted-foreground line-clamp-2 text-xs">{t.description}</p>
                     )}
                     <div className="flex flex-wrap gap-1 text-[11px]">
                       {t.defaultPriority && (
@@ -197,8 +186,8 @@ export function TicketTemplatePicker({ open, onClose, onPick }: Props) {
         </div>
 
         <div className="text-muted-foreground border-t px-4 py-2 text-xs">
-          После выбора шаблона строки добавятся в наряд автоматически — после создания
-          заявки. Цены и количества можно отредактировать.
+          После выбора шаблона строки добавятся в наряд автоматически — после создания заявки. Цены
+          и количества можно отредактировать.
         </div>
       </div>
     </div>

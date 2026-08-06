@@ -53,7 +53,12 @@ export interface SlaData {
   onTime: number;
   late: number;
   rate: number | null;
-  byPriority: Array<{ priority: string; totalTracked: number; onTime: number; rate: number | null }>;
+  byPriority: Array<{
+    priority: string;
+    totalTracked: number;
+    onTime: number;
+    rate: number | null;
+  }>;
 }
 export interface LeadsData {
   total: number;
@@ -175,8 +180,20 @@ export async function downloadAnalyticsXlsx(input: AnalyticsExportInput): Promis
       ['Маржа (прибыль), ₽', kopecksToRub(p.summary.marginAmountKopecks), true],
       ['Маржа, %', p.summary.marginPercent ?? '—'],
     ]);
-    makeTableSheet(wb, 'Рентабельность · инженеры', PROFIT_COLS, profitRows(p.byEngineer), 'Нет данных');
-    makeTableSheet(wb, 'Рентабельность · техника', PROFIT_COLS, profitRows(p.byEquipment), 'Нет данных');
+    makeTableSheet(
+      wb,
+      'Рентабельность · инженеры',
+      PROFIT_COLS,
+      profitRows(p.byEngineer),
+      'Нет данных',
+    );
+    makeTableSheet(
+      wb,
+      'Рентабельность · техника',
+      PROFIT_COLS,
+      profitRows(p.byEquipment),
+      'Нет данных',
+    );
   }
 
   if (input.sla) {

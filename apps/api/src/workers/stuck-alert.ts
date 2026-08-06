@@ -61,9 +61,7 @@ export async function processStuckAlertTick(): Promise<TickStats> {
     // теперь тоже краснеет на доске (визуальное старение act_pending), но отдельный пуш
     // «позвоните, техника лежит» пока не шлём — по решению владельца сперва только подсветка,
     // чтобы не завалить менеджера уведомлениями. Включается отдельным шагом при желании.
-    const stuck = cards.filter(
-      (c) => c.light === 'red' && c.status !== 'act_pending',
-    );
+    const stuck = cards.filter((c) => c.light === 'red' && c.status !== 'act_pending');
     if (stuck.length === 0) continue;
     const staff = await staffUserIds(tenantId);
     if (staff.length === 0) continue;
@@ -83,7 +81,9 @@ export async function processStuckAlertTick(): Promise<TickStats> {
       // Эскалация второго уровня: если инженера уже нуджили и он молчит — говорим об этом менеджеру.
       const unanswered = await getUnansweredCount(tenantId, t.id);
       const escalation =
-        unanswered > 0 ? ` Инженер не ответил на ${unanswered} напоминани${unanswered === 1 ? 'е' : 'я'}.` : '';
+        unanswered > 0
+          ? ` Инженер не ответил на ${unanswered} напоминани${unanswered === 1 ? 'е' : 'я'}.`
+          : '';
       for (const userId of staff) {
         try {
           await enqueuePushToUser({

@@ -25,14 +25,8 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
-import {
-  NotEnoughStockError,
-  issueToWorkOrder,
-} from '../modules/inventory-movements/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import { NotEnoughStockError, issueToWorkOrder } from '../modules/inventory-movements/repository';
 
 let erfolgId = '';
 let primaryClientId = '';
@@ -202,12 +196,7 @@ describe('FEFO выдача в строку наряда', () => {
       tx
         .select()
         .from(inventoryMovements)
-        .where(
-          and(
-            eq(inventoryMovements.itemId, itemId),
-            eq(inventoryMovements.kind, 'outbound'),
-          ),
-        ),
+        .where(and(eq(inventoryMovements.itemId, itemId), eq(inventoryMovements.kind, 'outbound'))),
     );
     expect(movements.length).toBe(2);
     for (const m of movements) {
@@ -327,12 +316,7 @@ describe('FEFO выдача в строку наряда', () => {
       tx
         .select()
         .from(inventoryMovements)
-        .where(
-          and(
-            eq(inventoryMovements.itemId, itemId),
-            eq(inventoryMovements.kind, 'outbound'),
-          ),
-        ),
+        .where(and(eq(inventoryMovements.itemId, itemId), eq(inventoryMovements.kind, 'outbound'))),
     );
     expect(movements.length).toBe(0);
   });

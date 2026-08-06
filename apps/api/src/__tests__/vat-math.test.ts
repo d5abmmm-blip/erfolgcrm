@@ -98,7 +98,7 @@ describe('calcVatInclusive — edge-кейсы', () => {
   it('property-based: для случайных сумм НДС всегда в [0, total]', () => {
     const rates: VatRate[] = ['0', '5', '10', '20', 'without_vat'];
     // Псевдо-случайный генератор без зависимостей: LCG.
-    let seed = 0xC0FFEE;
+    let seed = 0xc0ffee;
     const next = (): number => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed;

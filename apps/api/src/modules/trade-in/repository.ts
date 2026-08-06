@@ -311,9 +311,7 @@ export async function completeTradeIn(
       .set({
         status: 'sold',
         soldAt: today,
-        ...(opts.salePriceKopecks !== undefined
-          ? { salePriceKopecks: opts.salePriceKopecks }
-          : {}),
+        ...(opts.salePriceKopecks !== undefined ? { salePriceKopecks: opts.salePriceKopecks } : {}),
       })
       .where(eq(tradeInItems.id, id));
 

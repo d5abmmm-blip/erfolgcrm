@@ -85,7 +85,7 @@ export function AssetFormPage() {
       inventoryNumber: a.inventoryNumber ?? '',
       location: a.location ?? '',
       lifecycleStatus: a.lifecycleStatus,
-      riskClass: (a.riskClass ?? ''),
+      riskClass: a.riskClass ?? '',
       requiredAttestationCategory: a.requiredAttestationCategory ?? '',
       commissionedAt: a.commissionedAt ?? '',
       warrantyUntil: a.warrantyUntil ?? '',
@@ -213,14 +213,14 @@ export function AssetFormPage() {
             <input
               type="checkbox"
               {...form.register('noOwner')}
-              className="h-4 w-4 rounded border accent-primary"
+              className="accent-primary h-4 w-4 rounded border"
             />
             Без привязки к клиенту (веду как своё оборудование)
           </label>
           {form.watch('noOwner') ? (
             <p className="text-muted-foreground text-xs">
-              Техника без клиента-владельца — например, собственный парк сервиса, демо-аппарат
-              или оборудование на складе до продажи. Клиента можно будет указать позже.
+              Техника без клиента-владельца — например, собственный парк сервиса, демо-аппарат или
+              оборудование на складе до продажи. Клиента можно будет указать позже.
             </p>
           ) : (
             <div>
@@ -235,13 +235,10 @@ export function AssetFormPage() {
 
         <div>
           <Label>Модель из каталога</Label>
-          <AssetModelPicker
-            value={form.watch('assetModelId') || null}
-            onChange={handlePickModel}
-          />
+          <AssetModelPicker value={form.watch('assetModelId') || null} onChange={handlePickModel} />
           <p className="text-muted-foreground mt-1 text-xs">
-            Выберите тип аппарата из справочника — поля «Модель» и «Производитель»
-            заполнятся автоматически. Нет нужной модели — добавьте её прямо в поиске.
+            Выберите тип аппарата из справочника — поля «Модель» и «Производитель» заполнятся
+            автоматически. Нет нужной модели — добавьте её прямо в поиске.
           </p>
         </div>
 
@@ -251,7 +248,7 @@ export function AssetFormPage() {
             type="text"
             {...form.register('model', { required: true })}
             placeholder="Mindray DC-30, Tuttnauer 3870EA…"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
@@ -262,7 +259,7 @@ export function AssetFormPage() {
             list="device-types-list"
             {...form.register('deviceType')}
             placeholder="УЗИ, рентген, отсасыватель, автоклав…"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
           <datalist id="device-types-list">
             {deviceTypeOptions.map((t) => (
@@ -282,10 +279,12 @@ export function AssetFormPage() {
               list="manufacturers-list"
               {...form.register('manufacturer')}
               placeholder="Philips, Drager, Mindray…"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             <datalist id="manufacturers-list">
-              {manufacturers.data?.map((m) => <option key={m} value={m} />)}
+              {manufacturers.data?.map((m) => (
+                <option key={m} value={m} />
+              ))}
             </datalist>
           </div>
           <div>
@@ -293,7 +292,7 @@ export function AssetFormPage() {
             <input
               type="text"
               {...form.register('serialNumber')}
-              className="bg-background w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
             />
           </div>
         </div>
@@ -304,7 +303,7 @@ export function AssetFormPage() {
             <input
               type="text"
               {...form.register('inventoryNumber')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -313,7 +312,7 @@ export function AssetFormPage() {
               type="text"
               {...form.register('location')}
               placeholder="Кабинет 305, Корпус Б"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </div>
@@ -323,7 +322,7 @@ export function AssetFormPage() {
             <Label>Статус</Label>
             <select
               {...form.register('lifecycleStatus')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
               <option value="in_service">В работе</option>
               <option value="in_repair">В ремонте</option>
@@ -336,7 +335,7 @@ export function AssetFormPage() {
             <Label>Класс риска</Label>
             <select
               {...form.register('riskClass')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
               <option value="">не задан</option>
               <option value="1">1</option>
@@ -355,8 +354,8 @@ export function AssetFormPage() {
             onChange={(v) => form.setValue('requiredAttestationCategory', v)}
           />
           <p className="text-muted-foreground mt-1 text-xs">
-            Если задано — диспетчер увидит предупреждение при назначении инженера без
-            действующей аттестации по этой категории. Назначение не блокируется.
+            Если задано — диспетчер увидит предупреждение при назначении инженера без действующей
+            аттестации по этой категории. Назначение не блокируется.
           </p>
         </div>
 
@@ -366,7 +365,7 @@ export function AssetFormPage() {
             <input
               type="date"
               {...form.register('commissionedAt')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -374,7 +373,7 @@ export function AssetFormPage() {
             <input
               type="date"
               {...form.register('warrantyUntil')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </div>
@@ -384,12 +383,12 @@ export function AssetFormPage() {
           <textarea
             rows={3}
             {...form.register('notes')}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
         {serverError && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2.5 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2.5 text-xs">
             {serverError}
           </div>
         )}
@@ -405,7 +404,7 @@ export function AssetFormPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-4 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
           </button>
@@ -415,13 +414,7 @@ export function AssetFormPage() {
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}
@@ -446,7 +439,7 @@ function RequiredAttestationCategorySelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+      className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
     >
       <option value="">не требуется</option>
       {cats.data?.map((c) => (
@@ -455,7 +448,7 @@ function RequiredAttestationCategorySelect({
         </option>
       ))}
       {/* Если в БД сохранено редкое значение вне справочника — показать его тоже. */}
-      {value && !(cats.data as readonly string[] | undefined ?? []).includes(value) && (
+      {value && !((cats.data as readonly string[] | undefined) ?? []).includes(value) && (
         <option value={value}>{value}</option>
       )}
     </select>

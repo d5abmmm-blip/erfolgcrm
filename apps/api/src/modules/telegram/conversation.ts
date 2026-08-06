@@ -56,10 +56,7 @@ export async function saveConversation(
   await getRedis().set(key(tenantId, chatId), JSON.stringify(state), 'EX', CONV_TTL_SEC);
 }
 
-export async function clearConversation(
-  tenantId: string,
-  chatId: number | string,
-): Promise<void> {
+export async function clearConversation(tenantId: string, chatId: number | string): Promise<void> {
   await getRedis().del(key(tenantId, chatId));
 }
 
@@ -71,8 +68,7 @@ export const STEP_PROMPTS: Record<ConversationStep, string> = {
     'Спасибо. Какой ваш телефон для связи? Можно в любом формате (например, +7 928 123-45-67).',
   ASK_SYMPTOM:
     'Что сломалось? Кратко опишите неисправность и марку техники, если знаете (например: «УЗИ-аппарат Mindray DC-30, не включается»).',
-  ASK_ADDRESS:
-    'Где находится техника или куда удобно подъехать? Укажите адрес/организацию.',
+  ASK_ADDRESS: 'Где находится техника или куда удобно подъехать? Укажите адрес/организацию.',
   DONE: '',
 };
 

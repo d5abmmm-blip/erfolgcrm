@@ -49,24 +49,30 @@ export function MobileProfilePage() {
         <div className="text-muted-foreground text-[11px] font-medium uppercase">Сотрудник</div>
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 text-primary grid h-12 w-12 place-items-center rounded-full font-semibold">
-            {user.fullName.split(/\s+/).slice(0, 2).map((s) => s[0]).join('').toUpperCase()}
+            {user.fullName
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((s) => s[0])
+              .join('')
+              .toUpperCase()}
           </div>
           <div className="min-w-0">
             <div className="font-semibold">{user.fullName}</div>
-            <div className="text-muted-foreground text-xs inline-flex items-center gap-1">
+            <div className="text-muted-foreground inline-flex items-center gap-1 text-xs">
               <BadgeCheck className="h-3.5 w-3.5" />
               {ROLE_LABEL[user.role]}
             </div>
-            <div className="text-muted-foreground text-xs inline-flex items-center gap-1">
+            <div className="text-muted-foreground inline-flex items-center gap-1 text-xs">
               <Mail className="h-3.5 w-3.5" />
               {user.username}
             </div>
           </div>
         </div>
         <div className="border-t pt-3">
-          <div className="text-muted-foreground text-xs inline-flex items-center gap-1">
+          <div className="text-muted-foreground inline-flex items-center gap-1 text-xs">
             <Building2 className="h-3.5 w-3.5" />
-            {tenant.displayName} <span className="text-muted-foreground/60">· {tenant.subdomain}</span>
+            {tenant.displayName}{' '}
+            <span className="text-muted-foreground/60">· {tenant.subdomain}</span>
           </div>
         </div>
       </div>

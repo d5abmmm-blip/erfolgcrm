@@ -26,7 +26,10 @@ describe('toAnthropic', () => {
     );
     expect(system).toBe('Ты помощник');
     expect(messages).toHaveLength(1);
-    expect(messages[0]).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'привет' }] });
+    expect(messages[0]).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: 'привет' }],
+    });
   });
 
   it('конвертирует tool-определения в input_schema', () => {
@@ -44,7 +47,11 @@ describe('toAnthropic', () => {
         role: 'assistant',
         content: null,
         tool_calls: [
-          { id: 'c1', type: 'function', function: { name: 'search_clients', arguments: '{"q":"Ромашка"}' } },
+          {
+            id: 'c1',
+            type: 'function',
+            function: { name: 'search_clients', arguments: '{"q":"Ромашка"}' },
+          },
         ],
       },
       { role: 'tool', tool_call_id: 'c1', name: 'search_clients', content: '[{"id":"u1"}]' },

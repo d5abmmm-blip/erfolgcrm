@@ -73,14 +73,10 @@ async function clearTestData(): Promise<void> {
       // tickets → CASCADE удаляет связанные work_orders, work_order_lines, ticket_events.
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
       // Шаблоны (по prefix в имени).
-      await tx
-        .delete(ticketTemplates)
-        .where(like(ticketTemplates.name, `${TEST_PREFIX}%`));
+      await tx.delete(ticketTemplates).where(like(ticketTemplates.name, `${TEST_PREFIX}%`));
       // Audit-записи о шаблонах и применении.
       await tx.delete(auditLogs).where(eq(auditLogs.entityType, 'ticket_template'));
-      await tx
-        .delete(auditLogs)
-        .where(eq(auditLogs.entityType, 'ticket_template_apply'));
+      await tx.delete(auditLogs).where(eq(auditLogs.entityType, 'ticket_template_apply'));
     });
   }
 }
@@ -93,8 +89,7 @@ async function createBaseTicket(opts?: {
   symptom?: string;
 }): Promise<string> {
   const tid = opts?.tenantId ?? erfolgId;
-  const cid =
-    opts?.clientId ?? (tid === erfolgId ? erfolgClientId : demoClientId);
+  const cid = opts?.clientId ?? (tid === erfolgId ? erfolgClientId : demoClientId);
   const { id } = await createTicket(getDb(), tid, dispatcherId, {
     clientId: cid,
     symptom: opts?.symptom ?? `${TEST_PREFIX}base`,
@@ -210,9 +205,7 @@ describe('ticketTemplates.applyToTicket', () => {
 
   it('cross-tenant: шаблон demo нельзя применить к тикету erfolg → NOT_FOUND', async () => {
     const ticketId = await createBaseTicket({ symptom: `${TEST_PREFIX}cross-tenant` });
-    const demoCaller = appRouter.createCaller(
-      makeCtx({ role: 'dispatcher', tenantId: demoId }),
-    );
+    const demoCaller = appRouter.createCaller(makeCtx({ role: 'dispatcher', tenantId: demoId }));
     const tpl = await demoCaller.ticketTemplates.create({
       name: `${TEST_PREFIX}DemoOnly`,
       description: null,
@@ -251,10 +244,7 @@ describe('ticketTemplates.applyToTicket', () => {
         })
         .from(auditLogs)
         .where(
-          and(
-            eq(auditLogs.entityType, 'ticket_template_apply'),
-            eq(auditLogs.entityId, ticketId),
-          ),
+          and(eq(auditLogs.entityType, 'ticket_template_apply'), eq(auditLogs.entityId, ticketId)),
         ),
     );
     expect(rows.length).toBe(1);

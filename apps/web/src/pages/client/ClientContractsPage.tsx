@@ -62,9 +62,9 @@ export function ClientContractsPage() {
             {list.data.map((c) => (
               <tr key={c.id} className="hover:bg-muted/30">
                 <td className="px-3 py-2 font-medium">{c.contractNumber}</td>
-                <td className="px-3 py-2 text-muted-foreground">{c.contractDate}</td>
+                <td className="text-muted-foreground px-3 py-2">{c.contractDate}</td>
                 <td className="px-3 py-2">{TYPE_LABEL[c.type] ?? c.type}</td>
-                <td className="px-3 py-2 text-muted-foreground">
+                <td className="text-muted-foreground px-3 py-2">
                   {c.validFrom ?? '—'} … {c.validUntil ?? '—'}
                 </td>
                 <td className="px-3 py-2">

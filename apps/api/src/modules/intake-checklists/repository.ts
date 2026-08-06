@@ -5,12 +5,7 @@
  * Bulk insert checklist + items в одной транзакции (атомарно).
  */
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
-import {
-  intakeChecklistItems,
-  intakeChecklists,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { intakeChecklistItems, intakeChecklists, withTenantTx, type Db } from '@erfolg/db';
 
 export type ChecklistKind = 'intake' | 'handover';
 export type ChecklistItemStatus = 'ok' | 'issue' | 'na';
@@ -90,10 +85,7 @@ export async function createChecklistWithItems(
       photoAttachmentId: it.photoAttachmentId ?? null,
     }));
 
-    const insertedItems = await tx
-      .insert(intakeChecklistItems)
-      .values(rowsToInsert)
-      .returning();
+    const insertedItems = await tx.insert(intakeChecklistItems).values(rowsToInsert).returning();
 
     const issuesCount = insertedItems.filter((it) => it.status === 'issue').length;
 
@@ -131,12 +123,7 @@ export async function getChecklistWithItems(
     const headRows = await tx
       .select()
       .from(intakeChecklists)
-      .where(
-        and(
-          eq(intakeChecklists.id, checklistId),
-          isNull(intakeChecklists.deletedAt),
-        ),
-      )
+      .where(and(eq(intakeChecklists.id, checklistId), isNull(intakeChecklists.deletedAt)))
       .limit(1);
     const head = headRows[0];
     if (!head) return null;
@@ -181,12 +168,7 @@ export async function listForTicket(
     const heads = await tx
       .select()
       .from(intakeChecklists)
-      .where(
-        and(
-          eq(intakeChecklists.ticketId, ticketId),
-          isNull(intakeChecklists.deletedAt),
-        ),
-      )
+      .where(and(eq(intakeChecklists.ticketId, ticketId), isNull(intakeChecklists.deletedAt)))
       .orderBy(desc(intakeChecklists.completedAt));
     if (heads.length === 0) return [];
 
@@ -222,21 +204,12 @@ export async function listForTicket(
   });
 }
 
-export async function softDelete(
-  db: Db,
-  tenantId: string,
-  checklistId: string,
-): Promise<boolean> {
+export async function softDelete(db: Db, tenantId: string, checklistId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const updated = await tx
       .update(intakeChecklists)
       .set({ deletedAt: new Date() })
-      .where(
-        and(
-          eq(intakeChecklists.id, checklistId),
-          isNull(intakeChecklists.deletedAt),
-        ),
-      )
+      .where(and(eq(intakeChecklists.id, checklistId), isNull(intakeChecklists.deletedAt)))
       .returning({ id: intakeChecklists.id });
     return updated.length > 0;
   });

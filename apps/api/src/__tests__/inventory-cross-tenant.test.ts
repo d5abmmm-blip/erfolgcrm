@@ -38,15 +38,11 @@ describe('RLS — Stage 5 таблицы без tenant_id', () => {
     expect(rows.length).toBe(0);
   });
   it('inventory_movements: 0 строк', async () => {
-    const rows = await withoutTenantTx(getDb(), (tx) =>
-      tx.select().from(inventoryMovements),
-    );
+    const rows = await withoutTenantTx(getDb(), (tx) => tx.select().from(inventoryMovements));
     expect(rows.length).toBe(0);
   });
   it('maintenance_schedules: 0 строк', async () => {
-    const rows = await withoutTenantTx(getDb(), (tx) =>
-      tx.select().from(maintenanceSchedules),
-    );
+    const rows = await withoutTenantTx(getDb(), (tx) => tx.select().from(maintenanceSchedules));
     expect(rows.length).toBe(0);
   });
   it('maintenance_log: 0 строк', async () => {
@@ -61,9 +57,7 @@ describe('RLS — Stage 5 таблицы без tenant_id', () => {
 
 describe('RLS — Stage 5 изоляция между tenant', () => {
   it('erfolg видит свои inventory_items, не demo', async () => {
-    const rows = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select().from(inventoryItems),
-    );
+    const rows = await withTenantTx(getDb(), erfolgId, (tx) => tx.select().from(inventoryItems));
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) expect(r.tenantId).toBe(erfolgId);
   });

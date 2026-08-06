@@ -14,20 +14,10 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  clients,
-  getDb,
-  invoices,
-  payments,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { clients, getDb, invoices, payments, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
   createDraft,
   listOverdueForReminder,
@@ -106,7 +96,10 @@ async function setupOverdueInvoice(): Promise<{ invoiceId: string; ticketId: str
   // Сделаем due_date в прошлом — сегодня минус 5 дней
   const past = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   await withTenantTx(getDb(), erfolgId, async (tx) => {
-    await tx.update(invoices).set({ dueDate: past, issueDate: past }).where(eq(invoices.id, issued.id));
+    await tx
+      .update(invoices)
+      .set({ dueDate: past, issueDate: past })
+      .where(eq(invoices.id, issued.id));
   });
   return { invoiceId: issued.id, ticketId };
 }

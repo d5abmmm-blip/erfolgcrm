@@ -35,7 +35,9 @@ export function generateBarcodeDataUrl(
     // namespace itself, so we cover both shapes.
     const lib = bwipjs as unknown as {
       toCanvas?: (c: HTMLCanvasElement, o: Record<string, unknown>) => HTMLCanvasElement;
-      default?: { toCanvas: (c: HTMLCanvasElement, o: Record<string, unknown>) => HTMLCanvasElement };
+      default?: {
+        toCanvas: (c: HTMLCanvasElement, o: Record<string, unknown>) => HTMLCanvasElement;
+      };
     };
     const toCanvas = lib.toCanvas ?? lib.default?.toCanvas;
     if (!toCanvas) throw new Error('bwip-js: toCanvas is unavailable');

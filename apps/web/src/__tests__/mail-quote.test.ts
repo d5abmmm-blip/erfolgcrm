@@ -60,7 +60,13 @@ describe('buildForwardBody', () => {
   });
 
   it('пустые поля заменяются прочерками/заглушкой', () => {
-    const out = buildForwardBody({ from: null, to: null, date: null, subject: null, bodyText: null });
+    const out = buildForwardBody({
+      from: null,
+      to: null,
+      date: null,
+      subject: null,
+      bodyText: null,
+    });
     expect(out).toContain('От: —');
     expect(out).toContain('Дата: —');
     expect(out).toContain('Кому: —');

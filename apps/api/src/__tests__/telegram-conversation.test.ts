@@ -4,11 +4,7 @@
  * Юнит-тесты `applyAnswer` + `nextStep` (без Redis).
  */
 import { describe, it, expect } from 'vitest';
-import {
-  applyAnswer,
-  nextStep,
-  type ConversationState,
-} from '../modules/telegram/conversation';
+import { applyAnswer, nextStep, type ConversationState } from '../modules/telegram/conversation';
 
 function fresh(): ConversationState {
   return { step: 'ASK_NAME', startedAt: Date.now() };

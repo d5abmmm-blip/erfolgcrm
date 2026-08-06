@@ -333,9 +333,7 @@
         "plans_code_unique": {
           "name": "plans_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
       "policies": {},
@@ -601,9 +599,7 @@
         "tenants_subdomain_unique": {
           "name": "tenants_subdomain_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "subdomain"
-          ]
+          "columns": ["subdomain"]
         }
       },
       "policies": {},
@@ -678,9 +674,7 @@
         "sessions_session_token_unique": {
           "name": "sessions_session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "session_token"
-          ]
+          "columns": ["session_token"]
         }
       },
       "policies": {},
@@ -861,50 +855,27 @@
     "public.consent_type": {
       "name": "consent_type",
       "schema": "public",
-      "values": [
-        "pdn_processing",
-        "pdn_processing_client",
-        "marketing",
-        "cookie"
-      ]
+      "values": ["pdn_processing", "pdn_processing_client", "marketing", "cookie"]
     },
     "public.plan_code": {
       "name": "plan_code",
       "schema": "public",
-      "values": [
-        "start",
-        "pro",
-        "corp"
-      ]
+      "values": ["start", "pro", "corp"]
     },
     "public.subscription_status": {
       "name": "subscription_status",
       "schema": "public",
-      "values": [
-        "trial",
-        "active",
-        "past_due",
-        "cancelled"
-      ]
+      "values": ["trial", "active", "past_due", "cancelled"]
     },
     "public.tenant_status": {
       "name": "tenant_status",
       "schema": "public",
-      "values": [
-        "trial",
-        "active",
-        "suspended",
-        "cancelled"
-      ]
+      "values": ["trial", "active", "suspended", "cancelled"]
     },
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "director",
-        "dispatcher",
-        "engineer"
-      ]
+      "values": ["director", "dispatcher", "engineer"]
     }
   },
   "schemas": {},

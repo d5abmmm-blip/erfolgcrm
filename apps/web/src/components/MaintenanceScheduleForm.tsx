@@ -63,17 +63,14 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
         </div>
         <form onSubmit={submit} className="space-y-3 p-4">
           <Field label="Техника" required>
-            <AssetPicker
-              value={assetId}
-              onChange={(id) => setAssetId(id || null)}
-            />
+            <AssetPicker value={assetId} onChange={(id) => setAssetId(id || null)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Тип">
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as 'planned' | 'urgent')}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               >
                 <option value="planned">Плановое</option>
                 <option value="urgent">Срочное</option>
@@ -87,7 +84,7 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
                 value={intervalDays}
                 onChange={(e) => setIntervalDays(e.target.value)}
                 required
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -110,7 +107,7 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           {error && <div className="text-destructive text-sm">{error}</div>}
@@ -125,7 +122,7 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
             <button
               type="submit"
               disabled={create.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {create.isPending ? 'Сохраняем…' : 'Создать'}
             </button>

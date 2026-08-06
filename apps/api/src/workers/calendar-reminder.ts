@@ -17,10 +17,7 @@ import { getDb, tenants } from '@erfolg/db';
 import { logger } from '../lib/logger';
 import { getQueue, registerWorker } from '../lib/queue';
 import { enqueuePushToUser } from '../modules/notifications';
-import {
-  listDueCalendarReminders,
-  markCalendarReminderSent,
-} from '../modules/calendar';
+import { listDueCalendarReminders, markCalendarReminderSent } from '../modules/calendar';
 
 const QUEUE_NAME = 'calendar-reminder';
 const REPEAT_JOB_ID = 'calendar-reminder:tick';
@@ -39,9 +36,7 @@ interface TickStats {
 
 async function listActiveTenantIds(): Promise<string[]> {
   const db = getDb();
-  const rows = await db
-    .select({ id: tenants.id, status: tenants.status })
-    .from(tenants);
+  const rows = await db.select({ id: tenants.id, status: tenants.status }).from(tenants);
   return rows.filter((r) => r.status === 'active').map((r) => r.id);
 }
 

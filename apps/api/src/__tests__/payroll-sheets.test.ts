@@ -63,7 +63,12 @@ async function clearSheets(): Promise<void> {
   }
 }
 
-const entry = (salaryKopecks: number, advanceKopecks = 0, bonusKopecks = 0, name = 'Иванов И.') => ({
+const entry = (
+  salaryKopecks: number,
+  advanceKopecks = 0,
+  bonusKopecks = 0,
+  name = 'Иванов И.',
+) => ({
   employeeId: 'manual_test',
   employeeName: name,
   salaryKopecks,

@@ -6,12 +6,7 @@
  * listByItem: партии конкретного item, FEFO-сортировка (NULLS LAST, received_at).
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
-import {
-  inventoryBatches,
-  inventoryMovements,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { inventoryBatches, inventoryMovements, withTenantTx, type Db } from '@erfolg/db';
 
 export interface InventoryBatchDto {
   id: string;

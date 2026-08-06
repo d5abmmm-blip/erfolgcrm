@@ -112,7 +112,7 @@ export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
             type="button"
             disabled={ensure.isPending}
             onClick={() => ensure.mutate({ ticketId })}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Создать наряд
@@ -205,14 +205,13 @@ function WorkOrderHeader({
     }
   };
 
-  const blurSave = (
-    field: 'diagnosis' | 'repairDescription' | 'recommendation',
-    initial: string | null,
-  ) => (e: React.FocusEvent<HTMLTextAreaElement>) => {
-    const next = e.target.value.trim() || null;
-    if (next === (initial ?? null)) return;
-    void saveHeader(field, next);
-  };
+  const blurSave =
+    (field: 'diagnosis' | 'repairDescription' | 'recommendation', initial: string | null) =>
+    (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      const next = e.target.value.trim() || null;
+      if (next === (initial ?? null)) return;
+      void saveHeader(field, next);
+    };
 
   return (
     <div className="bg-card space-y-3 rounded-lg border p-4">
@@ -242,7 +241,7 @@ function WorkOrderHeader({
           disabled={!canEditVat}
           value={vatRate}
           onChange={(e) => setVat.mutate({ ticketId, vatRate: e.target.value as VatRate })}
-          className="bg-background rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
         >
           {VAT_OPTS.map((o) => (
             <option key={o.v} value={o.v}>
@@ -303,7 +302,7 @@ function RepairDescriptionField({
             type="button"
             disabled={draft.isPending}
             onClick={() => draft.mutate({ ticketId })}
-            className="text-primary hover:bg-primary/10 disabled:opacity-50 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium"
+            className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium disabled:opacity-50"
           >
             <Sparkles className="h-3 w-3" />
             {draft.isPending ? 'ИИ пишет…' : 'ИИ-черновик'}
@@ -316,7 +315,7 @@ function RepairDescriptionField({
         rows={3}
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
       {draft.isError ? (
         <div className="text-destructive mt-1 text-[11px]">
@@ -348,7 +347,7 @@ function Field({
         disabled={disabled}
         rows={3}
         onBlur={onBlur}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
     </div>
   );
@@ -598,9 +597,7 @@ function LineTable({
                 draft={d}
                 engineerOptions={engineerOptions}
                 onChange={(patch) =>
-                  patchDrafts((prev) =>
-                    prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)),
-                  )
+                  patchDrafts((prev) => prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)))
                 }
                 onSave={() => void saveLine(d.uid)}
                 onCancel={() => cancelDraft(d.uid)}
@@ -896,7 +893,7 @@ function RowInputs({
           disabled={!canEdit}
           onChange={(e) => update({ name: e.target.value })}
           onBlur={(e) => onFieldBlur('name', e.target.value, vals)}
-          className="bg-background w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2"
           placeholder="Что выполнено"
         />
         {isQueued && (
@@ -912,7 +909,7 @@ function RowInputs({
             value={engineer.value ?? ''}
             disabled={!canEdit}
             onChange={(e) => engineer.onChange(e.target.value || null)}
-            className="bg-background w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 disabled:opacity-50"
           >
             <option value="">— инженер наряда —</option>
             {engineer.options.map((u) => (
@@ -930,7 +927,7 @@ function RowInputs({
           disabled={!canEdit}
           onChange={(e) => update({ unit: e.target.value })}
           onBlur={(e) => onFieldBlur('unit', e.target.value, vals)}
-          className="bg-background w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -942,7 +939,7 @@ function RowInputs({
           disabled={!canEdit}
           onChange={(e) => update({ quantity: e.target.value })}
           onBlur={(e) => onFieldBlur('quantity', e.target.value, vals)}
-          className="bg-background w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
       </td>
       <td className="px-3 py-1.5">
@@ -954,12 +951,10 @@ function RowInputs({
           disabled={!canEdit}
           onChange={(e) => update({ unitPriceRub: e.target.value })}
           onBlur={(e) => onFieldBlur('unitPriceRub', e.target.value, vals)}
-          className="bg-background w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums">
-        {kopecksToRub(amountKopecks)}
-      </td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{kopecksToRub(amountKopecks)}</td>
       <td className="px-2 py-1.5 text-center">
         {canEdit && (
           <button

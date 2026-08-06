@@ -84,7 +84,7 @@ export function TradeInFormPage() {
       serialNumber: t.serialNumber ?? '',
       year: t.year ? String(t.year) : '',
       condition: t.condition,
-      status: (t.status === 'sold' ? 'in_stock' : t.status),
+      status: t.status === 'sold' ? 'in_stock' : t.status,
       purchaseRub: kopecksToRubStr(t.purchasePriceKopecks),
       assessedRub: kopecksToRubStr(t.assessedPriceKopecks),
       receivedAt: t.receivedAt,
@@ -186,8 +186,7 @@ export function TradeInFormPage() {
         href="/trade-in"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К реестру трейд-ина
+        <ChevronLeft className="h-4 w-4" />К реестру трейд-ина
       </Link>
       <h1 className="text-xl font-semibold md:text-2xl">
         {editId ? 'Редактирование позиции' : 'Приём техники в зачёт'}
@@ -217,19 +216,37 @@ export function TradeInFormPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>Производитель</Label>
-              <input type="text" {...form.register('manufacturer', { maxLength: 200 })} className={inputCls} />
+              <input
+                type="text"
+                {...form.register('manufacturer', { maxLength: 200 })}
+                className={inputCls}
+              />
             </div>
             <div>
               <Label>Модель</Label>
-              <input type="text" {...form.register('model', { maxLength: 200 })} className={inputCls} />
+              <input
+                type="text"
+                {...form.register('model', { maxLength: 200 })}
+                className={inputCls}
+              />
             </div>
             <div>
               <Label>Серийный номер</Label>
-              <input type="text" {...form.register('serialNumber', { maxLength: 100 })} className={inputCls} />
+              <input
+                type="text"
+                {...form.register('serialNumber', { maxLength: 100 })}
+                className={inputCls}
+              />
             </div>
             <div>
               <Label>Год выпуска</Label>
-              <input type="number" min="1950" max="2100" {...form.register('year')} className={inputCls} />
+              <input
+                type="number"
+                min="1950"
+                max="2100"
+                {...form.register('year')}
+                className={inputCls}
+              />
             </div>
           </div>
 
@@ -247,18 +264,34 @@ export function TradeInFormPage() {
             )}
             <div>
               <Label required>Дата приёма</Label>
-              <input type="date" {...form.register('receivedAt', { required: true })} className={inputCls} />
+              <input
+                type="date"
+                {...form.register('receivedAt', { required: true })}
+                className={inputCls}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>Зачтено клиенту, ₽</Label>
-              <input type="number" min="0" step="0.01" {...form.register('purchaseRub')} className={inputCls} />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                {...form.register('purchaseRub')}
+                className={inputCls}
+              />
             </div>
             <div>
               <Label>Оценочная стоимость, ₽</Label>
-              <input type="number" min="0" step="0.01" {...form.register('assessedRub')} className={inputCls} />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                {...form.register('assessedRub')}
+                className={inputCls}
+              />
             </div>
           </div>
 
@@ -275,7 +308,9 @@ export function TradeInFormPage() {
                   onChange={(id) => setBuyerClientId(id || null)}
                   placeholder="Поиск покупателя…"
                 />
-                <p className="text-muted-foreground mt-1 text-xs">Обязателен для завершения сделки</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Обязателен для завершения сделки
+                </p>
               </div>
             )}
           </div>
@@ -290,7 +325,11 @@ export function TradeInFormPage() {
 
           <div>
             <Label>Заметки</Label>
-            <textarea rows={2} {...form.register('notes', { maxLength: 5000 })} className={inputCls} />
+            <textarea
+              rows={2}
+              {...form.register('notes', { maxLength: 5000 })}
+              className={inputCls}
+            />
           </div>
         </fieldset>
 

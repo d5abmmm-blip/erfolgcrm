@@ -48,14 +48,14 @@ export function AssetMetrologyBlock({ assetId, requiresMetrology, canManage }: P
 
   if (!requiresMetrology) {
     return (
-      <section className="bg-card rounded-lg border p-4 md:p-6 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+      <section className="bg-card space-y-3 rounded-lg border p-4 md:p-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
           <Gauge className="h-4 w-4" />
           Метрология
         </h2>
         <p className="text-muted-foreground text-xs">
-          Эта техника не учитывается в реестре СИ. Заведите атрибуты, чтобы попадало
-          в журнал поверок 102-ФЗ.
+          Эта техника не учитывается в реестре СИ. Заведите атрибуты, чтобы попадало в журнал
+          поверок 102-ФЗ.
         </p>
         {canManage && (
           <button
@@ -96,8 +96,8 @@ export function AssetMetrologyBlock({ assetId, requiresMetrology, canManage }: P
   const si = siQ.data;
   if (!si) {
     return (
-      <section className="bg-card rounded-lg border p-4 md:p-6 space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+      <section className="bg-card space-y-2 rounded-lg border p-4 md:p-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
           <Gauge className="h-4 w-4" />
           Метрология
         </h2>
@@ -107,9 +107,9 @@ export function AssetMetrologyBlock({ assetId, requiresMetrology, canManage }: P
   }
 
   return (
-    <section className="bg-card rounded-lg border p-4 md:p-6 space-y-3">
+    <section className="bg-card space-y-3 rounded-lg border p-4 md:p-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
           <Gauge className="h-4 w-4" />
           Метрология
         </h2>
@@ -176,7 +176,12 @@ function StatusBadge({ status }: { status: 'overdue' | 'soon' | 'ok' | 'never' }
   };
   const c = cfg[status];
   return (
-    <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium', c.cls)}>
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium',
+        c.cls,
+      )}
+    >
       {c.label}
     </span>
   );
@@ -193,19 +198,14 @@ function KV({
 }) {
   return (
     <div className="bg-muted/30 rounded-md border p-2">
-      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">
-        {label}
-      </div>
+      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{label}</div>
       <div className={cn('mt-0.5 text-sm', className)}>{value || '—'}</div>
     </div>
   );
 }
 
 const createSiSchema = z.object({
-  typeName: z
-    .string()
-    .trim()
-    .min(2, 'Введите тип СИ'),
+  typeName: z.string().trim().min(2, 'Введите тип СИ'),
   patternRegistryNumber: z.string().trim(),
   accuracyClass: z.string().trim(),
   measurementRange: z.string().trim(),
@@ -286,7 +286,7 @@ function CreateSiModal({
               type="text"
               {...form.register('typeName')}
               placeholder="Например: Манометр МПЭ-3У"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             {form.formState.errors.typeName && (
               <div className="text-destructive mt-1 text-xs">
@@ -299,14 +299,14 @@ function CreateSiModal({
               <input
                 type="text"
                 {...form.register('patternRegistryNumber')}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
             <Field label="Класс точности">
               <input
                 type="text"
                 {...form.register('accuracyClass')}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -315,7 +315,7 @@ function CreateSiModal({
               type="text"
               {...form.register('measurementRange')}
               placeholder="Например: 0…600 мм рт. ст."
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           <Field label="Межповерочный интервал, мес." required>
@@ -324,7 +324,7 @@ function CreateSiModal({
               min={1}
               max={240}
               {...form.register('calibrationIntervalMonths', { valueAsNumber: true })}
-              className="bg-background w-32 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-32 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             {form.formState.errors.calibrationIntervalMonths && (
               <div className="text-destructive mt-1 text-xs">

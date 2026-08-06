@@ -12,7 +12,18 @@
  *
  * RLS включается отдельно через 0042_enable_rls_email.sql (setup-rls.ts).
  */
-import { bigint, boolean, check, index, integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { encryptedText, fkUuid, pk, tenantId, timestamps } from './_shared';
 

@@ -82,10 +82,7 @@ export function ContractFormPage() {
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const existing = trpc.contracts.get.useQuery(
-    { id: editId ?? '' },
-    { enabled: !!editId },
-  );
+  const existing = trpc.contracts.get.useQuery({ id: editId ?? '' }, { enabled: !!editId });
 
   useEffect(() => {
     if (!existing.data) return;
@@ -201,8 +198,7 @@ export function ContractFormPage() {
         href="/contracts"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К списку договоров
+        <ChevronLeft className="h-4 w-4" />К списку договоров
       </Link>
       <h1 className="text-xl font-semibold md:text-2xl">
         {editId ? 'Редактирование договора' : 'Новый договор'}
@@ -232,7 +228,7 @@ export function ContractFormPage() {
               type="text"
               {...form.register('contractNumber', { required: true, maxLength: 50 })}
               placeholder="например: СД-2026-12"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -240,7 +236,7 @@ export function ContractFormPage() {
             <input
               type="date"
               {...form.register('contractDate', { required: true })}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </div>
@@ -266,7 +262,7 @@ export function ContractFormPage() {
             <input
               type="date"
               {...form.register('validFrom')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -274,7 +270,7 @@ export function ContractFormPage() {
             <input
               type="date"
               {...form.register('validUntil')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             <p className="text-muted-foreground mt-1 text-xs">пусто = бессрочно</p>
           </div>
@@ -305,7 +301,7 @@ export function ContractFormPage() {
             <textarea
               rows={2}
               {...form.register('termsNotes', { maxLength: 2000 })}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </fieldset>
@@ -316,7 +312,7 @@ export function ContractFormPage() {
             rows={2}
             {...form.register('notes', { maxLength: 5000 })}
             placeholder="Видны только сотрудникам сервиса"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
@@ -337,7 +333,7 @@ export function ContractFormPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-4 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? 'Сохранение…' : editId ? 'Сохранить' : 'Создать договор'}
           </button>
@@ -364,7 +360,7 @@ function NumberField({
         step="any"
         min="0"
         {...form.register(name)}
-        className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
       />
     </div>
   );
@@ -379,7 +375,7 @@ function Select<T extends string>({
   return (
     <select
       {...rest}
-      className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+      className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
     >
       {options.map((o) => (
         <option key={o.v} value={o.v}>
@@ -390,13 +386,7 @@ function Select<T extends string>({
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}

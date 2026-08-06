@@ -40,7 +40,10 @@ describe('cash RLS isolation (этап A)', () => {
   beforeEach(clearTestData);
 
   it('счёт erfolg не виден из demo', async () => {
-    const acc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}секрет`, kind: 'cash' });
+    const acc = await createAccount(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}секрет`,
+      kind: 'cash',
+    });
     const erfolgAccounts = await listAccounts(getDb(), erfolgId, { includeArchived: true });
     expect(erfolgAccounts.some((a) => a.id === acc.id)).toBe(true);
 
@@ -49,11 +52,22 @@ describe('cash RLS isolation (этап A)', () => {
   });
 
   it('операция erfolg не видна в журнале demo', async () => {
-    const acc = await createAccount(getDb(), erfolgId, { name: `${TEST_PREFIX}касса`, kind: 'cash' });
-    const cat = await createCategory(getDb(), erfolgId, { name: `${TEST_PREFIX}д`, direction: 'income' });
+    const acc = await createAccount(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}касса`,
+      kind: 'cash',
+    });
+    const cat = await createCategory(getDb(), erfolgId, {
+      name: `${TEST_PREFIX}д`,
+      direction: 'income',
+    });
     const { id } = await createTransaction(getDb(), erfolgId, {
-      kind: 'income', accountId: acc.id, categoryId: cat.id,
-      amountKopecks: 5_000n, occurredOn: today, comment: `${TEST_PREFIX}op`, userId: null,
+      kind: 'income',
+      accountId: acc.id,
+      categoryId: cat.id,
+      amountKopecks: 5_000n,
+      occurredOn: today,
+      comment: `${TEST_PREFIX}op`,
+      userId: null,
     });
 
     const erfolgTx = await listTransactions(getDb(), erfolgId, {}, 200, 0);

@@ -32,11 +32,7 @@ import {
   users,
   withTenantTx,
 } from '@erfolg/db';
-import {
-  findCalibrationsDueInDays,
-  getOverdueAndSoon,
-  type SiRow,
-} from '../modules/metrology';
+import { findCalibrationsDueInDays, getOverdueAndSoon, type SiRow } from '../modules/metrology';
 import { logger } from '../lib/logger';
 import { sendMail } from '../lib/mailer';
 import { getQueue, registerWorker } from '../lib/queue';
@@ -395,7 +391,12 @@ export async function processMetrologyReminderTickForTenant(
     );
   }
 
-  if (per.overdue.length === 0 && per.for7.length === 0 && per.for14.length === 0 && per.for30.length === 0) {
+  if (
+    per.overdue.length === 0 &&
+    per.for7.length === 0 &&
+    per.for14.length === 0 &&
+    per.for30.length === 0
+  ) {
     return per;
   }
 

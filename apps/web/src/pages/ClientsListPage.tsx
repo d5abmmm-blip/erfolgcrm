@@ -53,10 +53,7 @@ export function ClientsListPage() {
       key: 'displayName',
       label: 'Название',
       render: (c) => (
-        <Link
-          href={`/clients/${c.id}`}
-          className="text-foreground hover:text-primary font-medium"
-        >
+        <Link href={`/clients/${c.id}`} className="text-foreground hover:text-primary font-medium">
           {c.displayName}
         </Link>
       ),
@@ -113,7 +110,7 @@ export function ClientsListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="search"
@@ -123,7 +120,7 @@ export function ClientsListPage() {
               setPage(1);
             }}
             placeholder="Поиск по названию или ИНН"
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
         <div className="inline-flex rounded-md border p-0.5">
@@ -157,12 +154,7 @@ export function ClientsListPage() {
         rowKey={(c) => c.id}
       />
 
-      <Pagination
-        page={page}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
     </div>
   );
 }

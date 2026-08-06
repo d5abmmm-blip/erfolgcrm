@@ -11,13 +11,13 @@ CRM для сервисного центра медтехники. Изнача�
 
 ## Стек
 
-| Слой | Технология |
-|---|---|
-| Frontend | React 19 + Vite, TypeScript strict, TanStack Query 5, Tailwind 4, zod, wouter, PWA |
-| Backend | Node.js + Express, tRPC 11, Drizzle ORM, Argon2id + 2FA, BullMQ |
-| База | PostgreSQL 16 + pgcrypto + RLS |
-| Кэш/очереди | Redis |
-| Telegram | grammy (отдельный процесс) |
+| Слой        | Технология                                                                         |
+| ----------- | ---------------------------------------------------------------------------------- |
+| Frontend    | React 19 + Vite, TypeScript strict, TanStack Query 5, Tailwind 4, zod, wouter, PWA |
+| Backend     | Node.js + Express, tRPC 11, Drizzle ORM, Argon2id + 2FA, BullMQ                    |
+| База        | PostgreSQL 16 + pgcrypto + RLS                                                     |
+| Кэш/очереди | Redis                                                                              |
+| Telegram    | grammy (отдельный процесс)                                                         |
 
 ## Структура
 
@@ -49,20 +49,20 @@ pnpm dev                 # web + api + bot
 
 После запуска:
 
-| Что | Адрес |
-|---|---|
-| Web | http://localhost:5173 |
-| API | http://localhost:3030 (health: `/health`, deep: `/health/deep`) |
-| Кабинет клиента | http://localhost:5173/client |
-| MailHog UI | http://localhost:8025 |
+| Что             | Адрес                                                           |
+| --------------- | --------------------------------------------------------------- |
+| Web             | http://localhost:5173                                           |
+| API             | http://localhost:3030 (health: `/health`, deep: `/health/deep`) |
+| Кабинет клиента | http://localhost:5173/client                                    |
+| MailHog UI      | http://localhost:8025                                           |
 
 Логины (организация `erfolg`, подставляется автоматически в личном режиме):
 
-| Роль | Логин | Пароль |
-|---|---|---|
-| Директор | `director` | `erfolg_director_2026` |
+| Роль      | Логин        | Пароль                   |
+| --------- | ------------ | ------------------------ |
+| Директор  | `director`   | `erfolg_director_2026`   |
 | Диспетчер | `dispatcher` | `erfolg_dispatcher_2026` |
-| Инженер | `engineer` | `erfolg_engineer_2026` |
+| Инженер   | `engineer`   | `erfolg_engineer_2026`   |
 
 ## Личный режим (single-tenant)
 

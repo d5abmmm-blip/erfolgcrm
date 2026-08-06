@@ -59,7 +59,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
                 type="text"
                 value={batchCode}
                 onChange={(e) => setBatchCode(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
             <Field label="Поставщик">
@@ -67,7 +67,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
                 type="text"
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -80,7 +80,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 required
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
               />
             </Field>
             <Field label="Себестоимость, ₽/ед.">
@@ -90,7 +90,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
                 min="0"
                 value={unitCostRub}
                 onChange={(e) => setUnitCostRub(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -99,7 +99,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
               type="date"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           {error && <div className="text-destructive text-sm">{error}</div>}
@@ -114,7 +114,7 @@ export function InventoryBatchForm({ itemId, onClose, onSaved }: Props) {
             <button
               type="submit"
               disabled={create.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {create.isPending ? 'Сохраняем…' : 'Принять'}
             </button>

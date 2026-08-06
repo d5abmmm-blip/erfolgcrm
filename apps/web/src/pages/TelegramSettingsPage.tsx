@@ -38,8 +38,8 @@ export function TelegramSettingsPage() {
       </div>
 
       <p className="text-muted-foreground mt-2 text-sm">
-        Клиенты смогут оформлять заявки через Telegram-бота. Заявка попадает диспетчеру, а
-        диспетчер получает push-уведомление.
+        Клиенты смогут оформлять заявки через Telegram-бота. Заявка попадает диспетчеру, а диспетчер
+        получает push-уведомление.
       </p>
 
       {cfg.isLoading ? (
@@ -160,8 +160,12 @@ export function TelegramSettingsPage() {
                 Откройте <code>@BotFather</code> в Telegram, отправьте <code>/newbot</code>.
               </li>
               <li>Введите имя бота (например: «Эрфольг СЦ — заявки»).</li>
-              <li>Введите username бота (например: <code>erfolg_service_bot</code>).</li>
-              <li>BotFather пришлёт токен вида <code>123456789:ABC...</code>.</li>
+              <li>
+                Введите username бота (например: <code>erfolg_service_bot</code>).
+              </li>
+              <li>
+                BotFather пришлёт токен вида <code>123456789:ABC...</code>.
+              </li>
               <li>Скопируйте токен в поле выше и нажмите «Сохранить».</li>
             </ol>
           </details>

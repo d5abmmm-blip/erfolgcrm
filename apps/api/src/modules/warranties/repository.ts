@@ -84,10 +84,7 @@ function statusFilter(status: WarrantyStatus): SQL {
     case 'voided':
       return eq(warranties.voided, true);
     case 'expired':
-      return and(
-        eq(warranties.voided, false),
-        sql`${warranties.endDate} < CURRENT_DATE`,
-      ) as SQL;
+      return and(eq(warranties.voided, false), sql`${warranties.endDate} < CURRENT_DATE`) as SQL;
     case 'expiring':
       return and(
         eq(warranties.voided, false),
@@ -257,7 +254,8 @@ export async function updateWarranty(
     if (patch.startDate !== undefined) set.startDate = patch.startDate;
     if (patch.endDate !== undefined) set.endDate = patch.endDate;
     if (patch.voided !== undefined) set.voided = patch.voided;
-    if (patch.coverageDescription !== undefined) set.coverageDescription = patch.coverageDescription;
+    if (patch.coverageDescription !== undefined)
+      set.coverageDescription = patch.coverageDescription;
     if (patch.provider !== undefined) set.provider = patch.provider;
     if (patch.contractNumber !== undefined) set.contractNumber = patch.contractNumber;
     if (patch.notes !== undefined) set.notes = patch.notes;

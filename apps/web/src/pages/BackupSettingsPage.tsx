@@ -104,8 +104,8 @@ export function BackupSettingsPage() {
             <div className="min-w-0">
               <h2 className="font-medium">Полная копия всей базы</h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                Один файл со всеми данными системы. Храните его в надёжном месте — это страховка
-                на случай поломки компьютера и способ перенести систему на новый сервер. Файл
+                Один файл со всеми данными системы. Храните его в надёжном месте — это страховка на
+                случай поломки компьютера и способ перенести систему на новый сервер. Файл
                 формируется при нажатии кнопки; для большой базы это может занять минуту.
               </p>
             </div>
@@ -208,7 +208,7 @@ export function BackupSettingsPage() {
               </div>
             )}
             {report && (
-              <pre className="bg-muted/40 text-muted-foreground max-h-80 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap">
+              <pre className="bg-muted/40 text-muted-foreground max-h-80 overflow-auto whitespace-pre-wrap rounded-md border p-3 text-xs">
                 {report}
               </pre>
             )}

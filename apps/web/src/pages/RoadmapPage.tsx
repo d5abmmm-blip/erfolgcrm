@@ -352,7 +352,7 @@ function GoalStages({
       {stages.length > 0 && (
         <>
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs font-medium tabular-nums whitespace-nowrap">
+            <span className="text-muted-foreground whitespace-nowrap text-xs font-medium tabular-nums">
               Этапы {done}/{stages.length}
             </span>
             <div className="bg-muted h-2 w-40 max-w-full overflow-hidden rounded-full">
@@ -382,7 +382,8 @@ function GoalStages({
                   )}
                   <span
                     className={
-                      'max-w-[260px] truncate ' + (s.done ? 'text-muted-foreground line-through' : '')
+                      'max-w-[260px] truncate ' +
+                      (s.done ? 'text-muted-foreground line-through' : '')
                     }
                   >
                     {s.title}
@@ -485,7 +486,11 @@ function GoalForm({
           align="center"
           content="В каком квартале планируете достичь цели. Кв 1 — янв–март, Кв 2 — апр–июнь, Кв 3 — июль–сент, Кв 4 — окт–дек."
         >
-          <select value={quarter} onChange={(e) => setQuarter(e.target.value as Quarter)} className={inputCls}>
+          <select
+            value={quarter}
+            onChange={(e) => setQuarter(e.target.value as Quarter)}
+            className={inputCls}
+          >
             {QUARTERS.map((q) => (
               <option key={q} value={q}>
                 {QUARTER_LABEL[q]} · {year}
@@ -499,7 +504,11 @@ function GoalForm({
           align="end"
           content="Тип цели — задаёт цвет метки и группировку карточек. На расчёты не влияет: Выручка, Клиенты, Процессы, Команда, Продукт."
         >
-          <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={inputCls}>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as Category)}
+            className={inputCls}
+          >
             {(Object.keys(CATEGORY_META) as Category[]).map((c) => (
               <option key={c} value={c}>
                 {CATEGORY_META[c].label}
@@ -543,7 +552,11 @@ function GoalForm({
           align="center"
           content="Насколько цель важна. «Высокий» помечается красной меткой. На расчёты не влияет — только визуальный акцент."
         >
-          <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={inputCls}>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as Priority)}
+            className={inputCls}
+          >
             {(Object.keys(PRIORITY_LABEL) as Priority[]).map((p) => (
               <option key={p} value={p}>
                 Приоритет: {PRIORITY_LABEL[p]}
@@ -566,7 +579,11 @@ function GoalForm({
         </Tooltip>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm"
+        >
           Отмена
         </button>
         <button

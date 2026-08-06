@@ -79,7 +79,9 @@ export function LoginPage() {
           <img src="/favicon.png" alt="ER" className="h-10 w-10 rounded-md bg-white/95 p-1" />
           <div className="leading-tight">
             <div className="text-base font-semibold">ErfolgCRM</div>
-            <div className="text-xs uppercase tracking-wider opacity-80">для сервисных центров медтехники</div>
+            <div className="text-xs uppercase tracking-wider opacity-80">
+              для сервисных центров медтехники
+            </div>
           </div>
         </div>
 
@@ -242,7 +244,15 @@ export function LoginPage() {
 const inputCls =
   'border-input bg-background focus-visible:ring-ring placeholder:text-muted-foreground/60 flex h-10 w-full rounded-md border px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2';
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-1.5">
       <span className="text-foreground text-sm font-medium">{label}</span>

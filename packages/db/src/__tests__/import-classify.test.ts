@@ -65,7 +65,12 @@ describe('classifyClientType', () => {
   // clip(c.INN,12), но функция не полагается на чистоту строки и считает именно цифры).
   it('IMP-1: чистый 12-значный личный ИНН → individual', () => {
     expect(
-      classifyClientType({ name: 'Петров Пётр', clientTypeOld: null, inn: '500100732259', root: null }),
+      classifyClientType({
+        name: 'Петров Пётр',
+        clientTypeOld: null,
+        inn: '500100732259',
+        root: null,
+      }),
     ).toBe('individual');
   });
 

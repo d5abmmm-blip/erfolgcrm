@@ -68,7 +68,12 @@ export function MailSettingsPage() {
   });
 
   const sendTest = trpc.email.sendTest.useMutation({
-    onSuccess: (r) => setTestMsg(r.status === 'sent' ? 'Тестовое письмо отправлено.' : 'Отправка пропущена (проверьте реквизиты SMTP).'),
+    onSuccess: (r) =>
+      setTestMsg(
+        r.status === 'sent'
+          ? 'Тестовое письмо отправлено.'
+          : 'Отправка пропущена (проверьте реквизиты SMTP).',
+      ),
     onError: (e) => setTestMsg(`Ошибка: ${e.message}`),
   });
 
@@ -109,7 +114,7 @@ export function MailSettingsPage() {
       </p>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 px-4 py-2 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border px-4 py-2 text-sm">
           {error}
         </div>
       )}
@@ -163,11 +168,21 @@ export function MailSettingsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-medium">Имя отправителя</span>
-                <input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="ООО «Эрфольг»" className={inputCls} />
+                <input
+                  value={fromName}
+                  onChange={(e) => setFromName(e.target.value)}
+                  placeholder="ООО «Эрфольг»"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Адрес отправителя</span>
-                <input value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="info@example.ru" className={inputCls} />
+                <input
+                  value={fromEmail}
+                  onChange={(e) => setFromEmail(e.target.value)}
+                  placeholder="info@example.ru"
+                  className={inputCls}
+                />
               </label>
             </div>
           </div>
@@ -178,15 +193,31 @@ export function MailSettingsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-medium">Сервер</span>
-                <input value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} placeholder="smtp.example.ru" className={inputCls} />
+                <input
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  placeholder="smtp.example.ru"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Порт</span>
-                <input value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} placeholder="465" inputMode="numeric" className={inputCls} />
+                <input
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  placeholder="465"
+                  inputMode="numeric"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Логин</span>
-                <input value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} placeholder="info@example.ru" className={inputCls} />
+                <input
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  placeholder="info@example.ru"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Пароль</span>
@@ -194,13 +225,19 @@ export function MailSettingsPage() {
                   type="password"
                   value={smtpPassword}
                   onChange={(e) => setSmtpPassword(e.target.value)}
-                  placeholder={cfg.data?.hasSmtpPassword ? '•••••• (сохранён, пусто — не менять)' : 'не задан'}
+                  placeholder={
+                    cfg.data?.hasSmtpPassword ? '•••••• (сохранён, пусто — не менять)' : 'не задан'
+                  }
                   className={inputCls}
                 />
               </label>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={smtpSecure} onChange={(e) => setSmtpSecure(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={smtpSecure}
+                onChange={(e) => setSmtpSecure(e.target.checked)}
+              />
               SSL/TLS (порт 465). Снимите для STARTTLS (587) или локального MailHog (1025).
             </label>
           </div>
@@ -208,20 +245,39 @@ export function MailSettingsPage() {
           {/* IMAP (Этап B) */}
           <div className="bg-card space-y-3 rounded-lg border p-4">
             <div className="font-medium">
-              IMAP (входящие) <span className="text-muted-foreground text-xs font-normal">— приём входящих писем</span>
+              IMAP (входящие){' '}
+              <span className="text-muted-foreground text-xs font-normal">
+                — приём входящих писем
+              </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-medium">Сервер</span>
-                <input value={imapHost} onChange={(e) => setImapHost(e.target.value)} placeholder="imap.example.ru" className={inputCls} />
+                <input
+                  value={imapHost}
+                  onChange={(e) => setImapHost(e.target.value)}
+                  placeholder="imap.example.ru"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Порт</span>
-                <input value={imapPort} onChange={(e) => setImapPort(e.target.value)} placeholder="993" inputMode="numeric" className={inputCls} />
+                <input
+                  value={imapPort}
+                  onChange={(e) => setImapPort(e.target.value)}
+                  placeholder="993"
+                  inputMode="numeric"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Логин</span>
-                <input value={imapUser} onChange={(e) => setImapUser(e.target.value)} placeholder="info@example.ru" className={inputCls} />
+                <input
+                  value={imapUser}
+                  onChange={(e) => setImapUser(e.target.value)}
+                  placeholder="info@example.ru"
+                  className={inputCls}
+                />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Пароль</span>
@@ -229,13 +285,19 @@ export function MailSettingsPage() {
                   type="password"
                   value={imapPassword}
                   onChange={(e) => setImapPassword(e.target.value)}
-                  placeholder={cfg.data?.hasImapPassword ? '•••••• (сохранён, пусто — не менять)' : 'не задан'}
+                  placeholder={
+                    cfg.data?.hasImapPassword ? '•••••• (сохранён, пусто — не менять)' : 'не задан'
+                  }
                   className={inputCls}
                 />
               </label>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={imapSecure} onChange={(e) => setImapSecure(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={imapSecure}
+                onChange={(e) => setImapSecure(e.target.checked)}
+              />
               SSL/TLS (порт 993)
             </label>
           </div>
@@ -274,7 +336,11 @@ export function MailSettingsPage() {
               disabled={sendTest.isPending}
               className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition disabled:opacity-50"
             >
-              {sendTest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {sendTest.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
               Отправить тест
             </button>
             {saved && (

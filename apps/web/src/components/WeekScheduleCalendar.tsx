@@ -107,9 +107,7 @@ export function WeekScheduleCalendar({
   const [overSlot, setOverSlot] = useState<OverSlot | null>(null);
 
   const day = addDays(weekStart, dayIndex);
-  const ticketsForDay = scheduledTickets.filter((t) =>
-    sameLocalDay(t.scheduledStartAt, day),
-  );
+  const ticketsForDay = scheduledTickets.filter((t) => sameLocalDay(t.scheduledStartAt, day));
 
   // Показываем ВСЕХ активных инженеров. Раньше был жёсткий лимит .slice(0, 9),
   // который прятал инженеров сверх девятого (по алфавиту) — при 12 активных
@@ -145,7 +143,7 @@ export function WeekScheduleCalendar({
           Нет активных инженеров. Добавьте их в «Настройки → Пользователи».
         </div>
       ) : (
-        <div className="overflow-auto max-h-[80vh] lg:min-h-0 lg:flex-1">
+        <div className="max-h-[80vh] overflow-auto lg:min-h-0 lg:flex-1">
           <div
             className="relative grid"
             style={{
@@ -171,7 +169,7 @@ export function WeekScheduleCalendar({
                   key={i}
                   className={cn(
                     'text-muted-foreground flex items-start justify-end pr-2 text-[10px] tabular-nums',
-                    i % 2 === 0 ? 'border-t' : 'border-t border-dashed border-border/50',
+                    i % 2 === 0 ? 'border-t' : 'border-border/50 border-t border-dashed',
                   )}
                   style={{ height: SLOT_HEIGHT_PX }}
                 >
@@ -199,9 +197,7 @@ export function WeekScheduleCalendar({
                         }}
                         onDragLeave={() =>
                           setOverSlot((cur) =>
-                            cur?.engineerId === eng.id && cur.slotIndex === slotIndex
-                              ? null
-                              : cur,
+                            cur?.engineerId === eng.id && cur.slotIndex === slotIndex ? null : cur,
                           )
                         }
                         onDrop={(e) => handleDrop(eng.id, slotIndex, e)}
@@ -209,8 +205,8 @@ export function WeekScheduleCalendar({
                           'transition',
                           slotIndex % 2 === 0
                             ? 'border-t'
-                            : 'border-t border-dashed border-border/50',
-                          isOver && 'ring-2 ring-primary/30 bg-primary/5',
+                            : 'border-border/50 border-t border-dashed',
+                          isOver && 'ring-primary/30 bg-primary/5 ring-2',
                         )}
                         style={{ height: SLOT_HEIGHT_PX }}
                       />
@@ -286,8 +282,7 @@ function ScheduledTicketBlock({
   onUnschedule: () => void;
 }) {
   const ppm = pixelsPerMinute();
-  const startMinutes =
-    t.scheduledStartAt.getHours() * 60 + t.scheduledStartAt.getMinutes();
+  const startMinutes = t.scheduledStartAt.getHours() * 60 + t.scheduledStartAt.getMinutes();
   const top = (startMinutes - DAY_START_HOUR * 60) * ppm;
   const durationMin = t.estimatedMinutes ?? 60;
   const height = Math.max(durationMin * ppm, SLOT_HEIGHT_PX);
@@ -337,7 +332,7 @@ function ScheduledTicketBlock({
       }}
       title={`${t.ticketNumber} · ${t.clientName}${t.symptom ? `\n${t.symptom}` : ''}`}
       className={cn(
-        'absolute left-1 right-1 z-10 cursor-grab overflow-hidden rounded-md border pl-2 pr-1.5 py-1 text-[11px] shadow-sm transition active:cursor-grabbing hover:ring-2 hover:ring-primary/30',
+        'hover:ring-primary/30 absolute left-1 right-1 z-10 cursor-grab overflow-hidden rounded-md border py-1 pl-2 pr-1.5 text-[11px] shadow-sm transition hover:ring-2 active:cursor-grabbing',
         bgByVariant[status.variant],
       )}
       style={{ top, height }}

@@ -57,20 +57,13 @@ export async function listLeadsQuery(
   return listLeads(db, tenant.id, opts);
 }
 
-export async function getLeadQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  id: string,
-): Promise<LeadDto> {
+export async function getLeadQuery(db: Db, tenant: ResolvedTenant, id: string): Promise<LeadDto> {
   const row = await getLeadById(db, tenant.id, id);
   if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Лид не найден' });
   return row;
 }
 
-export async function leadFunnelStatsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-): Promise<FunnelStats> {
+export async function leadFunnelStatsQuery(db: Db, tenant: ResolvedTenant): Promise<FunnelStats> {
   return leadFunnelStats(db, tenant.id);
 }
 

@@ -8,23 +8,12 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
-import {
-  assets,
-  clients,
-  getDb,
-  invoices,
-  payments,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, clients, getDb, invoices, payments, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { searchEverything } from '../modules/search';
 import { listClients } from '../modules/clients/repository';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import { createDraft, transitionToIssued } from '../modules/invoices/repository';
 
 let erfolgId = '';
@@ -125,7 +114,11 @@ async function createIssuedInvoice(
 
 describe('searchEverything', () => {
   it('находит заявку по фрагменту номера тикета', async () => {
-    const { ticketNumber } = await createTestTicketIn(erfolgId, primaryClientId, 'ticket-by-number');
+    const { ticketNumber } = await createTestTicketIn(
+      erfolgId,
+      primaryClientId,
+      'ticket-by-number',
+    );
     // ticketNumber вида T-2026-000123 — берём числовой хвост, он уникален
     const tail = ticketNumber.split('-').pop() ?? ticketNumber;
     const result = await searchEverything(getDb(), erfolgId, tail);
@@ -151,11 +144,7 @@ describe('searchEverything', () => {
     // независимая, и на свежей базе номера совпадают (оба T-…-000001) —
     // поиск по числовому хвосту дал бы ложное «утекло».
     const uniq = `xtenant-${Date.now()}`;
-    const { ticketNumber: demoTicketNumber } = await createTestTicketIn(
-      demoId,
-      demoClientId,
-      uniq,
-    );
+    const { ticketNumber: demoTicketNumber } = await createTestTicketIn(demoId, demoClientId, uniq);
     // Из erfolg по уникальному симптому demo-тикета — RLS должен скрыть.
     const result = await searchEverything(getDb(), erfolgId, uniq);
     expect(result.tickets).toHaveLength(0);

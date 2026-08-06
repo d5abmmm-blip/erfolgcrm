@@ -180,11 +180,7 @@ export async function searchAssetsQuery(db: Db, tenant: ResolvedTenant, q: strin
   return repoSearchAssets(db, tenant.id, q);
 }
 
-export async function assetsByClientQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  clientId: string,
-) {
+export async function assetsByClientQuery(db: Db, tenant: ResolvedTenant, clientId: string) {
   return repoListAssetsByClient(db, tenant.id, clientId);
 }
 

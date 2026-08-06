@@ -62,10 +62,18 @@ export const sales = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex('sales_tenant_no_uniq').on(t.tenantId, t.saleNo).where(sql`deleted_at IS NULL`),
-    index('sales_tenant_status_idx').on(t.tenantId, t.status).where(sql`deleted_at IS NULL`),
-    index('sales_tenant_client_idx').on(t.tenantId, t.clientId).where(sql`deleted_at IS NULL`),
-    index('sales_tenant_created_idx').on(t.tenantId, t.createdAt).where(sql`deleted_at IS NULL`),
+    uniqueIndex('sales_tenant_no_uniq')
+      .on(t.tenantId, t.saleNo)
+      .where(sql`deleted_at IS NULL`),
+    index('sales_tenant_status_idx')
+      .on(t.tenantId, t.status)
+      .where(sql`deleted_at IS NULL`),
+    index('sales_tenant_client_idx')
+      .on(t.tenantId, t.clientId)
+      .where(sql`deleted_at IS NULL`),
+    index('sales_tenant_created_idx')
+      .on(t.tenantId, t.createdAt)
+      .where(sql`deleted_at IS NULL`),
     check('sales_amounts_non_negative', sql`total_kopecks >= 0 AND purchase_cost_kopecks >= 0`),
   ],
 );

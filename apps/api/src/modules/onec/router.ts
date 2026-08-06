@@ -12,16 +12,8 @@
 import { z } from 'zod';
 import { directorProcedure, router } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
-import {
-  exportInvoicesToOnecCmd,
-  generateIncomingToken,
-} from './service';
-import {
-  getConfig,
-  listRecentExchanges,
-  setIncomingTokenHash,
-  upsertConfig,
-} from './repository';
+import { exportInvoicesToOnecCmd, generateIncomingToken } from './service';
+import { getConfig, listRecentExchanges, setIncomingTokenHash, upsertConfig } from './repository';
 
 export const onecRouter = router({
   getConfig: directorProcedure.query(({ ctx }) => getConfig(ctx.db, ctx.tenant.id)),
@@ -50,7 +42,9 @@ export const onecRouter = router({
     return { revoked: true };
   }),
 
-  exportInvoices: directorProcedure.mutation(({ ctx }) => exportInvoicesToOnecCmd(buildCmdCtx(ctx))),
+  exportInvoices: directorProcedure.mutation(({ ctx }) =>
+    exportInvoicesToOnecCmd(buildCmdCtx(ctx)),
+  ),
 
   listExchanges: directorProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())

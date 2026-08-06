@@ -46,7 +46,10 @@ type Role = 'director' | 'dispatcher' | 'engineer';
  * Иначе задачу можно было бы сохранить с «пустым» исполнителем, а напоминание
  * тихо потерялось бы (как в модуле tickets — ensureRefsExist/userBelongsToTenant).
  */
-async function resolveAssigneeRole(ctx: CmdCtx, assigneeUserId: string | null): Promise<Role | null> {
+async function resolveAssigneeRole(
+  ctx: CmdCtx,
+  assigneeUserId: string | null,
+): Promise<Role | null> {
   if (!assigneeUserId) return null;
   const role = await getUserRole(ctx.db, ctx.tenant.id, assigneeUserId);
   if (!role) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Исполнитель не найден' });
@@ -54,7 +57,12 @@ async function resolveAssigneeRole(ctx: CmdCtx, assigneeUserId: string | null): 
 }
 
 /** Push инженеру при назначении задачи (fire-and-forget). Роль проверена вызывающим. */
-function pushTaskAssigned(ctx: CmdCtx, taskId: string, title: string, engineerUserId: string): void {
+function pushTaskAssigned(
+  ctx: CmdCtx,
+  taskId: string,
+  title: string,
+  engineerUserId: string,
+): void {
   enqueuePushToUser({
     tenantId: ctx.tenant.id,
     userId: engineerUserId,
@@ -120,7 +128,9 @@ export async function updateTaskCmd(
   // Исполнителя проверяем ТОЛЬКО если он сменился на нового (правка чужих полей
   // не должна падать из-за исполнителя, уволенного уже после назначения).
   const assigneeChanged = (input.assigneeUserId ?? null) !== (before.assigneeUserId ?? null);
-  const newAssigneeRole = assigneeChanged ? await resolveAssigneeRole(ctx, input.assigneeUserId) : null;
+  const newAssigneeRole = assigneeChanged
+    ? await resolveAssigneeRole(ctx, input.assigneeUserId)
+    : null;
   const ok = await updateTask(ctx.db, ctx.tenant.id, id, ctx.tenant.timezone, input);
   if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'Задача не найдена' });
   await writeAudit(ctx.db, ctx.tenant.id, {

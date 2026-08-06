@@ -21,10 +21,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { pk, tenantId } from './_shared';
 
-export const onecExchangeDirectionEnum = pgEnum('onec_exchange_direction', [
-  'export',
-  'import',
-]);
+export const onecExchangeDirectionEnum = pgEnum('onec_exchange_direction', ['export', 'import']);
 
 export const onecExchangeStatusEnum = pgEnum('onec_exchange_status', [
   'pending',

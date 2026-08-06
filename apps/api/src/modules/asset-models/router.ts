@@ -56,15 +56,17 @@ export const assetModelsRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .query(({ ctx, input }) => getAssetModelQuery(ctx.db, ctx.tenant, input.id)),
 
-  create: staffProcedure.input(createSchema).mutation(({ ctx, input }) =>
-    createAssetModelCmd(
-      ctx.db,
-      ctx.tenant,
-      ctx.session,
-      { ip: ctx.ip, userAgent: ctx.userAgent },
-      input,
+  create: staffProcedure
+    .input(createSchema)
+    .mutation(({ ctx, input }) =>
+      createAssetModelCmd(
+        ctx.db,
+        ctx.tenant,
+        ctx.session,
+        { ip: ctx.ip, userAgent: ctx.userAgent },
+        input,
+      ),
     ),
-  ),
 
   update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateSchema }))

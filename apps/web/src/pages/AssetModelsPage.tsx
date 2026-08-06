@@ -49,12 +49,8 @@ export function AssetModelsPage() {
       render: (m) => (
         <div>
           <div className="text-foreground font-medium">{m.model}</div>
-          {m.deviceType && (
-            <div className="text-muted-foreground text-xs">{m.deviceType}</div>
-          )}
-          {m.manufacturer && (
-            <div className="text-muted-foreground text-xs">{m.manufacturer}</div>
-          )}
+          {m.deviceType && <div className="text-muted-foreground text-xs">{m.deviceType}</div>}
+          {m.manufacturer && <div className="text-muted-foreground text-xs">{m.manufacturer}</div>}
         </div>
       ),
     },
@@ -81,8 +77,7 @@ export function AssetModelsPage() {
         href="/assets"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К парку техники
+        <ChevronLeft className="h-4 w-4" />К парку техники
       </Link>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -93,8 +88,8 @@ export function AssetModelsPage() {
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Каталог моделей техники</h1>
           <p className="text-muted-foreground text-sm">
-            Типы аппаратов (производитель + модель), не привязанные к клиенту. Заполняются
-            один раз и переиспользуются при заведении техники и создании заявок.
+            Типы аппаратов (производитель + модель), не привязанные к клиенту. Заполняются один раз
+            и переиспользуются при заведении техники и создании заявок.
           </p>
         </div>
         <button
@@ -117,7 +112,7 @@ export function AssetModelsPage() {
             setPage(1);
           }}
           placeholder="Поиск по модели или производителю"
-          className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
         />
       </div>
 
@@ -143,13 +138,7 @@ export function AssetModelsPage() {
   );
 }
 
-function AssetModelModal({
-  model,
-  onClose,
-}: {
-  model: ModelRow | null;
-  onClose: () => void;
-}) {
+function AssetModelModal({ model, onClose }: { model: ModelRow | null; onClose: () => void }) {
   const utils = trpc.useUtils();
   const rootRef = useRef<HTMLDivElement>(null);
   const firstRef = useRef<HTMLInputElement>(null);
@@ -246,7 +235,7 @@ function AssetModelModal({
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
               placeholder="Mindray DC-70, Tuttnauer 3870EA…"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -256,7 +245,7 @@ function AssetModelModal({
               value={manufacturer}
               onChange={(e) => setManufacturer(e.target.value)}
               placeholder="Philips, Drager, Mindray…"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           <div>
@@ -267,7 +256,7 @@ function AssetModelModal({
               value={deviceType}
               onChange={(e) => setDeviceType(e.target.value)}
               placeholder="УЗИ, рентген, отсасыватель…"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             <datalist id="model-device-types-list">
               {deviceTypeOptions.map((t) => (
@@ -281,7 +270,7 @@ function AssetModelModal({
               <select
                 value={riskClass}
                 onChange={(e) => setRiskClass(e.target.value as '' | RiskClass)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               >
                 <option value="">не задан</option>
                 <option value="1">1</option>
@@ -296,7 +285,7 @@ function AssetModelModal({
               <select
                 value={attestation}
                 onChange={(e) => setAttestation(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               >
                 <option value="">не требуется</option>
                 {cats.data?.map((c) => (
@@ -305,7 +294,7 @@ function AssetModelModal({
                   </option>
                 ))}
                 {attestation &&
-                  !(cats.data as readonly string[] | undefined ?? []).includes(attestation) && (
+                  !((cats.data as readonly string[] | undefined) ?? []).includes(attestation) && (
                     <option value={attestation}>{attestation}</option>
                   )}
               </select>
@@ -317,7 +306,7 @@ function AssetModelModal({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </div>

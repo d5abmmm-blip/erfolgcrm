@@ -43,10 +43,7 @@ export function ContractCardPage() {
   const canEdit = role === 'director' || role === 'dispatcher';
 
   const detail = trpc.contracts.get.useQuery({ id }, { enabled: !!id });
-  const linked = trpc.tickets.list.useQuery(
-    { contractId: id, pageSize: 50 },
-    { enabled: !!id },
-  );
+  const linked = trpc.tickets.list.useQuery({ contractId: id, pageSize: 50 }, { enabled: !!id });
 
   const utils = trpc.useUtils();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -82,21 +79,24 @@ export function ContractCardPage() {
         contactName: null,
         contactPosition: null,
       };
-      await printContract({
-        tenant: tenantData,
-        client: clientData,
-        contract: {
-          contractNumber: c.contractNumber,
-          contractDate: c.contractDate,
-          type: c.type,
-          vatRate: c.vatRate,
-          status: c.status,
-          validFrom: c.validFrom,
-          validUntil: c.validUntil,
-          terms: c.terms,
-          notes: c.notes,
+      await printContract(
+        {
+          tenant: tenantData,
+          client: clientData,
+          contract: {
+            contractNumber: c.contractNumber,
+            contractDate: c.contractDate,
+            type: c.type,
+            vatRate: c.vatRate,
+            status: c.status,
+            validFrom: c.validFrom,
+            validUntil: c.validUntil,
+            terms: c.terms,
+            notes: c.notes,
+          },
         },
-      }, win);
+        win,
+      );
     } catch {
       win?.close();
     } finally {
@@ -105,9 +105,7 @@ export function ContractCardPage() {
   };
 
   if (detail.isLoading) {
-    return (
-      <div className="text-muted-foreground p-8 text-center text-sm">Загрузка…</div>
-    );
+    return <div className="text-muted-foreground p-8 text-center text-sm">Загрузка…</div>;
   }
   if (detail.error || !detail.data) {
     return (
@@ -118,15 +116,16 @@ export function ContractCardPage() {
         >
           <ChevronLeft className="h-4 w-4" />К списку
         </Link>
-        <div className="text-destructive mt-4">
-          {detail.error?.message ?? 'Контракт не найден'}
-        </div>
+        <div className="text-destructive mt-4">{detail.error?.message ?? 'Контракт не найден'}</div>
       </div>
     );
   }
 
   const c = detail.data;
-  const badge = STATUS_BADGE[c.status] ?? { label: c.status, cls: 'bg-muted text-muted-foreground' };
+  const badge = STATUS_BADGE[c.status] ?? {
+    label: c.status,
+    cls: 'bg-muted text-muted-foreground',
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
@@ -147,13 +146,18 @@ export function ContractCardPage() {
             № {c.contractNumber} от {formatDate(c.contractDate)}
           </h1>
           <p className="text-muted-foreground text-sm">
-            <Link href={`/clients/${c.clientId}`} className="hover:text-primary underline-offset-4 hover:underline">
+            <Link
+              href={`/clients/${c.clientId}`}
+              className="hover:text-primary underline-offset-4 hover:underline"
+            >
               {c.clientDisplayName}
             </Link>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs', badge.cls)}>
+          <span
+            className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs', badge.cls)}
+          >
             {badge.label}
           </span>
           <button
@@ -205,10 +209,7 @@ export function ContractCardPage() {
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm md:grid-cols-2">
           <Row label="НДС" value={VAT_LABEL[c.vatRate] ?? c.vatRate} />
           <Row label="Действует с" value={c.validFrom ? formatDate(c.validFrom) : 'с подписания'} />
-          <Row
-            label="Действует по"
-            value={c.validUntil ? formatDate(c.validUntil) : 'бессрочно'}
-          />
+          <Row label="Действует по" value={c.validUntil ? formatDate(c.validUntil) : 'бессрочно'} />
           <Row label="Создан" value={c.createdAt.toLocaleString('ru-RU')} />
         </dl>
       </section>
@@ -216,12 +217,38 @@ export function ContractCardPage() {
       <section className="bg-card rounded-lg border p-4 md:p-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Условия</h2>
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm md:grid-cols-2">
-          <Row label="Срок выполнения" value={c.terms.performanceDays ? `${c.terms.performanceDays} дн.` : '—'} />
-          <Row label="Гарантия" value={c.terms.warrantyMonths ? `${c.terms.warrantyMonths} мес.` : '—'} />
-          <Row label="Предоплата" value={c.terms.prepaymentPercent !== undefined ? `${c.terms.prepaymentPercent}%` : '—'} />
-          <Row label="Срок оплаты после акта" value={c.terms.paymentDueDays !== undefined ? `${c.terms.paymentDueDays} дн.` : '—'} />
-          <Row label="Штраф за просрочку этапа" value={c.terms.performancePenaltyPercent !== undefined ? `${c.terms.performancePenaltyPercent}%` : '—'} />
-          <Row label="Пеня за просрочку оплаты" value={c.terms.paymentPenaltyDailyPercent !== undefined ? `${c.terms.paymentPenaltyDailyPercent}% / день` : '—'} />
+          <Row
+            label="Срок выполнения"
+            value={c.terms.performanceDays ? `${c.terms.performanceDays} дн.` : '—'}
+          />
+          <Row
+            label="Гарантия"
+            value={c.terms.warrantyMonths ? `${c.terms.warrantyMonths} мес.` : '—'}
+          />
+          <Row
+            label="Предоплата"
+            value={c.terms.prepaymentPercent !== undefined ? `${c.terms.prepaymentPercent}%` : '—'}
+          />
+          <Row
+            label="Срок оплаты после акта"
+            value={c.terms.paymentDueDays !== undefined ? `${c.terms.paymentDueDays} дн.` : '—'}
+          />
+          <Row
+            label="Штраф за просрочку этапа"
+            value={
+              c.terms.performancePenaltyPercent !== undefined
+                ? `${c.terms.performancePenaltyPercent}%`
+                : '—'
+            }
+          />
+          <Row
+            label="Пеня за просрочку оплаты"
+            value={
+              c.terms.paymentPenaltyDailyPercent !== undefined
+                ? `${c.terms.paymentPenaltyDailyPercent}% / день`
+                : '—'
+            }
+          />
           {c.terms.notes && (
             <div className="md:col-span-2">
               <dt className="text-muted-foreground text-xs">Дополнительно</dt>
@@ -234,7 +261,7 @@ export function ContractCardPage() {
       {c.notes && (
         <section className="bg-card rounded-lg border p-4 md:p-6">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide">Внутренние заметки</h2>
-          <p className="text-sm whitespace-pre-line">{c.notes}</p>
+          <p className="whitespace-pre-line text-sm">{c.notes}</p>
         </section>
       )}
 
@@ -250,7 +277,7 @@ export function ContractCardPage() {
           <ul className="divide-y">
             {linked.data.items.map((t) => (
               <li key={t.id} className="flex items-center justify-between py-2 text-sm">
-                <Link href={`/tickets/${t.id}`} className="font-mono hover:text-primary">
+                <Link href={`/tickets/${t.id}`} className="hover:text-primary font-mono">
                   {t.ticketNumber}
                 </Link>
                 <span className="text-muted-foreground text-xs">

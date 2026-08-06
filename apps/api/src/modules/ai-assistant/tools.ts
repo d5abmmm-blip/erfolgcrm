@@ -74,11 +74,7 @@ interface ToolHandler {
    */
   staffOnly?: boolean;
   def: LlmFunctionTool;
-  run: (
-    caller: Caller,
-    args: Record<string, unknown>,
-    ctx?: ToolRunCtx,
-  ) => Promise<unknown>;
+  run: (caller: Caller, args: Record<string, unknown>, ctx?: ToolRunCtx) => Promise<unknown>;
   /** Человекочитаемое описание для карточки подтверждения (только write). */
   preview?: (args: Record<string, unknown>) => string;
 }
@@ -93,7 +89,10 @@ const FINANCE_PERIODS: FinancePeriod[] = [
 ];
 
 /** Безопасно привести аргумент period к допустимому пресету (по умолчанию month). */
-function asFinancePeriod(args: Record<string, unknown>, fallback: FinancePeriod = 'month'): FinancePeriod {
+function asFinancePeriod(
+  args: Record<string, unknown>,
+  fallback: FinancePeriod = 'month',
+): FinancePeriod {
   const v = args.period;
   return typeof v === 'string' && (FINANCE_PERIODS as string[]).includes(v)
     ? (v as FinancePeriod)
@@ -130,10 +129,39 @@ const TICKET_PRIORITIES = [...TicketPriority.options];
 /* ─────────── генерация логина/пароля для создания сотрудника ─────────── */
 
 const TRANSLIT: Record<string, string> = {
-  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
-  и: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
-  с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch',
-  ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'e',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'i',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'h',
+  ц: 'c',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'sch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
+  я: 'ya',
 };
 
 function translit(s: string): string {
@@ -263,7 +291,8 @@ const TOOLS: Record<string, ToolHandler> = {
       type: 'function',
       function: {
         name: 'get_ticket',
-        description: 'Получить подробности заявки по её ID (UUID): статус, клиент, техника, инженер.',
+        description:
+          'Получить подробности заявки по её ID (UUID): статус, клиент, техника, инженер.',
         parameters: {
           type: 'object',
           properties: { id: { type: 'string', description: 'UUID заявки' } },
@@ -621,7 +650,11 @@ const TOOLS: Record<string, ToolHandler> = {
         parameters: {
           type: 'object',
           properties: {
-            clientType: { type: 'string', enum: ['legal', 'individual'], description: 'Тип клиента' },
+            clientType: {
+              type: 'string',
+              enum: ['legal', 'individual'],
+              description: 'Тип клиента',
+            },
             displayName: { type: 'string', description: 'Название организации (для legal)' },
             inn: { type: 'string', description: 'ИНН (10 или 12 цифр)' },
             kpp: { type: 'string', description: 'КПП (9 цифр)' },
@@ -667,8 +700,12 @@ const TOOLS: Record<string, ToolHandler> = {
       if (type === 'individual') {
         return [
           `Завести клиента-физлицо: ${asString(args, 'individualFullName') ?? '—'}`,
-          asString(args, 'individualPhone') ? `Телефон: ${asString(args, 'individualPhone')}` : null,
-          asString(args, 'individualAddress') ? `Адрес: ${asString(args, 'individualAddress')}` : null,
+          asString(args, 'individualPhone')
+            ? `Телефон: ${asString(args, 'individualPhone')}`
+            : null,
+          asString(args, 'individualAddress')
+            ? `Адрес: ${asString(args, 'individualAddress')}`
+            : null,
         ]
           .filter(Boolean)
           .join('\n');
@@ -746,8 +783,16 @@ const TOOLS: Record<string, ToolHandler> = {
             clientId: { type: 'string', description: 'UUID клиента' },
             contractNumber: { type: 'string', description: 'Номер договора' },
             contractDate: { type: 'string', description: 'Дата договора, ГГГГ-ММ-ДД' },
-            type: { type: 'string', enum: ['service', 'one_time'], description: 'service — абонентский, one_time — разовый' },
-            vatRate: { type: 'string', enum: ['0', '5', '10', '20', 'without_vat'], description: 'Ставка НДС' },
+            type: {
+              type: 'string',
+              enum: ['service', 'one_time'],
+              description: 'service — абонентский, one_time — разовый',
+            },
+            vatRate: {
+              type: 'string',
+              enum: ['0', '5', '10', '20', 'without_vat'],
+              description: 'Ставка НДС',
+            },
             validFrom: { type: 'string', description: 'Действует с (ГГГГ-ММ-ДД)' },
             validUntil: { type: 'string', description: 'Действует по (ГГГГ-ММ-ДД)' },
             notes: { type: 'string', description: 'Примечание' },

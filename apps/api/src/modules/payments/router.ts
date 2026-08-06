@@ -5,12 +5,7 @@
 import { z } from 'zod';
 import { engineerProcedure, router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
-import {
-  addPaymentCmd,
-  deletePaymentCmd,
-  getTotalsQuery,
-  listByTicketQuery,
-} from './service';
+import { addPaymentCmd, deletePaymentCmd, getTotalsQuery, listByTicketQuery } from './service';
 
 const MAX_AMOUNT_RUB = 9_999_999_999;
 

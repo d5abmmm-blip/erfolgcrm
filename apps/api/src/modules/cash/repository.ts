@@ -12,13 +12,7 @@
  * Все суммы — копейки (bigint, в DTO → string). occurred_on — date 'YYYY-MM-DD'.
  */
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import {
-  cashAccounts,
-  cashCategories,
-  cashTransactions,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { cashAccounts, cashCategories, cashTransactions, withTenantTx, type Db } from '@erfolg/db';
 import { withDbRetry } from '../../lib/db-retry';
 
 type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
@@ -243,7 +237,8 @@ export async function updateAccount(
       if (patch.defaultForMethod !== undefined) set.defaultForMethod = patch.defaultForMethod;
       if (patch.isArchived !== undefined) set.isArchived = patch.isArchived;
       if (patch.sortOrder !== undefined) set.sortOrder = patch.sortOrder;
-      if (patch.openingBalanceKopecks !== undefined) set.openingBalanceKopecks = patch.openingBalanceKopecks;
+      if (patch.openingBalanceKopecks !== undefined)
+        set.openingBalanceKopecks = patch.openingBalanceKopecks;
 
       if (Object.keys(set).length > 0) {
         await tx
@@ -465,11 +460,7 @@ export async function createTransaction(
   );
 }
 
-export async function deleteTransaction(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<boolean> {
+export async function deleteTransaction(db: Db, tenantId: string, id: string): Promise<boolean> {
   return withDbRetry('cash.deleteTransaction', () =>
     withTenantTx(db, tenantId, async (tx) => {
       const rows = await tx
@@ -567,10 +558,7 @@ export interface AccountBalancesReport {
 }
 
 /** Остатки по активным счетам + итоги (всего, наличные, безнал). */
-export async function getAccountBalances(
-  db: Db,
-  tenantId: string,
-): Promise<AccountBalancesReport> {
+export async function getAccountBalances(db: Db, tenantId: string): Promise<AccountBalancesReport> {
   const accounts = await listAccounts(db, tenantId, { includeArchived: false });
   let total = 0n;
   let cash = 0n;
@@ -601,8 +589,16 @@ export interface PeriodSummary {
   expenseKopecks: string;
   profitKopecks: string;
   /** Расходы по статьям, по убыванию суммы. */
-  expenseByCategory: Array<{ categoryId: string | null; categoryName: string; amountKopecks: string }>;
-  incomeByCategory: Array<{ categoryId: string | null; categoryName: string; amountKopecks: string }>;
+  expenseByCategory: Array<{
+    categoryId: string | null;
+    categoryName: string;
+    amountKopecks: string;
+  }>;
+  incomeByCategory: Array<{
+    categoryId: string | null;
+    categoryName: string;
+    amountKopecks: string;
+  }>;
   /** Приход за период по типу счёта (способу): наличные / карта / безнал. Для «собрано сегодня». */
   incomeByKind: { cashKopecks: string; cardKopecks: string; bankKopecks: string };
 }
@@ -722,10 +718,18 @@ export async function getPeriodSummary(
       },
       expenseByCategory: byCat
         .filter((r) => r.kind === 'expense')
-        .map((r) => ({ categoryId: r.categoryId, categoryName: r.categoryName, amountKopecks: r.amountKopecks })),
+        .map((r) => ({
+          categoryId: r.categoryId,
+          categoryName: r.categoryName,
+          amountKopecks: r.amountKopecks,
+        })),
       incomeByCategory: byCat
         .filter((r) => r.kind === 'income')
-        .map((r) => ({ categoryId: r.categoryId, categoryName: r.categoryName, amountKopecks: r.amountKopecks })),
+        .map((r) => ({
+          categoryId: r.categoryId,
+          categoryName: r.categoryName,
+          amountKopecks: r.amountKopecks,
+        })),
     };
   });
 }

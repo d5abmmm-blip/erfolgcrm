@@ -120,7 +120,10 @@ export const aiAssistantRouter = router({
       );
       return { ok: true as const, model: cfg.model, reply: (reply.content ?? '').slice(0, 80) };
     } catch (err) {
-      return { ok: false as const, error: err instanceof Error ? err.message : 'Ошибка связи с LLM' };
+      return {
+        ok: false as const,
+        error: err instanceof Error ? err.message : 'Ошибка связи с LLM',
+      };
     }
   }),
 

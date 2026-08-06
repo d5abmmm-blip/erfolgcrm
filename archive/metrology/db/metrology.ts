@@ -62,9 +62,7 @@ export const metrologySiDetails = pgTable(
 
     ...timestamps,
   },
-  (t) => [
-    index('metrology_si_details_tenant_next_idx').on(t.tenantId, t.nextCalibrationAt),
-  ],
+  (t) => [index('metrology_si_details_tenant_next_idx').on(t.tenantId, t.nextCalibrationAt)],
 );
 
 /**
@@ -94,11 +92,7 @@ export const metrologyCalibrations = pgTable(
     ...timestamps,
   },
   (t) => [
-    index('metrology_calibrations_tenant_asset_idx').on(
-      t.tenantId,
-      t.assetId,
-      t.performedAt,
-    ),
+    index('metrology_calibrations_tenant_asset_idx').on(t.tenantId, t.assetId, t.performedAt),
   ],
 );
 

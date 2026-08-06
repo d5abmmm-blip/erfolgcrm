@@ -107,11 +107,7 @@ export async function listActiveForUser(
 }
 
 /** Помечаем подписку отозванной (после 410 Gone). */
-export async function markRevoked(
-  db: Db,
-  tenantId: string,
-  endpoint: string,
-): Promise<void> {
+export async function markRevoked(db: Db, tenantId: string, endpoint: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(pushSubscriptions)
@@ -121,11 +117,7 @@ export async function markRevoked(
 }
 
 /** Обновить lastSeenAt чтобы отслеживать, какие подписки давно не подавали признаков жизни. */
-export async function touchLastSeen(
-  db: Db,
-  tenantId: string,
-  endpoint: string,
-): Promise<void> {
+export async function touchLastSeen(db: Db, tenantId: string, endpoint: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(pushSubscriptions)

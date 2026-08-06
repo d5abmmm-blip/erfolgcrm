@@ -23,10 +23,7 @@ import {
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
-import {
-  issueToWorkOrder,
-  returnFromWorkOrder,
-} from '../modules/inventory-movements/repository';
+import { issueToWorkOrder, returnFromWorkOrder } from '../modules/inventory-movements/repository';
 
 let erfolgId = '';
 let primaryClientId = '';
@@ -58,7 +55,10 @@ async function clearTestData(): Promise<void> {
   });
 }
 
-async function setupItemAndLine(initialQty: string, batchCode: string): Promise<{
+async function setupItemAndLine(
+  initialQty: string,
+  batchCode: string,
+): Promise<{
   itemId: string;
   batchId: string;
   workOrderLineId: string;
@@ -193,12 +193,11 @@ describe('inventory return: возврат запчасти со списани�
       comment: `${TEST_PREFIX}c1`,
     });
     const movements = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select()
-        .from(inventoryMovements)
-        .where(eq(inventoryMovements.itemId, itemId)),
+      tx.select().from(inventoryMovements).where(eq(inventoryMovements.itemId, itemId)),
     );
     const inbound = movements.filter((m) => m.kind === 'inbound');
-    expect(inbound.some((m) => m.referenceType === 'work_order_line' && m.batchId === batchId)).toBe(true);
+    expect(
+      inbound.some((m) => m.referenceType === 'work_order_line' && m.batchId === batchId),
+    ).toBe(true);
   });
 });

@@ -4,7 +4,15 @@
  * удаление операции. RBAC: staff. Авто-доходы от оплат помечены «из заявки».
  */
 import { useState } from 'react';
-import { ArrowRightLeft, Loader2, PiggyBank, Sheet, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Loader2,
+  PiggyBank,
+  Sheet,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -101,7 +109,11 @@ export function CashJournalPage() {
       const EXPORT_LIMIT = 200;
       const all: Row[] = [];
       for (let p = 1; p <= 200; p++) {
-        const chunk = await utils.cash.transactions.list.fetch({ ...filter, page: p, limit: EXPORT_LIMIT });
+        const chunk = await utils.cash.transactions.list.fetch({
+          ...filter,
+          page: p,
+          limit: EXPORT_LIMIT,
+        });
         all.push(...((chunk?.items ?? []) as Row[]));
         if (!chunk || all.length >= (chunk.total ?? 0) || chunk.items.length < EXPORT_LIMIT) break;
       }
@@ -125,7 +137,9 @@ export function CashJournalPage() {
     {
       key: 'kind',
       label: 'Тип',
-      render: (r) => <StatusBadge variant={KIND_BADGE[r.kind]}>{CASH_TX_KIND_META[r.kind].label}</StatusBadge>,
+      render: (r) => (
+        <StatusBadge variant={KIND_BADGE[r.kind]}>{CASH_TX_KIND_META[r.kind].label}</StatusBadge>
+      ),
     },
     {
       key: 'description',
@@ -133,7 +147,8 @@ export function CashJournalPage() {
       render: (r) => (
         <div className="min-w-0">
           <div className="truncate">
-            {r.comment || (r.kind === 'transfer' ? 'Перевод между счетами' : r.categoryName || 'Без статьи')}
+            {r.comment ||
+              (r.kind === 'transfer' ? 'Перевод между счетами' : r.categoryName || 'Без статьи')}
           </div>
           <div className="text-muted-foreground truncate text-xs">
             {r.kind === 'transfer'
@@ -231,7 +246,11 @@ export function CashJournalPage() {
             className="border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
             title="Скачать операции по текущему фильтру в Excel"
           >
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sheet className="h-4 w-4" />
+            )}
             {exporting ? 'Собираю…' : 'Excel'}
           </button>
         </div>
@@ -247,7 +266,7 @@ export function CashJournalPage() {
         <select
           value={kind}
           onChange={(e) => resetPageAnd(() => setKind(e.target.value as '' | Kind))}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           <option value="">Все типы</option>
           <option value="income">Доходы</option>
@@ -257,7 +276,7 @@ export function CashJournalPage() {
         <select
           value={accountId}
           onChange={(e) => resetPageAnd(() => setAccountId(e.target.value))}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           <option value="">Все счета</option>
           {(accountsQ.data ?? []).map((a) => (
@@ -269,7 +288,7 @@ export function CashJournalPage() {
         <select
           value={categoryId}
           onChange={(e) => resetPageAnd(() => setCategoryId(e.target.value))}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           <option value="">Все статьи</option>
           {(categoriesQ.data ?? []).map((c) => (
@@ -282,14 +301,14 @@ export function CashJournalPage() {
           type="date"
           value={from}
           onChange={(e) => resetPageAnd(() => setFrom(e.target.value))}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           aria-label="С даты"
         />
         <input
           type="date"
           value={to}
           onChange={(e) => resetPageAnd(() => setTo(e.target.value))}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           aria-label="По дату"
         />
       </div>

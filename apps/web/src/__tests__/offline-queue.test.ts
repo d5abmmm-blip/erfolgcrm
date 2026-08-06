@@ -157,7 +157,13 @@ describe('executeOrQueue', () => {
 
   it('returns {status: error} on TRPC business error (BAD_REQUEST)', async () => {
     const trpcErr = new TRPCClientError<AppRouter>('Bad input', {
-      result: { error: { code: -32600, message: 'BAD_REQUEST', data: { code: 'BAD_REQUEST', httpStatus: 400, path: 'tickets.create' } } },
+      result: {
+        error: {
+          code: -32600,
+          message: 'BAD_REQUEST',
+          data: { code: 'BAD_REQUEST', httpStatus: 400, path: 'tickets.create' },
+        },
+      },
     } as never);
     const res = await executeOrQueue(
       'tickets.changeStatus',
@@ -196,7 +202,13 @@ describe('syncOutbox', () => {
   it('removes item on hard (business) error', async () => {
     await enqueue('tickets.addNote', { ticketId: '1', comment: 'hi' }, 'erfolg');
     const trpcErr = new TRPCClientError<AppRouter>('Forbidden', {
-      result: { error: { code: -32600, message: 'FORBIDDEN', data: { code: 'FORBIDDEN', httpStatus: 403, path: 'tickets.addNote' } } },
+      result: {
+        error: {
+          code: -32600,
+          message: 'FORBIDDEN',
+          data: { code: 'FORBIDDEN', httpStatus: 403, path: 'tickets.addNote' },
+        },
+      },
     } as never);
     const runner = vi.fn().mockRejectedValue(trpcErr);
     const r = await syncOutbox(runner);
@@ -257,7 +269,13 @@ describe('syncOutbox', () => {
       if (i === 1) return { id: 'ok' };
       if (i === 2) throw new TypeError('Failed to fetch');
       const e = new TRPCClientError<AppRouter>('not found', {
-        result: { error: { code: -32600, message: 'NOT_FOUND', data: { code: 'NOT_FOUND', httpStatus: 404, path: 'tickets.addNote' } } },
+        result: {
+          error: {
+            code: -32600,
+            message: 'NOT_FOUND',
+            data: { code: 'NOT_FOUND', httpStatus: 404, path: 'tickets.addNote' },
+          },
+        },
       } as never);
       throw e;
     });

@@ -63,7 +63,7 @@ export function UnscheduledTicketsList({ onTicketClick }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="№, клиент, модель…"
-            className="bg-background w-full rounded-md border py-1.5 pl-7 pr-2 text-xs outline-none focus:border-primary"
+            className="bg-background focus:border-primary w-full rounded-md border py-1.5 pl-7 pr-2 text-xs outline-none"
           />
         </div>
       </div>
@@ -79,11 +79,7 @@ export function UnscheduledTicketsList({ onTicketClick }: Props) {
           </div>
         ) : (
           items.map((t) => (
-            <UnscheduledCard
-              key={t.id}
-              ticket={t}
-              onClick={() => onTicketClick(t.id)}
-            />
+            <UnscheduledCard key={t.id} ticket={t} onClick={() => onTicketClick(t.id)} />
           ))
         )}
       </div>

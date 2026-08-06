@@ -43,7 +43,9 @@ export async function readNotifyClientWhenReady(db: Db, tenantId: string): Promi
 }
 
 export const settingsRouter = router({
-  getDisabledModules: authedProcedure.query(({ ctx }) => readDisabledModules(ctx.db, ctx.tenant.id)),
+  getDisabledModules: authedProcedure.query(({ ctx }) =>
+    readDisabledModules(ctx.db, ctx.tenant.id),
+  ),
 
   setDisabledModules: directorProcedure
     .input(z.object({ modules: z.array(z.string().trim().min(1).max(64)).max(64) }))

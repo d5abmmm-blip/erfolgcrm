@@ -43,7 +43,7 @@ export function Tooltip({
           'pointer-events-none absolute z-50 w-max max-w-xs rounded-md border px-2.5 py-1.5',
           'bg-popover text-popover-foreground text-left text-xs font-normal normal-case leading-snug tracking-normal shadow-lg',
           'whitespace-normal opacity-0 transition-opacity duration-150',
-          'group-hover:opacity-100 group-focus-within:opacity-100',
+          'group-focus-within:opacity-100 group-hover:opacity-100',
           side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
           align === 'center' && 'left-1/2 -translate-x-1/2',
           align === 'start' && 'left-0',

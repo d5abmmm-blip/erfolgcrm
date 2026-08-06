@@ -19,7 +19,11 @@ describe('isImageMime', () => {
 describe('processAttachment', () => {
   it('картинку отдаёт как image с data-URL', async () => {
     const data = b64('fake-bytes');
-    const r = await processAttachment({ name: 'photo.png', mimeType: 'image/png', dataBase64: data });
+    const r = await processAttachment({
+      name: 'photo.png',
+      mimeType: 'image/png',
+      dataBase64: data,
+    });
     expect(r.kind).toBe('image');
     if (r.kind === 'image') {
       expect(r.imageDataUrl).toBe(`data:image/png;base64,${data}`);

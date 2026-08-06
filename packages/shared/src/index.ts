@@ -146,12 +146,7 @@ export const VatRate = z.enum(['0', '5', '10', '20', 'without_vat']);
 export type VatRate = z.infer<typeof VatRate>;
 
 /** Этап 5 — Склад. Тип движения по партии. */
-export const InventoryMovementKind = z.enum([
-  'inbound',
-  'outbound',
-  'adjustment',
-  'writeoff',
-]);
+export const InventoryMovementKind = z.enum(['inbound', 'outbound', 'adjustment', 'writeoff']);
 export type InventoryMovementKind = z.infer<typeof InventoryMovementKind>;
 
 /** Этап 5 — Склад. К чему привязано движение. */
@@ -189,14 +184,7 @@ export type InvoiceStatus = z.infer<typeof InvoiceStatus>;
  * Лиды — воронка продаж (перенос из v1 project_2).
  * Стадия лида: new → contacted → proposal → negotiation → won/lost.
  */
-export const LeadStatus = z.enum([
-  'new',
-  'contacted',
-  'proposal',
-  'negotiation',
-  'won',
-  'lost',
-]);
+export const LeadStatus = z.enum(['new', 'contacted', 'proposal', 'negotiation', 'won', 'lost']);
 export type LeadStatus = z.infer<typeof LeadStatus>;
 
 /** Источник лида. */
@@ -204,13 +192,7 @@ export const LeadSource = z.enum(['cold_call', 'referral', 'tender', 'website', 
 export type LeadSource = z.infer<typeof LeadSource>;
 
 /** Причина проигрыша лида (заполняется при переходе в lost). */
-export const LeadLostReason = z.enum([
-  'price',
-  'competitor',
-  'no_need',
-  'no_response',
-  'other',
-]);
+export const LeadLostReason = z.enum(['price', 'competitor', 'no_need', 'no_response', 'other']);
 export type LeadLostReason = z.infer<typeof LeadLostReason>;
 
 /** Тип гарантии на технику (перенос из v1): заводская / сервисная / расширенная. */
@@ -254,12 +236,7 @@ export type RoadmapPriority = z.infer<typeof RoadmapPriority>;
  * концовка (не стадия). Стадии «Смета/Согласование» убраны из потока — устаревшие
  * статусы estimate/approval (если попадутся в истории) показываются как «Диагностика».
  */
-export type TrackStageKey =
-  | 'received'
-  | 'diagnostics'
-  | 'repair'
-  | 'ready'
-  | 'issued';
+export type TrackStageKey = 'received' | 'diagnostics' | 'repair' | 'ready' | 'issued';
 
 export interface TrackStageDef {
   key: TrackStageKey;
@@ -369,7 +346,7 @@ const TRACK_STATUS_TO_KEY: Record<string, TrackStageKey> = {
 export function buildTrackTimeline(input: BuildTrackTimelineInput): TrackTimeline {
   const cancelled = input.status === 'cancelled';
   const isClosed = input.status === 'closed';
-  const currentIndex = cancelled ? -1 : ticketStatusToTrackIndex(input.status) ?? 0;
+  const currentIndex = cancelled ? -1 : (ticketStatusToTrackIndex(input.status) ?? 0);
 
   const stageAt: Record<TrackStageKey, string | null> = {
     received: trackToIso(input.receivedAt),

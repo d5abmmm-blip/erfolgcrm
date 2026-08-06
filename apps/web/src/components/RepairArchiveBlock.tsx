@@ -56,8 +56,7 @@ export function RepairArchiveBlock({
   const liveModel = (model ?? '').trim();
 
   // Живой режим включаем только при осмысленном вводе, чтобы не искать по «не».
-  const liveEnabled =
-    !ticketId && (liveSymptom.length >= MIN_SYMPTOM_LEN || liveModel.length >= 3);
+  const liveEnabled = !ticketId && (liveSymptom.length >= MIN_SYMPTOM_LEN || liveModel.length >= 3);
   const enabled = !!ticketId || liveEnabled;
 
   const searchInput = ticketId
@@ -91,9 +90,7 @@ export function RepairArchiveBlock({
     return (
       <section className={'bg-card rounded-lg border p-4 md:p-6 ' + (className ?? '')}>
         <Header count={0} />
-        <p className="text-muted-foreground mt-3 text-sm">
-          Похожих ремонтов в архиве не нашлось.
-        </p>
+        <p className="text-muted-foreground mt-3 text-sm">Похожих ремонтов в архиве не нашлось.</p>
       </section>
     );
   }
@@ -224,9 +221,7 @@ function AiSummary({
       ) : text ? (
         <>
           <p className="whitespace-pre-wrap text-xs leading-relaxed">{text}</p>
-          <p className="text-muted-foreground mt-1 text-[10px]">
-            ИИ-резюме · без данных клиента
-          </p>
+          <p className="text-muted-foreground mt-1 text-[10px]">ИИ-резюме · без данных клиента</p>
         </>
       ) : done ? (
         <p className="text-muted-foreground text-xs">

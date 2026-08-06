@@ -142,7 +142,12 @@ export function TenderFormPage() {
       setError('Сумма платежа должна быть больше нуля.');
       return;
     }
-    addPayment.mutate({ tenderId: id, amountRub: rub, paidOn: payDate, note: payNote.trim() || null });
+    addPayment.mutate({
+      tenderId: id,
+      amountRub: rub,
+      paidOn: payDate,
+      note: payNote.trim() || null,
+    });
   };
 
   const inputCls =

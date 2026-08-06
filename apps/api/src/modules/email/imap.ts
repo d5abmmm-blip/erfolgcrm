@@ -96,7 +96,11 @@ export function parseTicketNumber(subject: string | null | undefined): string | 
   return m ? m[0].toUpperCase() : null;
 }
 
-async function getImapConfig(db: Db, tenantId: string, key: string): Promise<ImapConnConfig | null> {
+async function getImapConfig(
+  db: Db,
+  tenantId: string,
+  key: string,
+): Promise<ImapConnConfig | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({
@@ -146,7 +150,11 @@ async function messageExists(db: Db, tenantId: string, messageId: string): Promi
   });
 }
 
-async function findClientIdByEmail(db: Db, tenantId: string, email: string): Promise<string | null> {
+async function findClientIdByEmail(
+  db: Db,
+  tenantId: string,
+  email: string,
+): Promise<string | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ id: clients.id })
@@ -157,7 +165,11 @@ async function findClientIdByEmail(db: Db, tenantId: string, email: string): Pro
   });
 }
 
-async function findTicketIdByNumber(db: Db, tenantId: string, ticketNumber: string): Promise<string | null> {
+async function findTicketIdByNumber(
+  db: Db,
+  tenantId: string,
+  ticketNumber: string,
+): Promise<string | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ id: tickets.id })
@@ -184,7 +196,9 @@ export async function storeInboundMessage(
     ? await findClientIdByEmail(db, tenantId, parsed.fromAddress)
     : null;
   const ticketNumber = parseTicketNumber(parsed.subject);
-  const relatedTicketId = ticketNumber ? await findTicketIdByNumber(db, tenantId, ticketNumber) : null;
+  const relatedTicketId = ticketNumber
+    ? await findTicketIdByNumber(db, tenantId, ticketNumber)
+    : null;
 
   const threadId = computeThreadId(parsed.inReplyTo, parsed.references, parsed.messageId);
   const isSpam = isSpamSubject(parsed.subject);
@@ -255,7 +269,10 @@ async function parseAndStore(
       const content = a.content;
       const size = a.size ?? content.length;
       if (size > MAX_ATTACHMENT_BYTES) {
-        logger.warn({ uid, tenantId, filename: a.filename, size }, 'imap: attachment too large, skipped');
+        logger.warn(
+          { uid, tenantId, filename: a.filename, size },
+          'imap: attachment too large, skipped',
+        );
         continue;
       }
       attachments.push({
@@ -329,7 +346,8 @@ export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult>
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
-      const exists = client.mailbox && typeof client.mailbox !== 'boolean' ? client.mailbox.exists : 0;
+      const exists =
+        client.mailbox && typeof client.mailbox !== 'boolean' ? client.mailbox.exists : 0;
       if (!exists) return { fetched: 0 };
 
       // Первый запуск — последние N по номеру (seq); далее — только UID > сохранённого.

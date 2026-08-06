@@ -172,7 +172,11 @@ describe('email отложенная отправка', () => {
 
   it('processScheduledSend идемпотентен: для черновика (не scheduled) ничего не шлёт', async () => {
     const caller = appRouter.createCaller(makeCtx('director'));
-    const { id } = await caller.email.saveDraft({ to: 'd@example.com', subject: 'Черновик', bodyText: 'x' });
+    const { id } = await caller.email.saveDraft({
+      to: 'd@example.com',
+      subject: 'Черновик',
+      bodyText: 'x',
+    });
 
     await processScheduledSend({ tenantId: erfolgId, messageId: id });
 

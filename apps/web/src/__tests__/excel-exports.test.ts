@@ -117,7 +117,13 @@ describe('Excel: аналитика за период', () => {
         byEquipment: [],
       },
       sla: { totalTracked: 10, onTime: 9, late: 1, rate: 90, byPriority: [] },
-      leads: { total: 4, conversion: 25, totalPotentialRub: 100000, wonRevenueRub: 30000, byStatus: [] },
+      leads: {
+        total: 4,
+        conversion: 25,
+        totalPotentialRub: 100000,
+        wonRevenueRub: 30000,
+        byStatus: [],
+      },
       receivables: [
         {
           invoiceNumber: 'INV-2026-000017',
@@ -164,7 +170,12 @@ describe('Excel: аналитика продаж', () => {
           },
         ],
         topClients: [
-          { clientName: 'ООО Ромашка', revenueKopecks: '850000', profitKopecks: '320000', salesCount: 2 },
+          {
+            clientName: 'ООО Ромашка',
+            revenueKopecks: '850000',
+            profitKopecks: '320000',
+            salesCount: 2,
+          },
         ],
         topProducts: [
           { name: 'Плата ИВЛ', revenueKopecks: '500000', profitKopecks: '200000', quantity: 1 },

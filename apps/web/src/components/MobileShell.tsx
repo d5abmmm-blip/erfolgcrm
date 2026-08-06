@@ -7,7 +7,12 @@ import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
 
 interface SessionInfo {
-  user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
+  user: {
+    id: string;
+    username: string;
+    fullName: string;
+    role: 'director' | 'dispatcher' | 'engineer';
+  };
   tenant: { id: string; subdomain: string; displayName: string; disabledModules: string[] };
 }
 
@@ -30,9 +35,20 @@ const NAV: Array<{
     icon: ListChecks,
     match: (p) => p === '/m/queue' || p.startsWith('/m/tickets'),
   },
-  { href: '/m/tasks', label: 'Задачи', icon: ClipboardList, match: (p) => p.startsWith('/m/tasks') },
+  {
+    href: '/m/tasks',
+    label: 'Задачи',
+    icon: ClipboardList,
+    match: (p) => p.startsWith('/m/tasks'),
+  },
   { href: '/m/scan', label: 'Сканер', icon: ScanLine, match: (p) => p.startsWith('/m/scan') },
-  { href: '/m/inventory', label: 'Склад', icon: Package, match: (p) => p.startsWith('/m/inventory'), module: 'inventory' },
+  {
+    href: '/m/inventory',
+    label: 'Склад',
+    icon: Package,
+    match: (p) => p.startsWith('/m/inventory'),
+    module: 'inventory',
+  },
   { href: '/m/profile', label: 'Профиль', icon: User, match: (p) => p.startsWith('/m/profile') },
 ];
 
@@ -76,11 +92,7 @@ export function MobileShell({ children, session }: Props) {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="flex min-w-0 items-center gap-2.5">
-          <img
-            src="/favicon.png"
-            alt="Эрфольг"
-            className="h-8 w-8 shrink-0 rounded-md"
-          />
+          <img src="/favicon.png" alt="Эрфольг" className="h-8 w-8 shrink-0 rounded-md" />
           <div className="bg-primary/25 grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold">
             {initials || '??'}
           </div>
@@ -102,7 +114,7 @@ export function MobileShell({ children, session }: Props) {
 
       {/* overscroll-contain — прокрутка не «перетекает» на документ (нет отскока).
           overflow-x-hidden — только вертикальный скролл, вбок страница статична. */}
-      <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-20">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-20">
         {children}
       </main>
 

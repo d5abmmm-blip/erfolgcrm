@@ -99,7 +99,10 @@ function makeCtx(tenantId: string, subdomain: string): Context {
 /** id письма по его messageId (storeInboundMessage не возвращает id). */
 async function messageIdByHeader(headerId: string): Promise<string> {
   const rows = await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx.select({ id: emailMessages.id }).from(emailMessages).where(eq(emailMessages.messageId, headerId)),
+    tx
+      .select({ id: emailMessages.id })
+      .from(emailMessages)
+      .where(eq(emailMessages.messageId, headerId)),
   );
   const id = rows[0]?.id;
   if (!id) throw new Error('inbound message not found');
@@ -133,7 +136,12 @@ describe('ai-draft helpers', () => {
 
   it('buildDeviceHint собирает читаемую подсказку', () => {
     expect(
-      buildDeviceHint({ deviceType: 'УЗИ', manufacturer: 'Mindray', model: 'DC-70', serialNumber: '3F' }),
+      buildDeviceHint({
+        deviceType: 'УЗИ',
+        manufacturer: 'Mindray',
+        model: 'DC-70',
+        serialNumber: '3F',
+      }),
     ).toBe('УЗИ · Mindray DC-70 · сер. 3F');
     expect(buildDeviceHint({})).toBeNull();
   });
@@ -152,7 +160,11 @@ describe('email.draftTicketFromEmail (деградация без LLM)', () => {
     );
     const headerId = `<e2t-linked@client.ru>`;
     try {
-      await storeInboundMessage(getDb(), erfolgId, inbound({ from: email, fromAddress: email, messageId: headerId }));
+      await storeInboundMessage(
+        getDb(),
+        erfolgId,
+        inbound({ from: email, fromAddress: email, messageId: headerId }),
+      );
       const emailRowId = await messageIdByHeader(headerId);
 
       const caller = appRouter.createCaller(makeCtx(erfolgId, 'erfolg'));
@@ -167,7 +179,10 @@ describe('email.draftTicketFromEmail (деградация без LLM)', () => {
       expect(draft.linkedTicket).toBeNull();
     } finally {
       await withTenantTx(getDb(), erfolgId, (tx) =>
-        tx.update(clients).set({ email: c.email ?? null }).where(eq(clients.id, c.id)),
+        tx
+          .update(clients)
+          .set({ email: c.email ?? null })
+          .where(eq(clients.id, c.id)),
       );
     }
   });
@@ -183,11 +198,18 @@ describe('email.draftTicketFromEmail (деградация без LLM)', () => {
     );
     const headerId = `<e2t-rematch@client.ru>`;
     try {
-      await storeInboundMessage(getDb(), erfolgId, inbound({ from: email, fromAddress: email, messageId: headerId }));
+      await storeInboundMessage(
+        getDb(),
+        erfolgId,
+        inbound({ from: email, fromAddress: email, messageId: headerId }),
+      );
       const emailRowId = await messageIdByHeader(headerId);
       // Сбрасываем привязку → сервер должен заново найти клиента по адресу отправителя.
       await withTenantTx(getDb(), erfolgId, (tx) =>
-        tx.update(emailMessages).set({ relatedClientId: null }).where(eq(emailMessages.id, emailRowId)),
+        tx
+          .update(emailMessages)
+          .set({ relatedClientId: null })
+          .where(eq(emailMessages.id, emailRowId)),
       );
 
       const caller = appRouter.createCaller(makeCtx(erfolgId, 'erfolg'));
@@ -195,7 +217,10 @@ describe('email.draftTicketFromEmail (деградация без LLM)', () => {
       expect(draft.client?.id).toBe(c.id);
     } finally {
       await withTenantTx(getDb(), erfolgId, (tx) =>
-        tx.update(clients).set({ email: c.email ?? null }).where(eq(clients.id, c.id)),
+        tx
+          .update(clients)
+          .set({ email: c.email ?? null })
+          .where(eq(clients.id, c.id)),
       );
     }
   });
@@ -205,7 +230,11 @@ describe('email.draftTicketFromEmail (деградация без LLM)', () => {
     await storeInboundMessage(
       getDb(),
       erfolgId,
-      inbound({ from: 'stranger@nowhere.ru', fromAddress: 'stranger@nowhere.ru', messageId: headerId }),
+      inbound({
+        from: 'stranger@nowhere.ru',
+        fromAddress: 'stranger@nowhere.ru',
+        messageId: headerId,
+      }),
     );
     const emailRowId = await messageIdByHeader(headerId);
     const caller = appRouter.createCaller(makeCtx(erfolgId, 'erfolg'));
@@ -237,7 +266,10 @@ describe('email.linkTicket', () => {
     expect(res.ok).toBe(true);
 
     const rows = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ rt: emailMessages.relatedTicketId }).from(emailMessages).where(eq(emailMessages.id, emailRowId)),
+      tx
+        .select({ rt: emailMessages.relatedTicketId })
+        .from(emailMessages)
+        .where(eq(emailMessages.id, emailRowId)),
     );
     expect(rows[0]?.rt).toBe(ticket.id);
 
@@ -277,7 +309,10 @@ describe('email.linkTicket защита от чужой заявки', () => {
     const headerId = `<e2t-xt-link@demo.ru>`;
     await storeInboundMessage(getDb(), demoId, inbound({ messageId: headerId }));
     const demoRows = await withTenantTx(getDb(), demoId, (tx) =>
-      tx.select({ id: emailMessages.id }).from(emailMessages).where(eq(emailMessages.messageId, headerId)),
+      tx
+        .select({ id: emailMessages.id })
+        .from(emailMessages)
+        .where(eq(emailMessages.messageId, headerId)),
     );
     const demoEmailId = demoRows[0]?.id;
     if (!demoEmailId) throw new Error('demo inbound not stored');

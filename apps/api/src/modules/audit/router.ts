@@ -26,9 +26,7 @@ const auditActionSchema = z.enum([
   'consent_revoked',
 ]);
 
-const isoDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
 
 export const auditRouter = router({
   list: directorProcedure
@@ -42,10 +40,7 @@ export const auditRouter = router({
           dateTo: isoDateSchema.optional(),
           search: z.string().trim().max(200).optional(),
           limit: z.number().int().min(1).max(200).optional(),
-          cursor: z
-            .object({ ts: z.string(), id: z.string().uuid() })
-            .nullable()
-            .optional(),
+          cursor: z.object({ ts: z.string(), id: z.string().uuid() }).nullable().optional(),
         })
         .optional(),
     )
@@ -62,9 +57,7 @@ export const auditRouter = router({
       }),
     ),
 
-  entityTypes: directorProcedure.query(({ ctx }) =>
-    listEntityTypes(ctx.db, ctx.tenant.id),
-  ),
+  entityTypes: directorProcedure.query(({ ctx }) => listEntityTypes(ctx.db, ctx.tenant.id)),
 
   stats: directorProcedure.query(({ ctx }) => getAuditStats(ctx.db, ctx.tenant.id)),
 });

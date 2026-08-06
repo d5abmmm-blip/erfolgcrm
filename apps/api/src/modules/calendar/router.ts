@@ -43,32 +43,30 @@ export const calendarRouter = router({
       listMonthEvents(ctx.db, ctx.tenant.id, ctx.tenant.timezone, input.year, input.month),
     ),
 
-  createEvent: staffProcedure
-    .input(z.object(eventFields))
-    .mutation(async ({ ctx, input }) => {
-      const created = await createCalendarEvent(
-        ctx.db,
-        ctx.tenant.id,
-        ctx.session.userId,
-        ctx.tenant.timezone,
-        {
-          title: input.title,
-          date: input.date,
-          time: input.time ?? null,
-          notes: input.notes?.trim() ? input.notes.trim() : null,
-          remind: input.remind,
-        },
-      );
-      await writeAudit(ctx.db, ctx.tenant.id, {
-        userId: ctx.session.userId,
-        action: 'create',
-        entityType: 'calendar_event',
-        entityId: created.id,
-        after: { title: input.title, date: input.date, time: input.time ?? null },
-        ip: ctx.ip,
-      });
-      return created;
-    }),
+  createEvent: staffProcedure.input(z.object(eventFields)).mutation(async ({ ctx, input }) => {
+    const created = await createCalendarEvent(
+      ctx.db,
+      ctx.tenant.id,
+      ctx.session.userId,
+      ctx.tenant.timezone,
+      {
+        title: input.title,
+        date: input.date,
+        time: input.time ?? null,
+        notes: input.notes?.trim() ? input.notes.trim() : null,
+        remind: input.remind,
+      },
+    );
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'create',
+      entityType: 'calendar_event',
+      entityId: created.id,
+      after: { title: input.title, date: input.date, time: input.time ?? null },
+      ip: ctx.ip,
+    });
+    return created;
+  }),
 
   updateEvent: staffProcedure
     .input(z.object({ id: z.string().uuid(), ...eventFields }))

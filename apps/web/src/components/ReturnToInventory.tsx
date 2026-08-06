@@ -72,13 +72,19 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
 
   if (eligible.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-        <div className="bg-card w-full max-w-sm rounded-lg border p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-          <div className="text-sm">
-            В наряде нет строк, списанных со склада.
-          </div>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        onClick={onClose}
+      >
+        <div
+          className="bg-card w-full max-w-sm rounded-lg border p-4 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="text-sm">В наряде нет строк, списанных со склада.</div>
           <div className="mt-3 text-right">
-            <button type="button" onClick={onClose} className="text-primary text-sm">Закрыть</button>
+            <button type="button" onClick={onClose} className="text-primary text-sm">
+              Закрыть
+            </button>
           </div>
         </div>
       </div>
@@ -86,7 +92,10 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
       <form
         onSubmit={(e) => void submit(e)}
         onClick={(e) => e.stopPropagation()}
@@ -97,7 +106,11 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
             <Undo2 className="h-4 w-4" />
             Вернуть на склад
           </h3>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -111,7 +124,7 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
               const next = eligible.find((l) => l.id === e.target.value);
               if (next) setQuantity(next.quantity);
             }}
-            className="bg-background mt-1 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
           >
             {eligible.map((l) => (
               <option key={l.id} value={l.id}>
@@ -129,13 +142,13 @@ export function ReturnToInventory({ ticketId, lines, onClose, onReturned }: Prop
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             placeholder="напр. 1.000"
-            className="bg-background mt-1 w-full rounded-md border px-2 py-1.5 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-2 py-1.5 text-sm tabular-nums outline-none focus:ring-2"
           />
         </label>
 
         <div className="text-muted-foreground mb-3 text-xs">
-          Возврат идёт в самую свежую партию по item. Если объём не помещается —
-          ошибка, оформите как новый приход.
+          Возврат идёт в самую свежую партию по item. Если объём не помещается — ошибка, оформите
+          как новый приход.
         </div>
 
         {error && <div className="text-destructive mb-2 text-xs">{error}</div>}

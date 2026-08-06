@@ -112,10 +112,39 @@ const idOf = (kind: string, oldId: string | number): string => uuid5(`${kind}:${
 
 // Транслитерация ФИО → ascii-логин.
 const TRANSLIT: Record<string, string> = {
-  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i',
-  й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't',
-  у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '',
-  э: 'e', ю: 'yu', я: 'ya',
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'e',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'y',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'h',
+  ц: 'c',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'sch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
+  я: 'ya',
 };
 function translit(s: string): string {
   return s
@@ -398,7 +427,12 @@ async function main(): Promise<void> {
   const assetPlans = new Map<string, AssetPlan>();
   const assetIdByOrder = new Map<number, string>();
 
-  function deviceForOrder(o: Row): { model: string | null; manuf: string | null; serial: string | null; devType: string | null } {
+  function deviceForOrder(o: Row): {
+    model: string | null;
+    manuf: string | null;
+    serial: string | null;
+    devType: string | null;
+  } {
     const manuf = nameOf(manufacturers, o.MANUFACTURERID);
     const model = nameOf(models, o.MODELID);
     const devType = nameOf(deviceTypes, o.DEVICETYPEID);
@@ -477,7 +511,8 @@ async function main(): Promise<void> {
       statusId === 6 ? 'warranty' : repairTypeOld === 2 ? 'paid' : 'service_contract';
 
     const receivedAt = dt(o.ORDERDATE) ?? new Date('2015-01-01T00:00:00Z');
-    const closedish = dt(o.GIVEOUTDATE) ?? dt(o.RELEASEDATE) ?? dt(o.EXECUTIONDATEFACT) ?? receivedAt;
+    const closedish =
+      dt(o.GIVEOUTDATE) ?? dt(o.RELEASEDATE) ?? dt(o.EXECUTIONDATEFACT) ?? receivedAt;
     const closedAt = status === 'closed' ? closedish : null;
     const cancelledAt = status === 'cancelled' ? closedish : null;
 
@@ -517,7 +552,8 @@ async function main(): Promise<void> {
       receivedAt,
       closedAt,
       cancelledAt,
-      cancelReason: status === 'cancelled' ? (str(o.DISREPAIR) ?? 'Перенос из WinServisePro') : null,
+      cancelReason:
+        status === 'cancelled' ? (str(o.DISREPAIR) ?? 'Перенос из WinServisePro') : null,
       createdAt: receivedAt,
       updatedAt: closedish,
     });
@@ -617,7 +653,9 @@ async function main(): Promise<void> {
   // ───────────────────────── ОТЧЁТ ─────────────────────────
   console.info('\n──────── План переноса ────────');
   console.info(`Сотрудники (users):        ${userRows.length}`);
-  console.info(`Клиенты (clients):         ${clientPlans.length}  (юрлиц: ${cntLegal}, физлиц: ${cntIndividual})`);
+  console.info(
+    `Клиенты (clients):         ${clientPlans.length}  (юрлиц: ${cntLegal}, физлиц: ${cntIndividual})`,
+  );
   console.info(`  из них с контактным лицом: ${clientPlans.filter((c) => c.contact).length}`);
   console.info(`Техника (assets):          ${assetPlans.size}`);
   console.info(`Заявки (tickets):          ${ticketRows.length}`);
@@ -625,7 +663,8 @@ async function main(): Promise<void> {
   console.info(`Строки нарядов:            ${lineRows.length}`);
   console.info(`События (ticket_events):   ${eventRows.length}`);
   console.info(`Статусы заявок:            ${JSON.stringify(statusCount)}`);
-  if (needFallbackClient) console.info(`  + синтетический «Клиент не указан» (для заявок без клиента)`);
+  if (needFallbackClient)
+    console.info(`  + синтетический «Клиент не указан» (для заявок без клиента)`);
   if (warnings.length) {
     console.info('\nПредупреждения:');
     warnings.slice(0, 20).forEach((w) => console.info('  ! ' + w));
@@ -655,9 +694,17 @@ async function main(): Promise<void> {
       type: 'individual',
       subtype: null,
       displayName: 'Клиент не указан (перенос)',
-      inn: null, kpp: null, ogrn: null, legalAddress: null, phone: null, email: null,
-      indFullName: 'Клиент не указан', indPhone: null, indAddress: null,
-      notes: 'Заявки из WinServisePro без указанного клиента.', contact: null,
+      inn: null,
+      kpp: null,
+      ogrn: null,
+      legalAddress: null,
+      phone: null,
+      email: null,
+      indFullName: 'Клиент не указан',
+      indPhone: null,
+      indAddress: null,
+      notes: 'Заявки из WinServisePro без указанного клиента.',
+      contact: null,
     });
   }
   for (const c of clientPlans) {
@@ -745,7 +792,11 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-async function insertChunked<T>(rows: T[], fn: (chunk: T[]) => Promise<void>, size = 500): Promise<void> {
+async function insertChunked<T>(
+  rows: T[],
+  fn: (chunk: T[]) => Promise<void>,
+  size = 500,
+): Promise<void> {
   for (let i = 0; i < rows.length; i += size) {
     await fn(rows.slice(i, i + size));
   }

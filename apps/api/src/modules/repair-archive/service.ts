@@ -81,7 +81,11 @@ const SUMMARY_SYSTEM =
   '2–4 коротких предложения, простым языком. Используй ТОЛЬКО данные ниже, ничего не выдумывай. ' +
   'Без вступления и заключения.';
 
-function renderSummaryPrompt(symptom: string, model: string, matches: RepairArchiveMatch[]): string {
+function renderSummaryPrompt(
+  symptom: string,
+  model: string,
+  matches: RepairArchiveMatch[],
+): string {
   const lines: string[] = [];
   lines.push(`Текущий симптом: ${symptom || '—'}${model ? `; техника: ${model}` : ''}.`);
   lines.push('Похожие прошлые ремонты:');
@@ -90,7 +94,11 @@ function renderSummaryPrompt(symptom: string, model: string, matches: RepairArch
       m.symptom ? `симптом: ${m.symptom}` : null,
       m.diagnosis ? `нашли: ${m.diagnosis}` : null,
       m.worksSummary ? `делали: ${m.worksSummary}` : null,
-      m.deviceModel ? `(${m.deviceModel}${m.year ? `, ${m.year}` : ''})` : m.year ? `(${m.year})` : null,
+      m.deviceModel
+        ? `(${m.deviceModel}${m.year ? `, ${m.year}` : ''})`
+        : m.year
+          ? `(${m.year})`
+          : null,
     ].filter(Boolean);
     lines.push(`  • ${bits.join('. ')}`);
   }

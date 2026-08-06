@@ -10,13 +10,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  attachments,
-  clients,
-  getDb,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { attachments, clients, getDb, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import {
@@ -86,8 +80,18 @@ describe('attachments cross-tenant изоляция', () => {
 
   it('verifyReferenceBelongsToTenant отказывает по тикету другого tenant', async () => {
     const erfolgTicket = await makeTicket(erfolgId, erfolgClientId);
-    const allowedSelf = await verifyReferenceBelongsToTenant(getDb(), erfolgId, 'ticket', erfolgTicket);
-    const allowedOther = await verifyReferenceBelongsToTenant(getDb(), demoId, 'ticket', erfolgTicket);
+    const allowedSelf = await verifyReferenceBelongsToTenant(
+      getDb(),
+      erfolgId,
+      'ticket',
+      erfolgTicket,
+    );
+    const allowedOther = await verifyReferenceBelongsToTenant(
+      getDb(),
+      demoId,
+      'ticket',
+      erfolgTicket,
+    );
     expect(allowedSelf).toBe(true);
     expect(allowedOther).toBe(false);
   });

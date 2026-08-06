@@ -36,17 +36,9 @@ function metricsSheet(wb: ExcelJSType.Workbook, input: DailySummaryInput): void 
   const rows: Array<[string, string | number, string]> = [
     ['Дата', input.date, ''],
     ['Выручка (оплачено), ₽', kopecksToRub(m.revenuePeriodKopecks), ''],
-    [
-      'Выручка по закрытым нарядам, ₽',
-      kopecksToRub(m.revenueClosedPeriodKopecks),
-      '',
-    ],
+    ['Выручка по закрытым нарядам, ₽', kopecksToRub(m.revenueClosedPeriodKopecks), ''],
     ['Маржа, ₽', kopecksToRub(m.marginPeriodKopecks), ''],
-    [
-      'Маржа, %',
-      m.marginPercent === null ? '—' : Number(m.marginPercent.toFixed(2)),
-      '',
-    ],
+    ['Маржа, %', m.marginPercent === null ? '—' : Number(m.marginPercent.toFixed(2)), ''],
     ['Дебиторка, ₽', kopecksToRub(m.receivablesTotalKopecks), ''],
     ['Просрочка, ₽', kopecksToRub(m.overdueTotalKopecks), ''],
     ['Активных заявок, шт.', m.activeTicketsCount, ''],
@@ -71,9 +63,7 @@ function metricsSheet(wb: ExcelJSType.Workbook, input: DailySummaryInput): void 
   autoSize(sh);
 }
 
-export async function buildDailySummaryWorkbook(
-  input: DailySummaryInput,
-): Promise<Blob> {
+export async function buildDailySummaryWorkbook(input: DailySummaryInput): Promise<Blob> {
   const ExcelJS = await getExcelJS();
   const wb = new ExcelJS.Workbook();
   wb.creator = input.tenantDisplayName ?? 'Erfolg CRM';
@@ -181,9 +171,7 @@ function parseIsoDate(iso: string): Date {
   return new Date(iso);
 }
 
-export async function downloadDailySummaryXlsx(
-  input: DailySummaryInput,
-): Promise<void> {
+export async function downloadDailySummaryXlsx(input: DailySummaryInput): Promise<void> {
   const blob = await buildDailySummaryWorkbook(input);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -15,11 +15,7 @@ import { getDb } from '@erfolg/db';
 import { logger } from '../lib/logger';
 import { QUEUE_NAMES, registerWorker } from '../lib/queue';
 import { sendPush, type PushPayload } from '../lib/web-push';
-import {
-  listActiveForUser,
-  markRevoked,
-  touchLastSeen,
-} from '../modules/notifications/repository';
+import { listActiveForUser, markRevoked, touchLastSeen } from '../modules/notifications/repository';
 
 export interface PushSendPayload {
   tenantId: string;
@@ -35,14 +31,20 @@ export async function processPushSend(job: PushSendPayload): Promise<void> {
   }
   await Promise.all(
     subs.map(async (s) => {
-      const r = await sendPush({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth }, job.payload);
+      const r = await sendPush(
+        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+        job.payload,
+      );
       if (r.ok) {
         await touchLastSeen(getDb(), job.tenantId, s.endpoint);
         return;
       }
       if (r.gone) {
         await markRevoked(getDb(), job.tenantId, s.endpoint);
-        logger.info({ userId: job.userId, statusCode: r.statusCode }, 'push subscription revoked (410/404)');
+        logger.info(
+          { userId: job.userId, statusCode: r.statusCode },
+          'push subscription revoked (410/404)',
+        );
         return;
       }
       logger.warn(

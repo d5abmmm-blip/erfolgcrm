@@ -173,7 +173,9 @@ export async function deleteCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> 
   }).catch((err: unknown) => {
     // Если очередь недоступна — fallback на синхронное удаление, чтобы не оставить мусор в S3.
     logger.warn({ err, attachmentId: id }, 'enqueue purge failed; falling back to sync remove');
-    return getObjectStorage().remove(result.objectKey).catch(() => undefined);
+    return getObjectStorage()
+      .remove(result.objectKey)
+      .catch(() => undefined);
   });
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,

@@ -6,16 +6,7 @@
  */
 import { useRoute, Link } from 'wouter';
 import { useState, type FormEvent } from 'react';
-import {
-  ArrowLeft,
-  Loader2,
-  Lock,
-  Unlock,
-  KeyRound,
-  Plus,
-  X,
-  Trash2,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Lock, Unlock, KeyRound, Plus, X, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { ConfirmDialog } from '../components/ui';
 
@@ -25,10 +16,7 @@ export function ClientCabinetUsersPage() {
 
   const utils = trpc.useUtils();
   const client = trpc.clients.get.useQuery({ id: clientId }, { enabled: Boolean(clientId) });
-  const list = trpc.adminClientUsers.list.useQuery(
-    { clientId },
-    { enabled: Boolean(clientId) },
-  );
+  const list = trpc.adminClientUsers.list.useQuery({ clientId }, { enabled: Boolean(clientId) });
 
   const [showCreate, setShowCreate] = useState(false);
   const [resetTarget, setResetTarget] = useState<string | null>(null);
@@ -104,8 +92,8 @@ export function ClientCabinetUsersPage() {
                 <tr key={u.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{u.email}</td>
                   <td className="px-3 py-2">{u.fullName}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{u.position ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">
+                  <td className="text-muted-foreground px-3 py-2">{u.position ?? '—'}</td>
+                  <td className="text-muted-foreground px-3 py-2 text-xs">
                     {u.lastLoginAt
                       ? new Intl.DateTimeFormat('ru-RU', {
                           dateStyle: 'short',
@@ -128,17 +116,12 @@ export function ClientCabinetUsersPage() {
                     <div className="flex justify-end gap-1">
                       <IconBtn
                         title={u.isActive ? 'Заблокировать' : 'Разблокировать'}
-                        onClick={() =>
-                          setActive.mutate({ id: u.id, isActive: !u.isActive })
-                        }
+                        onClick={() => setActive.mutate({ id: u.id, isActive: !u.isActive })}
                         disabled={setActive.isPending}
                       >
                         {u.isActive ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                       </IconBtn>
-                      <IconBtn
-                        title="Сбросить пароль"
-                        onClick={() => setResetTarget(u.id)}
-                      >
+                      <IconBtn title="Сбросить пароль" onClick={() => setResetTarget(u.id)}>
                         <KeyRound className="h-4 w-4" />
                       </IconBtn>
                       <IconBtn
@@ -174,12 +157,7 @@ export function ClientCabinetUsersPage() {
       {showCreate && (
         <CreateClientUserModal clientId={clientId} onClose={() => setShowCreate(false)} />
       )}
-      {resetTarget && (
-        <ResetPasswordModal
-          id={resetTarget}
-          onClose={() => setResetTarget(null)}
-        />
-      )}
+      {resetTarget && <ResetPasswordModal id={resetTarget} onClose={() => setResetTarget(null)} />}
     </div>
   );
 }
@@ -219,13 +197,7 @@ function IconBtn({
   );
 }
 
-function CreateClientUserModal({
-  clientId,
-  onClose,
-}: {
-  clientId: string;
-  onClose: () => void;
-}) {
+function CreateClientUserModal({ clientId, onClose }: { clientId: string; onClose: () => void }) {
   const utils = trpc.useUtils();
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -297,7 +269,7 @@ function CreateClientUserModal({
           />
         </Field>
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/20 px-3 py-2 text-sm">
+          <div className="bg-destructive/10 text-destructive border-destructive/20 rounded-md border px-3 py-2 text-sm">
             {error}
           </div>
         )}
@@ -356,7 +328,7 @@ function ResetPasswordModal({ id, onClose }: { id: string; onClose: () => void }
           />
         </Field>
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/20 px-3 py-2 text-sm">
+          <div className="bg-destructive/10 text-destructive border-destructive/20 rounded-md border px-3 py-2 text-sm">
             {error}
           </div>
         )}

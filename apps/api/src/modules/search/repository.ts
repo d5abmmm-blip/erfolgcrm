@@ -14,15 +14,7 @@
 import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
 import { alias } from 'drizzle-orm/pg-core';
-import {
-  assets,
-  clients,
-  contracts,
-  invoices,
-  tickets,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { assets, clients, contracts, invoices, tickets, withTenantTx, type Db } from '@erfolg/db';
 
 const LIMIT_PER_TYPE = 5;
 const MIN_QUERY_LENGTH = 2;
@@ -97,11 +89,7 @@ function buildPattern(query: string): string {
   return `%${escapeIlike(query)}%`;
 }
 
-async function searchTicketsHits(
-  tenantId: string,
-  pattern: string,
-  db: Db,
-): Promise<TicketHit[]> {
+async function searchTicketsHits(tenantId: string, pattern: string, db: Db): Promise<TicketHit[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({
@@ -129,11 +117,7 @@ async function searchTicketsHits(
   });
 }
 
-async function searchClientsHits(
-  tenantId: string,
-  pattern: string,
-  db: Db,
-): Promise<ClientHit[]> {
+async function searchClientsHits(tenantId: string, pattern: string, db: Db): Promise<ClientHit[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     return tx
       .select({
@@ -156,11 +140,7 @@ async function searchClientsHits(
   });
 }
 
-async function searchAssetsHits(
-  tenantId: string,
-  pattern: string,
-  db: Db,
-): Promise<AssetHit[]> {
+async function searchAssetsHits(tenantId: string, pattern: string, db: Db): Promise<AssetHit[]> {
   const ownerClient = alias(clients, 'owner_client');
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
@@ -251,14 +231,13 @@ export async function searchEverything(
   // Инженеру недоступны ПДн клиентов и денежные данные (разделы «Клиенты»/«Счета»/«Договоры»
   // — staffProcedure). Глобальный поиск для инженера ограничиваем заявками и техникой.
   const isStaff = role === 'director' || role === 'dispatcher';
-  const [ticketsHits, clientsHits, assetsHits, invoicesHits, contractsHits] =
-    await Promise.all([
-      searchTicketsHits(tenantId, pattern, db),
-      isStaff ? searchClientsHits(tenantId, pattern, db) : Promise.resolve<ClientHit[]>([]),
-      searchAssetsHits(tenantId, pattern, db),
-      isStaff ? searchInvoicesHits(tenantId, pattern, db) : Promise.resolve<InvoiceHit[]>([]),
-      isStaff ? searchContractsHits(tenantId, pattern, db) : Promise.resolve<ContractHit[]>([]),
-    ]);
+  const [ticketsHits, clientsHits, assetsHits, invoicesHits, contractsHits] = await Promise.all([
+    searchTicketsHits(tenantId, pattern, db),
+    isStaff ? searchClientsHits(tenantId, pattern, db) : Promise.resolve<ClientHit[]>([]),
+    searchAssetsHits(tenantId, pattern, db),
+    isStaff ? searchInvoicesHits(tenantId, pattern, db) : Promise.resolve<InvoiceHit[]>([]),
+    isStaff ? searchContractsHits(tenantId, pattern, db) : Promise.resolve<ContractHit[]>([]),
+  ]);
   return {
     tickets: ticketsHits,
     clients: clientsHits,

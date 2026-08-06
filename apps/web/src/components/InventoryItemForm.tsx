@@ -60,7 +60,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -69,7 +69,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
                 type="text"
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
             <Field label="Производитель">
@@ -77,7 +77,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
                 type="text"
                 value={manufacturer}
                 onChange={(e) => setManufacturer(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -87,7 +87,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
                 type="text"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
             <Field label="Мин. остаток">
@@ -95,7 +95,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
                 type="text"
                 value={minStock}
                 onChange={(e) => setMinStock(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
               />
             </Field>
             <Field label="Категория">
@@ -103,7 +103,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               />
             </Field>
           </div>
@@ -119,7 +119,7 @@ export function InventoryItemForm({ onClose, onSaved }: Props) {
             <button
               type="submit"
               disabled={create.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {create.isPending ? 'Сохраняем…' : 'Сохранить'}
             </button>

@@ -6,20 +6,10 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { like } from 'drizzle-orm';
-import {
-  clients,
-  getDb,
-  invoices,
-  payments,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { clients, getDb, invoices, payments, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
   createDraft,
   getById,

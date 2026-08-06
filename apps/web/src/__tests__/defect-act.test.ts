@@ -66,7 +66,14 @@ const base: PrintDefectActInput = {
     repairDescription: 'Требуется замена платы управления, ремкомплекта; настройка ПО.',
     recommendation: 'Ремонт сопоставим с базовой ценой изделия — рекомендовано к списанию.',
     lines: [
-      { lineType: 'work', name: 'Диагностика', unit: 'шт.', quantity: 1, unitPriceKopecks: 0, amountKopecks: 0 },
+      {
+        lineType: 'work',
+        name: 'Диагностика',
+        unit: 'шт.',
+        quantity: 1,
+        unitPriceKopecks: 0,
+        amountKopecks: 0,
+      },
     ],
   },
 };

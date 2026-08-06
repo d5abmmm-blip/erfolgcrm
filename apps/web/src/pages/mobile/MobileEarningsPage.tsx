@@ -112,8 +112,7 @@ export function MobileEarningsPage() {
           {/* Итог к выплате за период */}
           <div className="bg-card rounded-xl border p-5">
             <div className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium uppercase">
-              <Wallet className="h-3.5 w-3.5" />
-              К выплате · {PERIOD_LABEL[period]}
+              <Wallet className="h-3.5 w-3.5" />К выплате · {PERIOD_LABEL[period]}
             </div>
             <div className="text-success mt-1 text-4xl font-semibold tabular-nums">
               {formatRubWhole(total.toString())}

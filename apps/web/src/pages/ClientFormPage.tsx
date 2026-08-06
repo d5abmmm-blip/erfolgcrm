@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useRoute, Link } from 'wouter';
-import {
-  useForm,
-  type SubmitHandler,
-  type UseFormReturn,
-  type FieldPath,
-} from 'react-hook-form';
+import { useForm, type SubmitHandler, type UseFormReturn, type FieldPath } from 'react-hook-form';
 import { ChevronLeft, Lock } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -60,10 +55,7 @@ export function ClientFormPage() {
   const isEdit = !!editingId;
 
   const utils = trpc.useUtils();
-  const existing = trpc.clients.get.useQuery(
-    { id: editingId ?? '' },
-    { enabled: isEdit },
-  );
+  const existing = trpc.clients.get.useQuery({ id: editingId ?? '' }, { enabled: isEdit });
 
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const [serverError, setServerError] = useState<string | null>(null);
@@ -244,12 +236,12 @@ export function ClientFormPage() {
           <textarea
             rows={3}
             {...form.register('notes')}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
         {serverError && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2.5 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2.5 text-xs">
             {serverError}
           </div>
         )}
@@ -265,7 +257,7 @@ export function ClientFormPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-4 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
           </button>
@@ -275,13 +267,7 @@ export function ClientFormPage() {
   );
 }
 
-function LegalFields({
-  form,
-  isBudget,
-}: {
-  form: UseFormReturn<FormValues>;
-  isBudget: boolean;
-}) {
+function LegalFields({ form, isBudget }: { form: UseFormReturn<FormValues>; isBudget: boolean }) {
   return (
     <div className="space-y-4">
       <div>
@@ -290,7 +276,7 @@ function LegalFields({
           type="text"
           {...form.register('displayName', { required: true })}
           placeholder="ООО «...» или ГБУ «...»"
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -303,7 +289,7 @@ function LegalFields({
         <input
           type="text"
           {...form.register('legalAddress')}
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -311,17 +297,17 @@ function LegalFields({
         <Field label="Email" name="email" form={form} type="email" />
       </div>
 
-      <label className="text-sm flex items-center gap-2">
+      <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           {...form.register('isBudget')}
-          className="h-4 w-4 rounded border-input"
+          className="border-input h-4 w-4 rounded"
         />
         Бюджетная организация (есть лицевые счета казначейства)
       </label>
 
       {isBudget && (
-        <div className="border-l-2 border-accent/40 space-y-3 pl-4">
+        <div className="border-accent/40 space-y-3 border-l-2 pl-4">
           <Field label="Счёт казначейства" name="treasuryAccount" form={form} />
           <Field label="Единый казначейский счёт (ЕКС)" name="eksAccount" form={form} />
           <Field label="Лицевой счёт" name="personalAccount" form={form} />
@@ -331,11 +317,7 @@ function LegalFields({
   );
 }
 
-function IndividualFields({
-  form,
-}: {
-  form: UseFormReturn<FormValues>;
-}) {
+function IndividualFields({ form }: { form: UseFormReturn<FormValues> }) {
   return (
     <div className="space-y-4">
       <div>
@@ -347,7 +329,7 @@ function IndividualFields({
           type="text"
           {...form.register('individualFullName', { required: true, minLength: 2 })}
           placeholder="Иванов Иван Иванович"
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
         <p className="text-muted-foreground mt-1 text-xs">
           В списках отобразится как «Иванов И.И.»
@@ -362,7 +344,7 @@ function IndividualFields({
           type="tel"
           {...form.register('individualPhone')}
           placeholder="+7 ..."
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
       <div>
@@ -373,7 +355,7 @@ function IndividualFields({
         <input
           type="text"
           {...form.register('individualAddress')}
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
     </div>
@@ -400,19 +382,13 @@ function Field({
         type={type}
         placeholder={placeholder}
         {...form.register(name)}
-        className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
       />
     </div>
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}

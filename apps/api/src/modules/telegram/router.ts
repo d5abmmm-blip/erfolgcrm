@@ -15,7 +15,9 @@ import { getPublicConfig } from './repository';
 import { createLinkCode, isChatLinked, unlinkChat } from './staff-link';
 
 export const telegramRouter = router({
-  getConfig: directorProcedure.query(({ ctx }) => getConfigQuery({ db: ctx.db, tenant: ctx.tenant })),
+  getConfig: directorProcedure.query(({ ctx }) =>
+    getConfigQuery({ db: ctx.db, tenant: ctx.tenant }),
+  ),
 
   setConfig: directorProcedure
     .input(
@@ -23,7 +25,9 @@ export const telegramRouter = router({
         botToken: z
           .string()
           .trim()
-          .regex(/^\d+:[A-Za-z0-9_-]+$/, { message: 'Неверный формат токена. Получите токен у @BotFather.' }),
+          .regex(/^\d+:[A-Za-z0-9_-]+$/, {
+            message: 'Неверный формат токена. Получите токен у @BotFather.',
+          }),
         defaultDispatcherUserId: z.string().uuid().nullable().optional(),
       }),
     )
@@ -35,7 +39,12 @@ export const telegramRouter = router({
   linkStatus: engineerProcedure
     .input(z.object({ userId: z.string().uuid().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const targetUserId = await resolveTargetUserId(ctx.db, ctx.tenant.id, ctx.session, input?.userId);
+      const targetUserId = await resolveTargetUserId(
+        ctx.db,
+        ctx.tenant.id,
+        ctx.session,
+        input?.userId,
+      );
       const [linked, cfg] = await Promise.all([
         isChatLinked(ctx.db, ctx.tenant.id, targetUserId),
         getPublicConfig(ctx.db, ctx.tenant),
@@ -51,12 +60,18 @@ export const telegramRouter = router({
   createLinkCode: engineerProcedure
     .input(z.object({ userId: z.string().uuid().optional() }).optional())
     .mutation(async ({ ctx, input }) => {
-      const targetUserId = await resolveTargetUserId(ctx.db, ctx.tenant.id, ctx.session, input?.userId);
+      const targetUserId = await resolveTargetUserId(
+        ctx.db,
+        ctx.tenant.id,
+        ctx.session,
+        input?.userId,
+      );
       const cfg = await getPublicConfig(ctx.db, ctx.tenant);
       if (!cfg?.enabled || !cfg.hasToken || !cfg.botUsername) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: 'Telegram-бот не подключён. Директор может подключить его в Настройках → Telegram.',
+          message:
+            'Telegram-бот не подключён. Директор может подключить его в Настройках → Telegram.',
         });
       }
       const code = await createLinkCode(ctx.tenant.id, targetUserId);
@@ -72,7 +87,12 @@ export const telegramRouter = router({
   unlink: engineerProcedure
     .input(z.object({ userId: z.string().uuid().optional() }).optional())
     .mutation(async ({ ctx, input }) => {
-      const targetUserId = await resolveTargetUserId(ctx.db, ctx.tenant.id, ctx.session, input?.userId);
+      const targetUserId = await resolveTargetUserId(
+        ctx.db,
+        ctx.tenant.id,
+        ctx.session,
+        input?.userId,
+      );
       await unlinkChat(ctx.db, ctx.tenant.id, targetUserId);
       return { ok: true as const };
     }),

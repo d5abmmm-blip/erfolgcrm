@@ -263,9 +263,7 @@ export function TicketKpBlock({ ticketId, canManage }: Props) {
                   {kp.respondedAt && <span>ответ {formatDateTime(kp.respondedAt)}</span>}
                 </div>
                 {kp.rejectionReason && (
-                  <p className="text-destructive mt-1 text-[11px]">
-                    Причина: {kp.rejectionReason}
-                  </p>
+                  <p className="text-destructive mt-1 text-[11px]">Причина: {kp.rejectionReason}</p>
                 )}
 
                 {rejectId === kp.id && (

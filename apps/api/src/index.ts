@@ -30,26 +30,14 @@ import {
   enqueueCalendarReminderSchedule,
   registerCalendarReminderWorker,
 } from './workers/calendar-reminder';
-import {
-  enqueueTaskReminderSchedule,
-  registerTaskReminderWorker,
-} from './workers/task-reminder';
-import {
-  enqueueEmailInboundSchedule,
-  registerEmailInboundWorker,
-} from './workers/email-inbound';
-import {
-  reconcileScheduledSends,
-  registerEmailScheduledWorker,
-} from './workers/email-scheduled';
+import { enqueueTaskReminderSchedule, registerTaskReminderWorker } from './workers/task-reminder';
+import { enqueueEmailInboundSchedule, registerEmailInboundWorker } from './workers/email-inbound';
+import { reconcileScheduledSends, registerEmailScheduledWorker } from './workers/email-scheduled';
 import {
   enqueueEngineerNudgeSchedule,
   registerEngineerNudgeWorker,
 } from './workers/engineer-nudge';
-import {
-  enqueueStuckAlertSchedule,
-  registerStuckAlertWorker,
-} from './workers/stuck-alert';
+import { enqueueStuckAlertSchedule, registerStuckAlertWorker } from './workers/stuck-alert';
 
 // Глобальная страховка от «тихой смерти» процесса. Незанятое событие 'error' у любого
 // EventEmitter (например обрыв IMAP/TLS-сокета) и необработанный rejected-промис по
@@ -90,8 +78,7 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (corsOrigins.includes(origin)) return cb(null, true);
-      const allowed =
-        !corsProd && /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/.test(origin);
+      const allowed = !corsProd && /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/.test(origin);
       cb(null, allowed);
     },
     credentials: true,
@@ -174,7 +161,8 @@ const authLimiter = rateLimit({
 app.use('/api/v1/trpc', authLimiter);
 
 // Локальный S3-эмулятор для dev. Подключаем только при STORAGE_DRIVER=local (или unset в dev).
-const storageDriver = process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === 'production' ? 's3' : 'local');
+const storageDriver =
+  process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === 'production' ? 's3' : 'local');
 if (storageDriver === 'local') {
   app.use('/api/v1/storage', makeStorageLocalRouter());
   logger.info('Local storage emulator mounted at /api/v1/storage');

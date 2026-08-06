@@ -10,10 +10,7 @@ export const CASH_ACCOUNT_KIND_LABEL: Record<CashAccountKind, string> = {
 };
 
 /** Метаданные типа операции: подпись, знак суммы и цвет (цвет = смысл). */
-export const CASH_TX_KIND_META: Record<
-  CashTxKind,
-  { label: string; sign: string; cls: string }
-> = {
+export const CASH_TX_KIND_META: Record<CashTxKind, { label: string; sign: string; cls: string }> = {
   income: { label: 'Доход', sign: '+', cls: 'text-success' },
   expense: { label: 'Расход', sign: '−', cls: 'text-destructive' },
   transfer: { label: 'Перевод', sign: '', cls: 'text-muted-foreground' },

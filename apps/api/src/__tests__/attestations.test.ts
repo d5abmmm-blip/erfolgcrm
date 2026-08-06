@@ -113,7 +113,11 @@ async function clearTestData(): Promise<void> {
 
 beforeEach(clearTestData);
 
-function makeCmdCtx(tenantId: string, userId: string, role: 'director' | 'dispatcher' = 'dispatcher') {
+function makeCmdCtx(
+  tenantId: string,
+  userId: string,
+  role: 'director' | 'dispatcher' = 'dispatcher',
+) {
   const tenant: ResolvedTenant = {
     id: tenantId,
     subdomain: 'test',
@@ -202,11 +206,7 @@ describe('getActiveCategoriesForEngineer', () => {
       notes: `${TEST_PREFIX}expired`,
     });
 
-    const active = await getActiveCategoriesForEngineer(
-      getDb(),
-      erfolgId,
-      erfolgEngineerId,
-    );
+    const active = await getActiveCategoriesForEngineer(getDb(), erfolgId, erfolgEngineerId);
     expect(active).toContain(TEST_CATEGORY_A);
     expect(active).toContain(TEST_CATEGORY_B);
     expect(active).not.toContain('Стоматологическое оборудование');
@@ -229,10 +229,7 @@ describe('softDeleteAttestation', () => {
 
     // В БД строка остаётся (для аудита/восстановления).
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select()
-        .from(engineerAttestations)
-        .where(eq(engineerAttestations.id, created.id)),
+      tx.select().from(engineerAttestations).where(eq(engineerAttestations.id, created.id)),
     );
     expect(row).toBeDefined();
     expect(row!.deletedAt).not.toBeNull();
@@ -248,11 +245,7 @@ describe('updateAttestation — установка validUntil в прошлое 
       validUntil: isoOffset(60),
       notes: `${TEST_PREFIX}revoke`,
     });
-    let active = await getActiveCategoriesForEngineer(
-      getDb(),
-      erfolgId,
-      erfolgEngineerId,
-    );
+    let active = await getActiveCategoriesForEngineer(getDb(), erfolgId, erfolgEngineerId);
     expect(active).toContain(TEST_CATEGORY_A);
 
     // Аннулируем — ставим validUntil вчера.
@@ -260,11 +253,7 @@ describe('updateAttestation — установка validUntil в прошлое 
       validUntil: isoOffset(-1),
     });
 
-    active = await getActiveCategoriesForEngineer(
-      getDb(),
-      erfolgId,
-      erfolgEngineerId,
-    );
+    active = await getActiveCategoriesForEngineer(getDb(), erfolgId, erfolgEngineerId);
     expect(active).not.toContain(TEST_CATEGORY_A);
   });
 });

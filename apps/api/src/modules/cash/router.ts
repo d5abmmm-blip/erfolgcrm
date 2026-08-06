@@ -196,7 +196,12 @@ export const cashRouter = router({
         .optional(),
     )
     .query(({ ctx, input }) =>
-      svc.overviewQuery(ctx.db, ctx.tenant, input?.preset ?? 'month', input?.includeInternal ?? false),
+      svc.overviewQuery(
+        ctx.db,
+        ctx.tenant,
+        input?.preset ?? 'month',
+        input?.includeInternal ?? false,
+      ),
     ),
 
   /** Внесение в кассу / выдача из кассы — внутренняя операция (не доход/расход бизнеса). */

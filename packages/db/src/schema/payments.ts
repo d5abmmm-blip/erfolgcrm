@@ -7,25 +7,12 @@
  * До интеграции с 1С (Этап 8) этот модуль — основной учёт оплаты.
  * Все суммы в копейках (bigint).
  */
-import {
-  bigint,
-  check,
-  index,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core';
+import { bigint, check, index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { fkUuid, pk, tenantId } from './_shared';
 
 /** Зеркало PaymentMethod из @erfolg/shared */
-export const paymentMethodEnum = pgEnum('payment_method', [
-  'cash',
-  'card',
-  'bank_transfer',
-]);
+export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'bank_transfer']);
 
 export const payments = pgTable(
   'payments',

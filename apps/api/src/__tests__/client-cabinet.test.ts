@@ -27,11 +27,7 @@ import {
   withTenantTx,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import {
-  archiveClient,
-  createClient,
-  unarchiveClient,
-} from '../modules/clients/repository';
+import { archiveClient, createClient, unarchiveClient } from '../modules/clients/repository';
 import {
   ClientUserConflictError,
   changeMyClientPassword,
@@ -196,9 +192,7 @@ describe('login flow', () => {
       tx
         .select()
         .from(auditLogs)
-        .where(
-          and(eq(auditLogs.entityType, 'client_user'), eq(auditLogs.action, 'login_failed')),
-        ),
+        .where(and(eq(auditLogs.entityType, 'client_user'), eq(auditLogs.action, 'login_failed'))),
     );
     expect(logs.length).toBeGreaterThan(0);
   });
@@ -449,10 +443,7 @@ async function clearConsentRecordsForUser(tenantId: string, subjectId: string) {
     await tx
       .delete(consentRecords)
       .where(
-        and(
-          eq(consentRecords.subjectType, 'client_user'),
-          eq(consentRecords.subjectId, subjectId),
-        ),
+        and(eq(consentRecords.subjectType, 'client_user'), eq(consentRecords.subjectId, subjectId)),
       );
   });
 }
@@ -602,8 +593,9 @@ describe('152-ФЗ: DSAR — exportMyData / requestAccountDeletion', () => {
     expect(profile!.clientId).toBe(c.id);
 
     // Хотя бы одно активное согласие — pdn_processing.
-    expect(consents.some((x) => x.consentType === 'pdn_processing' && x.revokedAt === null))
-      .toBe(true);
+    expect(consents.some((x) => x.consentType === 'pdn_processing' && x.revokedAt === null)).toBe(
+      true,
+    );
 
     // Связанные коллекции — массивы (могут быть пустыми, но всегда массивы).
     expect(Array.isArray(tickets)).toBe(true);

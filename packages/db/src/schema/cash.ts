@@ -57,7 +57,9 @@ export const cashAccounts = pgTable(
     name: varchar('name', { length: 120 }).notNull(),
     kind: cashAccountKindEnum('kind').notNull(),
     /** Стартовый остаток на момент заведения счёта. */
-    openingBalanceKopecks: bigint('opening_balance_kopecks', { mode: 'bigint' }).notNull().default(0n),
+    openingBalanceKopecks: bigint('opening_balance_kopecks', { mode: 'bigint' })
+      .notNull()
+      .default(0n),
     /** Материализованный текущий остаток. Пересчитывается в cash/repository.ts. */
     balanceKopecks: bigint('balance_kopecks', { mode: 'bigint' }).notNull().default(0n),
     /**
@@ -144,7 +146,10 @@ export const cashTransactions = pgTable(
     invoiceId: uuid('invoice_id'),
     ticketId: uuid('ticket_id'),
     /** Источник записи: 'manual' (внёс менеджер) | 'payment' (авто из оплаты по заявке). */
-    source: varchar('source', { length: 20 }).$type<'manual' | 'payment'>().notNull().default('manual'),
+    source: varchar('source', { length: 20 })
+      .$type<'manual' | 'payment'>()
+      .notNull()
+      .default('manual'),
     ...timestamps,
   },
   (t) => [

@@ -160,7 +160,7 @@ export function ClientCardPage() {
       </header>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="bg-card lg:col-span-2 rounded-lg border p-4 md:p-6">
+        <section className="bg-card rounded-lg border p-4 md:p-6 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide">Реквизиты</h2>
           <dl className="mt-3 space-y-2 text-sm">
             {isLegal ? (
@@ -172,7 +172,7 @@ export function ClientCardPage() {
                 <Field label="Телефон">{c.phone ?? '—'}</Field>
                 <Field label="Email">{c.email ?? '—'}</Field>
                 {c.subtype === 'budget' && (
-                  <div className="border-l-2 border-accent/40 mt-3 space-y-2 pl-3">
+                  <div className="border-accent/40 mt-3 space-y-2 border-l-2 pl-3">
                     <div className="text-muted-foreground text-xs uppercase">
                       Счета казначейства
                     </div>
@@ -209,12 +209,10 @@ export function ClientCardPage() {
               <li className="text-muted-foreground text-sm">Нет контактов</li>
             ) : (
               c.contacts.map((ct) => (
-                <li key={ct.id} className="border-l-2 border-border pl-3">
+                <li key={ct.id} className="border-border border-l-2 pl-3">
                   <div className="flex items-center gap-1.5 text-sm font-medium">
                     {ct.fullName ?? '—'}
-                    {ct.isPrimary && (
-                      <Star className="text-warning h-3.5 w-3.5 fill-current" />
-                    )}
+                    {ct.isPrimary && <Star className="text-warning h-3.5 w-3.5 fill-current" />}
                   </div>
                   {ct.position && (
                     <div className="text-muted-foreground text-xs">{ct.position}</div>
@@ -249,7 +247,7 @@ export function ClientCardPage() {
 
       <section className="bg-card rounded-lg border">
         <div className="flex items-center justify-between p-4 md:p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
             <Wrench className="h-4 w-4" />
             Техника клиента ({assets.data?.length ?? 0})
           </h2>
@@ -400,7 +398,7 @@ function AddContactInline({ clientId }: { clientId: string }) {
         type="text"
         placeholder="ФИО (зашифрованное)"
         {...form.register('fullName')}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
       />
       {form.formState.errors.fullName && (
         <div className="text-destructive text-xs">{form.formState.errors.fullName.message}</div>
@@ -409,7 +407,7 @@ function AddContactInline({ clientId }: { clientId: string }) {
         type="tel"
         placeholder="Телефон (зашифрованный)"
         {...form.register('phone')}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
       />
       {form.formState.errors.phone && (
         <div className="text-destructive text-xs">{form.formState.errors.phone.message}</div>
@@ -418,7 +416,7 @@ function AddContactInline({ clientId }: { clientId: string }) {
         type="email"
         placeholder="Email"
         {...form.register('email')}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
       />
       {form.formState.errors.email && (
         <div className="text-destructive text-xs">{form.formState.errors.email.message}</div>
@@ -427,9 +425,9 @@ function AddContactInline({ clientId }: { clientId: string }) {
         type="text"
         placeholder="Должность"
         {...form.register('position')}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
       />
-      <label className="text-xs flex items-center gap-1">
+      <label className="flex items-center gap-1 text-xs">
         <input type="checkbox" {...form.register('isPrimary')} />
         Главный контакт
       </label>

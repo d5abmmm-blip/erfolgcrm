@@ -27,10 +27,7 @@ export function salesAnalyticsQuery(db: Db, tenant: ResolvedTenant, period: repo
   return repo.salesAnalytics(db, tenant.id, period);
 }
 
-export async function createSaleCmd(
-  ctx: CmdCtx,
-  input: Omit<repo.CreateSaleInput, 'createdBy'>,
-) {
+export async function createSaleCmd(ctx: CmdCtx, input: Omit<repo.CreateSaleInput, 'createdBy'>) {
   let result;
   try {
     result = await repo.createSale(ctx.db, ctx.tenant.id, {

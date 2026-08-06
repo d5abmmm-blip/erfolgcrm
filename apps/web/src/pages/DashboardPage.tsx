@@ -176,7 +176,7 @@ function DirectorDashboard() {
       )}
 
       {metricsQ.error && (
-        <div className="bg-destructive/10 text-destructive rounded-lg border border-destructive/30 p-4 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-lg border p-4 text-sm">
           Не удалось загрузить метрики: {metricsQ.error.message}
         </div>
       )}
@@ -221,11 +221,7 @@ function DirectorDashboard() {
             <MetricTile
               title="Активные заявки"
               value={formatNumber(m.activeTicketsCount)}
-              hint={
-                m.slaAtRiskCount > 0
-                  ? `На грани SLA: ${m.slaAtRiskCount}`
-                  : 'все по плану'
-              }
+              hint={m.slaAtRiskCount > 0 ? `На грани SLA: ${m.slaAtRiskCount}` : 'все по плану'}
               tone={m.slaAtRiskCount > 0 ? 'warning' : 'default'}
               icon={Clock}
               href="/tickets"
@@ -310,9 +306,7 @@ function OverdueInvoicesCard({
           <span
             className={cn(
               'grid h-8 w-8 place-items-center rounded-lg',
-              rows.length > 0
-                ? 'bg-destructive/12 text-destructive'
-                : 'bg-success/12 text-success',
+              rows.length > 0 ? 'bg-destructive/12 text-destructive' : 'bg-success/12 text-success',
             )}
           >
             <Receipt className="h-4 w-4" />
@@ -324,10 +318,7 @@ function OverdueInvoicesCard({
             </span>
           )}
         </h3>
-        <Link
-          href="/invoices?status=overdue"
-          className="text-primary text-sm hover:underline"
-        >
+        <Link href="/invoices?status=overdue" className="text-primary text-sm hover:underline">
           Все →
         </Link>
       </div>
@@ -425,9 +416,7 @@ function SlaAtRiskCard({
                 <span
                   className={cn(
                     'rounded px-2 py-0.5 text-xs font-medium tabular-nums',
-                    overdue
-                      ? 'bg-destructive/15 text-destructive'
-                      : 'bg-warning/15 text-warning',
+                    overdue ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning',
                   )}
                 >
                   {overdue
@@ -454,14 +443,7 @@ interface MetricTileProps {
   href?: string;
 }
 
-function MetricTile({
-  title,
-  value,
-  hint,
-  tone = 'default',
-  icon: Icon,
-  href,
-}: MetricTileProps) {
+function MetricTile({ title, value, hint, tone = 'default', icon: Icon, href }: MetricTileProps) {
   // Цвет = смысл: зелёный «всё хорошо», янтарный «обрати внимание»,
   // красный «горит», голубой — нейтральная рабочая метрика.
   const TONE = {
@@ -496,7 +478,7 @@ function MetricTile({
     <div
       className={cn(
         'bg-card relative flex h-full flex-col gap-2.5 overflow-hidden rounded-xl border p-4 shadow-sm transition-all',
-        href && 'hover:border-primary/50 hover:shadow-md cursor-pointer',
+        href && 'hover:border-primary/50 cursor-pointer hover:shadow-md',
       )}
     >
       {/* Цветное «ребро» слева — сигнал считывается боковым зрением. */}
@@ -524,13 +506,7 @@ function MetricTile({
   return href ? <Link href={href}>{content}</Link> : content;
 }
 
-function PeriodTabs({
-  value,
-  onChange,
-}: {
-  value: Period;
-  onChange: (p: Period) => void;
-}) {
+function PeriodTabs({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   const periods: Period[] = ['today', 'week', 'month', 'quarter'];
   return (
     <div className="bg-secondary inline-flex rounded-md p-0.5 text-xs">
@@ -567,7 +543,10 @@ function SimpleDashboard({ role }: { role: 'director' | 'dispatcher' | 'engineer
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/tickets" className="bg-card hover:border-primary/50 rounded-lg border p-4 transition">
+        <Link
+          href="/tickets"
+          className="bg-card hover:border-primary/50 rounded-lg border p-4 transition"
+        >
           <div className="text-muted-foreground text-xs uppercase">Перейти</div>
           <div className="mt-1 text-lg font-semibold">Заявки</div>
         </Link>
@@ -594,16 +573,46 @@ function DispatcherDashboard() {
       <AiDailySummaryCard />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <AttentionTile label="Заявки на разбор" value={b?.ticketsAttention ?? 0} href="/tickets" icon={Ticket} />
-        <AttentionTile label="Просрочено ТО" value={b?.maintenanceOverdue ?? 0} href="/maintenance" icon={CalendarCheck} bad />
-        <AttentionTile label="Просроченные счета" value={b?.invoicesOverdue ?? 0} href="/finance/invoices" icon={Receipt} bad />
-        <AttentionTile label="Мало на складе" value={b?.inventoryLowStock ?? 0} href="/inventory" icon={Package} bad />
+        <AttentionTile
+          label="Заявки на разбор"
+          value={b?.ticketsAttention ?? 0}
+          href="/tickets"
+          icon={Ticket}
+        />
+        <AttentionTile
+          label="Просрочено ТО"
+          value={b?.maintenanceOverdue ?? 0}
+          href="/maintenance"
+          icon={CalendarCheck}
+          bad
+        />
+        <AttentionTile
+          label="Просроченные счета"
+          value={b?.invoicesOverdue ?? 0}
+          href="/finance/invoices"
+          icon={Receipt}
+          bad
+        />
+        <AttentionTile
+          label="Мало на складе"
+          value={b?.inventoryLowStock ?? 0}
+          href="/inventory"
+          icon={Package}
+          bad
+        />
         <AttentionTile label="Новые лиды" value={b?.leadsNew ?? 0} href="/leads" icon={Target} />
-        <AttentionTile label="События сегодня" value={b?.calendarToday ?? 0} href="/calendar" icon={CalendarDays} />
+        <AttentionTile
+          label="События сегодня"
+          value={b?.calendarToday ?? 0}
+          href="/calendar"
+          icon={CalendarDays}
+        />
       </div>
 
       <div>
-        <div className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">Быстрые переходы</div>
+        <div className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
+          Быстрые переходы
+        </div>
         <div className="flex flex-wrap gap-2">
           {(
             [
@@ -646,7 +655,7 @@ function AttentionTile({
     <Link
       href={href}
       className={cn(
-        'bg-card relative flex items-center justify-between gap-3 overflow-hidden rounded-lg border p-4 transition hover:border-primary/50',
+        'bg-card hover:border-primary/50 relative flex items-center justify-between gap-3 overflow-hidden rounded-lg border p-4 transition',
         active && bad && 'border-destructive/30',
       )}
     >

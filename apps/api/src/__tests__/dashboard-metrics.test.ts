@@ -29,10 +29,7 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket, changeStatus } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
   createDraft as createInvoiceDraft,
   transitionToIssued,
@@ -82,9 +79,7 @@ async function clearTestData(): Promise<void> {
       `);
       await tx.delete(invoices).where(like(invoices.notes, `${TEST_PREFIX}%`));
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
-      await tx
-        .delete(inventoryItems)
-        .where(like(inventoryItems.name, `${TEST_PREFIX}%`));
+      await tx.delete(inventoryItems).where(like(inventoryItems.name, `${TEST_PREFIX}%`));
       await tx
         .delete(maintenanceSchedules)
         .where(like(maintenanceSchedules.notes, `${TEST_PREFIX}%`));
@@ -118,10 +113,7 @@ async function createBilledTicket(
     // мы потом поправим closed_at прямым UPDATE.
     await changeStatus(getDb(), tenantId, null, ticketId, 'closed');
     await withTenantTx(getDb(), tenantId, async (tx) => {
-      await tx
-        .update(tickets)
-        .set({ closedAt: options.closedAt })
-        .where(eq(tickets.id, ticketId));
+      await tx.update(tickets).set({ closedAt: options.closedAt }).where(eq(tickets.id, ticketId));
     });
   }
   return { ticketId, workOrderId: wo.id };
@@ -220,9 +212,7 @@ describe('dashboard.getMetrics', () => {
     const afterClose = await getMetrics(getDb(), erfolgId, { start, end });
 
     // Закрытый ticket не увеличивает активных (но может остаться меньше из-за GC)
-    expect(afterClose.activeTicketsCount).toBeLessThanOrEqual(
-      baseline.activeTicketsCount,
-    );
+    expect(afterClose.activeTicketsCount).toBeLessThanOrEqual(baseline.activeTicketsCount);
   });
 
   it('slaAtRisk: дедлайн в ближайшие 24 часа', async () => {
@@ -360,10 +350,16 @@ describe('dashboard.getNavBadgeCounts (бейджи навигации)', () => 
   it('staff: новый лид и событие на сегодня увеличивают счётчики (дельта)', async () => {
     const before = await getNavBadgeCounts(getDb(), erfolgId, 'dispatcher', 'u1');
     await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-new`, status: 'new' });
+      await tx
+        .insert(leads)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-new`, status: 'new' });
       // не-новый лид в счётчик попасть НЕ должен
-      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-contacted`, status: 'contacted' });
-      await tx.insert(calendarEvents).values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt`, eventDate: todayStr() });
+      await tx
+        .insert(leads)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-contacted`, status: 'contacted' });
+      await tx
+        .insert(calendarEvents)
+        .values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt`, eventDate: todayStr() });
     });
     const after = await getNavBadgeCounts(getDb(), erfolgId, 'dispatcher', 'u1');
     expect(after.leadsNew - before.leadsNew).toBe(1);
@@ -372,11 +368,20 @@ describe('dashboard.getNavBadgeCounts (бейджи навигации)', () => 
 
   it('инженер не видит лиды/календарь/счета (всегда 0)', async () => {
     await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-eng`, status: 'new' });
-      await tx.insert(calendarEvents).values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt-eng`, eventDate: todayStr() });
+      await tx
+        .insert(leads)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-eng`, status: 'new' });
+      await tx
+        .insert(calendarEvents)
+        .values({ tenantId: erfolgId, title: `${TEST_PREFIX}evt-eng`, eventDate: todayStr() });
     });
     // userId — валидный UUID (в проде это всегда ctx.session.userId); заявок на него нет.
-    const eng = await getNavBadgeCounts(getDb(), erfolgId, 'engineer', '00000000-0000-0000-0000-000000000001');
+    const eng = await getNavBadgeCounts(
+      getDb(),
+      erfolgId,
+      'engineer',
+      '00000000-0000-0000-0000-000000000001',
+    );
     expect(eng.leadsNew).toBe(0);
     expect(eng.calendarToday).toBe(0);
     expect(eng.invoicesOverdue).toBe(0);
@@ -392,7 +397,9 @@ describe('dashboard.getNavBadgeCounts (бейджи навигации)', () => 
   it('cross-tenant: demo не видит лид erfolg', async () => {
     const beforeDemo = await getNavBadgeCounts(getDb(), demoId, 'dispatcher', 'u1');
     await withTenantTx(getDb(), erfolgId, async (tx) => {
-      await tx.insert(leads).values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-iso`, status: 'new' });
+      await tx
+        .insert(leads)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}lead-iso`, status: 'new' });
     });
     const afterDemo = await getNavBadgeCounts(getDb(), demoId, 'dispatcher', 'u1');
     expect(afterDemo.leadsNew - beforeDemo.leadsNew).toBe(0);

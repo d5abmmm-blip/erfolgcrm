@@ -155,8 +155,7 @@ export function WarrantyFormPage() {
         href="/warranties"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К реестру гарантий
+        <ChevronLeft className="h-4 w-4" />К реестру гарантий
       </Link>
       <h1 className="text-xl font-semibold md:text-2xl">
         {editId ? 'Редактирование гарантии' : 'Новая гарантия'}

@@ -205,7 +205,9 @@ async function callOpenAi(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`);
+    throw new Error(
+      `LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`,
+    );
   }
 
   const data = (await res.json()) as ChatCompletionResponse;
@@ -288,7 +290,11 @@ function userContentToBlocks(content: string | LlmContentPart[]): AnthropicBlock
 export function toAnthropic(
   messages: LlmMessage[],
   tools: LlmFunctionTool[],
-): { system: string; messages: AnthropicMessage[]; tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> } {
+): {
+  system: string;
+  messages: AnthropicMessage[];
+  tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+} {
   const systemParts: string[] = [];
   const out: AnthropicMessage[] = [];
   const push = (role: 'user' | 'assistant', blocks: AnthropicBlock[]) => {
@@ -353,7 +359,9 @@ async function callAnthropic(
 ): Promise<LlmReply> {
   const { system, messages: amsgs, tools: atools } = toAnthropic(messages, tools);
   // base уже без хвостовых слэшей; путь Messages API — /v1/messages.
-  const url = cfg.baseUrl.endsWith('/v1') ? `${cfg.baseUrl}/messages` : `${cfg.baseUrl}/v1/messages`;
+  const url = cfg.baseUrl.endsWith('/v1')
+    ? `${cfg.baseUrl}/messages`
+    : `${cfg.baseUrl}/v1/messages`;
 
   let res: Response;
   try {
@@ -385,7 +393,9 @@ async function callAnthropic(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`);
+    throw new Error(
+      `LLM вернул ошибку HTTP ${res.status}: ${redactSecret(text.slice(0, 500), cfg.apiKey)}`,
+    );
   }
 
   const data = (await res.json()) as AnthropicResponse;

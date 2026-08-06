@@ -122,7 +122,11 @@ export function verifyLocalToken(args: {
   return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(args.sig, 'hex'));
 }
 
-function makeLocalUrl(op: 'put' | 'get', key: string, ttlSeconds: number): { url: string; exp: Date } {
+function makeLocalUrl(
+  op: 'put' | 'get',
+  key: string,
+  ttlSeconds: number,
+): { url: string; exp: Date } {
   const ctx = getLocalCtx();
   const expSec = Math.floor(Date.now() / 1000) + ttlSeconds;
   const sig = signLocal(ctx.secret, op, key, expSec);
@@ -138,7 +142,10 @@ async function localWrite(key: string, data: Buffer, mimeType: string): Promise<
   const file = safeFsPath(ctx.rootDir, key);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, data);
-  await writeFile(`${file}.meta.json`, JSON.stringify({ mimeType, uploadedAt: new Date().toISOString() }));
+  await writeFile(
+    `${file}.meta.json`,
+    JSON.stringify({ mimeType, uploadedAt: new Date().toISOString() }),
+  );
 }
 
 async function localRead(key: string): Promise<{ data: Buffer; mimeType: string } | null> {
@@ -152,7 +159,13 @@ async function localRead(key: string): Promise<{ data: Buffer; mimeType: string 
     const meta = JSON.parse(metaRaw) as { mimeType?: string };
     return { data, mimeType: meta.mimeType ?? 'application/octet-stream' };
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'ENOENT') return null;
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      (err as { code: string }).code === 'ENOENT'
+    )
+      return null;
     throw err;
   }
 }
@@ -191,7 +204,10 @@ export const localObjectStorage: ObjectStorage = {
   async remove(key) {
     const ctx = getLocalCtx();
     const file = safeFsPath(ctx.rootDir, key);
-    await Promise.all([unlink(file).catch(() => undefined), unlink(`${file}.meta.json`).catch(() => undefined)]);
+    await Promise.all([
+      unlink(file).catch(() => undefined),
+      unlink(`${file}.meta.json`).catch(() => undefined),
+    ]);
   },
 };
 
@@ -203,7 +219,8 @@ let cached: ObjectStorage | null = null;
 
 export function getObjectStorage(): ObjectStorage {
   if (cached) return cached;
-  const driver = process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === 'production' ? 's3' : 'local');
+  const driver =
+    process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === 'production' ? 's3' : 'local');
   // Prod-guard: локальный драйвер в production допустим ТОЛЬКО на смонтированном
   // персистентном томе. Признак намеренной настройки — явно заданный LOCAL_STORAGE_DIR
   // (абсолютный путь к тому, напр. /data/storage). Без него local в проде = файлы

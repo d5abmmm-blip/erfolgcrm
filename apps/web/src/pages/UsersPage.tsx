@@ -7,16 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
-import {
-  KeyRound,
-  Loader2,
-  Lock,
-  Pencil,
-  Plus,
-  Unlock,
-  UserCircle2,
-  X,
-} from 'lucide-react';
+import { KeyRound, Loader2, Lock, Pencil, Plus, Unlock, UserCircle2, X } from 'lucide-react';
 import { STAFF_POSITIONS, type StaffPosition } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -55,7 +46,7 @@ export function UsersPage() {
   if (me.data?.user.role !== 'director') {
     return (
       <div className="mx-auto max-w-2xl p-6">
-        <div className="bg-destructive/10 text-destructive rounded-lg border border-destructive/30 p-4 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-lg border p-4 text-sm">
           Раздел доступен только директору.
         </div>
       </div>
@@ -72,8 +63,8 @@ export function UsersPage() {
           <div>
             <h1 className="text-xl font-semibold md:text-2xl">Пользователи</h1>
             <p className="text-muted-foreground text-sm">
-              Сотрудники компании, имеющие доступ в систему. Логин неизменяем — для
-              переименования заведите нового и заблокируйте старого.
+              Сотрудники компании, имеющие доступ в систему. Логин неизменяем — для переименования
+              заведите нового и заблокируйте старого.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -82,7 +73,7 @@ export function UsersPage() {
                 type="checkbox"
                 checked={includeBlocked}
                 onChange={(e) => setIncludeBlocked(e.target.checked)}
-                className="rounded border-input"
+                className="border-input rounded"
               />
               Показывать заблокированных
             </label>
@@ -136,9 +127,7 @@ export function UsersPage() {
               <tr key={u.id} className={cn('hover:bg-muted/30', !u.isActive && 'opacity-60')}>
                 <td className="p-3">
                   <div className="font-medium">{u.fullName}</div>
-                  {u.position && (
-                    <div className="text-muted-foreground text-xs">{u.position}</div>
-                  )}
+                  {u.position && <div className="text-muted-foreground text-xs">{u.position}</div>}
                 </td>
                 <td className="p-3 font-mono text-xs">
                   <div>{u.username}</div>
@@ -174,16 +163,10 @@ export function UsersPage() {
                 </td>
                 <td className="p-3 text-right">
                   <div className="inline-flex gap-1">
-                    <IconButton
-                      title="Редактировать"
-                      onClick={() => setEditingUser(u)}
-                    >
+                    <IconButton title="Редактировать" onClick={() => setEditingUser(u)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </IconButton>
-                    <IconButton
-                      title="Сбросить пароль"
-                      onClick={() => setPwdUser(u)}
-                    >
+                    <IconButton title="Сбросить пароль" onClick={() => setPwdUser(u)}>
                       <KeyRound className="h-3.5 w-3.5" />
                     </IconButton>
                     <BlockToggle user={u} disabled={u.id === me.data?.user.id} />
@@ -355,8 +338,8 @@ function IssuedPasswordDialog({
       <div className="bg-card w-full max-w-md rounded-lg border p-5 shadow-lg">
         <h2 className="text-base font-semibold">Пароль для входа выдан</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          {fullName} активирован. Этим аккаунтом ещё не входили, поэтому система задала
-          новый пароль.
+          {fullName} активирован. Этим аккаунтом ещё не входили, поэтому система задала новый
+          пароль.
         </p>
         <div className="bg-muted/50 mt-3 space-y-1 rounded-md border p-3 font-mono text-sm">
           <div>
@@ -369,8 +352,8 @@ function IssuedPasswordDialog({
           </div>
         </div>
         <div className="text-warning mt-3 text-xs font-medium">
-          Передайте пароль сотруднику сейчас — больше он не покажется. Если потеряете,
-          выдайте новый кнопкой «Сбросить пароль».
+          Передайте пароль сотруднику сейчас — больше он не покажется. Если потеряете, выдайте новый
+          кнопкой «Сбросить пароль».
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button
@@ -492,7 +475,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
             />
           </Field>
           <Field label="Пароль" required hint="Минимум 8 символов">
@@ -501,7 +484,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
             />
           </Field>
         </div>
@@ -511,14 +494,14 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </Field>
         <Field label="Должность" hint="Выбирается из списка">
           <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           >
             <option value="">— не указана —</option>
             {STAFF_POSITIONS.map((p) => (
@@ -534,7 +517,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           <Field label="Телефон">
@@ -542,7 +525,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
         </div>
@@ -550,7 +533,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           >
             <option value="director">Директор</option>
             <option value="dispatcher">Диспетчер</option>
@@ -558,7 +541,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           </select>
         </Field>
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
             {error}
           </div>
         )}
@@ -614,12 +597,7 @@ function EditUserModal({
       fullName,
       // '' → очистить (null); должность из списка → сохранить;
       // прежнее значение вне списка → не трогаем (undefined), чтобы не потерять.
-      position:
-        position === ''
-          ? null
-          : isKnownPosition
-            ? (position as StaffPosition)
-            : undefined,
+      position: position === '' ? null : isKnownPosition ? (position as StaffPosition) : undefined,
       email: email || null,
       phone: phone || null,
       role,
@@ -645,14 +623,14 @@ function EditUserModal({
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </Field>
         <Field label="Должность" hint="Выбирается из списка">
           <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           >
             <option value="">— не указана —</option>
             {position && !(STAFF_POSITIONS as readonly string[]).includes(position) && (
@@ -671,7 +649,7 @@ function EditUserModal({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
           <Field label="Телефон">
@@ -679,7 +657,7 @@ function EditUserModal({
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </Field>
         </div>
@@ -687,7 +665,7 @@ function EditUserModal({
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           >
             <option value="director">Директор</option>
             <option value="dispatcher">Диспетчер</option>
@@ -696,7 +674,7 @@ function EditUserModal({
         </Field>
         {user.role === 'engineer' && <EngineerProfileSection userId={user.id} />}
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
             {error}
           </div>
         )}
@@ -759,11 +737,11 @@ function ResetPasswordModal({
             onChange={(e) => setPwd(e.target.value)}
             required
             minLength={8}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
           />
         </Field>
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
             {error}
           </div>
         )}

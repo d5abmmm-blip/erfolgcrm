@@ -80,7 +80,11 @@ async function balanceOf(accountId: string): Promise<bigint> {
 async function cashTxForPayment(paymentId: string) {
   return withTenantTx(getDb(), erfolgId, (tx) =>
     tx
-      .select({ id: cashTransactions.id, amountKopecks: cashTransactions.amountKopecks, accountId: cashTransactions.accountId })
+      .select({
+        id: cashTransactions.id,
+        amountKopecks: cashTransactions.amountKopecks,
+        accountId: cashTransactions.accountId,
+      })
       .from(cashTransactions)
       .where(and(eq(cashTransactions.paymentId, paymentId), isNull(cashTransactions.deletedAt))),
   );
@@ -116,15 +120,23 @@ describe('payments → cash sync (этап B)', () => {
 
     const t1 = await newTicket();
     const p1 = await addPayment(getDb(), erfolgId, {
-      ticketId: t1, amountKopecks: 10_000n, method: 'card', paidAt: new Date(),
-      comment: `${TEST_PREFIX}card`, userId: null,
+      ticketId: t1,
+      amountKopecks: 10_000n,
+      method: 'card',
+      paidAt: new Date(),
+      comment: `${TEST_PREFIX}card`,
+      userId: null,
     });
     expect((await cashTxForPayment(p1.id))[0]?.accountId).toBe(cardAcc);
 
     const t2 = await newTicket();
     const p2 = await addPayment(getDb(), erfolgId, {
-      ticketId: t2, amountKopecks: 20_000n, method: 'bank_transfer', paidAt: new Date(),
-      comment: `${TEST_PREFIX}bank`, userId: null,
+      ticketId: t2,
+      amountKopecks: 20_000n,
+      method: 'bank_transfer',
+      paidAt: new Date(),
+      comment: `${TEST_PREFIX}bank`,
+      userId: null,
     });
     expect((await cashTxForPayment(p2.id))[0]?.accountId).toBe(bankAcc);
   });
@@ -132,14 +144,23 @@ describe('payments → cash sync (этап B)', () => {
   it('повторный sync платежа не задваивает доход (идемпотентность)', async () => {
     const ticketId = await newTicket();
     const res = await addPayment(getDb(), erfolgId, {
-      ticketId, amountKopecks: 50_000n, method: 'cash', paidAt: new Date(),
-      comment: `${TEST_PREFIX}idem`, userId: null,
+      ticketId,
+      amountKopecks: 50_000n,
+      method: 'cash',
+      paidAt: new Date(),
+      comment: `${TEST_PREFIX}idem`,
+      userId: null,
     });
     // имитируем повторный вызов синхронизации (как при ретрае транзакции)
     await withTenantTx(getDb(), erfolgId, (tx) =>
       syncCashFromPaymentInTx(tx, erfolgId, {
-        id: res.id, ticketId, invoiceId: null, amountKopecks: 50_000n,
-        method: 'cash', paidAt: new Date(), userId: null,
+        id: res.id,
+        ticketId,
+        invoiceId: null,
+        amountKopecks: 50_000n,
+        method: 'cash',
+        paidAt: new Date(),
+        userId: null,
       }),
     );
     expect(await cashTxForPayment(res.id)).toHaveLength(1);
@@ -150,8 +171,12 @@ describe('payments → cash sync (этап B)', () => {
     const accId = await accountByMethod('cash');
     const before = await balanceOf(accId);
     const res = await addPayment(getDb(), erfolgId, {
-      ticketId, amountKopecks: 80_000n, method: 'cash', paidAt: new Date(),
-      comment: `${TEST_PREFIX}del`, userId: null,
+      ticketId,
+      amountKopecks: 80_000n,
+      method: 'cash',
+      paidAt: new Date(),
+      comment: `${TEST_PREFIX}del`,
+      userId: null,
     });
     expect(await balanceOf(accId)).toBe(before + 80_000n);
 

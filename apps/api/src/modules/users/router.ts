@@ -34,10 +34,7 @@ const usernameSchema = z
   .max(64)
   .regex(/^[a-z0-9._-]+$/i, 'Только латиница, цифры, точка, дефис, подчёркивание');
 
-const passwordSchema = z
-  .string()
-  .min(8, 'Минимум 8 символов')
-  .max(200, 'Слишком длинный пароль');
+const passwordSchema = z.string().min(8, 'Минимум 8 символов').max(200, 'Слишком длинный пароль');
 
 const emailSchema = z
   .string()
@@ -224,12 +221,7 @@ export const usersRouter = router({
         });
       }
       try {
-        const result = await setUserActive(
-          ctx.db,
-          ctx.tenant.id,
-          input.userId,
-          input.isActive,
-        );
+        const result = await setUserActive(ctx.db, ctx.tenant.id, input.userId, input.isActive);
         if (!result) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
         }
@@ -260,12 +252,7 @@ export const usersRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const ok = await resetPassword(
-        ctx.db,
-        ctx.tenant.id,
-        input.userId,
-        input.newPassword,
-      );
+      const ok = await resetPassword(ctx.db, ctx.tenant.id, input.userId, input.newPassword);
       if (!ok) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Пользователь не найден' });
       }
@@ -346,7 +333,8 @@ export const usersRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const result = await updateUserPayout(ctx.db, ctx.tenant.id, input.userId, {
-        baseSalaryKopecks: input.baseSalaryKopecks !== null ? BigInt(input.baseSalaryKopecks) : null,
+        baseSalaryKopecks:
+          input.baseSalaryKopecks !== null ? BigInt(input.baseSalaryKopecks) : null,
         bonusPercent: input.bonusPercent,
       });
       if (!result) {

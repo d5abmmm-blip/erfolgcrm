@@ -12,12 +12,7 @@
  *     (для UI-бейджа диспетчера и для проверки в tickets/service.ts).
  */
 import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
-import {
-  engineerAttestations,
-  users,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { engineerAttestations, users, withTenantTx, type Db } from '@erfolg/db';
 
 export type AttestationStatus = 'active' | 'expiring_soon' | 'expired';
 
@@ -207,9 +202,7 @@ export async function updateAttestation(
     await tx
       .update(engineerAttestations)
       .set(set)
-      .where(
-        and(eq(engineerAttestations.id, id), isNull(engineerAttestations.deletedAt)),
-      );
+      .where(and(eq(engineerAttestations.id, id), isNull(engineerAttestations.deletedAt)));
   });
   return getAttestationById(db, tenantId, id);
 }
@@ -223,9 +216,7 @@ export async function softDeleteAttestation(
     const updated = await tx
       .update(engineerAttestations)
       .set({ deletedAt: new Date() })
-      .where(
-        and(eq(engineerAttestations.id, id), isNull(engineerAttestations.deletedAt)),
-      )
+      .where(and(eq(engineerAttestations.id, id), isNull(engineerAttestations.deletedAt)))
       .returning({ id: engineerAttestations.id });
     return updated.length > 0;
   });

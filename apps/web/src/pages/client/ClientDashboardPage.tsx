@@ -43,7 +43,7 @@ export function ClientDashboardPage() {
     );
   }
   if (dash.error || !dash.data) {
-    return <div className="p-6 text-destructive text-sm">Не удалось загрузить данные</div>;
+    return <div className="text-destructive p-6 text-sm">Не удалось загрузить данные</div>;
   }
   const d = dash.data;
 
@@ -118,20 +118,13 @@ export function ClientDashboardPage() {
         ) : (
           <div className="bg-card divide-y rounded-md border">
             {d.recentInvoices.map((i) => (
-              <div
-                key={i.id}
-                className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
-              >
+              <div key={i.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{i.invoiceNumber}</div>
-                  <div className="text-muted-foreground text-xs">
-                    Срок оплаты: {i.dueDate}
-                  </div>
+                  <div className="text-muted-foreground text-xs">Срок оплаты: {i.dueDate}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">
-                    {formatRubFromKopecks(i.totalAmountKopecks)}
-                  </div>
+                  <div className="font-medium">{formatRubFromKopecks(i.totalAmountKopecks)}</div>
                   <div className="text-muted-foreground text-xs">
                     {INVOICE_STATUS_LABEL[i.status] ?? i.status}
                   </div>

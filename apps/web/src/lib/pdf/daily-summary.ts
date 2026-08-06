@@ -124,9 +124,7 @@ function metricBlock(label: string, value: string, hint?: string): Content {
             stack: [
               { text: label, fontSize: 8, color: BRAND_GREY, margin: [0, 0, 0, 2] },
               { text: value, fontSize: 14, bold: true },
-              hint
-                ? { text: hint, fontSize: 8, color: BRAND_GREY, margin: [0, 2, 0, 0] }
-                : '',
+              hint ? { text: hint, fontSize: 8, color: BRAND_GREY, margin: [0, 2, 0, 0] } : '',
             ],
             margin: [8, 8, 8, 8],
           },
@@ -166,11 +164,7 @@ function metricsGrid(input: DailySummaryInput): Content {
         formatRubFromKopecks(m.receivablesTotalKopecks),
         `Просрочка: ${formatRubFromKopecks(m.overdueTotalKopecks)}`,
       ),
-      metricBlock(
-        'ЗАЯВКИ',
-        String(m.activeTicketsCount),
-        `SLA в риске: ${m.slaAtRiskCount}`,
-      ),
+      metricBlock('ЗАЯВКИ', String(m.activeTicketsCount), `SLA в риске: ${m.slaAtRiskCount}`),
     ],
     columnGap: 6,
   };
@@ -287,7 +281,12 @@ function lowStockTable(input: DailySummaryInput): Content {
       headerRows: 1,
       widths: ['*', 'auto', 'auto', 'auto'],
       body: [
-        [headerCell('Позиция'), headerCell('Остаток'), headerCell('Минимум'), headerCell('Дефицит')],
+        [
+          headerCell('Позиция'),
+          headerCell('Остаток'),
+          headerCell('Минимум'),
+          headerCell('Дефицит'),
+        ],
         ...input.lowStock.map((r) => [
           {
             text: r.sku ? `${r.name} (${r.sku})` : r.name,
@@ -338,10 +337,7 @@ function closedTodayTable(input: DailySummaryInput): Content {
   if (input.closedTicketsToday.length === 0) {
     return emptyMessage('За день закрытых заявок нет.');
   }
-  const total = input.closedTicketsToday.reduce(
-    (acc, r) => acc + BigInt(r.totalAmountKopecks),
-    0n,
-  );
+  const total = input.closedTicketsToday.reduce((acc, r) => acc + BigInt(r.totalAmountKopecks), 0n);
   return {
     table: {
       headerRows: 1,

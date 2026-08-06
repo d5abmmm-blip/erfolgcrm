@@ -15,13 +15,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { and, desc, eq, isNull, like, sql } from 'drizzle-orm';
 import { hash } from 'argon2';
-import {
-  auditLogs,
-  getDb,
-  getTenantEncryptionKey,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { auditLogs, getDb, getTenantEncryptionKey, users, withTenantTx } from '@erfolg/db';
 import { TRPCError } from '@trpc/server';
 import { ensureSeed } from './setup';
 import { authRouter } from '../modules/auth/router';
@@ -200,7 +194,9 @@ describe('auth.twoFactor.setup.confirm', () => {
 });
 
 describe('auth.login + auth.verify2fa', () => {
-  async function setup2faOnUser(u: CreatedUser): Promise<{ secret: string; recoveryCodes: string[] }> {
+  async function setup2faOnUser(
+    u: CreatedUser,
+  ): Promise<{ secret: string; recoveryCodes: string[] }> {
     const secret = generateTotpSecret();
     const codes = generateRecoveryCodes();
     const hashes = await hashRecoveryCodes(codes);

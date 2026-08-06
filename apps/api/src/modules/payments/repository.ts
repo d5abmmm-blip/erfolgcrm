@@ -10,14 +10,7 @@
  * и пересчитывается status счёта (issued ↔ partially_paid ↔ paid) в той же транзакции.
  */
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import {
-  invoices,
-  payments,
-  tickets,
-  withTenantTx,
-  workOrders,
-  type Db,
-} from '@erfolg/db';
+import { invoices, payments, tickets, withTenantTx, workOrders, type Db } from '@erfolg/db';
 import { recomputeStatusFromPaid } from '../invoices/repository';
 import { withDbRetry } from '../../lib/db-retry';
 import { logger } from '../../lib/logger';
@@ -165,7 +158,12 @@ async function recalcInvoicePaidInTx(
   invoiceId: string,
 ): Promise<bigint> {
   // Lock invoice строку
-  await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.id, invoiceId)).for('update').limit(1);
+  await tx
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .for('update')
+    .limit(1);
   const sumRows = await tx
     .select({ sum: sql<string>`COALESCE(SUM(${payments.amountKopecks}), 0)` })
     .from(payments)
@@ -235,101 +233,105 @@ export async function addPayment(
   // целиком — withDbRetry гарантирует это до 5 попыток с экспоненциальным backoff
   // (25 → 75 → 225 → 675 → 2025 ms ±20% jitter).
   // 3 попытки оказались мало при 3-way contention в нагрузочных тестах.
-  return withDbRetry('addPayment', () =>
-    withTenantTx(db, tenantId, async (tx) => {
-      if (input.invoiceId) {
-        const check = await invoiceMatchesTicket(tx, input.invoiceId, input.ticketId);
-        if (!check.ok) {
-          throw new Error('addPayment: invoice не найден или не принадлежит этому тикету');
+  return withDbRetry(
+    'addPayment',
+    () =>
+      withTenantTx(db, tenantId, async (tx) => {
+        if (input.invoiceId) {
+          const check = await invoiceMatchesTicket(tx, input.invoiceId, input.ticketId);
+          if (!check.ok) {
+            throw new Error('addPayment: invoice не найден или не принадлежит этому тикету');
+          }
+          if (check.status === 'cancelled') {
+            throw new Error('addPayment: нельзя оплачивать отменённый счёт');
+          }
+          if (check.status === 'draft') {
+            throw new Error(
+              'addPayment: нельзя оплатить черновик. Сначала выставьте счёт (issue).',
+            );
+          }
+          // Берём EXCLUSIVE lock на invoice СРАЗУ, до INSERT в payments. Иначе INSERT
+          // возьмёт SHARE-lock через FK, потом recompute попробует upgrade до EXCLUSIVE,
+          // и при 3+ конкурентных платежах гарантирован lock-upgrade deadlock.
+          await tx
+            .select({ id: invoices.id })
+            .from(invoices)
+            .where(eq(invoices.id, input.invoiceId))
+            .for('update')
+            .limit(1);
         }
-        if (check.status === 'cancelled') {
-          throw new Error('addPayment: нельзя оплачивать отменённый счёт');
-        }
-        if (check.status === 'draft') {
-          throw new Error('addPayment: нельзя оплатить черновик. Сначала выставьте счёт (issue).');
-        }
-        // Берём EXCLUSIVE lock на invoice СРАЗУ, до INSERT в payments. Иначе INSERT
-        // возьмёт SHARE-lock через FK, потом recompute попробует upgrade до EXCLUSIVE,
-        // и при 3+ конкурентных платежах гарантирован lock-upgrade deadlock.
-        await tx
-          .select({ id: invoices.id })
-          .from(invoices)
-          .where(eq(invoices.id, input.invoiceId))
-          .for('update')
-          .limit(1);
-      }
 
-      // Идемпотентность: если задан externalPaymentId, сначала пробуем найти существующую запись.
-      // ON CONFLICT (tenant_id, invoice_id, external_payment_id) DO NOTHING + RETURNING вернёт
-      // пустую строку при конфликте — тогда читаем существующий id.
-      // Note: UNIQUE-индекс по (tenant_id, invoice_id, external_payment_id) WHERE external_payment_id IS NOT NULL
-      // создаётся миграцией другого агента. До его наката ON CONFLICT не сработает — но и addPayment
-      // с externalPaymentId не вызывается до миграции.
-      if (input.externalPaymentId !== undefined && input.externalPaymentId !== null) {
-        const existing = await tx
-          .select({ id: payments.id })
-          .from(payments)
-          .where(
-            and(
-              eq(payments.tenantId, tenantId),
-              input.invoiceId
-                ? eq(payments.invoiceId, input.invoiceId)
-                : isNull(payments.invoiceId),
-              eq(payments.externalPaymentId, input.externalPaymentId),
-            ),
-          )
-          .limit(1);
-        if (existing.length > 0) {
-          const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
-          const invoicePaid = input.invoiceId
-            ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
-            : null;
-          return {
-            skipped: true,
-            id: existing[0]!.id,
-            paidTotalKopecks: total.toString(),
-            invoicePaidKopecks: invoicePaid,
-          };
+        // Идемпотентность: если задан externalPaymentId, сначала пробуем найти существующую запись.
+        // ON CONFLICT (tenant_id, invoice_id, external_payment_id) DO NOTHING + RETURNING вернёт
+        // пустую строку при конфликте — тогда читаем существующий id.
+        // Note: UNIQUE-индекс по (tenant_id, invoice_id, external_payment_id) WHERE external_payment_id IS NOT NULL
+        // создаётся миграцией другого агента. До его наката ON CONFLICT не сработает — но и addPayment
+        // с externalPaymentId не вызывается до миграции.
+        if (input.externalPaymentId !== undefined && input.externalPaymentId !== null) {
+          const existing = await tx
+            .select({ id: payments.id })
+            .from(payments)
+            .where(
+              and(
+                eq(payments.tenantId, tenantId),
+                input.invoiceId
+                  ? eq(payments.invoiceId, input.invoiceId)
+                  : isNull(payments.invoiceId),
+                eq(payments.externalPaymentId, input.externalPaymentId),
+              ),
+            )
+            .limit(1);
+          if (existing.length > 0) {
+            const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
+            const invoicePaid = input.invoiceId
+              ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
+              : null;
+            return {
+              skipped: true,
+              id: existing[0]!.id,
+              paidTotalKopecks: total.toString(),
+              invoicePaidKopecks: invoicePaid,
+            };
+          }
         }
-      }
 
-      const inserted = await tx
-        .insert(payments)
-        .values({
-          tenantId,
+        const inserted = await tx
+          .insert(payments)
+          .values({
+            tenantId,
+            ticketId: input.ticketId,
+            invoiceId: input.invoiceId ?? null,
+            amountKopecks: input.amountKopecks,
+            method: input.method,
+            paidAt: input.paidAt,
+            comment: input.comment ?? null,
+            userId: input.userId,
+            externalPaymentId: input.externalPaymentId ?? null,
+          })
+          .returning({ id: payments.id });
+        const id = inserted[0]?.id;
+        if (!id) throw new Error('addPayment: insert returned nothing');
+        const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
+        const invoicePaid = input.invoiceId
+          ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
+          : null;
+        // Авто-доход в кассу (идемпотентно по payment_id; no-op если нет счетов).
+        await syncCashFromPaymentInTx(tx, tenantId, {
+          id,
           ticketId: input.ticketId,
           invoiceId: input.invoiceId ?? null,
           amountKopecks: input.amountKopecks,
           method: input.method,
           paidAt: input.paidAt,
-          comment: input.comment ?? null,
           userId: input.userId,
-          externalPaymentId: input.externalPaymentId ?? null,
-        })
-        .returning({ id: payments.id });
-      const id = inserted[0]?.id;
-      if (!id) throw new Error('addPayment: insert returned nothing');
-      const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
-      const invoicePaid = input.invoiceId
-        ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
-        : null;
-      // Авто-доход в кассу (идемпотентно по payment_id; no-op если нет счетов).
-      await syncCashFromPaymentInTx(tx, tenantId, {
-        id,
-        ticketId: input.ticketId,
-        invoiceId: input.invoiceId ?? null,
-        amountKopecks: input.amountKopecks,
-        method: input.method,
-        paidAt: input.paidAt,
-        userId: input.userId,
-      });
-      return {
-        skipped: false,
-        id,
-        paidTotalKopecks: total.toString(),
-        invoicePaidKopecks: invoicePaid,
-      };
-    }),
+        });
+        return {
+          skipped: false,
+          id,
+          paidTotalKopecks: total.toString(),
+          invoicePaidKopecks: invoicePaid,
+        };
+      }),
     5,
   );
 }
@@ -383,11 +385,7 @@ export async function getPaidTotal(
 }
 
 /** Список последних платежей по tenant — для дашборда. */
-export async function listRecent(
-  db: Db,
-  tenantId: string,
-  limit = 50,
-): Promise<PaymentDto[]> {
+export async function listRecent(db: Db, tenantId: string, limit = 50): Promise<PaymentDto[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({

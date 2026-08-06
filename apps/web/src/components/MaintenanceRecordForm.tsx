@@ -14,22 +14,13 @@ interface Props {
 }
 
 const schema = z.object({
-  summary: z
-    .string()
-    .trim()
-    .min(2, 'Кратко опишите что сделано'),
+  summary: z.string().trim().min(2, 'Кратко опишите что сделано'),
   notes: z.string().trim(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-export function MaintenanceRecordForm({
-  assetId,
-  scheduleId,
-  ticketId,
-  onClose,
-  onSaved,
-}: Props) {
+export function MaintenanceRecordForm({ assetId, scheduleId, ticketId, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
@@ -78,7 +69,7 @@ export function MaintenanceRecordForm({
               autoFocus
               placeholder="Пример: Замена фильтра HEPA, проверка калибровки"
               {...form.register('summary')}
-              className="bg-background mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             {form.formState.errors.summary && (
               <div className="text-destructive mt-1 text-xs">
@@ -94,7 +85,7 @@ export function MaintenanceRecordForm({
               id="notes"
               rows={3}
               {...form.register('notes')}
-              className="bg-background mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
           {error && <div className="text-destructive text-sm">{error}</div>}
@@ -109,7 +100,7 @@ export function MaintenanceRecordForm({
             <button
               type="submit"
               disabled={record.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {record.isPending ? 'Сохраняем…' : 'Записать'}
             </button>

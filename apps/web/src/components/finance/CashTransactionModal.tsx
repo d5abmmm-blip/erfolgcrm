@@ -124,13 +124,32 @@ export function CashTransactionModal({ open, onClose, initialKind = 'expense', o
   };
 
   const TABS: Array<{ k: Kind; label: string; icon: typeof TrendingUp; activeCls: string }> = [
-    { k: 'income', label: 'Доход', icon: TrendingUp, activeCls: 'bg-success text-success-foreground' },
-    { k: 'expense', label: 'Расход', icon: TrendingDown, activeCls: 'bg-destructive text-destructive-foreground' },
-    { k: 'transfer', label: 'Перевод', icon: ArrowRightLeft, activeCls: 'bg-primary text-primary-foreground' },
+    {
+      k: 'income',
+      label: 'Доход',
+      icon: TrendingUp,
+      activeCls: 'bg-success text-success-foreground',
+    },
+    {
+      k: 'expense',
+      label: 'Расход',
+      icon: TrendingDown,
+      activeCls: 'bg-destructive text-destructive-foreground',
+    },
+    {
+      k: 'transfer',
+      label: 'Перевод',
+      icon: ArrowRightLeft,
+      activeCls: 'bg-primary text-primary-foreground',
+    },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose} role="presentation">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         ref={rootRef}
         className="bg-card max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border shadow-xl"
@@ -274,7 +293,11 @@ export function CashTransactionModal({ open, onClose, initialKind = 'expense', o
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
-          <button type="button" onClick={onClose} className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium">
+          <button
+            type="button"
+            onClick={onClose}
+            className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium"
+          >
             Отмена
           </button>
           <button

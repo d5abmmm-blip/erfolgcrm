@@ -90,7 +90,7 @@ export function EngineerProfileSection({ userId }: { userId: string }) {
             value={customSkill}
             onChange={(e) => setCustomSkill(e.target.value)}
             placeholder="Свой тип техники"
-            className="bg-background flex-1 rounded-md border px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 flex-1 rounded-md border px-2.5 py-1.5 text-xs outline-none focus:ring-2"
           />
           <button
             type="button"
@@ -120,7 +120,13 @@ function AvailabilityEditor({
   loading,
 }: {
   userId: string;
-  rows: Array<{ id: string; kind: 'day_off' | 'vacation' | 'onsite'; dateFrom: string; dateTo: string; note: string | null }>;
+  rows: Array<{
+    id: string;
+    kind: 'day_off' | 'vacation' | 'onsite';
+    dateFrom: string;
+    dateTo: string;
+    note: string | null;
+  }>;
   loading: boolean;
 }) {
   const utils = trpc.useUtils();

@@ -45,9 +45,20 @@ function headerBlock(input: BuildWorkActInput): Content {
         stack: [
           { text: t.displayName || 'ERFOLG', fontSize: 22, bold: true, color: BRAND_PRIMARY },
           ...(t.slogan
-            ? [{ text: t.slogan, fontSize: 9, color: BRAND_GREY, margin: [0, 2, 0, 0] as [number, number, number, number] }]
+            ? [
+                {
+                  text: t.slogan,
+                  fontSize: 9,
+                  color: BRAND_GREY,
+                  margin: [0, 2, 0, 0] as [number, number, number, number],
+                },
+              ]
             : []),
-          { text: t.legalName, fontSize: 9, margin: [0, 4, 0, 0] as [number, number, number, number] },
+          {
+            text: t.legalName,
+            fontSize: 9,
+            margin: [0, 4, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
@@ -102,10 +113,7 @@ function assetLine(input: BuildWorkActInput): Content {
   };
 }
 
-function buildLinesTable(
-  title: string,
-  lines: WorkOrderLine[],
-): Content | null {
+function buildLinesTable(title: string, lines: WorkOrderLine[]): Content | null {
   if (lines.length === 0) return null;
 
   const headerCell = (text: string, alignment: 'left' | 'right' | 'center' = 'left'): Content => ({
@@ -181,13 +189,10 @@ function totalsBlock(input: BuildWorkActInput): Content {
   const body: TableCell[][] = [];
   if (wo.worksAmountKopecks > 0) body.push(totalsRow('Работы:', wo.worksAmountKopecks));
   if (wo.partsAmountKopecks > 0) body.push(totalsRow('Запчасти:', wo.partsAmountKopecks));
-  if (wo.expensesAmountKopecks > 0) body.push(totalsRow('Прочие расходы:', wo.expensesAmountKopecks));
+  if (wo.expensesAmountKopecks > 0)
+    body.push(totalsRow('Прочие расходы:', wo.expensesAmountKopecks));
   body.push(
-    totalsRow(
-      `ИТОГО (включая НДС ${vatRateLabel(wo.vatRate)}):`,
-      wo.totalAmountKopecks,
-      true,
-    ),
+    totalsRow(`ИТОГО (включая НДС ${vatRateLabel(wo.vatRate)}):`, wo.totalAmountKopecks, true),
   );
 
   return {
@@ -210,7 +215,11 @@ function diagnosisBlock(input: BuildWorkActInput): Content | null {
     sections.push({
       stack: [
         { text: 'Диагностика:', bold: true, fontSize: 10 },
-        { text: wo.diagnosis, fontSize: 9, margin: [0, 2, 0, 0] as [number, number, number, number] },
+        {
+          text: wo.diagnosis,
+          fontSize: 9,
+          margin: [0, 2, 0, 0] as [number, number, number, number],
+        },
       ],
       margin: [0, 6, 0, 0],
     });
@@ -219,7 +228,11 @@ function diagnosisBlock(input: BuildWorkActInput): Content | null {
     sections.push({
       stack: [
         { text: 'Выполненные работы:', bold: true, fontSize: 10 },
-        { text: wo.repairDescription, fontSize: 9, margin: [0, 2, 0, 0] as [number, number, number, number] },
+        {
+          text: wo.repairDescription,
+          fontSize: 9,
+          margin: [0, 2, 0, 0] as [number, number, number, number],
+        },
       ],
       margin: [0, 6, 0, 0],
     });
@@ -228,7 +241,11 @@ function diagnosisBlock(input: BuildWorkActInput): Content | null {
     sections.push({
       stack: [
         { text: 'Рекомендации:', bold: true, fontSize: 10 },
-        { text: wo.recommendation, fontSize: 9, margin: [0, 2, 0, 0] as [number, number, number, number] },
+        {
+          text: wo.recommendation,
+          fontSize: 9,
+          margin: [0, 2, 0, 0] as [number, number, number, number],
+        },
       ],
       margin: [0, 6, 0, 0],
     });
@@ -257,7 +274,11 @@ function performersBlock(input: BuildWorkActInput): Content | null {
   return {
     margin: [0, 6, 0, 0],
     stack: [
-      { text: names.length > 1 ? 'Работы выполнили:' : 'Работы выполнил:', bold: true, fontSize: 10 },
+      {
+        text: names.length > 1 ? 'Работы выполнили:' : 'Работы выполнил:',
+        bold: true,
+        fontSize: 10,
+      },
       {
         text: names.join(', '),
         fontSize: 9,
@@ -284,8 +305,7 @@ function warrantyBlock(hasParts: boolean): Content {
         margin: [0, 2, 0, 0] as [number, number, number, number],
       },
       {
-        text:
-          'Стороны претензий по объёму, качеству и срокам выполнения работ не имеют. Оборудование передано Заказчику в исправном состоянии.',
+        text: 'Стороны претензий по объёму, качеству и срокам выполнения работ не имеют. Оборудование передано Заказчику в исправном состоянии.',
         fontSize: 9,
         margin: [0, 4, 0, 0] as [number, number, number, number],
       },
@@ -302,21 +322,32 @@ function signaturesBlock(input: BuildWorkActInput): Content {
         width: '*',
         stack: [
           { text: 'Исполнитель', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
           {
             text: input.tenant.director || '',
             fontSize: 9,
             color: BRAND_GREY,
             margin: [0, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            text: 'М.П.',
+            fontSize: 9,
+            color: BRAND_GREY,
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
         width: '*',
         stack: [
           { text: 'Заказчик', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
           {
             text: clientName,
             fontSize: 9,

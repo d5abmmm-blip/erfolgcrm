@@ -14,12 +14,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import {
-  useFieldArray,
-  useForm,
-  type SubmitHandler,
-  type Resolver,
-} from 'react-hook-form';
+import { useFieldArray, useForm, type SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Archive, ArrowLeft, Plus, RotateCcw, Trash2 } from 'lucide-react';
@@ -158,11 +153,9 @@ export function TemplatesPage() {
               {t.defaultEstimatedMinutes} мин
             </span>
           )}
-          {!t.defaultPriority &&
-            !t.defaultRepairType &&
-            t.defaultEstimatedMinutes === null && (
-              <span className="text-muted-foreground">—</span>
-            )}
+          {!t.defaultPriority && !t.defaultRepairType && t.defaultEstimatedMinutes === null && (
+            <span className="text-muted-foreground">—</span>
+          )}
         </div>
       ),
     },
@@ -176,13 +169,12 @@ export function TemplatesPage() {
             href="/settings"
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            К настройкам
+            <ArrowLeft className="h-3.5 w-3.5" />К настройкам
           </Link>
           <h1 className="mt-1 text-xl font-semibold md:text-2xl">Шаблоны заявок</h1>
           <p className="text-muted-foreground mt-0.5 text-sm">
-            Типовые операции (например «Замена термопасты»). При создании заявки менеджер
-            нажмёт «По шаблону» — и в наряд автоматически добавятся строки.
+            Типовые операции (например «Замена термопасты»). При создании заявки менеджер нажмёт «По
+            шаблону» — и в наряд автоматически добавятся строки.
           </p>
         </div>
         <button
@@ -224,10 +216,7 @@ export function TemplatesPage() {
 function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
   const isNew = id === null;
   const utils = trpc.useUtils();
-  const detail = trpc.ticketTemplates.get.useQuery(
-    { id: id ?? '' },
-    { enabled: !isNew },
-  );
+  const detail = trpc.ticketTemplates.get.useQuery({ id: id ?? '' }, { enabled: !isNew });
   const [archiveAsk, setArchiveAsk] = useState(false);
 
   const initial = useMemo<FormValues>(() => {
@@ -333,7 +322,8 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
 
   const isPending =
     create.isPending || update.isPending || archive.isPending || unarchive.isPending;
-  const archived = !isNew && detail.data?.archivedAt !== null && detail.data?.archivedAt !== undefined;
+  const archived =
+    !isNew && detail.data?.archivedAt !== null && detail.data?.archivedAt !== undefined;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
@@ -342,8 +332,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
         onClick={onClose}
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
       >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        К списку шаблонов
+        <ArrowLeft className="h-3.5 w-3.5" />К списку шаблонов
       </button>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold md:text-2xl">
@@ -373,8 +362,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
                 disabled={isPending}
                 className="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
               >
-                <Archive className="h-3.5 w-3.5" />
-                В архив
+                <Archive className="h-3.5 w-3.5" />В архив
               </button>
             )}
           </div>
@@ -391,12 +379,10 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             type="text"
             {...form.register('name')}
             placeholder="«Замена термопасты на CPU/GPU»"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
           {form.formState.errors.name && (
-            <p className="text-destructive mt-1 text-xs">
-              {form.formState.errors.name.message}
-            </p>
+            <p className="text-destructive mt-1 text-xs">{form.formState.errors.name.message}</p>
           )}
         </div>
 
@@ -406,7 +392,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             rows={2}
             {...form.register('description')}
             placeholder="Когда применяется, что входит, что не входит"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
@@ -415,7 +401,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             <Label>Тип ремонта по умолчанию</Label>
             <select
               {...form.register('defaultRepairType')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
               <option value="">— не менять —</option>
               <option value="paid">Платный</option>
@@ -427,7 +413,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             <Label>Приоритет по умолчанию</Label>
             <select
               {...form.register('defaultPriority')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
               <option value="">— не менять —</option>
               <option value="low">низкий</option>
@@ -443,7 +429,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
               inputMode="numeric"
               {...form.register('defaultEstimatedMinutes')}
               placeholder="например 60"
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             {form.formState.errors.defaultEstimatedMinutes && (
               <p className="text-destructive mt-1 text-xs">
@@ -488,7 +474,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
                   >
                     <select
                       {...form.register(`lines.${idx}.lineType` as const)}
-                      className="bg-background col-span-2 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+                      className="bg-background focus:ring-primary/40 col-span-2 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2"
                     >
                       <option value="work">Работа</option>
                       <option value="part">Запчасть</option>
@@ -498,27 +484,27 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
                       type="text"
                       placeholder="Название"
                       {...form.register(`lines.${idx}.name` as const)}
-                      className="bg-background col-span-5 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+                      className="bg-background focus:ring-primary/40 col-span-5 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2"
                     />
                     <input
                       type="text"
                       placeholder="ед."
                       {...form.register(`lines.${idx}.unit` as const)}
-                      className="bg-background col-span-1 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+                      className="bg-background focus:ring-primary/40 col-span-1 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2"
                     />
                     <input
                       type="text"
                       inputMode="decimal"
                       placeholder="кол-во"
                       {...form.register(`lines.${idx}.quantity` as const)}
-                      className="bg-background col-span-1 rounded-md border px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                      className="bg-background focus:ring-primary/40 col-span-1 rounded-md border px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2"
                     />
                     <input
                       type="text"
                       inputMode="numeric"
                       placeholder="цена ₽"
                       {...form.register(`lines.${idx}.unitPriceRubInput` as const)}
-                      className="bg-background col-span-2 rounded-md border px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+                      className="bg-background focus:ring-primary/40 col-span-2 rounded-md border px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2"
                     />
                     <button
                       type="button"
@@ -542,9 +528,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
             </div>
           )}
           {typeof form.formState.errors.lines?.message === 'string' && (
-            <p className="text-destructive mt-1 text-xs">
-              {form.formState.errors.lines.message}
-            </p>
+            <p className="text-destructive mt-1 text-xs">{form.formState.errors.lines.message}</p>
           )}
         </div>
 
@@ -591,13 +575,7 @@ function TemplateEditor({ id, onClose }: { id: string | null; onClose: () => voi
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}

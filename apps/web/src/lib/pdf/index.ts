@@ -54,7 +54,7 @@ async function getPdfMake(): Promise<PdfMakeRuntime> {
     // Runtime-бандл pdfmake публикует createPdf и vfs либо в module.default
     // (esModuleInterop), либо прямо в namespace — берём первое непустое.
     const modAny = pdfMakeMod as unknown as { default?: PdfMakeRuntime } & PdfMakeRuntime;
-    const pdfMake: PdfMakeRuntime = (modAny.default ?? modAny);
+    const pdfMake: PdfMakeRuntime = modAny.default ?? modAny;
     const fontsAny = fontsMod as unknown as { default?: PdfFontsModule } & PdfFontsModule;
     const vfsRoot = fontsAny.default ?? fontsAny;
     // pdfmake ≥0.2.x в ряде сборок экспортирует карту шрифтов НАПРЯМУЮ
@@ -62,9 +62,7 @@ async function getPdfMake(): Promise<PdfMakeRuntime> {
     // а полей .pdfMake.vfs / .vfs у него нет. Берём по убыванию приоритета:
     // legacy `.pdfMake.vfs` → modern `.vfs` → сам объект как карту шрифтов.
     const vfs =
-      vfsRoot.pdfMake?.vfs ??
-      vfsRoot.vfs ??
-      (vfsRoot as unknown as Record<string, string>);
+      vfsRoot.pdfMake?.vfs ?? vfsRoot.vfs ?? (vfsRoot as unknown as Record<string, string>);
     // Если шрифты не загрузились — НЕ молчим (иначе createPdf().open() даёт пустую
     // белую вкладку без ошибки): бросаем явную ошибку, её ловит вызывающий код.
     if (!vfs || typeof vfs !== 'object' || Object.keys(vfs).length === 0) {
@@ -152,10 +150,7 @@ export async function getTechConditionActAsBase64(
   return getDocAsBase64(buildTechConditionActDoc({ ...input, barcodeDataUrl }));
 }
 
-export async function printIntakeAct(
-  input: PrintIntakeInput,
-  win?: Window | null,
-): Promise<void> {
+export async function printIntakeAct(input: PrintIntakeInput, win?: Window | null): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildIntakeActDoc({ ...input, barcodeDataUrl });
   await openDoc(doc, win, 'Акт_приёма.pdf');
@@ -170,10 +165,7 @@ export async function printInvoice(
   await openDoc(doc, win, 'Счёт.pdf');
 }
 
-export async function printWorkAct(
-  input: PrintWorkActInput,
-  win?: Window | null,
-): Promise<void> {
+export async function printWorkAct(input: PrintWorkActInput, win?: Window | null): Promise<void> {
   const barcodeDataUrl = await generateBarcodeDataUrl(input.ticket.barcode);
   const doc = buildWorkActDoc({ ...input, barcodeDataUrl });
   await openDoc(doc, win, 'Акт_работ.pdf');
@@ -197,10 +189,7 @@ export async function printTechConditionAct(
   await openDoc(doc, win, 'Акт_технического_состояния.pdf');
 }
 
-export async function printContract(
-  input: PrintContractInput,
-  win?: Window | null,
-): Promise<void> {
+export async function printContract(input: PrintContractInput, win?: Window | null): Promise<void> {
   const doc = buildContractDoc(input);
   await openDoc(doc, win, 'Договор.pdf');
 }
@@ -247,10 +236,7 @@ export interface PrintPackageInput {
  * (без pdfmake/сети) — покрыта юнит-тестом. Все документы пакета имеют одинаковую
  * раскладку (A4 portrait, поля 42), поэтому берём единый page setup.
  */
-export function combineDocDefs(
-  docs: TDocumentDefinitions[],
-  title: string,
-): TDocumentDefinitions {
+export function combineDocDefs(docs: TDocumentDefinitions[], title: string): TDocumentDefinitions {
   const content: Content[] = [];
   docs.forEach((d, i) => {
     if (i > 0) content.push({ text: '', pageBreak: 'before' });

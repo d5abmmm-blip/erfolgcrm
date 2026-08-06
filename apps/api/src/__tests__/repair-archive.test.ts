@@ -10,15 +10,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { like } from 'drizzle-orm';
-import {
-  assets,
-  clients,
-  getDb,
-  repairArchive,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, clients, getDb, repairArchive, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createAssetWithEvent } from '../modules/assets/repository';
 import { createTicket } from '../modules/tickets/repository';

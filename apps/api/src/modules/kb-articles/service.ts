@@ -43,10 +43,7 @@ export async function listArticlesQuery(
   return repoList(ctx.db, ctx.tenant.id, opts);
 }
 
-export async function getArticleQuery(
-  ctx: CmdCtx,
-  id: string,
-): Promise<KbArticleDto> {
+export async function getArticleQuery(ctx: CmdCtx, id: string): Promise<KbArticleDto> {
   const article = await repoGet(ctx.db, ctx.tenant.id, id);
   if (!article) throw new TRPCError({ code: 'NOT_FOUND', message: 'Статья не найдена' });
   return article;
@@ -104,10 +101,7 @@ export async function updateArticleCmd(
   return article;
 }
 
-export async function archiveArticleCmd(
-  ctx: CmdCtx,
-  id: string,
-): Promise<KbArticleDto> {
+export async function archiveArticleCmd(ctx: CmdCtx, id: string): Promise<KbArticleDto> {
   let article: KbArticleDto;
   try {
     article = await repoArchive(ctx.db, ctx.tenant.id, id);
@@ -126,10 +120,7 @@ export async function archiveArticleCmd(
   return article;
 }
 
-export async function unarchiveArticleCmd(
-  ctx: CmdCtx,
-  id: string,
-): Promise<KbArticleDto> {
+export async function unarchiveArticleCmd(ctx: CmdCtx, id: string): Promise<KbArticleDto> {
   let article: KbArticleDto;
   try {
     article = await repoUnarchive(ctx.db, ctx.tenant.id, id);
@@ -177,10 +168,7 @@ export async function searchSimilarQuery(
   ctx: CmdCtx,
   input: SearchSimilarInput,
 ): Promise<KbSimilarMatch[]> {
-  const limit = Math.min(
-    Math.max(input.limit ?? SIMILAR_DEFAULT_LIMIT, 1),
-    SIMILAR_MAX_LIMIT,
-  );
+  const limit = Math.min(Math.max(input.limit ?? SIMILAR_DEFAULT_LIMIT, 1), SIMILAR_MAX_LIMIT);
   const tenantId = ctx.tenant.id;
 
   const queryParts: string[] = [];
@@ -214,11 +202,7 @@ export async function searchSimilarQuery(
     if (t?.symptom) queryParts.push(t.symptom);
     if (t?.assetId && !assetModel) {
       const [a] = await withTenantTx(ctx.db, tenantId, (tx) =>
-        tx
-          .select({ model: assets.model })
-          .from(assets)
-          .where(eq(assets.id, t.assetId!))
-          .limit(1),
+        tx.select({ model: assets.model }).from(assets).where(eq(assets.id, t.assetId!)).limit(1),
       );
       if (a?.model) {
         assetModel = a.model;

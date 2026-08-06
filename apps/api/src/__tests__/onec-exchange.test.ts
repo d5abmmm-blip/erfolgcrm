@@ -20,10 +20,7 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
   createDraft,
   transitionToCancelled,
@@ -37,10 +34,7 @@ import {
   verifyIncomingToken,
 } from '../modules/onec';
 import { setIncomingTokenHash, upsertConfig } from '../modules/onec/repository';
-import {
-  buildCommerceMlExport,
-  parseIncomingPayments,
-} from '../lib/onec-xml';
+import { buildCommerceMlExport, parseIncomingPayments } from '../lib/onec-xml';
 import type { ResolvedTenant } from '../lib/tenant';
 import type { SessionData } from '../lib/session';
 
@@ -96,7 +90,11 @@ async function clearTestData(): Promise<void> {
   }
 }
 
-async function setupIssuedInvoice(): Promise<{ ticketId: string; invoiceId: string; invoiceNumber: string }> {
+async function setupIssuedInvoice(): Promise<{
+  ticketId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+}> {
   const { id: ticketId } = await createTicket(getDb(), erfolgId, null, {
     clientId: primaryClientId,
     symptom: `${TEST_PREFIX}flow`,
@@ -172,9 +170,11 @@ describe('onec-xml lib', () => {
     expect(ok[0]?.method).toBe('bank_transfer');
 
     expect(() => parseIncomingPayments({})).toThrow(/payments/);
-    expect(() => parseIncomingPayments({ payments: [{ amountKopecks: '0', paidAt: '2026-04-30', method: 'cash' }] })).toThrow(
-      /invoiceExternalId|invoiceNumber/i,
-    );
+    expect(() =>
+      parseIncomingPayments({
+        payments: [{ amountKopecks: '0', paidAt: '2026-04-30', method: 'cash' }],
+      }),
+    ).toThrow(/invoiceExternalId|invoiceNumber/i);
   });
 });
 
@@ -226,7 +226,10 @@ describe('onec service (8.F)', () => {
       audit: { ip: '127.0.0.1', userAgent: 'test' },
     });
     const [afterFirst] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ syncedAt: invoices.onecSyncedAt })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(afterFirst?.syncedAt).toBeInstanceOf(Date);
     const firstStamp = afterFirst?.syncedAt?.getTime();
@@ -242,7 +245,10 @@ describe('onec service (8.F)', () => {
     expect(secondXmlContainsOurInvoice).toBe(false);
     // syncedAt не двигается.
     const [afterSecond] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ syncedAt: invoices.onecSyncedAt })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(afterSecond?.syncedAt?.getTime()).toBe(firstStamp);
   });
@@ -261,7 +267,10 @@ describe('onec service (8.F)', () => {
     ).rejects.toThrow(/Обмен с 1С выключен/);
 
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ syncedAt: invoices.onecSyncedAt })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(row?.syncedAt).toBeNull();
 
@@ -312,7 +321,12 @@ describe('onec service (8.F)', () => {
 
   it('отменённый счёт в 1С не выгружается', async () => {
     const { invoiceId } = await setupIssuedInvoice();
-    const cancelled = await transitionToCancelled(getDb(), erfolgId, invoiceId, `${TEST_PREFIX}отмена`);
+    const cancelled = await transitionToCancelled(
+      getDb(),
+      erfolgId,
+      invoiceId,
+      `${TEST_PREFIX}отмена`,
+    );
     expect(cancelled).toBeTruthy();
 
     const result = await exportInvoicesToOnecCmd({
@@ -324,7 +338,10 @@ describe('onec service (8.F)', () => {
 
     expect(result.xml).not.toContain(invoiceId);
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ syncedAt: invoices.onecSyncedAt }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ syncedAt: invoices.onecSyncedAt })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(row?.syncedAt).toBeNull();
   });
@@ -364,7 +381,10 @@ describe('onec service (8.F)', () => {
     expect(result.errors).toHaveLength(0);
 
     const [inv] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ status: invoices.status, paid: invoices.paidAmountKopecks }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ status: invoices.status, paid: invoices.paidAmountKopecks })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(inv?.status).toBe('paid');
     expect(inv?.paid).toBe(100_000n);
@@ -388,7 +408,10 @@ describe('onec service (8.F)', () => {
     });
     expect(result.processed).toBe(1);
     const [inv] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ status: invoices.status, paid: invoices.paidAmountKopecks }).from(invoices).where(eq(invoices.id, invoiceId)),
+      tx
+        .select({ status: invoices.status, paid: invoices.paidAmountKopecks })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId)),
     );
     expect(inv?.status).toBe('partially_paid');
     expect(inv?.paid).toBe(50_000n);

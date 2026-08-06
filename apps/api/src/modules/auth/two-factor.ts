@@ -112,11 +112,7 @@ export async function replaceRecoveryHashes(
   });
 }
 
-export async function disableTwoFactor(
-  db: Db,
-  tenantId: string,
-  userId: string,
-): Promise<void> {
+export async function disableTwoFactor(db: Db, tenantId: string, userId: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(users)

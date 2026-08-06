@@ -66,9 +66,20 @@ function headerBlock(input: PrintTechConditionActInput): Content {
         stack: [
           { text: t.displayName || 'ERFOLG', fontSize: 22, bold: true, color: BRAND_PRIMARY },
           ...(t.slogan
-            ? [{ text: t.slogan, fontSize: 9, color: BRAND_GREY, margin: [0, 2, 0, 0] as [number, number, number, number] }]
+            ? [
+                {
+                  text: t.slogan,
+                  fontSize: 9,
+                  color: BRAND_GREY,
+                  margin: [0, 2, 0, 0] as [number, number, number, number],
+                },
+              ]
             : []),
-          { text: t.legalName, fontSize: 9, margin: [0, 4, 0, 0] as [number, number, number, number] },
+          {
+            text: t.legalName,
+            fontSize: 9,
+            margin: [0, 4, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
@@ -120,7 +131,9 @@ function ownerBlock(input: PrintTechConditionActInput): Content {
 /** Пустая линия под заполнение от руки. */
 function blankLine(): Content {
   return {
-    canvas: [{ type: 'line', x1: 0, y1: 8, x2: 511, y2: 8, lineWidth: 0.5, lineColor: BRAND_LIGHT_GREY }],
+    canvas: [
+      { type: 'line', x1: 0, y1: 8, x2: 511, y2: 8, lineWidth: 0.5, lineColor: BRAND_LIGHT_GREY },
+    ],
     margin: [0, 8, 0, 0],
   };
 }
@@ -129,7 +142,11 @@ function blankLine(): Content {
  * Раздел «Заголовок + текст». Если текста нет — вместо него `blankCount` пустых
  * линий под заполнение от руки (для печати без наряда прямо в поле).
  */
-function sectionOrBlank(title: string, body: string | null | undefined, blankCount: number): Content {
+function sectionOrBlank(
+  title: string,
+  body: string | null | undefined,
+  blankCount: number,
+): Content {
   const text = (body ?? '').trim();
   const stack: Content[] = [{ text: title, bold: true, fontSize: 10, color: BRAND_GREY }];
   if (text) {
@@ -188,7 +205,12 @@ function signaturesBlock(input: PrintTechConditionActInput): Content {
             color: BRAND_GREY,
             margin: [90, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'инженер', fontSize: 8, color: BRAND_GREY, margin: [90, 1, 0, 0] as [number, number, number, number] },
+          {
+            text: 'инженер',
+            fontSize: 8,
+            color: BRAND_GREY,
+            margin: [90, 1, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
@@ -206,7 +228,12 @@ function signaturesBlock(input: PrintTechConditionActInput): Content {
             color: BRAND_GREY,
             margin: [120, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            text: 'М.П.',
+            fontSize: 9,
+            color: BRAND_GREY,
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       },
     ],
@@ -221,7 +248,9 @@ export function buildTechConditionActDoc(input: PrintTechConditionActInput): TDo
   const content: Content[] = [
     headerBlock(input),
     {
-      canvas: [{ type: 'line', x1: 0, y1: 4, x2: 515, y2: 4, lineWidth: 1, lineColor: BRAND_PRIMARY }],
+      canvas: [
+        { type: 'line', x1: 0, y1: 4, x2: 515, y2: 4, lineWidth: 1, lineColor: BRAND_PRIMARY },
+      ],
       margin: [0, 6, 0, 0],
     },
     {

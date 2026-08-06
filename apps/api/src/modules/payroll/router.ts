@@ -42,9 +42,7 @@ const rubToKopecks = (rub: number): bigint => BigInt(Math.round(rub * 100));
 const rubToKopecksInt = (rub: number): number => Math.round(rub * 100);
 
 export const payrollRouter = router({
-  getRule: directorProcedure.query(({ ctx }) =>
-    getRuleQuery(ctx.db, ctx.tenant.id),
-  ),
+  getRule: directorProcedure.query(({ ctx }) => getRuleQuery(ctx.db, ctx.tenant.id)),
 
   setRule: directorProcedure
     .input(
@@ -59,9 +57,7 @@ export const payrollRouter = router({
       setRuleCmd(ctx.db, ctx.tenant.id, {
         mode: input.mode,
         pieceworkPercent: input.pieceworkPercent,
-        baseSalaryKopecks: input.baseSalaryKopecks
-          ? BigInt(input.baseSalaryKopecks)
-          : undefined,
+        baseSalaryKopecks: input.baseSalaryKopecks ? BigInt(input.baseSalaryKopecks) : undefined,
         bonusPercent: input.bonusPercent,
       }),
     ),
@@ -73,42 +69,36 @@ export const payrollRouter = router({
         engineerId: z.string().uuid().optional(),
       }),
     )
-    .query(({ ctx, input }) =>
-      computePayoutsQuery(ctx.db, ctx.tenant.id, input),
-    ),
+    .query(({ ctx, input }) => computePayoutsQuery(ctx.db, ctx.tenant.id, input)),
 
   /**
    * Расчёт своей ЗП (инженер). Если директор отключил показ заработка инженерам,
    * возвращаем { enabled: false } БЕЗ финансовых данных — инженер не сможет
    * обойти запрет через прямой вызов API.
    */
-  myEarnings: engineerProcedure
-    .input(periodPresetSchema)
-    .query(async ({ ctx, input }) => {
-      if (ctx.session.role !== 'engineer') {
-        // Директор/диспетчер вызывают computePayouts — у них есть видимость по всем
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'myEarnings — только для роли engineer',
-        });
-      }
-      const rule = await getRuleQuery(ctx.db, ctx.tenant.id);
-      if (!rule.engineersSeeEarnings) {
-        return { enabled: false as const };
-      }
-      const result = await computePayoutsQuery(ctx.db, ctx.tenant.id, {
-        ...input,
-        engineerId: ctx.session.userId,
+  myEarnings: engineerProcedure.input(periodPresetSchema).query(async ({ ctx, input }) => {
+    if (ctx.session.role !== 'engineer') {
+      // Директор/диспетчер вызывают computePayouts — у них есть видимость по всем
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'myEarnings — только для роли engineer',
       });
-      return { enabled: true as const, ...result };
-    }),
+    }
+    const rule = await getRuleQuery(ctx.db, ctx.tenant.id);
+    if (!rule.engineersSeeEarnings) {
+      return { enabled: false as const };
+    }
+    const result = await computePayoutsQuery(ctx.db, ctx.tenant.id, {
+      ...input,
+      engineerId: ctx.session.userId,
+    });
+    return { enabled: true as const, ...result };
+  }),
 
   /** Тумблер: показывать инженерам их заработок в кабинете (директор). */
   setEngineersSeeEarnings: directorProcedure
     .input(z.object({ enabled: z.boolean() }))
-    .mutation(({ ctx, input }) =>
-      setEngineersSeeEarningsCmd(ctx.db, ctx.tenant.id, input.enabled),
-    ),
+    .mutation(({ ctx, input }) => setEngineersSeeEarningsCmd(ctx.db, ctx.tenant.id, input.enabled)),
 
   /* ── Выплаты ЗП (директор) ── */
 

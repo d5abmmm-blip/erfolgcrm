@@ -24,7 +24,10 @@ function contentOf(d: TDocumentDefinitions): Item[] {
 
 describe('combineDocDefs — пакет документов', () => {
   it('склеивает content всех документов с разрывами страниц между ними', () => {
-    const combined = combineDocDefs([doc('A1', 'A2'), doc('B1'), doc('C1', 'C2', 'C3')], 'Пакет T-1');
+    const combined = combineDocDefs(
+      [doc('A1', 'A2'), doc('B1'), doc('C1', 'C2', 'C3')],
+      'Пакет T-1',
+    );
     const content = contentOf(combined);
     // 2 + 1 + 3 = 6 элементов + 2 разрыва (перед B и перед C)
     expect(content.length).toBe(8);

@@ -18,11 +18,7 @@ import { boolean, check, date, index, pgEnum, pgTable, text, varchar } from 'dri
 import { sql } from 'drizzle-orm';
 import { fkUuid, pk, tenantId, timestamps } from './_shared';
 
-export const warrantyTypeEnum = pgEnum('warranty_type', [
-  'manufacturer',
-  'service',
-  'extended',
-]);
+export const warrantyTypeEnum = pgEnum('warranty_type', ['manufacturer', 'service', 'extended']);
 
 export const warranties = pgTable(
   'warranties',

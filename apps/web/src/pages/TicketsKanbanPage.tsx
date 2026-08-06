@@ -128,8 +128,8 @@ export function TicketsKanbanPage() {
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Канбан</h1>
           <p className="text-muted-foreground text-sm">
-            Перетащите карточку между колонками, чтобы перевести заявку в другой статус.
-            Обновление каждые 30 секунд.
+            Перетащите карточку между колонками, чтобы перевести заявку в другой статус. Обновление
+            каждые 30 секунд.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -308,7 +308,7 @@ function KanbanColumn({
       }}
       className={cn(
         'bg-card flex min-h-[120px] flex-col gap-2 rounded-lg border p-2 transition',
-        isOver && 'border-primary ring-2 ring-primary/30',
+        isOver && 'border-primary ring-primary/30 ring-2',
       )}
     >
       <div className="flex items-center justify-between gap-1 px-1">
@@ -492,10 +492,11 @@ function PriorityBadge({ priority }: { priority: TicketPriority }) {
 }
 
 export function ViewToggleNav({ current }: { current: 'table' | 'kanban' }) {
-  const options: Array<{ v: 'table' | 'kanban'; href: string; icon: typeof List; label: string }> = [
-    { v: 'table', href: '/tickets', icon: List, label: 'Список' },
-    { v: 'kanban', href: '/tickets/kanban', icon: LayoutGrid, label: 'Канбан' },
-  ];
+  const options: Array<{ v: 'table' | 'kanban'; href: string; icon: typeof List; label: string }> =
+    [
+      { v: 'table', href: '/tickets', icon: List, label: 'Список' },
+      { v: 'kanban', href: '/tickets/kanban', icon: LayoutGrid, label: 'Канбан' },
+    ];
   return (
     <div className="bg-secondary inline-flex rounded-md p-0.5">
       {options.map(({ v, href, icon: Icon, label }) => (

@@ -6,14 +6,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { eq } from 'drizzle-orm';
-import {
-  assetEvents,
-  assets,
-  clients,
-  getDb,
-  withTenantTx,
-  withoutTenantTx,
-} from '@erfolg/db';
+import { assetEvents, assets, clients, getDb, withTenantTx, withoutTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { assetsRouter } from '../modules/assets';
 import { TRPCError } from '@trpc/server';
@@ -93,10 +86,7 @@ describe('RLS — assets изолированы по tenant', () => {
     );
     if (!event) throw new Error('seed missing event');
     const result = await withTenantTx(getDb(), demoId, async (tx) =>
-      tx
-        .delete(assetEvents)
-        .where(eq(assetEvents.id, event.id))
-        .returning({ id: assetEvents.id }),
+      tx.delete(assetEvents).where(eq(assetEvents.id, event.id)).returning({ id: assetEvents.id }),
     );
     expect(result.length).toBe(0);
   });

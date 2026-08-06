@@ -20,8 +20,18 @@ const PRESETS: Array<{ id: PresetId; label: string }> = [
 ];
 
 const MONTHS_FULL = [
-  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+  'январь',
+  'февраль',
+  'март',
+  'апрель',
+  'май',
+  'июнь',
+  'июль',
+  'август',
+  'сентябрь',
+  'октябрь',
+  'ноябрь',
+  'декабрь',
 ];
 
 function isoLocal(d: Date): string {
@@ -153,7 +163,11 @@ export function SalesPage() {
       {/* Вкладки */}
       <div className="border-b">
         <div className="-mb-px flex gap-1">
-          <TabButton active={tab === 'overview'} onClick={() => setTab('overview')} icon={BarChart3}>
+          <TabButton
+            active={tab === 'overview'}
+            onClick={() => setTab('overview')}
+            icon={BarChart3}
+          >
             Обзор
           </TabButton>
           <TabButton active={tab === 'list'} onClick={() => setTab('list')} icon={List}>

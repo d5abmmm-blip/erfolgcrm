@@ -22,7 +22,14 @@ import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
-type TabId = 'monthly' | 'revenue' | 'engineers' | 'profitability' | 'sla' | 'leads' | 'receivables';
+type TabId =
+  | 'monthly'
+  | 'revenue'
+  | 'engineers'
+  | 'profitability'
+  | 'sla'
+  | 'leads'
+  | 'receivables';
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof TrendingUp; directorOnly?: boolean }> = [
   { id: 'monthly', label: 'Итог месяца', icon: Sparkles, directorOnly: true },
@@ -143,51 +150,51 @@ export function ReportsPage() {
 
       {/* Период (на вкладке «Итог месяца» — свой выбор месяца) */}
       {tab !== 'monthly' && (
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="bg-secondary inline-flex rounded-md p-0.5">
-          {(
-            [
-              ['month', 'Месяц'],
-              ['quarter', 'Квартал'],
-              ['year', 'Год'],
-              ['all', 'Всё время'],
-            ] as Array<[Preset, string]>
-          ).map(([p, label]) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => {
-                setPreset(p);
-                setCustomFrom('');
-                setCustomTo('');
-              }}
-              className={
-                'rounded px-2.5 py-1 text-xs transition ' +
-                (preset === p && !customFrom && !customTo
-                  ? 'bg-background text-foreground font-medium shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground')
-              }
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="bg-secondary inline-flex rounded-md p-0.5">
+            {(
+              [
+                ['month', 'Месяц'],
+                ['quarter', 'Квартал'],
+                ['year', 'Год'],
+                ['all', 'Всё время'],
+              ] as Array<[Preset, string]>
+            ).map(([p, label]) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => {
+                  setPreset(p);
+                  setCustomFrom('');
+                  setCustomTo('');
+                }}
+                className={
+                  'rounded px-2.5 py-1 text-xs transition ' +
+                  (preset === p && !customFrom && !customTo
+                    ? 'bg-background text-foreground font-medium shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground')
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1.5 text-xs outline-none focus:ring-2"
+            aria-label="Период с"
+          />
+          <span className="text-muted-foreground text-xs">—</span>
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1.5 text-xs outline-none focus:ring-2"
+            aria-label="Период по"
+          />
         </div>
-        <input
-          type="date"
-          value={customFrom}
-          onChange={(e) => setCustomFrom(e.target.value)}
-          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1.5 text-xs outline-none focus:ring-2"
-          aria-label="Период с"
-        />
-        <span className="text-muted-foreground text-xs">—</span>
-        <input
-          type="date"
-          value={customTo}
-          onChange={(e) => setCustomTo(e.target.value)}
-          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1.5 text-xs outline-none focus:ring-2"
-          aria-label="Период по"
-        />
-      </div>
       )}
 
       {/* Вкладки */}
@@ -249,7 +256,10 @@ function recentMonths(count: number): Array<{ value: string; label: string }> {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const y = d.getFullYear();
     const m = d.getMonth();
-    out.push({ value: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS_RU_WEB[m]} ${y}` });
+    out.push({
+      value: `${y}-${String(m + 1).padStart(2, '0')}`,
+      label: `${MONTHS_RU_WEB[m]} ${y}`,
+    });
   }
   return out;
 }
@@ -295,9 +305,7 @@ function MonthlySummaryReport() {
         </button>
       </div>
 
-      {q.isLoading && (
-        <p className="text-muted-foreground text-sm">Готовим итог месяца…</p>
-      )}
+      {q.isLoading && <p className="text-muted-foreground text-sm">Готовим итог месяца…</p>}
       {q.error && <p className="text-destructive text-sm">{q.error.message}</p>}
 
       {res && (
@@ -308,7 +316,7 @@ function MonthlySummaryReport() {
               <div className="text-primary mb-2 flex items-center gap-2 text-sm font-semibold">
                 <Sparkles className="h-4 w-4" /> AI-итог · {res.monthLabel}
               </div>
-              <div className="text-sm leading-relaxed whitespace-pre-wrap">{res.text}</div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed">{res.text}</div>
             </div>
           ) : (
             <div className="bg-card text-muted-foreground flex items-start gap-2 rounded-lg border p-3 text-xs leading-relaxed">
@@ -390,7 +398,10 @@ function MonthlySummaryReport() {
               <Receipt className="h-4 w-4" /> Дебиторка (текущее состояние)
             </h3>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              <Kpi label="Должны всего" value={formatRub(res.data.receivables.totalRemainingKopecks)} />
+              <Kpi
+                label="Должны всего"
+                value={formatRub(res.data.receivables.totalRemainingKopecks)}
+              />
               <Kpi
                 label="Из них просрочено"
                 value={formatRub(res.data.receivables.overdueRemainingKopecks)}
@@ -447,8 +458,18 @@ function RevenueReport({ period }: { period: { from?: string; to?: string } }) {
           r.clientDisplayName
         ),
     },
-    { key: 'tickets', label: 'Заявок', className: 'tabular-nums text-xs', render: (r) => r.ticketsCount },
-    { key: 'closed', label: 'Закрыто', className: 'tabular-nums text-xs', render: (r) => r.closedCount },
+    {
+      key: 'tickets',
+      label: 'Заявок',
+      className: 'tabular-nums text-xs',
+      render: (r) => r.ticketsCount,
+    },
+    {
+      key: 'closed',
+      label: 'Закрыто',
+      className: 'tabular-nums text-xs',
+      render: (r) => r.closedCount,
+    },
     {
       key: 'total',
       label: 'Сумма нарядов',
@@ -488,9 +509,23 @@ function EngineersReport({ period }: { period: { from?: string; to?: string } })
   }
   const items = (q.data ?? []) as Row[];
   const columns: Column<Row>[] = [
-    { key: 'name', label: 'Инженер', render: (r) => <span className="font-medium">{r.engineerName}</span> },
-    { key: 'tickets', label: 'Заявок', className: 'tabular-nums text-xs', render: (r) => r.ticketsCount },
-    { key: 'closed', label: 'Закрыто', className: 'tabular-nums text-xs', render: (r) => r.closedCount },
+    {
+      key: 'name',
+      label: 'Инженер',
+      render: (r) => <span className="font-medium">{r.engineerName}</span>,
+    },
+    {
+      key: 'tickets',
+      label: 'Заявок',
+      className: 'tabular-nums text-xs',
+      render: (r) => r.ticketsCount,
+    },
+    {
+      key: 'closed',
+      label: 'Закрыто',
+      className: 'tabular-nums text-xs',
+      render: (r) => r.closedCount,
+    },
     {
       key: 'revenue',
       label: 'Выручка (наряды)',
@@ -551,7 +586,11 @@ function marginTextClass(marginKopecks: string): string {
 
 function ProfitTable({ rows, firstColLabel }: { rows: ProfitRow[]; firstColLabel: string }) {
   const columns: Column<ProfitRow>[] = [
-    { key: 'name', label: firstColLabel, render: (r) => <span className="font-medium">{r.name}</span> },
+    {
+      key: 'name',
+      label: firstColLabel,
+      render: (r) => <span className="font-medium">{r.name}</span>,
+    },
     {
       key: 'closed',
       label: 'Закрыто',
@@ -572,7 +611,9 @@ function ProfitTable({ rows, firstColLabel }: { rows: ProfitRow[]; firstColLabel
       className: 'tabular-nums text-xs text-right',
       headerClassName: 'text-right',
       render: (r) => (
-        <span className={marginTextClass(r.marginAmountKopecks)}>{formatRub(r.marginAmountKopecks)}</span>
+        <span className={marginTextClass(r.marginAmountKopecks)}>
+          {formatRub(r.marginAmountKopecks)}
+        </span>
       ),
     },
     {
@@ -613,7 +654,11 @@ function ProfitabilityReport({ period }: { period: { from?: string; to?: string 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Выручка (закрытые)" value={formatRub(d.summary.totalAmountKopecks)} />
         <Kpi label="Себестоимость" value={formatRub(d.summary.costAmountKopecks)} />
-        <Kpi label="Маржа (прибыль)" value={formatRub(d.summary.marginAmountKopecks)} tone={marginTone} />
+        <Kpi
+          label="Маржа (прибыль)"
+          value={formatRub(d.summary.marginAmountKopecks)}
+          tone={marginTone}
+        />
         <Kpi label="Маржа %" value={fmtPct(d.summary.marginPercent)} tone={marginTone} />
       </div>
 
@@ -651,8 +696,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 function SlaReport({ period }: { period: { from?: string; to?: string } }) {
   const q = trpc.reports.slaCompliance.useQuery(period);
   if (q.isLoading) return <p className="text-muted-foreground text-sm">Загрузка…</p>;
-  if (q.error)
-    return <p className="text-destructive text-sm">{q.error.message}</p>;
+  if (q.error) return <p className="text-destructive text-sm">{q.error.message}</p>;
   const d = q.data!;
   return (
     <div className="space-y-4">
@@ -673,7 +717,7 @@ function SlaReport({ period }: { period: { from?: string; to?: string } }) {
             {d.byPriority.map((p) => (
               <li key={p.priority} className="flex items-center justify-between text-sm">
                 <span>{PRIORITY_LABEL[p.priority] ?? p.priority}</span>
-                <span className="tabular-nums text-xs">
+                <span className="text-xs tabular-nums">
                   {p.onTime}/{p.totalTracked} в срок ·{' '}
                   <span className="font-medium">{p.rate === null ? '—' : `${p.rate}%`}</span>
                 </span>
@@ -709,7 +753,11 @@ function LeadsReport({ period }: { period: { from?: string; to?: string } }) {
   if (q.error) return <p className="text-destructive text-sm">{q.error.message}</p>;
   const d = q.data!;
   const fmtRubNum = (n: number) =>
-    new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: 'RUB',
+      maximumFractionDigits: 0,
+    }).format(n);
   const sorted = [...d.byStatus].sort(
     (a, b) => LEAD_ORDER.indexOf(a.status) - LEAD_ORDER.indexOf(b.status),
   );
@@ -730,7 +778,7 @@ function LeadsReport({ period }: { period: { from?: string; to?: string } }) {
             {sorted.map((s) => (
               <li key={s.status} className="flex items-center justify-between text-sm">
                 <span>{LEAD_LABEL[s.status] ?? s.status}</span>
-                <span className="tabular-nums text-xs">
+                <span className="text-xs tabular-nums">
                   {s.count} шт. · <span className="font-medium">{fmtRubNum(s.valueRub)}</span>
                 </span>
               </li>
@@ -783,7 +831,10 @@ function ReceivablesReport() {
       className: 'text-xs',
       render: (r) =>
         r.clientId ? (
-          <Link href={`/clients/${r.clientId}`} className="text-muted-foreground hover:text-primary">
+          <Link
+            href={`/clients/${r.clientId}`}
+            className="text-muted-foreground hover:text-primary"
+          >
             {r.clientDisplayName}
           </Link>
         ) : (
@@ -842,7 +893,15 @@ function ReceivablesReport() {
   );
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'danger' | 'success' }) {
+function Kpi({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'danger' | 'success';
+}) {
   const toneCls = tone === 'danger' ? 'text-destructive' : tone === 'success' ? 'text-success' : '';
   return (
     <div className="bg-card rounded-lg border p-3">

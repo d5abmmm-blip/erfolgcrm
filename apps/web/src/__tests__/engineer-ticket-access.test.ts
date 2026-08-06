@@ -26,9 +26,9 @@ describe('engineerOwnsTicket', () => {
   it('чужая и неназначенная — нет', () => {
     expect(engineerOwnsTicket(engineer, { assignedEngineerId: 'u2' })).toBe(false);
     expect(engineerOwnsTicket(engineer, { assignedEngineerId: null })).toBe(false);
-    expect(
-      engineerOwnsTicket(engineer, { assignedEngineerId: null, helperEngineers: [] }),
-    ).toBe(false);
+    expect(engineerOwnsTicket(engineer, { assignedEngineerId: null, helperEngineers: [] })).toBe(
+      false,
+    );
   });
 
   it('директор и диспетчер — без ограничений', () => {

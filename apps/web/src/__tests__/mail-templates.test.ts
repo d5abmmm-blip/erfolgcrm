@@ -26,7 +26,11 @@ describe('applyTemplate', () => {
   it('шаблон счёта подставляет номер счёта и компанию', () => {
     const tpl = MAIL_TEMPLATES.find((t) => t.id === 'invoice');
     expect(tpl).toBeTruthy();
-    const body = applyTemplate(tpl!.body, { clientName: 'ООО Тест', invoiceNumber: 'INV-7', company: 'ООО Эрфольг' });
+    const body = applyTemplate(tpl!.body, {
+      clientName: 'ООО Тест',
+      invoiceNumber: 'INV-7',
+      company: 'ООО Эрфольг',
+    });
     expect(body).toContain('INV-7');
     expect(body).toContain('ООО Эрфольг');
     expect(body).not.toContain('{{');

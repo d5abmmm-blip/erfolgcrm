@@ -116,14 +116,10 @@ export function PromptDialog({
           {title}
         </h3>
         {description && (
-          <p className="text-muted-foreground mt-2 text-sm whitespace-pre-line">
-            {description}
-          </p>
+          <p className="text-muted-foreground mt-2 whitespace-pre-line text-sm">{description}</p>
         )}
         <div className="mt-3 space-y-1">
-          {label && (
-            <label className="text-muted-foreground text-xs font-medium">{label}</label>
-          )}
+          {label && <label className="text-muted-foreground text-xs font-medium">{label}</label>}
           {multiline ? (
             <textarea
               ref={inputRef as React.RefObject<HTMLTextAreaElement>}
@@ -131,7 +127,7 @@ export function PromptDialog({
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
               rows={3}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           ) : (
             <input
@@ -146,7 +142,7 @@ export function PromptDialog({
                 }
               }}
               placeholder={placeholder}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           )}
         </div>

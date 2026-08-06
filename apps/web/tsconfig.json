@@ -17,8 +17,5 @@
     }
   },
   "include": ["src", "vite.config.ts"],
-  "references": [
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/ui" }
-  ]
+  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/ui" }]
 }

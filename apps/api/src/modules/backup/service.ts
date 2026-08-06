@@ -52,7 +52,9 @@ export function resolveBackupExecConfig(): BackupExecConfig {
 
   // host/port/имя базы могут прийти из любого URL (для docker-режима они вообще не важны).
   const locUrl =
-    ownerUrl ?? process.env.DATABASE_URL ?? 'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_dev';
+    ownerUrl ??
+    process.env.DATABASE_URL ??
+    'postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_dev';
 
   let host = 'localhost';
   let port = '5432';
@@ -86,7 +88,9 @@ export function resolveBackupExecConfig(): BackupExecConfig {
   }
 
   return {
-    mode: (process.env.BACKUP_EXEC_MODE as 'docker' | 'direct' | undefined) ?? (isProd ? 'direct' : 'docker'),
+    mode:
+      (process.env.BACKUP_EXEC_MODE as 'docker' | 'direct' | undefined) ??
+      (isProd ? 'direct' : 'docker'),
     container: process.env.BACKUP_PG_CONTAINER ?? `erfolgcrm-postgres-${isProd ? 'prod' : 'dev'}`,
     user: process.env.BACKUP_PG_SUPERUSER ?? user,
     database: process.env.BACKUP_PG_DB ?? database,
@@ -118,10 +122,15 @@ function tokenSecret(): string {
 }
 
 function signBackup(tenantId: string, expEpochSec: number): string {
-  return createHmac('sha256', tokenSecret()).update(`backup-full:${tenantId}:${expEpochSec}`).digest('hex');
+  return createHmac('sha256', tokenSecret())
+    .update(`backup-full:${tenantId}:${expEpochSec}`)
+    .digest('hex');
 }
 
-export function makeFullDumpToken(tenantId: string, ttlSeconds = 5 * 60): { exp: number; sig: string } {
+export function makeFullDumpToken(
+  tenantId: string,
+  ttlSeconds = 5 * 60,
+): { exp: number; sig: string } {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   return { exp, sig: signBackup(tenantId, exp) };
 }
@@ -148,7 +157,11 @@ export function fullDumpFileName(cfg = resolveBackupExecConfig(), now = new Date
 // ───────── Запуск pg_dump ─────────
 
 /** Аргументы pg_dump для полной копии (custom-формат, без owner/privileges — переносимо). */
-function pgDumpArgs(cfg: BackupExecConfig): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } {
+function pgDumpArgs(cfg: BackupExecConfig): {
+  cmd: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
   const common = ['--no-owner', '--no-privileges', '--format=custom'];
   if (cfg.mode === 'docker') {
     return {
@@ -193,7 +206,10 @@ function signImport(tenantId: string, expEpochSec: number): string {
     .digest('hex');
 }
 
-export function makeImportToken(tenantId: string, ttlSeconds = 10 * 60): { exp: number; sig: string } {
+export function makeImportToken(
+  tenantId: string,
+  ttlSeconds = 10 * 60,
+): { exp: number; sig: string } {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   return { exp, sig: signImport(tenantId, exp) };
 }
@@ -216,7 +232,10 @@ export function verifyImportToken(args: { tenantId: string; exp: number; sig: st
  * собирает stdout (отчёт импортёра) и stderr. Импортёр сам берёт DATABASE_OWNER_URL.
  * Целевой tenant передаётся через env IMPORT_TENANT_ID (из HMAC-токена директора).
  */
-export function spawnWinServiceImport(filePath: string, opts: { dryRun: boolean; tenantId?: string }) {
+export function spawnWinServiceImport(
+  filePath: string,
+  opts: { dryRun: boolean; tenantId?: string },
+) {
   const args = ['--import', 'tsx', IMPORT_WINSERVICE_PATH, filePath];
   if (opts.dryRun) args.push('--dry-run');
   // Пробрасываем целевой tenant импортёру: без этого он падает на захардкоженный

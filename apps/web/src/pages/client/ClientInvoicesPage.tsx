@@ -81,12 +81,12 @@ export function ClientInvoicesPage() {
             {list.data.map((i) => (
               <tr key={i.id} className="hover:bg-muted/30">
                 <td className="px-3 py-2 font-medium">{i.invoiceNumber}</td>
-                <td className="px-3 py-2 text-muted-foreground">{i.issueDate}</td>
-                <td className="px-3 py-2 text-muted-foreground">{i.dueDate}</td>
+                <td className="text-muted-foreground px-3 py-2">{i.issueDate}</td>
+                <td className="text-muted-foreground px-3 py-2">{i.dueDate}</td>
                 <td className="px-3 py-2 text-right font-medium">
                   {formatRubFromKopecks(i.totalAmountKopecks)}
                 </td>
-                <td className="px-3 py-2 text-right text-muted-foreground">
+                <td className="text-muted-foreground px-3 py-2 text-right">
                   {formatRubFromKopecks(i.paidAmountKopecks)}
                 </td>
                 <td className="px-3 py-2">
@@ -103,7 +103,8 @@ export function ClientInvoicesPage() {
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        Скачивание PDF счёта появится в следующем обновлении кабинета. Пока — обратитесь в сервисный центр.
+        Скачивание PDF счёта появится в следующем обновлении кабинета. Пока — обратитесь в сервисный
+        центр.
       </p>
     </div>
   );

@@ -25,11 +25,7 @@ import {
   softDeleteTask,
   updateTask,
 } from '../modules/tasks/repository';
-import {
-  assertEngineerOwnsTask,
-  createTaskCmd,
-  setTaskDoneCmd,
-} from '../modules/tasks/service';
+import { assertEngineerOwnsTask, createTaskCmd, setTaskDoneCmd } from '../modules/tasks/service';
 import { processTaskReminderTick } from '../workers/task-reminder';
 import type { CmdCtx } from '../trpc/helpers';
 import type { ResolvedTenant } from '../lib/tenant';
@@ -252,13 +248,13 @@ describe('tasks — владение (assertEngineerOwnsTask)', () => {
     });
 
     // Чужой инженер — FORBIDDEN.
-    await expect(setTaskDoneCmd(ctxFor(erfolgId, ENG2, 'engineer'), id, true)).rejects.toMatchObject(
-      { code: 'FORBIDDEN' },
-    );
-    // Владелец — ок.
     await expect(
-      setTaskDoneCmd(ctxFor(erfolgId, ENG1, 'engineer'), id, true),
-    ).resolves.toEqual({ ok: true });
+      setTaskDoneCmd(ctxFor(erfolgId, ENG2, 'engineer'), id, true),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    // Владелец — ок.
+    await expect(setTaskDoneCmd(ctxFor(erfolgId, ENG1, 'engineer'), id, true)).resolves.toEqual({
+      ok: true,
+    });
     expect(
       (await listTasks(getDb(), erfolgId, { includeDone: true })).find((x) => x.id === id)?.isDone,
     ).toBe(true);
@@ -329,7 +325,9 @@ describe('tasks — напоминания (воркер)', () => {
     });
     // «Перематываем» момент напоминания в прошлое.
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.execute(sql`UPDATE tasks SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`),
+      tx.execute(
+        sql`UPDATE tasks SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`,
+      ),
     );
 
     const dueBefore = await listDueTaskReminders(getDb(), erfolgId);
@@ -358,7 +356,9 @@ describe('tasks — напоминания (воркер)', () => {
       remind: true,
     });
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.execute(sql`UPDATE tasks SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`),
+      tx.execute(
+        sql`UPDATE tasks SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`,
+      ),
     );
     await setTaskDone(getDb(), erfolgId, id, true, directorId);
     expect((await listDueTaskReminders(getDb(), erfolgId)).some((x) => x.id === id)).toBe(false);

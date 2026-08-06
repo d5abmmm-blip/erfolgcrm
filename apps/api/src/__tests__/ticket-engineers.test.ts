@@ -118,14 +118,9 @@ function makeCtx(userId: string, role: 'engineer' | 'dispatcher' = 'engineer') {
 describe('назначение помощников', () => {
   it('можно назначить двоих помощников и прочитать список', async () => {
     const ticketId = await makeTicket();
-    await setTicketEngineers(getDb(), erfolgId, ticketId, [
-      helperEngineerId,
-      strangerEngineerId,
-    ]);
+    await setTicketEngineers(getDb(), erfolgId, ticketId, [helperEngineerId, strangerEngineerId]);
     const list = await listTicketEngineers(getDb(), erfolgId, ticketId);
-    expect(list.map((e) => e.userId).sort()).toEqual(
-      [helperEngineerId, strangerEngineerId].sort(),
-    );
+    expect(list.map((e) => e.userId).sort()).toEqual([helperEngineerId, strangerEngineerId].sort());
   });
 
   it('повторное назначение того же человека не двоит строки', async () => {
@@ -140,10 +135,7 @@ describe('назначение помощников', () => {
 
   it('ОТВЕТСТВЕННЫЙ не попадает в помощники — иначе он посчитался бы дважды', async () => {
     const ticketId = await makeTicket();
-    await setTicketEngineers(getDb(), erfolgId, ticketId, [
-      mainEngineerId,
-      helperEngineerId,
-    ]);
+    await setTicketEngineers(getDb(), erfolgId, ticketId, [mainEngineerId, helperEngineerId]);
     const list = await listTicketEngineers(getDb(), erfolgId, ticketId);
     expect(list.map((e) => e.userId)).toEqual([helperEngineerId]);
   });

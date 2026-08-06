@@ -144,9 +144,7 @@ describe('draftRepairDescription (ИИ-черновик акта)', () => {
       symptom: `${TEST_PREFIX}без наряда`,
     });
     const caller = appRouter.createCaller(makeCtx('engineer'));
-    await expect(caller.workOrders.draftRepairDescription({ ticketId })).rejects.toThrow(
-      /наряд/i,
-    );
+    await expect(caller.workOrders.draftRepairDescription({ ticketId })).rejects.toThrow(/наряд/i);
   });
 
   it('диспетчер тоже имеет доступ (staff ⊆ engineerProcedure)', async () => {

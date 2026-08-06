@@ -144,7 +144,12 @@ export function CalendarTasksPanel() {
                 </button>
 
                 <div className="min-w-0 flex-1">
-                  <div className={cn('text-sm font-medium', t.isDone && 'text-muted-foreground line-through')}>
+                  <div
+                    className={cn(
+                      'text-sm font-medium',
+                      t.isDone && 'text-muted-foreground line-through',
+                    )}
+                  >
                     {t.title}
                   </div>
                   {t.notes && (
@@ -207,7 +212,13 @@ export function CalendarTasksPanel() {
 
 /* ───────────── Диалог создания/правки задачи ───────────── */
 
-function TaskDialog({ initial, onClose }: { initial: NonNullable<DialogState>; onClose: () => void }) {
+function TaskDialog({
+  initial,
+  onClose,
+}: {
+  initial: NonNullable<DialogState>;
+  onClose: () => void;
+}) {
   const utils = trpc.useUtils();
   const isEdit = initial.mode === 'edit';
   const task = isEdit ? initial.task : null;
@@ -229,9 +240,18 @@ function TaskDialog({ initial, onClose }: { initial: NonNullable<DialogState>; o
     await utils.tasks.list.invalidate();
     onClose();
   };
-  const create = trpc.tasks.create.useMutation({ onSuccess: done, onError: (e) => setError(e.message) });
-  const update = trpc.tasks.update.useMutation({ onSuccess: done, onError: (e) => setError(e.message) });
-  const remove = trpc.tasks.delete.useMutation({ onSuccess: done, onError: (e) => setError(e.message) });
+  const create = trpc.tasks.create.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
+  const update = trpc.tasks.update.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
+  const remove = trpc.tasks.delete.useMutation({
+    onSuccess: done,
+    onError: (e) => setError(e.message),
+  });
   const pending = create.isPending || update.isPending || remove.isPending;
 
   useEffect(() => {
@@ -292,7 +312,12 @@ function TaskDialog({ initial, onClose }: { initial: NonNullable<DialogState>; o
       aria-labelledby="task-dialog-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
-      <button type="button" aria-label="Закрыть диалог" onClick={onClose} className="absolute inset-0 bg-black/40" />
+      <button
+        type="button"
+        aria-label="Закрыть диалог"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+      />
       <div className="bg-card relative z-10 w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl">
         <h3 id="task-dialog-title" className="flex items-center gap-2 text-base font-semibold">
           <span className="bg-success/12 text-success grid h-7 w-7 place-items-center rounded-lg">
@@ -325,7 +350,12 @@ function TaskDialog({ initial, onClose }: { initial: NonNullable<DialogState>; o
             <span className="text-muted-foreground text-xs font-medium">
               Дата <span className="opacity-60">(необязательно)</span>
             </span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputCls}
+            />
           </label>
           <label className="block space-y-1">
             <span className="text-muted-foreground text-xs font-medium">
@@ -343,12 +373,20 @@ function TaskDialog({ initial, onClose }: { initial: NonNullable<DialogState>; o
 
         <label className="block space-y-1">
           <span className="text-muted-foreground text-xs font-medium">Исполнитель</span>
-          <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={inputCls}>
+          <select
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+            className={inputCls}
+          >
             <option value="">— без исполнителя —</option>
             {(users.data ?? []).map((u) => (
               <option key={u.id} value={u.id}>
                 {u.fullName}
-                {u.role === 'engineer' ? ' · инженер' : u.role === 'dispatcher' ? ' · диспетчер' : ' · директор'}
+                {u.role === 'engineer'
+                  ? ' · инженер'
+                  : u.role === 'dispatcher'
+                    ? ' · диспетчер'
+                    : ' · директор'}
               </option>
             ))}
           </select>

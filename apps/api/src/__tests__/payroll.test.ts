@@ -24,10 +24,7 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket, changeStatus } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
   computePayouts,
   getRule,
@@ -51,11 +48,7 @@ beforeAll(async () => {
     tx.select({ id: clients.id }).from(clients).limit(1),
   );
   const [eng] = await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'engineer'))
-      .limit(1),
+    tx.select({ id: users.id }).from(users).where(eq(users.role, 'engineer')).limit(1),
   );
   if (!ec || !eng) throw new Error('seed missing client/engineer');
   erfolgClientId = ec.id;
@@ -97,10 +90,7 @@ async function createClosedTicketWithWorks(
   const wo = await getOrCreateWorkOrder(getDb(), tenantId, ticketId);
   // Привязываем главного инженера к WO
   await withTenantTx(getDb(), tenantId, async (tx) => {
-    await tx
-      .update(workOrders)
-      .set({ engineerId })
-      .where(eq(workOrders.id, wo.id));
+    await tx.update(workOrders).set({ engineerId }).where(eq(workOrders.id, wo.id));
   });
   for (const amount of workAmounts) {
     await upsertLine(getDb(), tenantId, wo.id, null, {
@@ -114,10 +104,7 @@ async function createClosedTicketWithWorks(
   }
   await changeStatus(getDb(), tenantId, null, ticketId, 'closed');
   await withTenantTx(getDb(), tenantId, async (tx) => {
-    await tx
-      .update(tickets)
-      .set({ closedAt })
-      .where(eq(tickets.id, ticketId));
+    await tx.update(tickets).set({ closedAt }).where(eq(tickets.id, ticketId));
   });
   return { ticketId, workOrderId: wo.id };
 }

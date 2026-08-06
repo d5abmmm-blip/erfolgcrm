@@ -21,15 +21,7 @@
  * `asset_models` — модели (например ["Drager Savina 300"]) для применения к
  * новым асcетам той же модели в будущем.
  */
-import {
-  check,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { pk, tenantId, timestamps } from './_shared';
 

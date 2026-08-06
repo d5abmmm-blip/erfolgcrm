@@ -75,7 +75,7 @@ export function TradeInListPage() {
 
   const list = trpc.tradeIn.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined),
+    status: status || undefined,
     page,
   });
   const stats = trpc.tradeIn.stats.useQuery();
@@ -140,7 +140,10 @@ export function TradeInListPage() {
       render: (t) => (
         <div>
           {t.clientId ? (
-            <Link href={`/clients/${t.clientId}`} className="text-muted-foreground hover:text-primary">
+            <Link
+              href={`/clients/${t.clientId}`}
+              className="text-muted-foreground hover:text-primary"
+            >
               {t.clientDisplayName}
             </Link>
           ) : (
@@ -149,7 +152,10 @@ export function TradeInListPage() {
           {t.buyerClientId && (
             <div>
               →{' '}
-              <Link href={`/clients/${t.buyerClientId}`} className="text-muted-foreground hover:text-primary">
+              <Link
+                href={`/clients/${t.buyerClientId}`}
+                className="text-muted-foreground hover:text-primary"
+              >
                 {t.buyerDisplayName}
               </Link>
             </div>
@@ -210,7 +216,11 @@ export function TradeInListPage() {
                 setCompleteId(t.id);
               }}
               aria-label="Продано"
-              title={t.buyerClientId ? 'Завершить сделку (продано)' : 'Сначала укажите покупателя в позиции'}
+              title={
+                t.buyerClientId
+                  ? 'Завершить сделку (продано)'
+                  : 'Сначала укажите покупателя в позиции'
+              }
               className="text-muted-foreground hover:text-success hover:bg-muted grid h-7 w-7 place-items-center rounded"
             >
               <BadgeCheck className="h-3.5 w-3.5" />
@@ -333,8 +343,7 @@ export function TradeInListPage() {
           const rub = Number.parseFloat(v.trim().replace(',', '.'));
           complete.mutate({
             id: completeId,
-            salePriceKopecks:
-              Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : undefined,
+            salePriceKopecks: Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : undefined,
           });
         }}
         onCancel={() => setCompleteId(null)}

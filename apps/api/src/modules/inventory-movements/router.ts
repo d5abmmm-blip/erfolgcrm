@@ -11,11 +11,7 @@
 import { z } from 'zod';
 import { engineerProcedure, router } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
-import {
-  issueToWorkOrderCmd,
-  listMovementsQuery,
-  returnFromWorkOrderCmd,
-} from './service';
+import { issueToWorkOrderCmd, listMovementsQuery, returnFromWorkOrderCmd } from './service';
 
 const QUANTITY_REGEX = /^\d+(\.\d{1,3})?$/;
 
@@ -24,9 +20,7 @@ export const inventoryMovementsRouter = router({
     .input(
       z.object({
         itemId: z.string().uuid().optional(),
-        kind: z
-          .enum(['inbound', 'outbound', 'adjustment', 'writeoff'])
-          .optional(),
+        kind: z.enum(['inbound', 'outbound', 'adjustment', 'writeoff']).optional(),
         limit: z.number().int().min(1).max(500).optional(),
       }),
     )

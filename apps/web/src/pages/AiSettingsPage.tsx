@@ -105,8 +105,8 @@ export function AiSettingsPage() {
       </div>
 
       <p className="text-muted-foreground text-sm">
-        Ключ и модель для встроенного помощника. Получите ключ у провайдера (z.ai, OpenRouter
-        и т.п.), вставьте сюда и включите. Ключ хранится в зашифрованном виде и не показывается
+        Ключ и модель для встроенного помощника. Получите ключ у провайдера (z.ai, OpenRouter и
+        т.п.), вставьте сюда и включите. Ключ хранится в зашифрованном виде и не показывается
         обратно.
       </p>
 
@@ -118,8 +118,8 @@ export function AiSettingsPage() {
 
       {cfg.data?.usingEnvFallback && (
         <div className="bg-muted text-muted-foreground rounded-md px-4 py-2 text-xs">
-          Сейчас ассистент работает из серверных переменных окружения (LLM_*). Заполните и
-          сохраните форму, чтобы управлять настройками отсюда.
+          Сейчас ассистент работает из серверных переменных окружения (LLM_*). Заполните и сохраните
+          форму, чтобы управлять настройками отсюда.
         </div>
       )}
 
@@ -171,7 +171,7 @@ export function AiSettingsPage() {
                     className={cn(
                       'rounded-md border p-3 text-left transition',
                       active
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
+                        ? 'border-primary bg-primary/5 ring-primary/40 ring-1'
                         : 'border-input hover:border-primary/40',
                     )}
                   >
@@ -197,7 +197,9 @@ export function AiSettingsPage() {
                 <option value="anthropic">Anthropic-совместимый (z.ai GLM Coding Plan)</option>
                 <option value="openai">OpenAI-совместимый (OpenRouter и др.)</option>
               </select>
-              <span className="text-muted-foreground mt-1 block text-xs">{PRESETS[apiStyle].hint}</span>
+              <span className="text-muted-foreground mt-1 block text-xs">
+                {PRESETS[apiStyle].hint}
+              </span>
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -227,7 +229,9 @@ export function AiSettingsPage() {
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={cfg.data?.hasApiKey ? '•••••• (сохранён, пусто — не менять)' : 'вставьте ключ'}
+                placeholder={
+                  cfg.data?.hasApiKey ? '•••••• (сохранён, пусто — не менять)' : 'вставьте ключ'
+                }
                 autoComplete="off"
                 className={inputCls}
               />
@@ -239,8 +243,8 @@ export function AiSettingsPage() {
             <div>
               <div className="font-medium">Инструкция для ассистента</div>
               <div className="text-muted-foreground text-xs">
-                Опишите, как у вас принято работать: порядок ведения заявки, когда какой статус,
-                как оформить гарантию/акт/счёт, ваши правила и особенности. Ассистент будет это
+                Опишите, как у вас принято работать: порядок ведения заявки, когда какой статус, как
+                оформить гарантию/акт/счёт, ваши правила и особенности. Ассистент будет это
                 учитывать и подсказывать сотрудникам «что и куда». Персональные данные сюда не
                 вписывайте — это общая памятка.
               </div>
@@ -282,7 +286,11 @@ export function AiSettingsPage() {
               disabled={testConfig.isPending}
               className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition disabled:opacity-50"
             >
-              {testConfig.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+              {testConfig.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wifi className="h-4 w-4" />
+              )}
               Проверить связь
             </button>
             {saved && (

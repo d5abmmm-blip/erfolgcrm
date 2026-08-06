@@ -79,7 +79,10 @@ export const contracts = pgTable(
      * Условия договора (см. ContractTerms). Default '{}' позволяет создавать
      * черновик без заполнения — терминальная UI догадается о значениях.
      */
-    termsJson: jsonb('terms_json').$type<ContractTerms>().notNull().default(sql`'{}'::jsonb`),
+    termsJson: jsonb('terms_json')
+      .$type<ContractTerms>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
 
     /** object_key подписанного скана (см. attachments). */
     signedPdfObjectKey: varchar('signed_pdf_object_key', { length: 500 }),

@@ -20,10 +20,7 @@ import {
   type Db,
 } from '@erfolg/db';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
-import {
-  getEngineerWorkPercentTx,
-  laborCostPerUnitKopecks,
-} from '../payroll/repository';
+import { getEngineerWorkPercentTx, laborCostPerUnitKopecks } from '../payroll/repository';
 
 type Tx = PgTransaction<never, never, never>;
 
@@ -144,10 +141,7 @@ async function selectLines(tx: Tx, workOrderId: string): Promise<WorkOrderLineDt
   return rows.map(toLineDto);
 }
 
-async function selectHeader(
-  tx: Tx,
-  filter: SQL,
-): Promise<Omit<WorkOrderDto, 'lines'> | null> {
+async function selectHeader(tx: Tx, filter: SQL): Promise<Omit<WorkOrderDto, 'lines'> | null> {
   const rows = await tx
     .select({
       id: workOrders.id,
@@ -185,10 +179,7 @@ async function selectHeader(
   };
 }
 
-async function loadFullByTicket(
-  tx: Tx,
-  ticketId: string,
-): Promise<WorkOrderDto | null> {
+async function loadFullByTicket(tx: Tx, ticketId: string): Promise<WorkOrderDto | null> {
   const header = await selectHeader(tx, eq(workOrders.ticketId, ticketId));
   if (!header) return null;
   const lines = await selectLines(tx, header.id);
@@ -562,9 +553,7 @@ export async function upsertLine(
           ...(input.comment !== undefined ? { comment: input.comment } : {}),
           ...(input.orderIdx !== undefined ? { orderIdx: input.orderIdx } : {}),
         })
-        .where(
-          and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)),
-        );
+        .where(and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)));
       resultId = lineId;
     } else {
       const costPerUnit = await resolveLineCost(tx, {
@@ -610,9 +599,7 @@ export async function deleteLine(
     const lineCostBefore = await sumLineCostKopecks(tx, workOrderId);
     await tx
       .delete(workOrderLines)
-      .where(
-        and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)),
-      );
+      .where(and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)));
     await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);
   });
 }

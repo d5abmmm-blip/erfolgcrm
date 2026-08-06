@@ -283,8 +283,7 @@ export function MobileTicketPage() {
         href="/m/queue"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К очереди
+        <ChevronLeft className="h-4 w-4" />К очереди
       </Link>
 
       <div className="bg-card space-y-3 rounded-lg border p-4">
@@ -324,7 +323,7 @@ export function MobileTicketPage() {
           )}
           {t.barcode && (
             <Row icon={ScanLine} label="Штрих-код">
-              <span className="font-mono text-xs break-all">{t.barcode}</span>
+              <span className="break-all font-mono text-xs">{t.barcode}</span>
             </Row>
           )}
         </div>
@@ -371,27 +370,39 @@ export function MobileTicketPage() {
         {t.assetModel && (
           <button
             type="button"
-            onClick={() => void (async () => {
-              const win = openPrintWindow();
-              const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                import('../../lib/pdf'),
-                import('../../lib/pdf/branding'),
-              ]);
-              await printAssetLabel({
-                asset: {
-                  model: t.assetModel ?? '—',
-                  manufacturer: null,
-                  serialNumber: t.assetSerialNumber ?? null,
-                  inventoryNumber: t.assetInventoryNumber ?? null,
-                  riskClass: null,
-                },
-                ticket: t.barcode
-                  ? { ticketNumber: t.ticketNumber, receivedAt: typeof t.receivedAt === 'string' ? t.receivedAt : t.receivedAt.toISOString(), barcode: t.barcode }
-                  : null,
-                fallbackBarcode: t.assetId ?? t.id,
-                tenantDisplayName: ERFOLG_FALLBACK.displayName,
-              }, win);
-            })()}
+            onClick={() =>
+              void (async () => {
+                const win = openPrintWindow();
+                const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
+                  import('../../lib/pdf'),
+                  import('../../lib/pdf/branding'),
+                ]);
+                await printAssetLabel(
+                  {
+                    asset: {
+                      model: t.assetModel ?? '—',
+                      manufacturer: null,
+                      serialNumber: t.assetSerialNumber ?? null,
+                      inventoryNumber: t.assetInventoryNumber ?? null,
+                      riskClass: null,
+                    },
+                    ticket: t.barcode
+                      ? {
+                          ticketNumber: t.ticketNumber,
+                          receivedAt:
+                            typeof t.receivedAt === 'string'
+                              ? t.receivedAt
+                              : t.receivedAt.toISOString(),
+                          barcode: t.barcode,
+                        }
+                      : null,
+                    fallbackBarcode: t.assetId ?? t.id,
+                    tenantDisplayName: ERFOLG_FALLBACK.displayName,
+                  },
+                  win,
+                );
+              })()
+            }
             className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
           >
             <Tag className="h-4 w-4" />
@@ -488,7 +499,8 @@ export function MobileTicketPage() {
         className="bg-card hover:bg-muted/40 flex h-14 w-full items-center justify-center gap-2 rounded-lg border text-base font-semibold transition"
       >
         <Wrench className="h-5 w-5" />
-        Журнал работ {wo.data ? `· ${(Number(wo.data.totalAmountKopecks) / 100).toLocaleString('ru-RU')} ₽` : ''}
+        Журнал работ{' '}
+        {wo.data ? `· ${(Number(wo.data.totalAmountKopecks) / 100).toLocaleString('ru-RU')} ₽` : ''}
       </Link>
 
       <div className="bg-card space-y-2 rounded-lg border p-3">
@@ -532,7 +544,7 @@ export function MobileTicketPage() {
                     </span>
                   </div>
                   {d.body && (
-                    <div className="text-muted-foreground mt-0.5 text-xs whitespace-pre-wrap">
+                    <div className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
                       {d.body}
                     </div>
                   )}
@@ -559,7 +571,6 @@ export function MobileTicketPage() {
           hint="Фото техники, состояния, повреждений"
         />
       </div>
-
     </div>
   );
 }

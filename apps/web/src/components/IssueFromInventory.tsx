@@ -147,14 +147,12 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
                   onChange={(e) => setQ(e.target.value)}
                   autoFocus
                   placeholder="Поиск по складу"
-                  className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
                 />
               </div>
               {debounced.length >= 1 && (
                 <ul className="bg-card max-h-60 overflow-auto rounded-md border">
-                  {list.isLoading && (
-                    <li className="text-muted-foreground p-2 text-xs">Поиск…</li>
-                  )}
+                  {list.isLoading && <li className="text-muted-foreground p-2 text-xs">Поиск…</li>}
                   {list.data?.items.length === 0 && (
                     <li className="text-muted-foreground p-2 text-xs">Ничего не найдено</li>
                   )}
@@ -193,7 +191,7 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
               min="0"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              className="bg-background mt-1 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
             />
           </label>
           {error && <div className="text-destructive text-sm">{error}</div>}
@@ -208,7 +206,7 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
             <button
               type="submit"
               disabled={upsert.isPending || issue.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {upsert.isPending || issue.isPending ? 'Списание…' : 'Списать'}
             </button>

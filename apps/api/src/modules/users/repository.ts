@@ -181,11 +181,7 @@ async function countActiveDirectorsTx(
   tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
   excludeUserId?: string,
 ): Promise<number> {
-  const filters = [
-    eq(users.role, 'director'),
-    eq(users.isActive, true),
-    isNull(users.deletedAt),
-  ];
+  const filters = [eq(users.role, 'director'), eq(users.isActive, true), isNull(users.deletedAt)];
   if (excludeUserId) filters.push(ne(users.id, excludeUserId));
   const rows = await tx
     .select({ c: sql<number>`count(*)::int` })
@@ -220,9 +216,7 @@ export async function updateUser(
       const dup = await tx
         .select({ id: users.id })
         .from(users)
-        .where(
-          and(eq(users.email, email), ne(users.id, userId), isNull(users.deletedAt)),
-        )
+        .where(and(eq(users.email, email), ne(users.id, userId), isNull(users.deletedAt)))
         .limit(1);
       if (dup[0]) throw new UserConflictError('email');
     }
@@ -241,11 +235,7 @@ export async function updateUser(
 
     if (Object.keys(set).length === 0) return toRow(current);
 
-    const [updated] = await tx
-      .update(users)
-      .set(set)
-      .where(eq(users.id, userId))
-      .returning();
+    const [updated] = await tx.update(users).set(set).where(eq(users.id, userId)).returning();
     return updated ? toRow(updated) : null;
   });
 }

@@ -95,10 +95,7 @@ beforeAll(async () => {
       .select({ id: users.id, email: users.email, role: users.role })
       .from(users)
       .where(
-        and(
-          eq(users.isActive, true),
-          or(eq(users.role, 'director'), eq(users.role, 'dispatcher')),
-        ),
+        and(eq(users.isActive, true), or(eq(users.role, 'director'), eq(users.role, 'dispatcher'))),
       ),
   );
   for (const u of staff) {
@@ -138,9 +135,7 @@ afterAll(async () => {
   }
   // Удаляем тестового диспетчера и связанные с ним записи лога.
   await withTenantTx(getDb(), erfolgId, async (tx) => {
-    await tx
-      .delete(metrologyReminderLog)
-      .where(eq(metrologyReminderLog.sentOn, todayIso()));
+    await tx.delete(metrologyReminderLog).where(eq(metrologyReminderLog.sentOn, todayIso()));
     await tx.delete(users).where(like(users.username, `${USERNAME_PREFIX}%`));
   });
 });
@@ -156,15 +151,10 @@ async function clearTestData(): Promise<void> {
         .delete(metrologySiDetails)
         .where(like(metrologySiDetails.typeName, `${TYPE_PREFIX}%`));
       // Сброс лога напоминаний на сегодня (мы в той же дате — иначе анти-спам всё заблокирует).
-      await tx
-        .delete(metrologyReminderLog)
-        .where(eq(metrologyReminderLog.sentOn, todayIso()));
+      await tx.delete(metrologyReminderLog).where(eq(metrologyReminderLog.sentOn, todayIso()));
       // Сброс requires_metrology у тестовых ассетов.
       for (const aid of erfolgAssetIds) {
-        await tx
-          .update(assets)
-          .set({ requiresMetrology: false })
-          .where(eq(assets.id, aid));
+        await tx.update(assets).set({ requiresMetrology: false }).where(eq(assets.id, aid));
       }
     });
   }
@@ -202,9 +192,7 @@ describe('metrology-reminder worker (10.G)', () => {
     // Минимум одно письмо нашему тестовому диспетчеру с обоими блоками.
     const mail = sent.find(
       (m) =>
-        m.to === testRecipientEmail &&
-        m.text.includes('Просрочены') &&
-        m.text.includes('7 дней'),
+        m.to === testRecipientEmail && m.text.includes('Просрочены') && m.text.includes('7 дней'),
     );
     expect(mail).toBeDefined();
     expect(mail!.subject).toMatch(/Метрология/);

@@ -23,9 +23,7 @@ import {
   updateAttestation,
 } from './repository';
 
-const isoDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
 
 const createSchema = z
   .object({
@@ -38,10 +36,10 @@ const createSchema = z
     documentAttachmentId: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
   })
-  .refine(
-    (v) => !v.validUntil || v.validUntil >= v.issuedAt,
-    { message: 'validUntil не может быть раньше issuedAt', path: ['validUntil'] },
-  );
+  .refine((v) => !v.validUntil || v.validUntil >= v.issuedAt, {
+    message: 'validUntil не может быть раньше issuedAt',
+    path: ['validUntil'],
+  });
 
 const updateSchema = z
   .object({

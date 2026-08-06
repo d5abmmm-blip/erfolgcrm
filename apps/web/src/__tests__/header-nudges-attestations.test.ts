@@ -60,9 +60,7 @@ describe('подсказка «следующее ТО» в форме граф�
   });
 
   it('будущий срок про просрочку не пишет', () => {
-    const давноВперёд = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    const давноВперёд = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     expect(formatNextDue(давноВперёд, '30')).not.toContain('просрочено');
   });
 

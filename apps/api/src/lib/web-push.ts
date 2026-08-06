@@ -17,7 +17,9 @@ function configure(): void {
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT ?? 'mailto:erfolgmt@mail.ru';
   if (!publicKey || !privateKey) {
-    logger.warn('VAPID keys not set — web-push отключён, push-уведомления будут падать с ошибкой при попытке отправки');
+    logger.warn(
+      'VAPID keys not set — web-push отключён, push-уведомления будут падать с ошибкой при попытке отправки',
+    );
     _configured = true;
     return;
   }

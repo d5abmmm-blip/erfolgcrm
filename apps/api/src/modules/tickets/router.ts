@@ -17,12 +17,7 @@ import {
   TicketSource,
   TicketStatus,
 } from '@erfolg/shared';
-import {
-  router,
-  directorProcedure,
-  engineerProcedure,
-  staffProcedure,
-} from '../../trpc/trpc';
+import { router, directorProcedure, engineerProcedure, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   addTicketNoteCmd,
@@ -181,9 +176,7 @@ export const ticketsRouter = router({
         action: z.enum(['inwork', 'ready', 'part']),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      engineerReactCmd(buildCmdCtx(ctx), input.ticketId, input.action),
-    ),
+    .mutation(({ ctx, input }) => engineerReactCmd(buildCmdCtx(ctx), input.ticketId, input.action)),
 
   get: engineerProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -208,9 +201,7 @@ export const ticketsRouter = router({
 
   update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateTicketSchema }))
-    .mutation(({ ctx, input }) =>
-      updateTicketCmd(buildCmdCtx(ctx), input.id, input.patch),
-    ),
+    .mutation(({ ctx, input }) => updateTicketCmd(buildCmdCtx(ctx), input.id, input.patch)),
 
   addNote: engineerProcedure
     .input(
@@ -270,7 +261,13 @@ export const ticketsRouter = router({
     .input(
       z.object({
         ticketId: z.string().uuid(),
-        documentKind: z.enum(['intake_act', 'invoice', 'work_act', 'defect_act', 'tech_condition_act']),
+        documentKind: z.enum([
+          'intake_act',
+          'invoice',
+          'work_act',
+          'defect_act',
+          'tech_condition_act',
+        ]),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -289,21 +286,13 @@ export const ticketsRouter = router({
     ),
 
   changeStatus: engineerProcedure.input(changeStatusSchema).mutation(({ ctx, input }) => {
-    if (
-      ctx.session.role === 'engineer' &&
-      !ENGINEER_ALLOWED_STATUSES.includes(input.status)
-    ) {
+    if (ctx.session.role === 'engineer' && !ENGINEER_ALLOWED_STATUSES.includes(input.status)) {
       throw new TRPCError({
         code: 'FORBIDDEN',
         message: 'Инженер может ставить только diagnostics / in_progress / act_pending',
       });
     }
-    return changeStatusCmd(
-      buildCmdCtx(ctx),
-      input.id,
-      input.status,
-      input.cancelReason ?? null,
-    );
+    return changeStatusCmd(buildCmdCtx(ctx), input.id, input.status, input.cancelReason ?? null);
   }),
 
   cancel: directorProcedure
@@ -339,23 +328,19 @@ export const ticketsRouter = router({
 
   /* ──────────────────── Stage 11: Schedule ──────────────────── */
 
-  schedule: staffProcedure
-    .input(scheduleInputSchema)
-    .mutation(({ ctx, input }) =>
-      scheduleCmd(buildCmdCtx(ctx), {
-        ticketId: input.ticketId,
-        engineerId: input.engineerId,
-        scheduledStartAt: input.scheduledStartAt,
-        scheduledEndAt: input.scheduledEndAt ?? null,
-        estimatedMinutes: input.estimatedMinutes ?? null,
-      }),
-    ),
+  schedule: staffProcedure.input(scheduleInputSchema).mutation(({ ctx, input }) =>
+    scheduleCmd(buildCmdCtx(ctx), {
+      ticketId: input.ticketId,
+      engineerId: input.engineerId,
+      scheduledStartAt: input.scheduledStartAt,
+      scheduledEndAt: input.scheduledEndAt ?? null,
+      estimatedMinutes: input.estimatedMinutes ?? null,
+    }),
+  ),
 
   unschedule: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      unscheduleCmd(buildCmdCtx(ctx), { ticketId: input.ticketId }),
-    ),
+    .mutation(({ ctx, input }) => unscheduleCmd(buildCmdCtx(ctx), { ticketId: input.ticketId })),
 
   /**
    * Помощники по заявке — второй, третий инженер на одной работе.

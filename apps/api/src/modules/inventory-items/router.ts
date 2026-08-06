@@ -47,9 +47,7 @@ export const inventoryItemsRouter = router({
     .input(
       z.object({ itemId: z.string().uuid(), limit: z.number().int().min(1).max(500).optional() }),
     )
-    .query(({ ctx, input }) =>
-      listMovementsQuery(ctx.db, ctx.tenant, input.itemId, input.limit),
-    ),
+    .query(({ ctx, input }) => listMovementsQuery(ctx.db, ctx.tenant, input.itemId, input.limit)),
 
   create: staffProcedure
     .input(upsertSchema)

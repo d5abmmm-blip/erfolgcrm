@@ -6,12 +6,7 @@
  */
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
-import {
-  inventoryItems,
-  inventoryMovements,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { inventoryItems, inventoryMovements, withTenantTx, type Db } from '@erfolg/db';
 
 export interface InventoryItemDto {
   id: string;
@@ -199,11 +194,7 @@ export async function deleteItem(db: Db, tenantId: string, itemId: string): Prom
 }
 
 /** Проверка что у item есть movements (запрещаем удаление). */
-export async function hasMovements(
-  db: Db,
-  tenantId: string,
-  itemId: string,
-): Promise<boolean> {
+export async function hasMovements(db: Db, tenantId: string, itemId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ id: inventoryMovements.id })
@@ -215,11 +206,7 @@ export async function hasMovements(
 }
 
 /** Существует ли item в этом tenant — нужно для service-валидации. */
-export async function itemExists(
-  db: Db,
-  tenantId: string,
-  itemId: string,
-): Promise<boolean> {
+export async function itemExists(db: Db, tenantId: string, itemId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ id: inventoryItems.id })

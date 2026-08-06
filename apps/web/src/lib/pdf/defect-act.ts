@@ -48,9 +48,20 @@ function headerBlock(input: PrintDefectActInput): Content {
         stack: [
           { text: t.displayName || 'ERFOLG', fontSize: 22, bold: true, color: BRAND_PRIMARY },
           ...(t.slogan
-            ? [{ text: t.slogan, fontSize: 9, color: BRAND_GREY, margin: [0, 2, 0, 0] as [number, number, number, number] }]
+            ? [
+                {
+                  text: t.slogan,
+                  fontSize: 9,
+                  color: BRAND_GREY,
+                  margin: [0, 2, 0, 0] as [number, number, number, number],
+                },
+              ]
             : []),
-          { text: t.legalName, fontSize: 9, margin: [0, 4, 0, 0] as [number, number, number, number] },
+          {
+            text: t.legalName,
+            fontSize: 9,
+            margin: [0, 4, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
@@ -87,9 +98,7 @@ function ownerBlock(input: PrintDefectActInput): Content {
       ? String(new Date(a.commissionedAt).getFullYear())
       : '';
 
-  const rows: Content[] = [
-    fieldRow('Владелец оборудования:', c.displayName),
-  ];
+  const rows: Content[] = [fieldRow('Владелец оборудования:', c.displayName)];
   if (c.phone) rows.push(fieldRow('Телефон:', c.phone));
   if (c.legalAddress) rows.push(fieldRow('Адрес:', c.legalAddress));
   rows.push(fieldRow('Оборудование:', equipment));
@@ -143,7 +152,13 @@ function worksTable(input: PrintDefectActInput): Content {
   const lines = input.workOrder.lines;
   if (lines.length === 0) {
     // Пустая строка под ручное заполнение, если позиции ещё не заведены.
-    body.push([cell(' '), cell(' ', 'center'), cell(' ', 'right'), cell(' ', 'right'), cell(' ', 'right')]);
+    body.push([
+      cell(' '),
+      cell(' ', 'center'),
+      cell(' ', 'right'),
+      cell(' ', 'right'),
+      cell(' ', 'right'),
+    ]);
   } else {
     lines.forEach((line) => {
       body.push([
@@ -157,7 +172,14 @@ function worksTable(input: PrintDefectActInput): Content {
   }
 
   body.push([
-    { text: 'ИТОГО:', bold: true, fontSize: 9, alignment: 'right', margin: [4, 3, 4, 3], colSpan: 4 },
+    {
+      text: 'ИТОГО:',
+      bold: true,
+      fontSize: 9,
+      alignment: 'right',
+      margin: [4, 3, 4, 3],
+      colSpan: 4,
+    },
     {},
     {},
     {},
@@ -221,7 +243,12 @@ function signaturesBlock(input: PrintDefectActInput): Content {
             color: BRAND_GREY,
             margin: [96, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            text: 'М.П.',
+            fontSize: 9,
+            color: BRAND_GREY,
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       },
     ],
@@ -252,10 +279,16 @@ export function buildDefectActDoc(input: PrintDefectActInput): TDocumentDefiniti
     ownerBlock(input),
   ];
 
-  const works = section('Выполненные работы:', input.workOrder.repairDescription || input.workOrder.diagnosis);
+  const works = section(
+    'Выполненные работы:',
+    input.workOrder.repairDescription || input.workOrder.diagnosis,
+  );
   if (works) content.push(works);
 
-  const conclusion = section('Заключение о причинах неисправности:', input.workOrder.recommendation);
+  const conclusion = section(
+    'Заключение о причинах неисправности:',
+    input.workOrder.recommendation,
+  );
   if (conclusion) content.push(conclusion);
 
   content.push(worksTable(input));

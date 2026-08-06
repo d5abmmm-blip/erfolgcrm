@@ -11,13 +11,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
-import {
-  attachments,
-  clients,
-  getDb,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { attachments, clients, getDb, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import { insertPending, softDelete } from '../modules/attachments/repository';
@@ -132,7 +126,10 @@ describe('storage-cleanup processPurge', () => {
 
     expect(mock.removed).toEqual([]);
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ purgedAt: attachments.purgedAt }).from(attachments).where(eq(attachments.id, a.id)),
+      tx
+        .select({ purgedAt: attachments.purgedAt })
+        .from(attachments)
+        .where(eq(attachments.id, a.id)),
     );
     expect(row?.purgedAt).toBeNull();
   });
@@ -141,7 +138,10 @@ describe('storage-cleanup processPurge', () => {
     const a = await makeAttachment();
     await softDelete(getDb(), erfolgId, a.id);
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.update(attachments).set({ purgedAt: sql`now()` }).where(eq(attachments.id, a.id)),
+      tx
+        .update(attachments)
+        .set({ purgedAt: sql`now()` })
+        .where(eq(attachments.id, a.id)),
     );
 
     await processPurge({ tenantId: erfolgId, attachmentId: a.id, objectKey: a.objectKey });

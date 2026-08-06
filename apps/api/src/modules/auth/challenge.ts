@@ -50,7 +50,10 @@ function sign(payloadB64: string): string {
   return b64url(createHmac('sha256', getSecret()).update(payloadB64).digest());
 }
 
-export function issueChallengeToken(userId: string, tenantId: string): {
+export function issueChallengeToken(
+  userId: string,
+  tenantId: string,
+): {
   token: string;
   jti: string;
 } {

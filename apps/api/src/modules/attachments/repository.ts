@@ -72,11 +72,19 @@ export async function verifyReferenceBelongsToTenant(
 ): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     if (refType === 'ticket') {
-      const r = await tx.select({ id: tickets.id }).from(tickets).where(eq(tickets.id, refId)).limit(1);
+      const r = await tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(eq(tickets.id, refId))
+        .limit(1);
       return r.length > 0;
     }
     if (refType === 'asset') {
-      const r = await tx.select({ id: assets.id }).from(assets).where(eq(assets.id, refId)).limit(1);
+      const r = await tx
+        .select({ id: assets.id })
+        .from(assets)
+        .where(eq(assets.id, refId))
+        .limit(1);
       return r.length > 0;
     }
     if (refType === 'inventory_batch') {
@@ -181,11 +189,7 @@ export async function listByReference(
   });
 }
 
-export async function getById(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<AttachmentDto | null> {
+export async function getById(db: Db, tenantId: string, id: string): Promise<AttachmentDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select()

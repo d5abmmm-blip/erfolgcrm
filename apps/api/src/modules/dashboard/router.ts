@@ -31,21 +31,15 @@ export const dashboardRouter = router({
 
   listOverdueInvoices: directorProcedure
     .input(z.object({ limit: limitSchema }).optional())
-    .query(({ ctx, input }) =>
-      listOverdueInvoicesQuery(ctx.db, ctx.tenant.id, input?.limit),
-    ),
+    .query(({ ctx, input }) => listOverdueInvoicesQuery(ctx.db, ctx.tenant.id, input?.limit)),
 
   listSlaAtRisk: directorProcedure
     .input(z.object({ limit: limitSchema }).optional())
-    .query(({ ctx, input }) =>
-      listSlaAtRiskQuery(ctx.db, ctx.tenant.id, input?.limit),
-    ),
+    .query(({ ctx, input }) => listSlaAtRiskQuery(ctx.db, ctx.tenant.id, input?.limit)),
 
   listLowStock: directorProcedure
     .input(z.object({ limit: limitSchema }).optional())
-    .query(({ ctx, input }) =>
-      listLowStockQuery(ctx.db, ctx.tenant.id, input?.limit),
-    ),
+    .query(({ ctx, input }) => listLowStockQuery(ctx.db, ctx.tenant.id, input?.limit)),
 
   listMaintenanceToday: directorProcedure
     .input(
@@ -67,9 +61,7 @@ export const dashboardRouter = router({
 
   getDailySummary: directorProcedure
     .input(z.object({ date: z.string().datetime() }))
-    .query(({ ctx, input }) =>
-      getDailySummaryQuery(ctx.db, ctx.tenant.id, input.date),
-    ),
+    .query(({ ctx, input }) => getDailySummaryQuery(ctx.db, ctx.tenant.id, input.date)),
 
   /** Счётчики «требует внимания» для бейджей бокового меню (ролевые). */
   navBadges: engineerProcedure.query(({ ctx }) =>

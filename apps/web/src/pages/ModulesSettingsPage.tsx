@@ -81,15 +81,18 @@ export function ModulesSettingsPage() {
 
       <h1 className="text-2xl font-semibold">Разделы интерфейса</h1>
       <p className="text-muted-foreground mt-1 text-sm">
-        Скройте разделы, которыми не пользуетесь — они исчезнут из меню у всех сотрудников.
-        Данные и расчёты при этом сохраняются: раздел можно вернуть в любой момент.
-        Базовые разделы (Дашборд, Заявки, Клиенты, Настройки) отключить нельзя.
+        Скройте разделы, которыми не пользуетесь — они исчезнут из меню у всех сотрудников. Данные и
+        расчёты при этом сохраняются: раздел можно вернуть в любой момент. Базовые разделы (Дашборд,
+        Заявки, Клиенты, Настройки) отключить нельзя.
       </p>
 
       {!isDirector && (
         <div className="border-warning/40 bg-warning/10 text-warning-foreground mt-4 flex items-start gap-2 rounded-lg border p-3 text-sm">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Менять список разделов может только директор. Ниже — текущее состояние (только просмотр).</span>
+          <span>
+            Менять список разделов может только директор. Ниже — текущее состояние (только
+            просмотр).
+          </span>
         </div>
       )}
 
@@ -130,7 +133,9 @@ export function ModulesSettingsPage() {
         <div className="bg-background/80 sticky bottom-0 mt-6 flex items-center justify-between gap-3 border-t py-4 backdrop-blur">
           <div className="text-muted-foreground text-sm">
             {disabledCount === 0 ? 'Все разделы включены' : `Скрыто разделов: ${disabledCount}`}
-            {isDirty && <span className="text-warning-foreground"> · есть несохранённые изменения</span>}
+            {isDirty && (
+              <span className="text-warning-foreground"> · есть несохранённые изменения</span>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -154,9 +159,7 @@ export function ModulesSettingsPage() {
         </div>
       )}
 
-      {save.error && (
-        <div className="text-destructive mt-3 text-sm">{save.error.message}</div>
-      )}
+      {save.error && <div className="text-destructive mt-3 text-sm">{save.error.message}</div>}
     </div>
   );
 }

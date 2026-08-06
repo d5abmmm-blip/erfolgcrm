@@ -13,14 +13,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
-import {
-  assets,
-  clients,
-  getDb,
-  maintenanceSchedules,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, clients, getDb, maintenanceSchedules, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { listSchedules } from '../modules/maintenance/repository';
 import { decommissionAssetCmd } from '../modules/assets/service';

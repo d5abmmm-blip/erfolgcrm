@@ -7,13 +7,7 @@
  */
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
-import {
-  clients,
-  contracts,
-  withTenantTx,
-  type ContractTerms,
-  type Db,
-} from '@erfolg/db';
+import { clients, contracts, withTenantTx, type ContractTerms, type Db } from '@erfolg/db';
 
 export type ContractType = 'service' | 'one_time';
 export type ContractStatus = 'draft' | 'active' | 'expired' | 'terminated';
@@ -72,10 +66,7 @@ export interface ListOpts {
 
 const PAGE_SIZE = 25;
 
-function rowToDto(
-  row: typeof contracts.$inferSelect,
-  clientDisplayName: string,
-): ContractDto {
+function rowToDto(row: typeof contracts.$inferSelect, clientDisplayName: string): ContractDto {
   return {
     id: row.id,
     clientId: row.clientId,
@@ -87,7 +78,7 @@ function rowToDto(
     status: row.status,
     validFrom: row.validFrom ?? null,
     validUntil: row.validUntil ?? null,
-    terms: (row.termsJson ?? {}),
+    terms: row.termsJson ?? {},
     signedPdfObjectKey: row.signedPdfObjectKey ?? null,
     notes: row.notes ?? null,
     createdAt: row.createdAt,
@@ -107,10 +98,7 @@ export async function listContracts(
     if (opts.search) {
       const q = `%${opts.search.trim()}%`;
       filters.push(
-        or(
-          ruIlike(contracts.contractNumber, q),
-          ruIlike(clients.displayName, q),
-        ) as SQL,
+        or(ruIlike(contracts.contractNumber, q), ruIlike(clients.displayName, q)) as SQL,
       );
     }
     const where = and(...filters);
@@ -215,11 +203,7 @@ export async function updateContract(
   });
 }
 
-export async function archiveContract(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<boolean> {
+export async function archiveContract(db: Db, tenantId: string, id: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const updated = await tx
       .update(contracts)

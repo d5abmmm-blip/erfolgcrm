@@ -6,13 +6,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { and, desc, eq } from 'drizzle-orm';
-import {
-  assetEvents,
-  assets,
-  clients,
-  getDb,
-  withTenantTx,
-} from '@erfolg/db';
+import { assetEvents, assets, clients, getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   createAssetWithEvent,

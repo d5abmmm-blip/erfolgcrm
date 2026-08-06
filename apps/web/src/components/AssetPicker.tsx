@@ -41,10 +41,7 @@ export function AssetPicker({
     { q: debounced },
     { enabled: !ownerClientId && debounced.length >= 1 },
   );
-  const selected = trpc.assets.get.useQuery(
-    { id: value ?? '' },
-    { enabled: !!value },
-  );
+  const selected = trpc.assets.get.useQuery({ id: value ?? '' }, { enabled: !!value });
 
   // Сброс поискового стейта при смене владельца
   useEffect(() => {
@@ -60,9 +57,7 @@ export function AssetPicker({
       const items = byClient.data ?? [];
       if (items.length === 0) {
         return (
-          <li className="text-muted-foreground p-2 text-xs">
-            У клиента нет техники в системе
-          </li>
+          <li className="text-muted-foreground p-2 text-xs">У клиента нет техники в системе</li>
         );
       }
       return items.map((a) => (
@@ -80,11 +75,7 @@ export function AssetPicker({
       ));
     }
     if (debounced.length < 1) {
-      return (
-        <li className="text-muted-foreground p-2 text-xs">
-          Введите хотя бы один символ
-        </li>
-      );
+      return <li className="text-muted-foreground p-2 text-xs">Введите хотя бы один символ</li>;
     }
     if (search.isLoading) {
       return <li className="text-muted-foreground p-2 text-xs">Поиск…</li>;
@@ -137,7 +128,7 @@ export function AssetPicker({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="bg-background hover:bg-muted/30 w-full rounded-md border px-3 py-2 text-left text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background hover:bg-muted/30 focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-left text-sm outline-none focus:ring-2"
         >
           <span className="text-muted-foreground">
             {byClient.isLoading
@@ -159,7 +150,7 @@ export function AssetPicker({
             }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
       )}

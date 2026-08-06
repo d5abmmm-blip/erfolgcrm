@@ -75,9 +75,7 @@ interface Move {
 // ⚠️ Пароли ящика (email_configs.smtp/imap_password_encrypted), токены Telegram,
 // ключ ИИ и секреты 2FA НЕ переносятся сознательно: это секреты доступа, они
 // остаются зашифрованными, и ради них PII_ENCRYPTION_KEY нужен по-прежнему.
-const MOVES: Move[] = [
-  { table: 'clients', from: 'phone_encrypted', to: 'individual_phone' },
-];
+const MOVES: Move[] = [{ table: 'clients', from: 'phone_encrypted', to: 'individual_phone' }];
 
 /**
  * Сверка: открытое значение должно совпадать с расшифровкой шифрованного.
@@ -163,7 +161,9 @@ async function main(): Promise<void> {
           `Переносить нечего, но ${drift} значений РАСХОДЯТСЯ с расшифровкой старых колонок.`,
         );
       }
-      console.info('\nПереносить нечего — всё уже на месте, сверка с шифрованными колонками сошлась.');
+      console.info(
+        '\nПереносить нечего — всё уже на месте, сверка с шифрованными колонками сошлась.',
+      );
       return;
     }
 
@@ -211,7 +211,9 @@ async function main(): Promise<void> {
     }
     console.info('\nСверка: все перенесённые значения совпали с расшифровкой старых колонок.');
     console.info('Готово. Картотека клиентов и переписка лежат открыто.');
-    console.info('Служебные пароли (почта, бот, ИИ, 2FA) остались зашифрованными — так и задумано.');
+    console.info(
+      'Служебные пароли (почта, бот, ИИ, 2FA) остались зашифрованными — так и задумано.',
+    );
   } finally {
     await db.$client.end();
   }

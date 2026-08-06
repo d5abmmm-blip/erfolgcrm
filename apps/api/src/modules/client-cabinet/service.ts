@@ -20,11 +20,7 @@ export async function getMyAssetForCreateTicket(
       .select({ id: assets.id })
       .from(assets)
       .where(
-        and(
-          eq(assets.id, assetId),
-          eq(assets.ownerClientId, clientId),
-          isNull(assets.deletedAt),
-        ),
+        and(eq(assets.id, assetId), eq(assets.ownerClientId, clientId), isNull(assets.deletedAt)),
       )
       .limit(1);
     // WHERE гарантирует owner_client_id = clientId, поэтому владелец здесь — это clientId.

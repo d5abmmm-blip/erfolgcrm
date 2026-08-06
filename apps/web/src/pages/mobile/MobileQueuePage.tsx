@@ -44,12 +44,7 @@ import {
 const PAGE_STEP = 50;
 const MAX_PAGE_SIZE = 500;
 
-const ACTIVE_STATUSES: TicketStatus[] = [
-  'received',
-  'diagnostics',
-  'in_progress',
-  'act_pending',
-];
+const ACTIVE_STATUSES: TicketStatus[] = ['received', 'diagnostics', 'in_progress', 'act_pending'];
 
 type ReactAction = 'inwork' | 'ready' | 'part';
 
@@ -124,10 +119,7 @@ export function MobileQueuePage({ engineerId }: Props) {
     setBusyTicket(null);
     if (result.status === 'ok') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
-      await Promise.all([
-        utils.tickets.myTickets.invalidate(),
-        utils.tickets.myList.invalidate(),
-      ]);
+      await Promise.all([utils.tickets.myTickets.invalidate(), utils.tickets.myList.invalidate()]);
       showToast('ok', result.data.message);
     } else if (result.status === 'queued') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
@@ -164,8 +156,7 @@ export function MobileQueuePage({ engineerId }: Props) {
     const todayItems = items
       .filter((s) => inDayRange(new Date(s.scheduledStartAt), today, tomorrow))
       .sort(
-        (a, b) =>
-          new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
+        (a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
       );
     if (todayItems.length > 0) {
       return { scheduleHeader: 'Сегодня по графику' as const, scheduleItems: todayItems };
@@ -173,8 +164,7 @@ export function MobileQueuePage({ engineerId }: Props) {
     const tomorrowItems = items
       .filter((s) => inDayRange(new Date(s.scheduledStartAt), tomorrow, dayAfterTomorrow))
       .sort(
-        (a, b) =>
-          new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
+        (a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime(),
       );
     if (tomorrowItems.length > 0) {
       return { scheduleHeader: 'Завтра по графику' as const, scheduleItems: tomorrowItems };
@@ -281,13 +271,13 @@ export function MobileQueuePage({ engineerId }: Props) {
       {/* Поиск по загруженной очереди: номер, клиент, модель, серийный/инв. номер. */}
       <div className="px-3 pt-3">
         <div className="relative">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="search"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             placeholder="Номер, клиент, модель, серийный или инв."
-            className="focus:ring-primary/40 bg-background w-full rounded-lg border py-2.5 pr-3 pl-9 text-sm outline-none focus:ring-2"
+            className="focus:ring-primary/40 bg-background w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2"
             autoComplete="off"
           />
         </div>
@@ -334,11 +324,11 @@ export function MobileQueuePage({ engineerId }: Props) {
                   className="bg-primary/5 hover:bg-primary/10 active:bg-primary/15 border-primary/20 flex items-center gap-3 rounded-lg border p-3 transition"
                 >
                   <div className="bg-primary/10 text-primary flex min-w-[64px] shrink-0 flex-col items-center justify-center rounded-md px-2 py-1.5">
-                    <span className="text-base leading-tight font-semibold tabular-nums">
+                    <span className="text-base font-semibold tabular-nums leading-tight">
                       {fmtTime(s.scheduledStartAt)}
                     </span>
                     {s.scheduledEndAt && (
-                      <span className="text-[10px] leading-tight opacity-70 tabular-nums">
+                      <span className="text-[10px] tabular-nums leading-tight opacity-70">
                         до {fmtTime(s.scheduledEndAt)}
                       </span>
                     )}
@@ -392,10 +382,8 @@ export function MobileQueuePage({ engineerId }: Props) {
                     стоит {c.stuckDays} дн
                   </span>
                 </div>
-                {c.assetModel && (
-                  <div className="mt-1 text-sm font-medium">{c.assetModel}</div>
-                )}
-                <div className="text-destructive/80 mt-0.5 mb-2.5 text-xs">
+                {c.assetModel && <div className="mt-1 text-sm font-medium">{c.assetModel}</div>}
+                <div className="text-destructive/80 mb-2.5 mt-0.5 text-xs">
                   причина не указана — что происходит?
                 </div>
                 <div className="flex flex-col gap-2">
@@ -570,7 +558,6 @@ export function MobileQueuePage({ engineerId }: Props) {
           )}
         </div>
       )}
-
     </div>
   );
 }

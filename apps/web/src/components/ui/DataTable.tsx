@@ -71,10 +71,7 @@ export function DataTable<T>({
         <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
           <tr>
             {columns.map((c) => (
-              <th
-                key={c.key}
-                className={cn('px-3 py-2 text-left font-medium', c.headerClassName)}
-              >
+              <th key={c.key} className={cn('px-3 py-2 text-left font-medium', c.headerClassName)}>
                 {c.label}
               </th>
             ))}
@@ -108,9 +105,9 @@ export function DataTable<T>({
                 <td key={c.key} className={cn('px-3 py-2', c.className)}>
                   {c.render
                     ? c.render(row)
-                    : ((row as Record<string, unknown>)[c.key] as ReactNode) ?? (
+                    : (((row as Record<string, unknown>)[c.key] as ReactNode) ?? (
                         <span className="text-muted-foreground">—</span>
-                      )}
+                      ))}
                 </td>
               ))}
             </tr>

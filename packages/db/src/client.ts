@@ -23,7 +23,8 @@ const DEV_FALLBACK_URL = 'postgresql://app_runtime:app_runtime_dev_only@localhos
 
 export function getDb() {
   if (!_db) {
-    const url = process.env.DATABASE_URL ?? (process.env.NODE_ENV === 'production' ? null : DEV_FALLBACK_URL);
+    const url =
+      process.env.DATABASE_URL ?? (process.env.NODE_ENV === 'production' ? null : DEV_FALLBACK_URL);
     if (!url) throw new Error('DATABASE_URL is required in production');
     _db = createDb(url);
   }

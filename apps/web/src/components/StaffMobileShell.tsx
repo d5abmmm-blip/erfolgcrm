@@ -73,8 +73,8 @@ export function StaffMobileShell({ children, session, onUseFullVersion }: Props)
   const tabs = TABS.filter((t) => !t.module || !disabledModules.includes(t.module));
 
   const title =
-    NAV_ITEMS.find((n) => (n.href === '/' ? location === '/' : location.startsWith(n.href)))?.label ??
-    'ErfolgCRM';
+    NAV_ITEMS.find((n) => (n.href === '/' ? location === '/' : location.startsWith(n.href)))
+      ?.label ?? 'ErfolgCRM';
 
   const initials = session.user.fullName
     .split(/\s+/)
@@ -111,7 +111,7 @@ export function StaffMobileShell({ children, session, onUseFullVersion }: Props)
         </button>
       </header>
 
-      <main className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-20">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-20">
         {children}
       </main>
 
@@ -143,7 +143,7 @@ export function StaffMobileShell({ children, session, onUseFullVersion }: Props)
               >
                 <Icon className="h-5.5 w-5.5" />
                 {badge > 0 && (
-                  <span className="bg-destructive text-destructive-foreground absolute -right-0.5 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-4 tabular-nums">
+                  <span className="bg-destructive text-destructive-foreground absolute -right-0.5 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums leading-4">
                     {badge > 99 ? '99+' : badge}
                   </span>
                 )}

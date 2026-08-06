@@ -66,9 +66,10 @@ export function SalesFormPage() {
             name: i.name,
             qtyStr: String(i.quantity),
             priceRubStr: (Number(i.unitPriceKopecks) / 100).toString(),
-            costRubStr: i.unitCostKopecks && i.unitCostKopecks !== '0'
-              ? (Number(i.unitCostKopecks) / 100).toString()
-              : '',
+            costRubStr:
+              i.unitCostKopecks && i.unitCostKopecks !== '0'
+                ? (Number(i.unitCostKopecks) / 100).toString()
+                : '',
           }))
         : [emptyRow()],
     );
@@ -119,7 +120,10 @@ export function SalesFormPage() {
     void utils.cash.invalidate();
   };
   const setStatusM = trpc.sales.setStatus.useMutation({ onSuccess: refresh });
-  const payM = trpc.sales.pay.useMutation({ onSuccess: refresh, onError: (e) => setErr(e.message) });
+  const payM = trpc.sales.pay.useMutation({
+    onSuccess: refresh,
+    onError: (e) => setErr(e.message),
+  });
   const unpayM = trpc.sales.unpay.useMutation({ onSuccess: refresh });
   const deleteM = trpc.sales.delete.useMutation({
     onSuccess: () => {
@@ -152,16 +156,24 @@ export function SalesFormPage() {
       return;
     }
     if (isEdit && editId) {
-      update.mutate({ id: editId, supplier: supplier.trim() || null, comment: comment.trim() || null, items: built });
+      update.mutate({
+        id: editId,
+        supplier: supplier.trim() || null,
+        comment: comment.trim() || null,
+        items: built,
+      });
     } else {
-      create.mutate({ clientId, supplier: supplier.trim() || null, comment: comment.trim() || null, items: built });
+      create.mutate({
+        clientId,
+        supplier: supplier.trim() || null,
+        comment: comment.trim() || null,
+        items: built,
+      });
     }
   };
 
   if (isEdit && existing.isLoading) {
-    return (
-      <div className="text-muted-foreground mx-auto max-w-3xl p-6 text-sm">Загружаем…</div>
-    );
+    return <div className="text-muted-foreground mx-auto max-w-3xl p-6 text-sm">Загружаем…</div>;
   }
 
   // Пока записи НЕТ — форму не показываем. Условие именно «нет данных», а не «есть
@@ -195,9 +207,11 @@ export function SalesFormPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
-      <Link href="/sales" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm">
-        <ChevronLeft className="h-4 w-4" />
-        К списку продаж
+      <Link
+        href="/sales"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+      >
+        <ChevronLeft className="h-4 w-4" />К списку продаж
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold md:text-2xl">
@@ -237,7 +251,14 @@ export function SalesFormPage() {
 
         <div>
           <label className="mb-1 block text-sm font-medium">Поставщик (опц.)</label>
-          <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} disabled={isPaid} placeholder="У кого закупаем" className={inputCls} />
+          <input
+            type="text"
+            value={supplier}
+            onChange={(e) => setSupplier(e.target.value)}
+            disabled={isPaid}
+            placeholder="У кого закупаем"
+            className={inputCls}
+          />
         </div>
 
         {/* Позиции */}
@@ -245,7 +266,11 @@ export function SalesFormPage() {
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-medium">Позиции</label>
             {!isPaid && (
-              <button type="button" onClick={() => setItems((p) => [...p, emptyRow()])} className="text-primary inline-flex items-center gap-1 text-sm hover:underline">
+              <button
+                type="button"
+                onClick={() => setItems((p) => [...p, emptyRow()])}
+                className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
+              >
                 <Plus className="h-3.5 w-3.5" />
                 Добавить
               </button>
@@ -264,7 +289,11 @@ export function SalesFormPage() {
                 <input
                   type="text"
                   value={row.name}
-                  onChange={(e) => setItems((p) => p.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)))}
+                  onChange={(e) =>
+                    setItems((p) =>
+                      p.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)),
+                    )
+                  }
                   disabled={isPaid}
                   placeholder="Наименование (модель, арт.)"
                   className={inputCls}
@@ -273,7 +302,11 @@ export function SalesFormPage() {
                   type="number"
                   min={1}
                   value={row.qtyStr}
-                  onChange={(e) => setItems((p) => p.map((r, i) => (i === idx ? { ...r, qtyStr: e.target.value } : r)))}
+                  onChange={(e) =>
+                    setItems((p) =>
+                      p.map((r, i) => (i === idx ? { ...r, qtyStr: e.target.value } : r)),
+                    )
+                  }
                   disabled={isPaid}
                   placeholder="Кол-во"
                   className={`${inputCls} text-right`}
@@ -282,7 +315,11 @@ export function SalesFormPage() {
                   type="text"
                   inputMode="decimal"
                   value={row.priceRubStr}
-                  onChange={(e) => setItems((p) => p.map((r, i) => (i === idx ? { ...r, priceRubStr: e.target.value } : r)))}
+                  onChange={(e) =>
+                    setItems((p) =>
+                      p.map((r, i) => (i === idx ? { ...r, priceRubStr: e.target.value } : r)),
+                    )
+                  }
                   disabled={isPaid}
                   placeholder="Цена, ₽"
                   className={`${inputCls} text-right`}
@@ -291,7 +328,11 @@ export function SalesFormPage() {
                   type="text"
                   inputMode="decimal"
                   value={row.costRubStr}
-                  onChange={(e) => setItems((p) => p.map((r, i) => (i === idx ? { ...r, costRubStr: e.target.value } : r)))}
+                  onChange={(e) =>
+                    setItems((p) =>
+                      p.map((r, i) => (i === idx ? { ...r, costRubStr: e.target.value } : r)),
+                    )
+                  }
                   disabled={isPaid}
                   placeholder="Закупка"
                   title="За сколько купили (за единицу) — для маржи"
@@ -312,7 +353,9 @@ export function SalesFormPage() {
           <div className="mt-3 space-y-1 border-t pt-3 text-right text-sm">
             <div>
               <span className="text-muted-foreground">Сумма продажи: </span>
-              <span className="text-lg font-semibold tabular-nums">{formatRub(String(totalKopecks))}</span>
+              <span className="text-lg font-semibold tabular-nums">
+                {formatRub(String(totalKopecks))}
+              </span>
             </div>
             {costKopecks > 0 && (
               <>
@@ -338,20 +381,41 @@ export function SalesFormPage() {
 
         <div>
           <label className="mb-1 block text-sm font-medium">Комментарий</label>
-          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} disabled={isPaid} className={inputCls} />
+          <textarea
+            rows={2}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            disabled={isPaid}
+            className={inputCls}
+          />
         </div>
 
         {err && (
-          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">{err}</div>
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
+            {err}
+          </div>
         )}
 
         {!isPaid && (
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => navigate('/sales')} className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => navigate('/sales')}
+              className="hover:bg-muted rounded-md border px-3 py-1.5 text-sm font-medium"
+            >
               Отмена
             </button>
-            <button type="button" onClick={submit} disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition disabled:opacity-50">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={saving}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
               {isEdit ? 'Сохранить' : 'Создать продажу'}
             </button>
           </div>
@@ -363,10 +427,14 @@ export function SalesFormPage() {
         <>
           <section className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
             <div>
-              <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Статус заказа</div>
+              <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Статус заказа
+              </div>
               <select
                 value={sale.status}
-                onChange={(e) => setStatusM.mutate({ id: sale.id, status: e.target.value as SaleStatus })}
+                onChange={(e) =>
+                  setStatusM.mutate({ id: sale.id, status: e.target.value as SaleStatus })
+                }
                 disabled={setStatusM.isPending}
                 className="border-input bg-background focus:ring-primary/40 mt-1 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
               >
@@ -379,19 +447,27 @@ export function SalesFormPage() {
             </div>
             {sale.marginKopecks && (
               <div className="text-right">
-                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Маржа</div>
-                <div className="mt-1 text-base font-semibold tabular-nums">{formatRub(sale.marginKopecks)}</div>
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Маржа
+                </div>
+                <div className="mt-1 text-base font-semibold tabular-nums">
+                  {formatRub(sale.marginKopecks)}
+                </div>
               </div>
             )}
           </section>
 
           <section className="bg-card rounded-lg border p-4">
-            <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">Оплата клиентом</div>
+            <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
+              Оплата клиентом
+            </div>
             {isPaid ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-success inline-flex items-center gap-2 text-sm font-medium">
                   <Check className="h-4 w-4" />
-                  Оплачено {sale.paidOn ? new Date(sale.paidOn).toLocaleDateString('ru-RU') : ''} · {formatRub(sale.totalKopecks)}
+                  Оплачено {sale.paidOn
+                    ? new Date(sale.paidOn).toLocaleDateString('ru-RU')
+                    : ''} · {formatRub(sale.totalKopecks)}
                 </div>
                 <button
                   type="button"
@@ -405,25 +481,41 @@ export function SalesFormPage() {
             ) : accounts.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Заведите денежный счёт в{' '}
-                <Link href="/finance/accounts" className="text-primary hover:underline">кассе</Link>, чтобы принять оплату.
+                <Link href="/finance/accounts" className="text-primary hover:underline">
+                  кассе
+                </Link>
+                , чтобы принять оплату.
               </p>
             ) : (
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <label className="text-muted-foreground mb-1 block text-xs">На счёт</label>
-                  <select value={payAccountId} onChange={(e) => setPayAccountId(e.target.value)} className="border-input bg-background focus:ring-primary/40 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2">
+                  <select
+                    value={payAccountId}
+                    onChange={(e) => setPayAccountId(e.target.value)}
+                    className="border-input bg-background focus:ring-primary/40 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+                  >
                     {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="text-muted-foreground mb-1 block text-xs">Дата</label>
-                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="border-input bg-background focus:ring-primary/40 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2" />
+                  <input
+                    type="date"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="border-input bg-background focus:ring-primary/40 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
+                  />
                 </div>
                 <button
                   type="button"
-                  onClick={() => payM.mutate({ id: sale.id, accountId: payAccountId, paidOn: payDate })}
+                  onClick={() =>
+                    payM.mutate({ id: sale.id, accountId: payAccountId, paidOn: payDate })
+                  }
                   disabled={payM.isPending || totalKopecks <= 0}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50"
                 >
@@ -435,7 +527,11 @@ export function SalesFormPage() {
           </section>
 
           <div className="flex justify-end">
-            <button type="button" onClick={() => setToDelete(true)} className="text-destructive hover:bg-destructive/10 rounded-md px-3 py-1.5 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setToDelete(true)}
+              className="text-destructive hover:bg-destructive/10 rounded-md px-3 py-1.5 text-sm font-medium"
+            >
               Удалить продажу
             </button>
           </div>

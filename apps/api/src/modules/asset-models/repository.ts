@@ -74,9 +74,7 @@ export async function listAssetModels(
   const filters: SQL[] = [isNull(assetModels.deletedAt)];
   if (opts.search) {
     const q = `%${opts.search.trim()}%`;
-    filters.push(
-      or(ruIlike(assetModels.model, q), ruIlike(assetModels.manufacturer, q)) as SQL,
-    );
+    filters.push(or(ruIlike(assetModels.model, q), ruIlike(assetModels.manufacturer, q)) as SQL);
   }
   const whereClause = and(...filters);
 
@@ -98,10 +96,7 @@ export async function listAssetModels(
       .limit(PAGE_SIZE_DEFAULT)
       .offset(offset);
 
-    const totalRow = await tx
-      .select({ value: count() })
-      .from(assetModels)
-      .where(whereClause);
+    const totalRow = await tx.select({ value: count() }).from(assetModels).where(whereClause);
 
     return { items, total: Number(totalRow[0]?.value ?? 0) };
   });

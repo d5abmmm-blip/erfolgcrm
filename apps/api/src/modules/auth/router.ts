@@ -147,7 +147,11 @@ export const authRouter = router({
           role: user.role,
           position: user.position,
         },
-        tenant: { id: ctx.tenant.id, subdomain: ctx.tenant.subdomain, displayName: ctx.tenant.displayName },
+        tenant: {
+          id: ctx.tenant.id,
+          subdomain: ctx.tenant.subdomain,
+          displayName: ctx.tenant.displayName,
+        },
       };
     }),
 

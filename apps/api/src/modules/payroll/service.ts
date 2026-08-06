@@ -28,19 +28,11 @@ export async function getRuleQuery(db: Db, tenantId: string) {
   return repo.getRule(db, tenantId);
 }
 
-export async function setRuleCmd(
-  db: Db,
-  tenantId: string,
-  input: repo.SetRuleInput,
-) {
+export async function setRuleCmd(db: Db, tenantId: string, input: repo.SetRuleInput) {
   return repo.setRule(db, tenantId, input);
 }
 
-export async function setEngineersSeeEarningsCmd(
-  db: Db,
-  tenantId: string,
-  value: boolean,
-) {
+export async function setEngineersSeeEarningsCmd(db: Db, tenantId: string, value: boolean) {
   return repo.setEngineersSeeEarnings(db, tenantId, value);
 }
 
@@ -79,9 +71,14 @@ export async function createPayoutCmd(ctx: CmdCtx, input: CreatePayoutCmdInput) 
   // окончательного расчёта считаем начисление на сервере (для прозрачности ручной правки).
   let computedKopecks = 0n;
   if (input.kind !== 'bonus') {
-    const computed = await repo.computePayouts(ctx.db, ctx.tenant.id, { start, end }, {
-      engineerId: input.engineerId,
-    });
+    const computed = await repo.computePayouts(
+      ctx.db,
+      ctx.tenant.id,
+      { start, end },
+      {
+        engineerId: input.engineerId,
+      },
+    );
     computedKopecks = BigInt(computed.rows[0]?.totalEarningsKopecks ?? '0');
   }
 

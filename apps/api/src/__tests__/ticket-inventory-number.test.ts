@@ -28,12 +28,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { assetEvents, assets, clients, getDb, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import {
-  createTicket,
-  getTicket,
-  listTickets,
-  searchTickets,
-} from '../modules/tickets/repository';
+import { createTicket, getTicket, listTickets, searchTickets } from '../modules/tickets/repository';
 import { createAssetWithEvent } from '../modules/assets/repository';
 
 let erfolgId = '';
