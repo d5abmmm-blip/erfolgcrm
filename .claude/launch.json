@@ -12,6 +12,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@erfolg/web", "dev"],
       "autoPort": true
+    },
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@erfolg/web", "preview", "--port", "4173", "--strictPort"],
+      "port": 4173
     }
   ]
 }

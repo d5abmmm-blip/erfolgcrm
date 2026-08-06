@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2, ShieldCheck, Building2, KeyRound } from 'lucide-react';
 import { trpc, setTenantSubdomain, getTenantSubdomain } from '../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
+import { resetOfflineMemory } from '../lib/offline/session-reset';
 
 type Step = 'password' | '2fa';
 
@@ -14,6 +16,7 @@ const DEFAULT_TENANT = ((import.meta.env.VITE_DEFAULT_TENANT as string | undefin
 
 export function LoginPage() {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const [tenant, setTenant] = useState(() => getTenantSubdomain() ?? DEFAULT_TENANT);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +36,7 @@ export function LoginPage() {
         setError(null);
         return;
       }
+      await resetOfflineMemory(queryClient);
       await utils.auth.me.invalidate();
     },
     onError: (e) => setError(e.message),
@@ -40,6 +44,7 @@ export function LoginPage() {
 
   const verify = trpc.auth.verify2fa.useMutation({
     onSuccess: async () => {
+      await resetOfflineMemory(queryClient);
       await utils.auth.me.invalidate();
     },
     onError: (e) => setError(e.message),

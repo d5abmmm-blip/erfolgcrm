@@ -6,6 +6,7 @@ import { AppToaster } from './components/AppToaster';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OutboxAutoSync } from './components/OutboxAutoSync';
 import { humanizeError } from './lib/error-message';
+import { restorePersistedQueries, startPersistingQueries } from './lib/offline/query-persist';
 import { ThemeProvider } from './lib/theme';
 import { showToast } from './lib/toast';
 import { trpc, trpcClient } from './lib/trpc';
@@ -38,20 +39,37 @@ const queryClient = new QueryClient({
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
 
-createRoot(rootEl).render(
-  <StrictMode>
-    <ThemeProvider defaultTheme="system" storageKey="erfolg-theme">
-      <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <QueryClientProvider client={queryClient}>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
-          {/* Вне ErrorBoundary: сообщение должно доживать до экрана даже если
-              упал сам экран. */}
-          <AppToaster />
-          <OutboxAutoSync />
-        </QueryClientProvider>
-      </trpc.Provider>
-    </ThemeProvider>
-  </StrictMode>,
-);
+/**
+ * Снимок кэша поднимается ДО первой отрисовки — иначе инженер, открывший
+ * приложение без связи, успевает увидеть экран входа (нет ответа auth.me →
+ * App.tsx рисует LoginPage), и только потом экран сменится на очередь.
+ *
+ * Ждём не дольше секунды: если хранилище браузера почему-то не отвечает,
+ * приложение должно открыться так же, как открывалось раньше, а не зависнуть
+ * на пустом экране.
+ */
+async function restoreOfflineCache(): Promise<void> {
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+  await Promise.race([restorePersistedQueries(queryClient).then(() => undefined), timeout]);
+}
+
+void restoreOfflineCache().finally(() => {
+  startPersistingQueries(queryClient);
+  createRoot(rootEl).render(
+    <StrictMode>
+      <ThemeProvider defaultTheme="system" storageKey="erfolg-theme">
+        <trpc.Provider client={trpcClient} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+            {/* Вне ErrorBoundary: сообщение должно доживать до экрана даже если
+                упал сам экран. */}
+            <AppToaster />
+            <OutboxAutoSync />
+          </QueryClientProvider>
+        </trpc.Provider>
+      </ThemeProvider>
+    </StrictMode>,
+  );
+});

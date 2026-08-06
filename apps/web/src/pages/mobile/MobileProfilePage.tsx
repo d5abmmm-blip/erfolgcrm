@@ -10,6 +10,8 @@ import {
   Wallet,
 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
+import { resetOfflineMemory } from '../../lib/offline/session-reset';
 import { formatRubWhole } from '../../lib/money';
 import { useOutbox } from '../../lib/offline/useOutbox';
 import { markEngineerWantsDesktop } from '../../lib/engineer-redirect';
@@ -24,7 +26,13 @@ const ROLE_LABEL: Record<'director' | 'dispatcher' | 'engineer', string> = {
 export function MobileProfilePage() {
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
-  const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
+  const queryClient = useQueryClient();
+  const logout = trpc.auth.logout.useMutation({
+    onSuccess: async () => {
+      await resetOfflineMemory(queryClient);
+      await utils.auth.me.invalidate();
+    },
+  });
   const outbox = useOutbox();
 
   // Заработок показываем инженеру (myEarnings — только для роли engineer) и только
