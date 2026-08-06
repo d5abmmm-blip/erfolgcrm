@@ -162,10 +162,7 @@ export async function sendMailVia(
     );
     return { skipped: false, messageId: info.messageId };
   } catch (err) {
-    logger.warn(
-      { err, to: maskEmail(input.to), subject: input.subject },
-      'sendMail failed',
-    );
+    logger.warn({ err, to: maskEmail(input.to), subject: input.subject }, 'sendMail failed');
     throw err;
   }
 }

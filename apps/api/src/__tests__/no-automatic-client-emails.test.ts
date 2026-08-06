@@ -236,10 +236,7 @@ describe('робот НЕ пишет клиенту сам', () => {
 
     expect(stats.overdueMarked).toBeGreaterThanOrEqual(1);
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select({ status: invoices.status })
-        .from(invoices)
-        .where(eq(invoices.clientId, clientId)),
+      tx.select({ status: invoices.status }).from(invoices).where(eq(invoices.clientId, clientId)),
     );
     expect(row?.status).toBe('overdue');
   });

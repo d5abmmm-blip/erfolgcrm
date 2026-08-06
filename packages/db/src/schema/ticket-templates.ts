@@ -59,7 +59,10 @@ export const ticketTemplates = pgTable(
     defaultPriority: ticketPriorityEnum('default_priority'),
     /** Оценка трудозатрат в минутах (1..720). NULL — не задавать. */
     defaultEstimatedMinutes: integer('default_estimated_minutes'),
-    lines: jsonb('lines').$type<TicketTemplateLine[]>().notNull().default(sql`'[]'::jsonb`),
+    lines: jsonb('lines')
+      .$type<TicketTemplateLine[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     /** Soft archive — не показывать в выборе при создании тикета. */
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdByUserId: uuid('created_by_user_id'),

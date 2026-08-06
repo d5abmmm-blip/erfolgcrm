@@ -15,15 +15,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { and, eq, like } from 'drizzle-orm';
-import {
-  attachments,
-  clients,
-  contracts,
-  getDb,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { attachments, clients, contracts, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { TRPCError } from '@trpc/server';
 import { ensureSeed } from './setup';
 import {
@@ -117,18 +109,10 @@ beforeAll(async () => {
   demoClientId = dc.id;
 
   const [eu] = await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'dispatcher'))
-      .limit(1),
+    tx.select({ id: users.id }).from(users).where(eq(users.role, 'dispatcher')).limit(1),
   );
   const [du] = await withTenantTx(getDb(), demoId, (tx) =>
-    tx
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'dispatcher'))
-      .limit(1),
+    tx.select({ id: users.id }).from(users).where(eq(users.role, 'dispatcher')).limit(1),
   );
   if (!eu || !du) throw new Error('seed missing dispatcher users');
   erfolgDispatcherId = eu.id;
@@ -142,9 +126,7 @@ async function clearTestData(): Promise<void> {
       await tx.delete(attachments).where(like(attachments.objectKey, `tenants/%/${TEST_PREFIX}%`));
       // Тикеты с TEST_PREFIX в symptom (createTicket нижеставит туда префикс).
       await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
-      await tx
-        .delete(contracts)
-        .where(like(contracts.contractNumber, `${TEST_PREFIX}%`));
+      await tx.delete(contracts).where(like(contracts.contractNumber, `${TEST_PREFIX}%`));
     });
   }
 }

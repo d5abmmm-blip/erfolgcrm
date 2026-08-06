@@ -142,9 +142,7 @@ describe('trade-in — complete переносит владельца техни
 
     // Guards: повторный complete и update проданной — BAD_REQUEST
     await expect(completeTradeInCmd(mkCmdCtx(), { id })).rejects.toThrowError(TRPCError);
-    await expect(updateTradeInCmd(mkCmdCtx(), id, { notes: 'x' })).rejects.toThrowError(
-      TRPCError,
-    );
+    await expect(updateTradeInCmd(mkCmdCtx(), id, { notes: 'x' })).rejects.toThrowError(TRPCError);
   });
 
   it('complete без покупателя — BAD_REQUEST', async () => {

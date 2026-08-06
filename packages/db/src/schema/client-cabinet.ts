@@ -12,14 +12,7 @@
  *
  * client_sessions — отдельные сессии (cookie name 'client_session_token').
  */
-import {
-  boolean,
-  index,
-  pgTable,
-  timestamp,
-  uniqueIndex,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { fkUuid, pk, tenantId, timestamps } from './_shared';
 

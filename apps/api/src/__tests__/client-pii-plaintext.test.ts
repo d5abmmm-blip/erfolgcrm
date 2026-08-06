@@ -109,9 +109,7 @@ describe('ПДн физлица хранятся открыто', () => {
     });
 
     await updateClient(getDb(), erfolgId, id, { individualFullName: `Стало Стало ${tag}` });
-    expect((await getClient(getDb(), erfolgId, id))?.individualFullName).toBe(
-      `Стало Стало ${tag}`,
-    );
+    expect((await getClient(getDb(), erfolgId, id))?.individualFullName).toBe(`Стало Стало ${tag}`);
 
     await updateClient(getDb(), erfolgId, id, { individualPhone: null });
     const after = await getClient(getDb(), erfolgId, id);
@@ -186,7 +184,11 @@ describe('поиск клиента', () => {
     expect(byDigits.map((c) => c.id)).toContain(id);
 
     // Набрано в другом формате, чем записано.
-    const byOtherFormat = await searchClients(getDb(), erfolgId, `963-${tag.slice(0, 3)} ${tag.slice(3)}`);
+    const byOtherFormat = await searchClients(
+      getDb(),
+      erfolgId,
+      `963-${tag.slice(0, 3)} ${tag.slice(3)}`,
+    );
     expect(byOtherFormat.map((c) => c.id)).toContain(id);
   });
 

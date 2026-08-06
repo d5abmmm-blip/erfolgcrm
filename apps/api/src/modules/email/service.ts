@@ -382,7 +382,9 @@ export async function purgeCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> {
 }
 
 /** Тестовое письмо самому себе (на адрес отправителя) — проверка реквизитов. */
-export async function sendTestCmd(ctx: CmdCtx): Promise<{ status: 'sent' | 'skipped'; messageId: string | null }> {
+export async function sendTestCmd(
+  ctx: CmdCtx,
+): Promise<{ status: 'sent' | 'skipped'; messageId: string | null }> {
   const cfg = await getConfig(ctx.db, ctx.tenant.id);
   const to = cfg?.fromEmail;
   if (!to) {
@@ -435,9 +437,7 @@ export async function getThreadQuery(
   const target = await getMessage(db, tenant.id, messageId);
   if (!target) return [];
 
-  const msgs = target.threadId
-    ? await getThread(db, tenant.id, target.threadId)
-    : [target];
+  const msgs = target.threadId ? await getThread(db, tenant.id, target.threadId) : [target];
 
   const storage = getObjectStorage();
   return Promise.all(

@@ -129,11 +129,7 @@ export interface ListSiOpts {
   search?: string;
 }
 
-export async function listSi(
-  db: Db,
-  tenantId: string,
-  opts: ListSiOpts = {},
-): Promise<SiRow[]> {
+export async function listSi(db: Db, tenantId: string, opts: ListSiOpts = {}): Promise<SiRow[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const filters = [isNull(metrologySiDetails.deletedAt)];
     if (opts.clientId) filters.push(eq(assets.ownerClientId, opts.clientId));
@@ -209,11 +205,7 @@ export async function listSi(
   });
 }
 
-export async function getSi(
-  db: Db,
-  tenantId: string,
-  assetId: string,
-): Promise<SiRow | null> {
+export async function getSi(db: Db, tenantId: string, assetId: string): Promise<SiRow | null> {
   const all = await listSi(db, tenantId, { status: 'all' });
   return all.find((r) => r.assetId === assetId) ?? null;
 }
@@ -265,10 +257,7 @@ export async function upsertSiDetails(
       });
     }
 
-    await tx
-      .update(assets)
-      .set({ requiresMetrology: true })
-      .where(eq(assets.id, assetId));
+    await tx.update(assets).set({ requiresMetrology: true }).where(eq(assets.id, assetId));
   });
 
   const result = await getSi(db, tenantId, assetId);
@@ -276,24 +265,15 @@ export async function upsertSiDetails(
   return result;
 }
 
-export async function removeSiDetails(
-  db: Db,
-  tenantId: string,
-  assetId: string,
-): Promise<boolean> {
+export async function removeSiDetails(db: Db, tenantId: string, assetId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const updated = await tx
       .update(metrologySiDetails)
       .set({ deletedAt: new Date() })
-      .where(
-        and(eq(metrologySiDetails.assetId, assetId), isNull(metrologySiDetails.deletedAt)),
-      )
+      .where(and(eq(metrologySiDetails.assetId, assetId), isNull(metrologySiDetails.deletedAt)))
       .returning({ id: metrologySiDetails.assetId });
     if (updated.length === 0) return false;
-    await tx
-      .update(assets)
-      .set({ requiresMetrology: false })
-      .where(eq(assets.id, assetId));
+    await tx.update(assets).set({ requiresMetrology: false }).where(eq(assets.id, assetId));
     return true;
   });
 }
@@ -377,10 +357,7 @@ export async function listCalibrations(
       .select()
       .from(metrologyCalibrations)
       .where(
-        and(
-          eq(metrologyCalibrations.assetId, assetId),
-          isNull(metrologyCalibrations.deletedAt),
-        ),
+        and(eq(metrologyCalibrations.assetId, assetId), isNull(metrologyCalibrations.deletedAt)),
       )
       .orderBy(desc(metrologyCalibrations.performedAt))
       .limit(50);
@@ -432,10 +409,7 @@ export interface DashboardStats {
   totalSiCount: number;
 }
 
-export async function getDashboardStats(
-  db: Db,
-  tenantId: string,
-): Promise<DashboardStats> {
+export async function getDashboardStats(db: Db, tenantId: string): Promise<DashboardStats> {
   return withTenantTx(db, tenantId, async (tx) => {
     const total = await tx
       .select({ c: sql<number>`count(*)::int` })
@@ -447,10 +421,7 @@ export async function getDashboardStats(
       .select({ c: sql<number>`count(*)::int` })
       .from(metrologySiDetails)
       .where(
-        and(
-          isNull(metrologySiDetails.deletedAt),
-          lt(metrologySiDetails.nextCalibrationAt, today),
-        ),
+        and(isNull(metrologySiDetails.deletedAt), lt(metrologySiDetails.nextCalibrationAt, today)),
       );
     const soon = await tx
       .select({ c: sql<number>`count(*)::int` })

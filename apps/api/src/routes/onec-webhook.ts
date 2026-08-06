@@ -15,10 +15,7 @@ import express, { type Router } from 'express';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, tenants } from '@erfolg/db';
 import { logger } from '../lib/logger';
-import {
-  receivePaymentsFromOnecCmd,
-  verifyTenantIncomingToken,
-} from '../modules/onec';
+import { receivePaymentsFromOnecCmd, verifyTenantIncomingToken } from '../modules/onec';
 import type { ResolvedTenant } from '../lib/tenant';
 
 export function makeOnecWebhookRouter(): Router {

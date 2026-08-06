@@ -81,15 +81,14 @@ async function createBaseTicket(opts?: { tenantId?: string; clientId?: string })
 }
 
 /** Прямое обновление статуса заявки в БД (минуя таблицу переходов) — для проверки вывода причины. */
-async function forceStatus(ticketId: string, status: 'estimate' | 'approval' | 'act_pending' | 'closed'): Promise<void> {
+async function forceStatus(
+  ticketId: string,
+  status: 'estimate' | 'approval' | 'act_pending' | 'closed',
+): Promise<void> {
   await withTenantTx(getDb(), erfolgId, (tx) =>
     tx
       .update(tickets)
-      .set(
-        status === 'closed'
-          ? { status, closedAt: new Date() }
-          : { status },
-      )
+      .set(status === 'closed' ? { status, closedAt: new Date() } : { status })
       .where(eq(tickets.id, ticketId)),
   );
 }
@@ -108,7 +107,11 @@ function makeCtx(opts: {
   const tid = opts.tenantId ?? erfolgId;
   const userId =
     opts.userId ??
-    (opts.role === 'director' ? directorId : opts.role === 'dispatcher' ? dispatcherId : engineerId);
+    (opts.role === 'director'
+      ? directorId
+      : opts.role === 'dispatcher'
+        ? dispatcherId
+        : engineerId);
   const session: SessionData = {
     tenantId: tid,
     userId,
@@ -257,7 +260,11 @@ describe('Доска: светофор', () => {
   it('старый простой (blocked_since 10 дней назад) → red', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
-    await caller.tickets.setBlockedReason({ ticketId: id, reason: 'waiting_management_decision', note: null });
+    await caller.tickets.setBlockedReason({
+      ticketId: id,
+      reason: 'waiting_management_decision',
+      note: null,
+    });
     // Отматываем начало простоя на 10 дней назад.
     const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000);
     await withTenantTx(getDb(), erfolgId, (tx) =>

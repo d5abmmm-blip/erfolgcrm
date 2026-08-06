@@ -126,12 +126,10 @@ export async function loginClient(
 
   // 152-ФЗ: фиксируем согласие на обработку ПДн при первом входе.
   // Идемпотентно — уже активные согласия не дублируются.
-  const consentInserted = await recordClientConsentIfMissing(
-    ctx.db,
-    ctx.tenantId,
-    user.id,
-    { ip: ctx.ip, userAgent: ctx.userAgent },
-  );
+  const consentInserted = await recordClientConsentIfMissing(ctx.db, ctx.tenantId, user.id, {
+    ip: ctx.ip,
+    userAgent: ctx.userAgent,
+  });
   if (consentInserted) {
     await writeAudit(ctx.db, ctx.tenantId, {
       userId: null,
@@ -168,11 +166,7 @@ export async function loginClient(
     path: '/',
   });
 
-  const clientDisplayName = await getClientDisplayName(
-    ctx.db,
-    ctx.tenantId,
-    user.clientId,
-  );
+  const clientDisplayName = await getClientDisplayName(ctx.db, ctx.tenantId, user.clientId);
 
   logger.info({ tenantId: ctx.tenantId, clientUserId: user.id }, 'client login ok');
 

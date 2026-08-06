@@ -44,7 +44,7 @@ export function LeadsListPage() {
 
   const list = trpc.leads.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined),
+    status: status || undefined,
     page,
   });
   const stats = trpc.leads.funnelStats.useQuery();
@@ -219,15 +219,7 @@ export function LeadsListPage() {
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-}) {
+function KpiCard({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
     <div className="bg-card rounded-lg border p-3">
       <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -240,8 +232,7 @@ function KpiCard({
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const variant: StatusBadgeVariant =
-    score >= 70 ? 'success' : score >= 40 ? 'warning' : 'muted';
+  const variant: StatusBadgeVariant = score >= 70 ? 'success' : score >= 40 ? 'warning' : 'muted';
   return (
     <StatusBadge variant={variant} compact>
       {score}

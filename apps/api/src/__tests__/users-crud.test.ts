@@ -19,12 +19,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { hash, verify } from 'argon2';
-import {
-  getDb,
-  sessions,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { getDb, sessions, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   changeMyPassword,
@@ -71,7 +66,12 @@ async function clearTestUsers(): Promise<void> {
   // last-director — таких нужно либо демонстрировать в отдельном tenant, либо удалить.
   await withTenantTx(getDb(), erfolgId, async (tx) => {
     const allDirectors = await tx
-      .select({ id: users.id, username: users.username, role: users.role, isActive: users.isActive })
+      .select({
+        id: users.id,
+        username: users.username,
+        role: users.role,
+        isActive: users.isActive,
+      })
       .from(users)
       .where(eq(users.role, 'director'));
     for (const d of allDirectors) {
@@ -276,10 +276,7 @@ describe('setUserActive', () => {
     await setUserActive(getDb(), erfolgId, u.id, false);
 
     const open = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select()
-        .from(sessions)
-        .where(eq(sessions.userId, u.id)),
+      tx.select().from(sessions).where(eq(sessions.userId, u.id)),
     );
     // Все revokedAt должны быть установлены
     expect(open.length).toBe(2);
@@ -293,9 +290,9 @@ describe('setUserActive', () => {
     const [dir] = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx.select().from(users).where(eq(users.role, 'director')),
     );
-    await expect(
-      setUserActive(getDb(), erfolgId, dir!.id, false),
-    ).rejects.toBeInstanceOf(LastDirectorError);
+    await expect(setUserActive(getDb(), erfolgId, dir!.id, false)).rejects.toBeInstanceOf(
+      LastDirectorError,
+    );
   });
 
   it('можно заблокировать одного из двух директоров', async () => {
@@ -415,13 +412,7 @@ describe('changeMyPassword', () => {
       fullName: 'P',
       role: 'engineer',
     });
-    const ok = await changeMyPassword(
-      getDb(),
-      erfolgId,
-      u.id,
-      'OldPass1234',
-      'NewPass5678',
-    );
+    const ok = await changeMyPassword(getDb(), erfolgId, u.id, 'OldPass1234', 'NewPass5678');
     expect(ok).toBe(true);
   });
 

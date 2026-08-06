@@ -24,7 +24,8 @@ export function humanUploadError(err: unknown): string {
   if (!navigator.onLine || raw.includes('Failed to fetch') || raw.includes('NetworkError')) {
     return 'Нет связи — фото не отправлено';
   }
-  if (/storage PUT (401|403)/.test(raw)) return 'Хранилище отклонило файл — позовите администратора';
+  if (/storage PUT (401|403)/.test(raw))
+    return 'Хранилище отклонило файл — позовите администратора';
   if (/storage PUT 4\d\d/.test(raw)) return 'Файл не принят хранилищем';
   if (/storage PUT 5\d\d/.test(raw)) return 'Хранилище недоступно — повторите';
   return raw || 'Не удалось отправить фото';
@@ -154,10 +155,7 @@ export function PhotoUploader({
         // Раньше файл здесь терялся насовсем: он жил только в замыкании, а на
         // экране оставалась одна техническая строка вроде «Failed to fetch».
         // Теперь держим сам File и показываем плитку с кнопкой «Повторить».
-        setFailed((prev) => [
-          ...prev,
-          { id: tag, file, reason: humanUploadError(err) },
-        ]);
+        setFailed((prev) => [...prev, { id: tag, file, reason: humanUploadError(err) }]);
       } finally {
         setPending((p) => p.filter((x) => x !== tag));
         await utils.attachments.listByReference.invalidate({ referenceType, referenceId });
@@ -193,7 +191,8 @@ export function PhotoUploader({
             </button>
             {showCamera && (
               <>
-                / <button
+                /{' '}
+                <button
                   type="button"
                   onClick={() => cameraRef.current?.click()}
                   className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
@@ -238,8 +237,8 @@ export function PhotoUploader({
             Не отправлено: {failed.length}
           </div>
           <div className="text-muted-foreground text-xs">
-            Файлы держатся только на этом экране. Отправьте сейчас — если уйти со
-            страницы или закрыть приложение, их придётся снимать заново.
+            Файлы держатся только на этом экране. Отправьте сейчас — если уйти со страницы или
+            закрыть приложение, их придётся снимать заново.
           </div>
           <ul className="space-y-1.5">
             {failed.map((f) => (

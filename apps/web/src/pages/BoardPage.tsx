@@ -260,9 +260,7 @@ function EngineerView({
   }
   // Порядок колонок — по загрузке: самый занятой инженер первым, дальше по убыванию.
   // При равенстве — по алфавиту, чтобы порядок не «прыгал» между автообновлениями.
-  columns.sort(
-    (a, b) => b.cards.length - a.cards.length || a.name.localeCompare(b.name, 'ru'),
-  );
+  columns.sort((a, b) => b.cards.length - a.cards.length || a.name.localeCompare(b.name, 'ru'));
   // «Не назначен» всегда в конце — это не инженер, а очередь на распределение.
   columns.push({ key: UNASSIGNED, name: 'Не назначен', cards: unassigned });
 
@@ -326,7 +324,12 @@ function EngineerView({
                 </div>
               ) : (
                 col.cards.map((t) => (
-                  <BoardCardView key={t.id} card={t} showEngineer={false} onSetReason={onSetReason} />
+                  <BoardCardView
+                    key={t.id}
+                    card={t}
+                    showEngineer={false}
+                    onSetReason={onSetReason}
+                  />
                 ))
               )}
             </div>
@@ -496,7 +499,11 @@ function BoardCardView({
             {t.assignedEngineerName ?? 'не назначен'}
           </span>
         )}
-        <ReasonSelect card={t} onSetReason={onSetReason} className={showEngineer ? 'ml-auto' : 'w-full'} />
+        <ReasonSelect
+          card={t}
+          onSetReason={onSetReason}
+          className={showEngineer ? 'ml-auto' : 'w-full'}
+        />
       </div>
     </div>
   );

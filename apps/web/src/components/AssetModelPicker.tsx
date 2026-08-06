@@ -41,10 +41,7 @@ export function AssetModelPicker({
     { q: debounced },
     { enabled: debounced.length >= 1 },
   );
-  const selected = trpc.assetModels.get.useQuery(
-    { id: value ?? '' },
-    { enabled: !!value },
-  );
+  const selected = trpc.assetModels.get.useQuery({ id: value ?? '' }, { enabled: !!value });
 
   const createModel = trpc.assetModels.create.useMutation({
     onSuccess: async (res, vars) => {
@@ -66,9 +63,7 @@ export function AssetModelPicker({
 
   const items = search.data ?? [];
   // Точное совпадение по названию модели — чтобы не предлагать «добавить» дубликат.
-  const hasExact = items.some(
-    (m) => m.model.trim().toLowerCase() === debounced.toLowerCase(),
-  );
+  const hasExact = items.some((m) => m.model.trim().toLowerCase() === debounced.toLowerCase());
 
   function pick(id: string, m: AssetModelLite) {
     onChange(id, m);
@@ -83,9 +78,7 @@ export function AssetModelPicker({
           <div>
             <div className="font-medium">{selected.data.model}</div>
             {selected.data.manufacturer && (
-              <div className="text-muted-foreground text-xs">
-                {selected.data.manufacturer}
-              </div>
+              <div className="text-muted-foreground text-xs">{selected.data.manufacturer}</div>
             )}
           </div>
           <button
@@ -113,7 +106,7 @@ export function AssetModelPicker({
             }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
       )}
@@ -126,9 +119,7 @@ export function AssetModelPicker({
             </li>
           ) : (
             <>
-              {search.isLoading && (
-                <li className="text-muted-foreground p-2 text-xs">Поиск…</li>
-              )}
+              {search.isLoading && <li className="text-muted-foreground p-2 text-xs">Поиск…</li>}
               {items.map((m) => (
                 <li key={m.id}>
                   <button
@@ -160,9 +151,7 @@ export function AssetModelPicker({
                     onClick={() => createModel.mutate({ model: debounced })}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    {createModel.isPending
-                      ? 'Добавление…'
-                      : `Добавить модель «${debounced}»`}
+                    {createModel.isPending ? 'Добавление…' : `Добавить модель «${debounced}»`}
                   </button>
                 </li>
               )}

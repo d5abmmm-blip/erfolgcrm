@@ -18,10 +18,7 @@ export interface SubscribeInput {
   auth: string;
 }
 
-export async function subscribeCmd(
-  ctx: CmdCtx,
-  input: SubscribeInput,
-): Promise<{ ok: true }> {
+export async function subscribeCmd(ctx: CmdCtx, input: SubscribeInput): Promise<{ ok: true }> {
   await upsertSubscription(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
     endpoint: input.endpoint,
@@ -40,10 +37,7 @@ export async function subscribeCmd(
   return { ok: true };
 }
 
-export async function unsubscribeCmd(
-  ctx: CmdCtx,
-  endpoint: string,
-): Promise<{ ok: boolean }> {
+export async function unsubscribeCmd(ctx: CmdCtx, endpoint: string): Promise<{ ok: boolean }> {
   const ok = await deleteByEndpoint(ctx.db, ctx.tenant.id, ctx.session.userId, endpoint);
   if (ok) {
     await writeAudit(ctx.db, ctx.tenant.id, {

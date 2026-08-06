@@ -39,10 +39,7 @@ export async function withTenantTx<T>(
  * Очищает app.current_tenant_id чтобы политики subscriptions работали правильно
  * (там USING (... OR current_tenant_id() IS NULL) для control plane).
  */
-export async function withoutTenantTx<T>(
-  db: Db,
-  cb: (tx: TenantTx) => Promise<T>,
-): Promise<T> {
+export async function withoutTenantTx<T>(db: Db, cb: (tx: TenantTx) => Promise<T>): Promise<T> {
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.current_tenant_id', '', true)`);
     return cb(tx as unknown as TenantTx);

@@ -12,10 +12,7 @@ import { RepairTracker } from '../components/RepairTracker';
 export function PublicTrackPage() {
   const [, params] = useRoute<{ token: string }>('/track/:token');
   const token = params?.token ?? '';
-  const q = trpc.track.getByToken.useQuery(
-    { token },
-    { enabled: Boolean(token), retry: false },
-  );
+  const q = trpc.track.getByToken.useQuery({ token }, { enabled: Boolean(token), retry: false });
 
   return (
     <div className="bg-muted/30 h-full w-full overflow-y-auto px-4 py-8">

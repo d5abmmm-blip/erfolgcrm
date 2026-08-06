@@ -26,9 +26,7 @@ interface TickStats {
 }
 
 async function listActiveTenantIds(): Promise<string[]> {
-  const rows = await getDb()
-    .select({ id: tenants.id, status: tenants.status })
-    .from(tenants);
+  const rows = await getDb().select({ id: tenants.id, status: tenants.status }).from(tenants);
   return rows.filter((r) => r.status === 'active').map((r) => r.id);
 }
 

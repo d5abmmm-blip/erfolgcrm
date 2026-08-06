@@ -4,16 +4,8 @@
  * Использует withTenantTx (RLS). Логи append-only — никаких update'ов после completion.
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
-import {
-  onecConfigs,
-  onecExchangeLog,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
-import type {
-  OnecExchangePayload,
-  OnecExchangeResult,
-} from '@erfolg/db';
+import { onecConfigs, onecExchangeLog, withTenantTx, type Db } from '@erfolg/db';
+import type { OnecExchangePayload, OnecExchangeResult } from '@erfolg/db';
 
 export interface ExchangeLogDto {
   id: string;
@@ -121,10 +113,7 @@ export interface OnecConfigDto {
   updatedAt: Date;
 }
 
-export async function getConfig(
-  db: Db,
-  tenantId: string,
-): Promise<OnecConfigDto | null> {
+export async function getConfig(db: Db, tenantId: string): Promise<OnecConfigDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select()

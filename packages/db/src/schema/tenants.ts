@@ -2,11 +2,26 @@
  * Control plane: tenants, plans, subscriptions.
  * Эти таблицы — БЕЗ tenant_id (они и есть про tenant'ов).
  */
-import { boolean, integer, jsonb, pgEnum, pgTable, text, timestamp, varchar, unique } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+  unique,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { fkUuid, pk, slug, timestamps } from './_shared';
 
-export const tenantStatusEnum = pgEnum('tenant_status', ['trial', 'active', 'suspended', 'cancelled']);
+export const tenantStatusEnum = pgEnum('tenant_status', [
+  'trial',
+  'active',
+  'suspended',
+  'cancelled',
+]);
 export const planCodeEnum = pgEnum('plan_code', ['start', 'pro', 'corp']);
 
 /**
@@ -100,16 +115,18 @@ export const plans = pgTable(
     description: text('description'),
     monthlyPriceRub: integer('monthly_price_rub').notNull(),
     yearlyPriceRub: integer('yearly_price_rub').notNull(),
-    features: jsonb('features').$type<{
-      maxUsers: number | null; // null = безлимит
-      maxClients: number | null;
-      maxTicketsPerMonth: number | null;
-      hasTelegramBot: boolean;
-      hasMaintenanceLog: boolean;
-      hasOneCExport: boolean;
-      hasCustomBranding: boolean;
-      hasPrioritySupport: boolean;
-    }>().notNull(),
+    features: jsonb('features')
+      .$type<{
+        maxUsers: number | null; // null = безлимит
+        maxClients: number | null;
+        maxTicketsPerMonth: number | null;
+        hasTelegramBot: boolean;
+        hasMaintenanceLog: boolean;
+        hasOneCExport: boolean;
+        hasCustomBranding: boolean;
+        hasPrioritySupport: boolean;
+      }>()
+      .notNull(),
     isActive: boolean('is_active').notNull().default(true),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
@@ -133,7 +150,9 @@ export const subscriptions = pgTable('subscriptions', {
   planId: fkUuid('plan_id'),
   status: subscriptionStatusEnum('status').notNull().default('trial'),
   trialUntil: timestamp('trial_until', { withTimezone: true }),
-  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }).notNull().defaultNow(),
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }).notNull(),
   cancelAt: timestamp('cancel_at', { withTimezone: true }),
   yookassaSubscriptionId: varchar('yookassa_subscription_id', { length: 100 }),

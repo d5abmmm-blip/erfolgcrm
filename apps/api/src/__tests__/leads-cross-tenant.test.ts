@@ -89,9 +89,7 @@ describe('calculateLeadScore (чистая логика)', () => {
   });
 
   it('won → 100, lost → 0', () => {
-    expect(
-      calculateLeadScore({ estimatedValue: 0, source: 'other', status: 'won' }),
-    ).toBe(100);
+    expect(calculateLeadScore({ estimatedValue: 0, source: 'other', status: 'won' })).toBe(100);
     expect(
       calculateLeadScore({ estimatedValue: 999_999, source: 'referral', status: 'lost' }),
     ).toBe(0);
@@ -163,9 +161,7 @@ describe('leads — конвертация и воронка', () => {
     expect(lead?.convertedClientId).toBe(res!.clientId);
 
     // повторная конвертация — null (идемпотентность)
-    expect(
-      await convertLeadToClient(getDb(), erfolgId, id, { clientType: 'legal' }),
-    ).toBeNull();
+    expect(await convertLeadToClient(getDb(), erfolgId, id, { clientType: 'legal' })).toBeNull();
 
     // клиент реально создан в том же тенанте с реквизитами лида
     const client = await withTenantTx(getDb(), erfolgId, (tx) =>

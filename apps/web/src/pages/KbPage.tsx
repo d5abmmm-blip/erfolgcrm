@@ -15,12 +15,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import {
-  useFieldArray,
-  useForm,
-  type Resolver,
-  type SubmitHandler,
-} from 'react-hook-form';
+import { useFieldArray, useForm, type Resolver, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -76,10 +71,7 @@ export function KbPage() {
 
   if (editingId !== null) {
     return (
-      <KbEditor
-        id={editingId === 'new' ? null : editingId}
-        onClose={() => setEditingId(null)}
-      />
+      <KbEditor id={editingId === 'new' ? null : editingId} onClose={() => setEditingId(null)} />
     );
   }
 
@@ -112,17 +104,12 @@ export function KbPage() {
         a.assetModels.length > 0 ? (
           <div className="flex flex-wrap gap-1 text-xs">
             {a.assetModels.slice(0, 3).map((m) => (
-              <span
-                key={m}
-                className="bg-muted text-muted-foreground rounded px-1.5 py-0.5"
-              >
+              <span key={m} className="bg-muted text-muted-foreground rounded px-1.5 py-0.5">
                 {m}
               </span>
             ))}
             {a.assetModels.length > 3 && (
-              <span className="text-muted-foreground">
-                +{a.assetModels.length - 3}
-              </span>
+              <span className="text-muted-foreground">+{a.assetModels.length - 3}</span>
             )}
           </div>
         ) : (
@@ -136,10 +123,7 @@ export function KbPage() {
         a.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1 text-xs">
             {a.tags.map((t) => (
-              <span
-                key={t}
-                className="bg-primary/10 text-primary rounded px-1.5 py-0.5"
-              >
+              <span key={t} className="bg-primary/10 text-primary rounded px-1.5 py-0.5">
                 #{t}
               </span>
             ))}
@@ -175,8 +159,8 @@ export function KbPage() {
           </div>
           <h1 className="mt-1 text-xl font-semibold md:text-2xl">База знаний</h1>
           <p className="text-muted-foreground mt-0.5 text-sm">
-            Записи о моделях техники, типовых операциях и прошлых сложных ремонтах.
-            Видны в карточке заявки и асcета как «Похожие случаи».
+            Записи о моделях техники, типовых операциях и прошлых сложных ремонтах. Видны в карточке
+            заявки и асcета как «Похожие случаи».
           </p>
         </div>
         <button
@@ -190,14 +174,14 @@ export function KbPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[260px]">
+        <div className="relative min-w-[260px] flex-1">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по заголовку и тексту…"
-            className="bg-background w-full rounded-md border pl-8 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
         <label className="text-muted-foreground inline-flex items-center gap-2 text-xs">
@@ -229,13 +213,7 @@ export function KbPage() {
   );
 }
 
-function KbEditor({
-  id,
-  onClose,
-}: {
-  id: string | null;
-  onClose: () => void;
-}) {
+function KbEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
   const isNew = id === null;
   const utils = trpc.useUtils();
   const detail = trpc.kbArticles.get.useQuery({ id: id ?? '' }, { enabled: !isNew });
@@ -294,12 +272,8 @@ function KbEditor({
     !isNew && detail.data?.archivedAt !== null && detail.data?.archivedAt !== undefined;
 
   const onSubmit: SubmitHandler<FormValues> = (v) => {
-    const cleanTags = v.tags
-      .map((t) => t.value.trim().toLowerCase())
-      .filter((t) => t.length > 0);
-    const cleanModels = v.assetModels
-      .map((m) => m.value.trim())
-      .filter((m) => m.length > 0);
+    const cleanTags = v.tags.map((t) => t.value.trim().toLowerCase()).filter((t) => t.length > 0);
+    const cleanModels = v.assetModels.map((m) => m.value.trim()).filter((m) => m.length > 0);
     const payload = {
       title: v.title.trim(),
       body: v.body,
@@ -320,8 +294,7 @@ function KbEditor({
         onClick={onClose}
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
       >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        К списку
+        <ArrowLeft className="h-3.5 w-3.5" />К списку
       </button>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -352,8 +325,7 @@ function KbEditor({
                 disabled={isPending}
                 className="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
               >
-                <Archive className="h-3.5 w-3.5" />
-                В архив
+                <Archive className="h-3.5 w-3.5" />В архив
               </button>
             )}
           </div>
@@ -370,12 +342,10 @@ function KbEditor({
             type="text"
             {...form.register('title')}
             placeholder="«Калибровка тонометра Omron HEM-7156 — пошагово»"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
           {form.formState.errors.title && (
-            <p className="text-destructive mt-1 text-xs">
-              {form.formState.errors.title.message}
-            </p>
+            <p className="text-destructive mt-1 text-xs">{form.formState.errors.title.message}</p>
           )}
         </div>
 
@@ -420,9 +390,7 @@ function KbEditor({
           </p>
           <div
             className={
-              showPreview
-                ? 'grid grid-cols-1 gap-3 md:grid-cols-2'
-                : 'grid grid-cols-1 gap-3'
+              showPreview ? 'grid grid-cols-1 gap-3 md:grid-cols-2' : 'grid grid-cols-1 gap-3'
             }
           >
             <textarea
@@ -431,7 +399,7 @@ function KbEditor({
               placeholder={
                 '## Шаги\n1. Подключить прибор к стенду…\n2. Прогреть 5 минут…\n\n**Внимание:** не использовать манжету < 22 см.'
               }
-              className="bg-background w-full font-mono rounded-md border px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-xs outline-none focus:ring-2"
             />
             {showPreview && (
               <div
@@ -459,7 +427,7 @@ function KbEditor({
           <button
             type="submit"
             disabled={isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-4 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? 'Сохранение…' : isNew ? 'Создать' : 'Сохранить'}
           </button>
@@ -519,13 +487,13 @@ function ChipsField({
               type="text"
               {...register(`${registerName}.${idx}.value` as const)}
               placeholder={placeholder}
-              className="bg-background flex-1 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 flex-1 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2"
             />
             <button
               type="button"
               onClick={() => onRemove(idx)}
               aria-label="Удалить"
-              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive grid place-items-center rounded-md border w-7"
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive grid w-7 place-items-center rounded-md border"
             >
               <Trash2 className="h-3 w-3" />
             </button>
@@ -545,13 +513,7 @@ function ChipsField({
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}

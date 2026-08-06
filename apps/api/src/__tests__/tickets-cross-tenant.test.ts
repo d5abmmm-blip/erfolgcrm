@@ -83,10 +83,7 @@ describe('RLS — tickets изолированы по tenant', () => {
     );
     if (!erfolgWo) throw new Error('seed missing work_order — расширь seed');
     const result = await withTenantTx(getDb(), demoId, async (tx) =>
-      tx
-        .delete(workOrders)
-        .where(eq(workOrders.id, erfolgWo.id))
-        .returning({ id: workOrders.id }),
+      tx.delete(workOrders).where(eq(workOrders.id, erfolgWo.id)).returning({ id: workOrders.id }),
     );
     expect(result.length).toBe(0);
 

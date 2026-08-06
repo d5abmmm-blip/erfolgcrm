@@ -120,10 +120,7 @@ const REMINDER_LOCK_TTL_SEC = 120;
  * последние ~20ч, пропускаются (skippedCooldown) — чтобы повторный клик не задваивал
  * письма клиенту. Возвращает разбивку исходов для тоста в UI.
  */
-export async function sendReminderCmd(
-  ctx: CmdCtx,
-  clientId: string,
-): Promise<SendReminderResult> {
+export async function sendReminderCmd(ctx: CmdCtx, clientId: string): Promise<SendReminderResult> {
   const overdueInvoices = await listClientOverdueInvoices(ctx.db, ctx.tenant.id, clientId);
   const [firstInvoice] = overdueInvoices;
   if (!firstInvoice) {
@@ -146,10 +143,7 @@ export async function sendReminderCmd(
     total: overdueInvoices.length,
   };
   for (const invoice of overdueInvoices) {
-    if (
-      invoice.lastReminderSentAt &&
-      nowMs - invoice.lastReminderSentAt.getTime() < cooldownMs
-    ) {
+    if (invoice.lastReminderSentAt && nowMs - invoice.lastReminderSentAt.getTime() < cooldownMs) {
       result.skippedCooldown++;
       continue;
     }
@@ -161,7 +155,10 @@ export async function sendReminderCmd(
     try {
       claimed = (await getRedis().set(lockKey, '1', 'EX', REMINDER_LOCK_TTL_SEC, 'NX')) !== null;
     } catch (err) {
-      logger.warn({ err, invoiceId: invoice.id }, 'sendReminder: redis claim unavailable, proceeding');
+      logger.warn(
+        { err, invoiceId: invoice.id },
+        'sendReminder: redis claim unavailable, proceeding',
+      );
     }
     if (!claimed) {
       result.skippedCooldown++;
@@ -219,10 +216,7 @@ export async function sendReminderCmd(
   return result;
 }
 
-export async function createDraftCmd(
-  ctx: CmdCtx,
-  input: CreateDraftInput,
-): Promise<InvoiceDto> {
+export async function createDraftCmd(ctx: CmdCtx, input: CreateDraftInput): Promise<InvoiceDto> {
   let dto: InvoiceDto;
   try {
     dto = await repoCreateDraft(ctx.db, ctx.tenant.id, input);
@@ -298,10 +292,7 @@ export interface UpdateDraftCmdInput extends UpdateDraftInput {
   invoiceId: string;
 }
 
-export async function updateDraftCmd(
-  ctx: CmdCtx,
-  input: UpdateDraftCmdInput,
-): Promise<InvoiceDto> {
+export async function updateDraftCmd(ctx: CmdCtx, input: UpdateDraftCmdInput): Promise<InvoiceDto> {
   const { invoiceId, ...patch } = input;
   const dto = await repoUpdateDraft(ctx.db, ctx.tenant.id, invoiceId, patch);
   if (!dto) throw new TRPCError({ code: 'NOT_FOUND', message: 'Счёт не найден' });
@@ -321,10 +312,7 @@ export async function updateDraftCmd(
   return dto;
 }
 
-export async function deleteDraftCmd(
-  ctx: CmdCtx,
-  invoiceId: string,
-): Promise<void> {
+export async function deleteDraftCmd(ctx: CmdCtx, invoiceId: string): Promise<void> {
   if (!(await invoiceBelongsToTenant(ctx.db, ctx.tenant.id, invoiceId))) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Счёт не найден' });
   }

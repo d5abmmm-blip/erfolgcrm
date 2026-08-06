@@ -9,12 +9,7 @@
  */
 import { z } from 'zod';
 import { AssetLifecycleStatus, MedDeviceRiskClass } from '@erfolg/shared';
-import {
-  router,
-  authedProcedure,
-  directorProcedure,
-  staffProcedure,
-} from '../../trpc/trpc';
+import { router, authedProcedure, directorProcedure, staffProcedure } from '../../trpc/trpc';
 import {
   addAssetNoteCmd,
   assetEventsQuery,
@@ -99,22 +94,29 @@ export const assetsRouter = router({
     .query(({ ctx, input }) => assetsByClientQuery(ctx.db, ctx.tenant, input.clientId)),
 
   events: authedProcedure
-    .input(z.object({ assetId: z.string().uuid(), limit: z.number().int().positive().max(500).optional() }))
+    .input(
+      z.object({
+        assetId: z.string().uuid(),
+        limit: z.number().int().positive().max(500).optional(),
+      }),
+    )
     .query(({ ctx, input }) => assetEventsQuery(ctx.db, ctx.tenant, input.assetId, input.limit)),
 
   manufacturers: authedProcedure.query(({ ctx }) => manufacturersQuery(ctx.db, ctx.tenant)),
 
   deviceTypes: authedProcedure.query(({ ctx }) => deviceTypesQuery(ctx.db, ctx.tenant)),
 
-  create: staffProcedure.input(createAssetSchema).mutation(({ ctx, input }) =>
-    createAssetCmd(
-      ctx.db,
-      ctx.tenant,
-      ctx.session,
-      { ip: ctx.ip, userAgent: ctx.userAgent },
-      input,
+  create: staffProcedure
+    .input(createAssetSchema)
+    .mutation(({ ctx, input }) =>
+      createAssetCmd(
+        ctx.db,
+        ctx.tenant,
+        ctx.session,
+        { ip: ctx.ip, userAgent: ctx.userAgent },
+        input,
+      ),
     ),
-  ),
 
   update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateAssetSchema }))

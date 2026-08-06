@@ -9,11 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { assetEvents, assets, getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import {
-  createAssetWithEvent,
-  getAsset,
-  listAssets,
-} from '../modules/assets/repository';
+import { createAssetWithEvent, getAsset, listAssets } from '../modules/assets/repository';
 
 let erfolgId = '';
 const createdIds: string[] = [];

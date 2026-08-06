@@ -89,15 +89,15 @@ apps/api/src/modules/<название>/
 
 ## Стек
 
-| Слой | Что |
-|---|---|
-| Интерфейс | React 19, Vite 6, Tailwind 4, TanStack Query 5, wouter |
-| Сервер | Node.js 22, Express 5, tRPC 11, Drizzle 0.45, Argon2id, BullMQ |
-| База | PostgreSQL 16 + pgcrypto + RLS |
-| Файлы | локальный том на сервере |
-| Кэш и очереди | Redis 7 |
-| Telegram | внутри процесса api (отдельного бота-процесса нет) |
-| Развёртывание | Docker Compose + Caddy на одном сервере |
+| Слой          | Что                                                            |
+| ------------- | -------------------------------------------------------------- |
+| Интерфейс     | React 19, Vite 6, Tailwind 4, TanStack Query 5, wouter         |
+| Сервер        | Node.js 22, Express 5, tRPC 11, Drizzle 0.45, Argon2id, BullMQ |
+| База          | PostgreSQL 16 + pgcrypto + RLS                                 |
+| Файлы         | локальный том на сервере                                       |
+| Кэш и очереди | Redis 7                                                        |
+| Telegram      | внутри процесса api (отдельного бота-процесса нет)             |
+| Развёртывание | Docker Compose + Caddy на одном сервере                        |
 
 ## Персональные данные
 

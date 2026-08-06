@@ -54,7 +54,8 @@ function fakeRes() {
 }
 
 function makeCtx(role: 'director' | 'dispatcher' | 'engineer'): Context {
-  const userId = role === 'director' ? directorId : role === 'dispatcher' ? dispatcherId : engineerId;
+  const userId =
+    role === 'director' ? directorId : role === 'dispatcher' ? dispatcherId : engineerId;
   const session: SessionData = {
     tenantId: erfolgId,
     userId,

@@ -3,19 +3,9 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  assets,
-  getDb,
-  maintenanceLog,
-  maintenanceSchedules,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, getDb, maintenanceLog, maintenanceSchedules, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
-import {
-  createSchedule,
-  listSchedules,
-  recordPerformed,
-} from '../modules/maintenance/repository';
+import { createSchedule, listSchedules, recordPerformed } from '../modules/maintenance/repository';
 
 let erfolgId = '';
 let assetId = '';
@@ -37,9 +27,7 @@ async function clearTestSchedules(): Promise<void> {
     await tx
       .delete(maintenanceSchedules)
       .where(like(maintenanceSchedules.notes, `${TEST_NOTE_PREFIX}%`));
-    await tx
-      .delete(maintenanceLog)
-      .where(like(maintenanceLog.summary, `${TEST_NOTE_PREFIX}%`));
+    await tx.delete(maintenanceLog).where(like(maintenanceLog.summary, `${TEST_NOTE_PREFIX}%`));
   });
 }
 

@@ -13,14 +13,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { and, eq, like } from 'drizzle-orm';
-import {
-  auditLogs,
-  clients,
-  getDb,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { auditLogs, clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { pgErrorText } from '../lib/pg-error';
 import { createTicket } from '../modules/tickets/repository';
@@ -78,12 +71,7 @@ async function clearTestData(): Promise<void> {
       // по action='schedule_change' чтобы не задеть другие тесты.
       await tx
         .delete(auditLogs)
-        .where(
-          and(
-            eq(auditLogs.entityType, 'ticket'),
-            eq(auditLogs.action, 'schedule_change'),
-          ),
-        );
+        .where(and(eq(auditLogs.entityType, 'ticket'), eq(auditLogs.action, 'schedule_change')));
     });
   }
 }
@@ -302,9 +290,7 @@ describe('Stage 11: tickets.myWeeklySchedule', () => {
       estimatedMinutes: 60,
     });
 
-    const myCaller = appRouter.createCaller(
-      makeCtx({ role: 'engineer', userId: engineerId }),
-    );
+    const myCaller = appRouter.createCaller(makeCtx({ role: 'engineer', userId: engineerId }));
     const myList = await myCaller.tickets.myWeeklySchedule({ weekStart: monday });
     const myIds = myList.map((t) => t.id);
     expect(myIds).toContain(t1);
@@ -361,9 +347,7 @@ describe('Stage 11: CHECK constraint tickets_schedule_consistency', () => {
           .set({ scheduledStartAt: start, scheduledEndAt: end })
           .where(eq(tickets.id, ticketId)),
       ),
-    ).rejects.toSatisfy((e: unknown) =>
-      /tickets_schedule_consistency/i.test(pgErrorText(e)),
-    );
+    ).rejects.toSatisfy((e: unknown) => /tickets_schedule_consistency/i.test(pgErrorText(e)));
   });
 });
 

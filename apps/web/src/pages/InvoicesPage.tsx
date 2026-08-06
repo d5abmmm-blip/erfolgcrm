@@ -53,7 +53,7 @@ export function InvoicesPage() {
   const [page, setPage] = useState(1);
 
   const list = trpc.invoices.listForTenant.useQuery({
-    status: (status || undefined),
+    status: status || undefined,
     limit: PAGE_SIZE,
     page,
   });
@@ -85,11 +85,7 @@ export function InvoicesPage() {
       label: 'Статус',
       render: (inv) => {
         const meta = INVOICE_STATUS_META[inv.status];
-        return (
-          <StatusBadge variant={meta.variant}>
-            {meta.shortLabel ?? meta.label}
-          </StatusBadge>
-        );
+        return <StatusBadge variant={meta.variant}>{meta.shortLabel ?? meta.label}</StatusBadge>;
       },
     },
     {
@@ -144,14 +140,14 @@ export function InvoicesPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по номеру счёта"
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
         <select
@@ -160,7 +156,7 @@ export function InvoicesPage() {
             setStatus(e.target.value as StatusOption);
             setPage(1);
           }}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -179,12 +175,7 @@ export function InvoicesPage() {
         rowKey={(inv) => inv.id}
       />
 
-      <Pagination
-        page={page}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
     </div>
   );
 }

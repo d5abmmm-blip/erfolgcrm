@@ -5,12 +5,7 @@
  * в логи, не попадает в audit. В DTO для UI токен НЕ отдаётся; только bot_username + masked.
  */
 import { eq, sql } from 'drizzle-orm';
-import {
-  getTenantEncryptionKey,
-  telegramBotConfigs,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { getTenantEncryptionKey, telegramBotConfigs, withTenantTx, type Db } from '@erfolg/db';
 
 export interface TelegramConfigPublicDto {
   enabled: boolean;
@@ -129,11 +124,7 @@ export async function upsertConfig(
   });
 }
 
-export async function setEnabled(
-  db: Db,
-  tenantId: string,
-  enabled: boolean,
-): Promise<void> {
+export async function setEnabled(db: Db, tenantId: string, enabled: boolean): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(telegramBotConfigs)

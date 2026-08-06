@@ -36,8 +36,8 @@ export function ClientAssetsPage() {
     return (
       <div className="p-6">
         <div className="bg-card text-muted-foreground rounded-md border p-8 text-center text-sm">
-          За вашей организацией ещё не закреплено ни одной единицы техники.
-          Если вы только начали обслуживание — обратитесь в сервисный центр для регистрации.
+          За вашей организацией ещё не закреплено ни одной единицы техники. Если вы только начали
+          обслуживание — обратитесь в сервисный центр для регистрации.
         </div>
       </div>
     );
@@ -61,10 +61,10 @@ export function ClientAssetsPage() {
             {list.data.map((a) => (
               <tr key={a.id} className="hover:bg-muted/30">
                 <td className="px-3 py-2 font-medium">{a.model}</td>
-                <td className="px-3 py-2 text-muted-foreground">{a.manufacturer ?? '—'}</td>
+                <td className="text-muted-foreground px-3 py-2">{a.manufacturer ?? '—'}</td>
                 <td className="px-3 py-2">{a.serialNumber ?? '—'}</td>
                 <td className="px-3 py-2">{a.inventoryNumber ?? '—'}</td>
-                <td className="px-3 py-2 text-muted-foreground">{a.location ?? '—'}</td>
+                <td className="text-muted-foreground px-3 py-2">{a.location ?? '—'}</td>
                 <td className="px-3 py-2">
                   <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
                     {STATUS_LABEL[a.lifecycleStatus] ?? a.lifecycleStatus}

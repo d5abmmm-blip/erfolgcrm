@@ -91,8 +91,7 @@ function SummaryFacts({
   onOpenDetail: () => void;
 }) {
   if (!data) return null;
-  const nothing =
-    data.stuckCount === 0 && data.readyCount === 0 && data.overloaded.length === 0;
+  const nothing = data.stuckCount === 0 && data.readyCount === 0 && data.overloaded.length === 0;
   if (nothing) {
     return (
       <div className="text-muted-foreground p-4 text-sm">
@@ -122,7 +121,10 @@ function SummaryFacts({
             <dt>
               Застряло
               {data.unspecifiedCount > 0 && (
-                <span className="text-muted-foreground"> · без причины {data.unspecifiedCount}</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  · без причины {data.unspecifiedCount}
+                </span>
               )}
             </dt>
             <dd className="font-medium tabular-nums">{data.stuckCount}</dd>
@@ -286,7 +288,10 @@ function SummaryDetailModal({ data, onClose }: { data: SummaryData; onClose: () 
 
           {/* Готово к выдаче — позвонить */}
           {data.ready.length > 0 && (
-            <DetailSection icon={PhoneCall} title={`Готово к выдаче — позвонить · ${data.readyCount}`}>
+            <DetailSection
+              icon={PhoneCall}
+              title={`Готово к выдаче — позвонить · ${data.readyCount}`}
+            >
               {data.ready.map((r) => (
                 <li key={r.ticketNumber}>
                   <Link
@@ -306,7 +311,10 @@ function SummaryDetailModal({ data, onClose }: { data: SummaryData; onClose: () 
           {data.overloaded.length > 0 && (
             <DetailSection icon={Users} title="Загрузка инженеров">
               {data.overloaded.map((e, i) => (
-                <li key={`${e.name}-${i}`} className="flex items-baseline justify-between gap-3 py-1.5">
+                <li
+                  key={`${e.name}-${i}`}
+                  className="flex items-baseline justify-between gap-3 py-1.5"
+                >
                   <span className="truncate">{e.name}</span>
                   <span className="text-muted-foreground shrink-0 tabular-nums">
                     {e.count} активных

@@ -56,8 +56,8 @@ export function SecurityPage() {
           <div>
             <div className="font-medium">Включите 2FA — требование 152-ФЗ.</div>
             <div className="opacity-90">
-              Роль «Директор» имеет доступ ко всем ПДн клиентов. Без второго фактора защита
-              слабее минимальной.
+              Роль «Директор» имеет доступ ко всем ПДн клиентов. Без второго фактора защита слабее
+              минимальной.
             </div>
           </div>
         </div>
@@ -73,9 +73,7 @@ export function SecurityPage() {
             {enabled ? <Shield className="h-6 w-6" /> : <ShieldOff className="h-6 w-6" />}
           </div>
           <div className="flex-1">
-            <div className="font-medium">
-              {enabled ? '2FA активна' : '2FA не настроена'}
-            </div>
+            <div className="font-medium">{enabled ? '2FA активна' : '2FA не настроена'}</div>
             <div className="text-muted-foreground mt-0.5 text-sm">
               {enabled
                 ? 'При входе понадобится 6-значный код из приложения Authenticator (Google Authenticator, Aegis, 1Password и др.)'
@@ -140,10 +138,7 @@ export function SecurityPage() {
       )}
 
       {showCodesAfterRegen && (
-        <CodesShowModal
-          codes={showCodesAfterRegen}
-          onClose={() => setShowCodesAfterRegen(null)}
-        />
+        <CodesShowModal codes={showCodesAfterRegen} onClose={() => setShowCodesAfterRegen(null)} />
       )}
 
       {disableOpen && (
@@ -237,11 +232,7 @@ function Setup2faWizard({
               </div>
             )}
             {otpauthUrl && (
-              <a
-                href={otpauthUrl}
-                className="text-primary text-xs hover:underline"
-                rel="noopener"
-              >
+              <a href={otpauthUrl} className="text-primary text-xs hover:underline" rel="noopener">
                 Открыть в приложении
               </a>
             )}
@@ -284,22 +275,14 @@ function Setup2faWizard({
         </form>
       )}
 
-      {step === 'codes' && recoveryCodes && (
-        <CodesView codes={recoveryCodes} onContinue={onDone} />
-      )}
+      {step === 'codes' && recoveryCodes && <CodesView codes={recoveryCodes} onContinue={onDone} />}
     </ModalShell>
   );
 }
 
 /* ========================= Disable / Regenerate ========================= */
 
-function DisableModal({
-  onClose,
-  onDone,
-}: {
-  onClose: () => void;
-  onDone: () => void;
-}) {
+function DisableModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -452,8 +435,8 @@ function CodesView({ codes, onContinue }: { codes: string[]; onContinue: () => v
       <div className="bg-warning/10 text-warning border-warning/30 flex items-start gap-3 rounded-md border p-3 text-sm">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
-          Эти коды показываются <b>один раз</b>. Сохраните их в надёжном месте — они помогут
-          войти, если вы потеряете телефон.
+          Эти коды показываются <b>один раз</b>. Сохраните их в надёжном месте — они помогут войти,
+          если вы потеряете телефон.
         </div>
       </div>
       <div className="bg-muted grid grid-cols-2 gap-2 rounded-md p-3 font-mono text-sm">

@@ -55,10 +55,7 @@ export async function listByAssetQuery(
   return listByAsset(db, tenant.id, assetId);
 }
 
-export async function warrantyStatsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-): Promise<WarrantyStats> {
+export async function warrantyStatsQuery(db: Db, tenant: ResolvedTenant): Promise<WarrantyStats> {
   return warrantyStats(db, tenant.id);
 }
 

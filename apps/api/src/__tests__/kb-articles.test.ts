@@ -9,15 +9,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { like } from 'drizzle-orm';
-import {
-  assets,
-  clients,
-  getDb,
-  kbArticles,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, clients, getDb, kbArticles, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createAssetWithEvent } from '../modules/assets/repository';
 import { createTicket } from '../modules/tickets/repository';
@@ -125,23 +117,18 @@ describe('kbArticles.list / get / searchSimilar', () => {
     const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
 
     // Создаём asset
-    const { id: assetId } = await createAssetWithEvent(
-      getDb(),
-      erfolgId,
-      dispatcherId,
-      {
-        ownerClientId: erfolgClientId,
-        model: `${TEST_PREFIX}TonometrXYZ`,
-        manufacturer: 'Omron',
-        serialNumber: null,
-        inventoryNumber: null,
-        location: null,
-        riskClass: null,
-        commissionedAt: null,
-        warrantyUntil: null,
-        notes: null,
-      },
-    );
+    const { id: assetId } = await createAssetWithEvent(getDb(), erfolgId, dispatcherId, {
+      ownerClientId: erfolgClientId,
+      model: `${TEST_PREFIX}TonometrXYZ`,
+      manufacturer: 'Omron',
+      serialNumber: null,
+      inventoryNumber: null,
+      location: null,
+      riskClass: null,
+      commissionedAt: null,
+      warrantyUntil: null,
+      notes: null,
+    });
 
     // 1) Статья по модели — должна быть найдена через assetModels.
     const byModel = await caller.kbArticles.create({
@@ -171,23 +158,18 @@ describe('kbArticles.list / get / searchSimilar', () => {
   it('searchSimilar по ticketId — учитывает model асcета и symptom', async () => {
     const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
 
-    const { id: assetId } = await createAssetWithEvent(
-      getDb(),
-      erfolgId,
-      dispatcherId,
-      {
-        ownerClientId: erfolgClientId,
-        model: `${TEST_PREFIX}DragerSavina300`,
-        manufacturer: 'Drager',
-        serialNumber: null,
-        inventoryNumber: null,
-        location: null,
-        riskClass: null,
-        commissionedAt: null,
-        warrantyUntil: null,
-        notes: null,
-      },
-    );
+    const { id: assetId } = await createAssetWithEvent(getDb(), erfolgId, dispatcherId, {
+      ownerClientId: erfolgClientId,
+      model: `${TEST_PREFIX}DragerSavina300`,
+      manufacturer: 'Drager',
+      serialNumber: null,
+      inventoryNumber: null,
+      location: null,
+      riskClass: null,
+      commissionedAt: null,
+      warrantyUntil: null,
+      notes: null,
+    });
 
     const { id: ticketId } = await createTicket(getDb(), erfolgId, dispatcherId, {
       clientId: erfolgClientId,
@@ -210,9 +192,7 @@ describe('kbArticles.list / get / searchSimilar', () => {
   });
 
   it('cross-tenant: статья demo не видна из erfolg', async () => {
-    const demoCaller = appRouter.createCaller(
-      makeCtx({ role: 'dispatcher', tenantId: demoId }),
-    );
+    const demoCaller = appRouter.createCaller(makeCtx({ role: 'dispatcher', tenantId: demoId }));
     const erfolgCaller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
 
     // ВАЖНО: для demo используем demoClientId — иначе foreign key упадёт

@@ -3,12 +3,7 @@
  * Чистые DB-функции; RLS по tenant соблюдается через withTenantTx.
  */
 import { and, asc, eq, gte, lte } from 'drizzle-orm';
-import {
-  userAvailability,
-  userDeviceSkills,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { userAvailability, userDeviceSkills, withTenantTx, type Db } from '@erfolg/db';
 
 export type AvailabilityKind = 'day_off' | 'vacation' | 'onsite';
 
@@ -49,9 +44,9 @@ export async function setSkills(
   return withTenantTx(db, tenantId, async (tx) => {
     await tx.delete(userDeviceSkills).where(eq(userDeviceSkills.userId, userId));
     if (clean.length > 0) {
-      await tx.insert(userDeviceSkills).values(
-        clean.map((deviceType) => ({ tenantId, userId, deviceType })),
-      );
+      await tx
+        .insert(userDeviceSkills)
+        .values(clean.map((deviceType) => ({ tenantId, userId, deviceType })));
     }
     return clean;
   });
@@ -98,9 +93,7 @@ export async function listActiveAvailability(
     tx
       .select({ userId: userAvailability.userId, kind: userAvailability.kind })
       .from(userAvailability)
-      .where(
-        and(lte(userAvailability.dateFrom, onDate), gte(userAvailability.dateTo, onDate)),
-      ),
+      .where(and(lte(userAvailability.dateFrom, onDate), gte(userAvailability.dateTo, onDate))),
   );
 }
 
@@ -131,11 +124,7 @@ export async function setAvailability(
   });
 }
 
-export async function deleteAvailability(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<void> {
+export async function deleteAvailability(db: Db, tenantId: string, id: string): Promise<void> {
   await withTenantTx(db, tenantId, (tx) =>
     tx.delete(userAvailability).where(eq(userAvailability.id, id)),
   );

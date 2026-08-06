@@ -63,13 +63,7 @@ export async function writeoffBatchCmd(
   batchId: string,
   comment: string | null,
 ): Promise<{ writtenOff: string }> {
-  const result = await repoWriteoff(
-    ctx.db,
-    ctx.tenant.id,
-    ctx.session.userId,
-    batchId,
-    comment,
-  );
+  const result = await repoWriteoff(ctx.db, ctx.tenant.id, ctx.session.userId, batchId, comment);
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
     action: 'delete',

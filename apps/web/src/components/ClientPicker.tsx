@@ -23,10 +23,7 @@ export function ClientPicker({ value, onChange, placeholder = 'Поиск кли
     return () => clearTimeout(t);
   }, [q]);
 
-  const search = trpc.clients.search.useQuery(
-    { q: debounced },
-    { enabled: debounced.length >= 1 },
-  );
+  const search = trpc.clients.search.useQuery({ q: debounced }, { enabled: debounced.length >= 1 });
   const selected = trpc.clients.get.useQuery({ id: value ?? '' }, { enabled: !!value });
 
   return (
@@ -36,9 +33,7 @@ export function ClientPicker({ value, onChange, placeholder = 'Поиск кли
           <div>
             <div className="font-medium">{selected.data.displayName}</div>
             {selected.data.inn && (
-              <div className="text-muted-foreground font-mono text-xs">
-                ИНН {selected.data.inn}
-              </div>
+              <div className="text-muted-foreground font-mono text-xs">ИНН {selected.data.inn}</div>
             )}
           </div>
           <button
@@ -65,7 +60,7 @@ export function ClientPicker({ value, onChange, placeholder = 'Поиск кли
             }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
       )}
@@ -80,9 +75,7 @@ export function ClientPicker({ value, onChange, placeholder = 'Поиск кли
               <li key={c.id}>
                 <button
                   type="button"
-                  className={cn(
-                    'hover:bg-muted/40 w-full px-3 py-2 text-left text-sm transition',
-                  )}
+                  className={cn('hover:bg-muted/40 w-full px-3 py-2 text-left text-sm transition')}
                   onClick={() => {
                     onChange(c.id, c.displayName);
                     setOpen(false);

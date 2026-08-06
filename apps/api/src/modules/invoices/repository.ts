@@ -15,12 +15,7 @@
  * apps/web/src/lib/pdf/invoice.ts: vat = round(total * rate / (100 + rate)).
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
-import {
-  invoices,
-  withTenantTx,
-  workOrders,
-  type Db,
-} from '@erfolg/db';
+import { invoices, withTenantTx, workOrders, type Db } from '@erfolg/db';
 import type { InvoiceStatus, VatRate } from '@erfolg/shared';
 import { WorkOrderNotFoundError } from '../../lib/errors';
 
@@ -181,21 +176,14 @@ export async function createDraft(
       .limit(1);
     const wo = woRows[0];
     if (!wo) {
-      throw new WorkOrderNotFoundError(
-        'createDraft: work_order не найден в этом тенанте',
-      );
+      throw new WorkOrderNotFoundError('createDraft: work_order не найден в этом тенанте');
     }
 
     // 2. Если живой счёт уже есть — возвращаем его (даже draft, или issued, или cancelled).
     const existingRows = await tx
       .select()
       .from(invoices)
-      .where(
-        and(
-          eq(invoices.workOrderId, wo.id),
-          isNull(invoices.deletedAt),
-        ),
-      )
+      .where(and(eq(invoices.workOrderId, wo.id), isNull(invoices.deletedAt)))
       .limit(1);
     const existing = existingRows[0];
     if (existing) return toDto(existing);
@@ -478,10 +466,7 @@ export async function softDeleteDraft(
     const row = rows[0];
     if (!row) return false;
     if (row.status !== 'draft') return false;
-    await tx
-      .update(invoices)
-      .set({ deletedAt: new Date() })
-      .where(eq(invoices.id, invoiceId));
+    await tx.update(invoices).set({ deletedAt: new Date() }).where(eq(invoices.id, invoiceId));
     return true;
   });
 }
@@ -556,11 +541,7 @@ export async function invoiceBelongsToTenant(
  * Помечает все issued/partially_paid счета с просроченным due_date как overdue.
  * Используется ночным cron'ом (8.E). Возвращает количество переведённых.
  */
-export async function markOverdueAsOf(
-  db: Db,
-  tenantId: string,
-  asOf: Date,
-): Promise<number> {
+export async function markOverdueAsOf(db: Db, tenantId: string, asOf: Date): Promise<number> {
   return withTenantTx(db, tenantId, async (tx) => {
     const result = await tx
       .update(invoices)
@@ -613,11 +594,7 @@ export async function listOverdueForReminder(
 }
 
 /** Регистрирует факт отправки напоминания. */
-export async function markReminderSent(
-  db: Db,
-  tenantId: string,
-  invoiceId: string,
-): Promise<void> {
+export async function markReminderSent(db: Db, tenantId: string, invoiceId: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(invoices)
@@ -924,13 +901,10 @@ export async function receivablesReport(
     const overdueBuckets = [aging.d1_30, aging.d31_60, aging.d60plus];
     return {
       summary: {
-        totalOutstandingKopecks: sumBig(
-          [aging.notDue, ...overdueBuckets].map((b) => b.sumKopecks),
-        ),
+        totalOutstandingKopecks: sumBig([aging.notDue, ...overdueBuckets].map((b) => b.sumKopecks)),
         overdueOutstandingKopecks: sumBig(overdueBuckets.map((b) => b.sumKopecks)),
         debtorCount,
-        invoiceCount:
-          aging.notDue.count + overdueBuckets.reduce((a, b) => a + b.count, 0),
+        invoiceCount: aging.notDue.count + overdueBuckets.reduce((a, b) => a + b.count, 0),
         overdueInvoiceCount: overdueBuckets.reduce((a, b) => a + b.count, 0),
       },
       aging,

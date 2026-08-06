@@ -232,11 +232,36 @@ export function MailListPage() {
             onClick={() => switchFolder('in')}
             badge={unreadCount}
           />
-          <RailItem icon={Send} label="Отправленные" active={folder === 'out'} onClick={() => switchFolder('out')} />
-          <RailItem icon={FileText} label="Черновики" active={folder === 'drafts'} onClick={() => switchFolder('drafts')} />
-          <RailItem icon={Clock} label="Запланированные" active={folder === 'scheduled'} onClick={() => switchFolder('scheduled')} />
-          <RailItem icon={ShieldAlert} label="Спам" active={folder === 'spam'} onClick={() => switchFolder('spam')} />
-          <RailItem icon={Trash2} label="Корзина" active={folder === 'trash'} onClick={() => switchFolder('trash')} />
+          <RailItem
+            icon={Send}
+            label="Отправленные"
+            active={folder === 'out'}
+            onClick={() => switchFolder('out')}
+          />
+          <RailItem
+            icon={FileText}
+            label="Черновики"
+            active={folder === 'drafts'}
+            onClick={() => switchFolder('drafts')}
+          />
+          <RailItem
+            icon={Clock}
+            label="Запланированные"
+            active={folder === 'scheduled'}
+            onClick={() => switchFolder('scheduled')}
+          />
+          <RailItem
+            icon={ShieldAlert}
+            label="Спам"
+            active={folder === 'spam'}
+            onClick={() => switchFolder('spam')}
+          />
+          <RailItem
+            icon={Trash2}
+            label="Корзина"
+            active={folder === 'trash'}
+            onClick={() => switchFolder('trash')}
+          />
         </nav>
         {isDirector && (
           <div className="border-sidebar-border mt-auto border-t pt-2">
@@ -258,12 +283,37 @@ export function MailListPage() {
         <div className="space-y-2 border-b p-3">
           <div className="flex items-center gap-2 md:hidden">
             <div className="bg-secondary flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-md p-0.5">
-              <MiniFolder label="Входящие" active={folder === 'in'} onClick={() => switchFolder('in')} badge={unreadCount} />
-              <MiniFolder label="Отправленные" active={folder === 'out'} onClick={() => switchFolder('out')} />
-              <MiniFolder label="Черновики" active={folder === 'drafts'} onClick={() => switchFolder('drafts')} />
-              <MiniFolder label="Запланир." active={folder === 'scheduled'} onClick={() => switchFolder('scheduled')} />
-              <MiniFolder label="Спам" active={folder === 'spam'} onClick={() => switchFolder('spam')} />
-              <MiniFolder label="Корзина" active={folder === 'trash'} onClick={() => switchFolder('trash')} />
+              <MiniFolder
+                label="Входящие"
+                active={folder === 'in'}
+                onClick={() => switchFolder('in')}
+                badge={unreadCount}
+              />
+              <MiniFolder
+                label="Отправленные"
+                active={folder === 'out'}
+                onClick={() => switchFolder('out')}
+              />
+              <MiniFolder
+                label="Черновики"
+                active={folder === 'drafts'}
+                onClick={() => switchFolder('drafts')}
+              />
+              <MiniFolder
+                label="Запланир."
+                active={folder === 'scheduled'}
+                onClick={() => switchFolder('scheduled')}
+              />
+              <MiniFolder
+                label="Спам"
+                active={folder === 'spam'}
+                onClick={() => switchFolder('spam')}
+              />
+              <MiniFolder
+                label="Корзина"
+                active={folder === 'trash'}
+                onClick={() => switchFolder('trash')}
+              />
             </div>
             <button
               type="button"
@@ -325,11 +375,16 @@ export function MailListPage() {
           ) : list.error ? (
             <div className="text-destructive p-4 text-sm">Ошибка: {list.error.message}</div>
           ) : items.length === 0 ? (
-            <div className="text-muted-foreground p-6 text-center text-sm">{FOLDER_EMPTY[folder]}</div>
+            <div className="text-muted-foreground p-6 text-center text-sm">
+              {FOLDER_EMPTY[folder]}
+            </div>
           ) : (
             <ul className="divide-y">
               {items.map((m) => {
-                const meta = STATUS_META[m.status] ?? { label: m.status, variant: 'muted' as const };
+                const meta = STATUS_META[m.status] ?? {
+                  label: m.status,
+                  variant: 'muted' as const,
+                };
                 const active = m.id === selectedId;
                 const inbound = inboundFolder;
                 // Жирным — непрочитанные входящие (исходящие «прочитанности» не имеют).
@@ -348,9 +403,14 @@ export function MailListPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span
-                          className={cn('truncate text-sm', unreadRow ? 'font-semibold' : 'font-medium')}
+                          className={cn(
+                            'truncate text-sm',
+                            unreadRow ? 'font-semibold' : 'font-medium',
+                          )}
                         >
-                          {(inbound ? m.from : m.to) ?? <span className="text-muted-foreground">—</span>}
+                          {(inbound ? m.from : m.to) ?? (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </span>
                         <span className="text-muted-foreground shrink-0 text-[11px]">
                           {fmtListDate(folder === 'scheduled' ? m.scheduledAt : m.createdAt)}
@@ -643,7 +703,9 @@ function MessageReader({
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{subject ?? '(без темы)'}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+          {subject ?? '(без темы)'}
+        </h2>
         {selInbound && (
           <button
             type="button"
@@ -693,8 +755,7 @@ function MessageReader({
           className="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition disabled:opacity-50"
           title="Переместить в корзину"
         >
-          <Trash2 className="h-3.5 w-3.5" />
-          В корзину
+          <Trash2 className="h-3.5 w-3.5" />В корзину
         </button>
       </div>
 
@@ -761,7 +822,7 @@ function ThreadCard({ m, highlighted }: { m: ThreadMessage; highlighted: boolean
       {m.bodyHtml ? (
         // Входящий HTML очищаем DOMPurify (вырезаем скрипты/стили), затем показываем разметкой.
         <div
-          className="text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full"
+          className="[&_a]:text-primary text-sm leading-relaxed [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full"
           dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(m.bodyHtml) }}
         />
       ) : (
@@ -798,7 +859,12 @@ function MailAttachments({ items }: { items: MailAttachment[] }) {
           >
             <div className="aspect-square">
               {isImg ? (
-                <img src={a.url} alt={a.name} className="h-full w-full object-cover" loading="lazy" />
+                <img
+                  src={a.url}
+                  alt={a.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
               ) : (
                 <div className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs">
                   <FileIcon className="h-6 w-6" />
@@ -838,8 +904,14 @@ function ScheduledReader({
     await utils.email.list.invalidate();
     onDone();
   };
-  const sendNow = trpc.email.sendScheduledNow.useMutation({ onSuccess: afterAction, meta: SILENT_ERROR });
-  const cancel = trpc.email.cancelSchedule.useMutation({ onSuccess: afterAction, meta: SILENT_ERROR });
+  const sendNow = trpc.email.sendScheduledNow.useMutation({
+    onSuccess: afterAction,
+    meta: SILENT_ERROR,
+  });
+  const cancel = trpc.email.cancelSchedule.useMutation({
+    onSuccess: afterAction,
+    meta: SILENT_ERROR,
+  });
   const busy = sendNow.isPending || cancel.isPending;
 
   if (msg.isLoading) {
@@ -851,7 +923,11 @@ function ScheduledReader({
     );
   }
   if (msg.error || !msg.data) {
-    return <div className="text-destructive p-6 text-sm">{msg.error?.message ?? 'Письмо не найдено'}</div>;
+    return (
+      <div className="text-destructive p-6 text-sm">
+        {msg.error?.message ?? 'Письмо не найдено'}
+      </div>
+    );
   }
   const m = msg.data;
 
@@ -897,7 +973,7 @@ function ScheduledReader({
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 md:p-6">
-        <div className="text-primary flex items-center gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 text-sm">
+        <div className="text-primary border-primary/10 bg-primary/5 flex items-center gap-2 rounded-md border p-3 text-sm">
           <Clock className="h-4 w-4 shrink-0" />
           Отправится автоматически: {fmtDate(m.scheduledAt)}
         </div>
@@ -958,7 +1034,11 @@ function TrashReader({
     );
   }
   if (msg.error || !msg.data) {
-    return <div className="text-destructive p-6 text-sm">{msg.error?.message ?? 'Письмо не найдено'}</div>;
+    return (
+      <div className="text-destructive p-6 text-sm">
+        {msg.error?.message ?? 'Письмо не найдено'}
+      </div>
+    );
   }
   const m = msg.data;
   const inbound = m.direction === 'in';

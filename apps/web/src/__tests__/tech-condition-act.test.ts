@@ -71,7 +71,14 @@ const base: PrintTechConditionActInput = {
     repairDescription: 'Заменён датчик расхода.',
     recommendation: 'До замены датчика эксплуатация не рекомендована.',
     lines: [
-      { lineType: 'work', name: 'Диагностика', unit: 'шт.', quantity: 1, unitPriceKopecks: 5000, amountKopecks: 5000 },
+      {
+        lineType: 'work',
+        name: 'Диагностика',
+        unit: 'шт.',
+        quantity: 1,
+        unitPriceKopecks: 5000,
+        amountKopecks: 5000,
+      },
     ],
   },
 };

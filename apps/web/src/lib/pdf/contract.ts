@@ -66,7 +66,13 @@ function header(input: PrintContractInput): Content {
       {
         width: 'auto',
         stack: [
-          { text: input.tenant.displayName, alignment: 'right', bold: true, color: BRAND_PRIMARY, fontSize: 14 },
+          {
+            text: input.tenant.displayName,
+            alignment: 'right',
+            bold: true,
+            color: BRAND_PRIMARY,
+            fontSize: 14,
+          },
           input.tenant.slogan
             ? { text: input.tenant.slogan, alignment: 'right', fontSize: 9, color: BRAND_GREY }
             : { text: '', fontSize: 1 },
@@ -161,7 +167,10 @@ function subjectBlock(input: PrintContractInput): Content {
     : 'Исполнитель обязуется выполнить работы по ремонту/обслуживанию медицинского оборудования Заказчика по согласованной заявке, а Заказчик — принять и оплатить выполненные работы.';
   return {
     margin: [0, 0, 0, 0],
-    stack: [sectionHeading('1. Предмет договора'), { text: subject, fontSize: 10, lineHeight: 1.25 }],
+    stack: [
+      sectionHeading('1. Предмет договора'),
+      { text: subject, fontSize: 10, lineHeight: 1.25 },
+    ],
   };
 }
 
@@ -208,7 +217,12 @@ function pricingBlock(input: PrintContractInput): Content {
   return {
     stack: [
       sectionHeading('3. Стоимость и порядок оплаты'),
-      ...lines.map((l) => ({ text: l, fontSize: 10, lineHeight: 1.25, margin: [0, 0, 0, 4] as [number, number, number, number] })),
+      ...lines.map((l) => ({
+        text: l,
+        fontSize: 10,
+        lineHeight: 1.25,
+        margin: [0, 0, 0, 4] as [number, number, number, number],
+      })),
     ],
   };
 }
@@ -230,7 +244,12 @@ function penaltiesBlock(input: PrintContractInput): Content | null {
   return {
     stack: [
       sectionHeading('4. Ответственность сторон'),
-      ...lines.map((l) => ({ text: l, fontSize: 10, lineHeight: 1.25, margin: [0, 0, 0, 4] as [number, number, number, number] })),
+      ...lines.map((l) => ({
+        text: l,
+        fontSize: 10,
+        lineHeight: 1.25,
+        margin: [0, 0, 0, 4] as [number, number, number, number],
+      })),
     ],
   };
 }
@@ -240,7 +259,9 @@ function validityBlock(input: PrintContractInput): Content {
   const range =
     c.validFrom || c.validUntil
       ? `Договор действует ${c.validFrom ? `с ${formatDate(c.validFrom)}` : 'с момента подписания'}${
-          c.validUntil ? ` по ${formatDate(c.validUntil)}` : ' до полного исполнения сторонами обязательств'
+          c.validUntil
+            ? ` по ${formatDate(c.validUntil)}`
+            : ' до полного исполнения сторонами обязательств'
         }.`
       : 'Договор вступает в силу с момента подписания и действует до полного исполнения сторонами своих обязательств.';
   return {
@@ -262,7 +283,19 @@ function signaturesBlock(input: PrintContractInput): Content {
           { text: 'Исполнитель:', bold: true, fontSize: 10 },
           { text: t.legalName, fontSize: 10, margin: [0, 2, 0, 0] },
           { text: ' ', margin: [0, 16, 0, 0] },
-          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.5, lineColor: BRAND_LIGHT_GREY }] },
+          {
+            canvas: [
+              {
+                type: 'line',
+                x1: 0,
+                y1: 0,
+                x2: 200,
+                y2: 0,
+                lineWidth: 0.5,
+                lineColor: BRAND_LIGHT_GREY,
+              },
+            ],
+          },
           { text: `${t.director} / ____________`, fontSize: 9, margin: [0, 4, 0, 0] },
           { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 8, 0, 0] },
         ],
@@ -273,7 +306,19 @@ function signaturesBlock(input: PrintContractInput): Content {
           { text: 'Заказчик:', bold: true, fontSize: 10 },
           { text: input.client.displayName, fontSize: 10, margin: [0, 2, 0, 0] },
           { text: ' ', margin: [0, 16, 0, 0] },
-          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.5, lineColor: BRAND_LIGHT_GREY }] },
+          {
+            canvas: [
+              {
+                type: 'line',
+                x1: 0,
+                y1: 0,
+                x2: 200,
+                y2: 0,
+                lineWidth: 0.5,
+                lineColor: BRAND_LIGHT_GREY,
+              },
+            ],
+          },
           { text: '____________ / ____________', fontSize: 9, margin: [0, 4, 0, 0] },
           { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 8, 0, 0] },
         ],

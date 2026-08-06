@@ -20,9 +20,7 @@ import {
   upsertSiDetails,
 } from './repository';
 
-const isoDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате YYYY-MM-DD');
 
 const siInputSchema = z.object({
   typeName: z.string().trim().min(1, 'Укажите тип СИ').max(200),
@@ -78,20 +76,13 @@ export const metrologyRouter = router({
     .input(z.object({ assetId: z.string().uuid() }))
     .query(({ ctx, input }) => listCalibrations(ctx.db, ctx.tenant.id, input.assetId)),
 
-  getDashboard: staffProcedure.query(({ ctx }) =>
-    getDashboardStats(ctx.db, ctx.tenant.id),
-  ),
+  getDashboard: staffProcedure.query(({ ctx }) => getDashboardStats(ctx.db, ctx.tenant.id)),
 
   upsertSiDetails: staffProcedure
     .input(z.object({ assetId: z.string().uuid(), input: siInputSchema }))
     .mutation(async ({ ctx, input }) => {
       try {
-        const row = await upsertSiDetails(
-          ctx.db,
-          ctx.tenant.id,
-          input.assetId,
-          input.input,
-        );
+        const row = await upsertSiDetails(ctx.db, ctx.tenant.id, input.assetId, input.input);
         await writeAudit(ctx.db, ctx.tenant.id, {
           userId: ctx.session.userId,
           action: 'update',
@@ -135,17 +126,10 @@ export const metrologyRouter = router({
     }),
 
   addCalibration: staffProcedure
-    .input(
-      z.object({ assetId: z.string().uuid(), input: calibrationInputSchema }),
-    )
+    .input(z.object({ assetId: z.string().uuid(), input: calibrationInputSchema }))
     .mutation(async ({ ctx, input }) => {
       try {
-        const row = await addCalibration(
-          ctx.db,
-          ctx.tenant.id,
-          input.assetId,
-          input.input,
-        );
+        const row = await addCalibration(ctx.db, ctx.tenant.id, input.assetId, input.input);
         await writeAudit(ctx.db, ctx.tenant.id, {
           userId: ctx.session.userId,
           action: 'create',
@@ -177,9 +161,8 @@ export const metrologyRouter = router({
    * Реальный cron — через worker. Этот endpoint — для ручного запуска и отладки.
    */
   runRemindersNow: directorProcedure.mutation(async ({ ctx }) => {
-    const { processMetrologyReminderTickForTenant } = await import(
-      '../../workers/metrology-reminder'
-    );
+    const { processMetrologyReminderTickForTenant } =
+      await import('../../workers/metrology-reminder');
     const stats = await processMetrologyReminderTickForTenant(ctx.tenant.id);
     return stats;
   }),

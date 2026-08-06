@@ -7,14 +7,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Gauge,
-  Loader2,
-  Search,
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Gauge, Loader2, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
@@ -109,7 +102,7 @@ export function MetrologyPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по модели, серийнику, клиенту…"
-            className="bg-background w-72 rounded-md border py-1.5 pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-72 rounded-md border py-1.5 pl-8 pr-3 text-xs outline-none focus:ring-2"
           />
         </div>
       </div>
@@ -197,10 +190,7 @@ function SiTable({ rows, loading }: { rows: SiRow[] | undefined; loading: boolea
           {rows?.map((r) => (
             <tr key={r.assetId} className="hover:bg-muted/30">
               <td className="p-3">
-                <Link
-                  href={`/metrology/${r.assetId}`}
-                  className="hover:underline"
-                >
+                <Link href={`/metrology/${r.assetId}`} className="hover:underline">
                   <div className="font-medium">{r.typeName}</div>
                   <div className="text-muted-foreground text-xs">{r.assetModel}</div>
                 </Link>
@@ -210,15 +200,11 @@ function SiTable({ rows, loading }: { rows: SiRow[] | undefined; loading: boolea
               </td>
               <td className="p-3 text-xs">{r.ownerClientName ?? '—'}</td>
               <td className="p-3 text-xs">{r.accuracyClass ?? '—'}</td>
-              <td className="text-muted-foreground p-3 text-xs">
-                {r.measurementRange ?? '—'}
-              </td>
+              <td className="text-muted-foreground p-3 text-xs">{r.measurementRange ?? '—'}</td>
               <td className="text-muted-foreground p-3 text-xs tabular-nums">
                 {r.lastCalibrationAt ?? '—'}
               </td>
-              <td className="p-3 text-xs tabular-nums">
-                {r.nextCalibrationAt ?? '—'}
-              </td>
+              <td className="p-3 text-xs tabular-nums">{r.nextCalibrationAt ?? '—'}</td>
               <td className="p-3">
                 <StatusBadge status={r.status} />
               </td>

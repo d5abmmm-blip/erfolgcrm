@@ -85,7 +85,10 @@ export function cleanSymptomFromBody(
     if (/^(с уважением|best regards|regards|отправлено с)/i.test(line)) break;
     lines.push(line);
   }
-  const text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const text = lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
 

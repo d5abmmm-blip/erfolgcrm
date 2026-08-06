@@ -60,7 +60,10 @@ const setup = router({
           .limit(1),
       );
       if (current?.enabledAt) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: '2FA уже включена. Отключите её перед повторной настройкой.' });
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '2FA уже включена. Отключите её перед повторной настройкой.',
+        });
       }
 
       const recoveryCodes = generateRecoveryCodes();

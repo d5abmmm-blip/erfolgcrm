@@ -10,14 +10,7 @@
  * Возвращает дискриминированный результат — UI сам решает что показать.
  */
 import { TRPCClientError } from '@trpc/client';
-import {
-  enqueue,
-  listPending,
-  remove,
-  update,
-  type MutationKind,
-  type OutboxItem,
-} from './queue';
+import { enqueue, listPending, remove, update, type MutationKind, type OutboxItem } from './queue';
 
 export type ExecResult<T> =
   | { status: 'ok'; data: T }

@@ -52,7 +52,12 @@ describe('redactClientPii', () => {
   });
 
   it('ИНН физлица (type=individual) скрывается, ИНН юрлица (type=legal) остаётся', () => {
-    const individual = { id: 'c1', type: 'individual', displayName: 'Сидоров С.С.', inn: '500100732259' };
+    const individual = {
+      id: 'c1',
+      type: 'individual',
+      displayName: 'Сидоров С.С.',
+      inn: '500100732259',
+    };
     const legal = { id: 'c2', type: 'legal', displayName: 'ООО Ромашка', inn: '7701234567' };
     const outInd = redactClientPii(individual) as typeof individual;
     const outLegal = redactClientPii(legal) as typeof legal;

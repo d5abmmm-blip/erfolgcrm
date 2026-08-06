@@ -59,7 +59,7 @@ export function ClientTicketCardPage() {
         {t.symptom && (
           <div className="mt-4">
             <div className="text-muted-foreground text-xs">Описание проблемы</div>
-            <div className="mt-0.5 text-sm whitespace-pre-wrap">{t.symptom}</div>
+            <div className="mt-0.5 whitespace-pre-wrap text-sm">{t.symptom}</div>
           </div>
         )}
         {t.engineerName && (

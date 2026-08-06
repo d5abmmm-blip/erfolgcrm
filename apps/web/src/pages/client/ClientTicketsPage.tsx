@@ -82,11 +82,9 @@ export function ClientTicketsPage() {
                       {t.ticketNumber}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {t.assetModel ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 max-w-md truncate">{t.symptom ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">
+                  <td className="text-muted-foreground px-3 py-2">{t.assetModel ?? '—'}</td>
+                  <td className="max-w-md truncate px-3 py-2">{t.symptom ?? '—'}</td>
+                  <td className="text-muted-foreground px-3 py-2 text-xs">
                     {new Intl.DateTimeFormat('ru-RU').format(new Date(t.receivedAt))}
                   </td>
                   <td className="px-3 py-2">

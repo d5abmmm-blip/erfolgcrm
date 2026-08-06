@@ -52,32 +52,135 @@ export interface ModuleMeta {
 
 export const TOGGLEABLE_MODULES: readonly ModuleMeta[] = [
   // Работа
-  { key: 'leads', label: 'Лиды', group: 'Работа', description: 'Воронка продаж и входящие обращения', routes: ['/leads'] },
-  { key: 'schedule', label: 'График', group: 'Работа', description: 'Расписание загрузки инженеров по дням', routes: ['/schedule'] },
-  { key: 'calendar', label: 'Календарь', group: 'Работа', description: 'События компании: выезды, дедлайны, окончания договоров', routes: ['/calendar'] },
-  { key: 'kb', label: 'База знаний', group: 'Работа', description: 'Внутренняя вики по моделям техники и типовым случаям', routes: ['/kb'] },
-  { key: 'mail', label: 'Почта', group: 'Работа', description: 'Исходящие письма клиентам, журнал отправки и шаблоны', routes: ['/mail'] },
+  {
+    key: 'leads',
+    label: 'Лиды',
+    group: 'Работа',
+    description: 'Воронка продаж и входящие обращения',
+    routes: ['/leads'],
+  },
+  {
+    key: 'schedule',
+    label: 'График',
+    group: 'Работа',
+    description: 'Расписание загрузки инженеров по дням',
+    routes: ['/schedule'],
+  },
+  {
+    key: 'calendar',
+    label: 'Календарь',
+    group: 'Работа',
+    description: 'События компании: выезды, дедлайны, окончания договоров',
+    routes: ['/calendar'],
+  },
+  {
+    key: 'kb',
+    label: 'База знаний',
+    group: 'Работа',
+    description: 'Внутренняя вики по моделям техники и типовым случаям',
+    routes: ['/kb'],
+  },
+  {
+    key: 'mail',
+    label: 'Почта',
+    group: 'Работа',
+    description: 'Исходящие письма клиентам, журнал отправки и шаблоны',
+    routes: ['/mail'],
+  },
   // Картотека
-  { key: 'contracts', label: 'Договоры', group: 'Картотека', description: 'Договоры на обслуживание и разовые работы', routes: ['/contracts'] },
-  { key: 'assets', label: 'Техника', group: 'Картотека', description: 'Парк обслуживаемой медтехники клиентов', routes: ['/assets'] },
-  { key: 'inventory', label: 'Склад', group: 'Картотека', description: 'Запчасти и расходники, списание в наряды (FEFO)', routes: ['/inventory'] },
-  { key: 'maintenance', label: 'Журнал ТО', group: 'Картотека', description: 'Плановое техобслуживание и его история', routes: ['/maintenance'] },
-  { key: 'warranties', label: 'Гарантии', group: 'Картотека', description: 'Гарантийные обязательства на технику', routes: ['/warranties'] },
-  { key: 'tradeIn', label: 'Трейд-ин', group: 'Картотека', description: 'Приём б/у техники в зачёт', routes: ['/trade-in'] },
+  {
+    key: 'contracts',
+    label: 'Договоры',
+    group: 'Картотека',
+    description: 'Договоры на обслуживание и разовые работы',
+    routes: ['/contracts'],
+  },
+  {
+    key: 'assets',
+    label: 'Техника',
+    group: 'Картотека',
+    description: 'Парк обслуживаемой медтехники клиентов',
+    routes: ['/assets'],
+  },
+  {
+    key: 'inventory',
+    label: 'Склад',
+    group: 'Картотека',
+    description: 'Запчасти и расходники, списание в наряды (FEFO)',
+    routes: ['/inventory'],
+  },
+  {
+    key: 'maintenance',
+    label: 'Журнал ТО',
+    group: 'Картотека',
+    description: 'Плановое техобслуживание и его история',
+    routes: ['/maintenance'],
+  },
+  {
+    key: 'warranties',
+    label: 'Гарантии',
+    group: 'Картотека',
+    description: 'Гарантийные обязательства на технику',
+    routes: ['/warranties'],
+  },
+  {
+    key: 'tradeIn',
+    label: 'Трейд-ин',
+    group: 'Картотека',
+    description: 'Приём б/у техники в зачёт',
+    routes: ['/trade-in'],
+  },
   // Деньги
-  { key: 'invoices', label: 'Финансы', group: 'Деньги', description: 'Касса (доходы/расходы), счета на оплату, остатки и обзор', routes: ['/finance', '/invoices'] },
-  { key: 'sales', label: 'Продажи', group: 'Деньги', description: 'Продажа запчастей и оборудования клиентам (отдельно от заявок)', routes: ['/sales'] },
-  { key: 'tenders', label: 'Тендеры', group: 'Деньги', description: 'Реестр тендерных контрактов: реальные суммы, статусы, оплаты по этапам', routes: ['/tenders'] },
-  { key: 'payroll', label: 'Зарплата', group: 'Деньги', description: 'Расчёт зарплаты инженеров (сделка/оклад)', routes: ['/payroll'] },
-  { key: 'reports', label: 'Отчёты', group: 'Деньги', description: 'Аналитические отчёты по периодам', routes: ['/reports'] },
+  {
+    key: 'invoices',
+    label: 'Финансы',
+    group: 'Деньги',
+    description: 'Касса (доходы/расходы), счета на оплату, остатки и обзор',
+    routes: ['/finance', '/invoices'],
+  },
+  {
+    key: 'sales',
+    label: 'Продажи',
+    group: 'Деньги',
+    description: 'Продажа запчастей и оборудования клиентам (отдельно от заявок)',
+    routes: ['/sales'],
+  },
+  {
+    key: 'tenders',
+    label: 'Тендеры',
+    group: 'Деньги',
+    description: 'Реестр тендерных контрактов: реальные суммы, статусы, оплаты по этапам',
+    routes: ['/tenders'],
+  },
+  {
+    key: 'payroll',
+    label: 'Зарплата',
+    group: 'Деньги',
+    description: 'Расчёт зарплаты инженеров (сделка/оклад)',
+    routes: ['/payroll'],
+  },
+  {
+    key: 'reports',
+    label: 'Отчёты',
+    group: 'Деньги',
+    description: 'Аналитические отчёты по периодам',
+    routes: ['/reports'],
+  },
   // Система
-  { key: 'roadmap', label: 'Дорожная карта', group: 'Система', description: 'Цели компании по кварталам', routes: ['/roadmap'] },
+  {
+    key: 'roadmap',
+    label: 'Дорожная карта',
+    group: 'Система',
+    description: 'Цели компании по кварталам',
+    routes: ['/roadmap'],
+  },
 ];
 
 /** Маршрут → ключ модуля. Длинные префиксы раньше, чтобы не «съесть» вложенные. */
-const ROUTE_TO_MODULE: ReadonlyArray<{ prefix: string; key: ModuleKey }> = TOGGLEABLE_MODULES.flatMap(
-  (m) => m.routes.map((prefix) => ({ prefix, key: m.key })),
-).sort((a, b) => b.prefix.length - a.prefix.length);
+const ROUTE_TO_MODULE: ReadonlyArray<{ prefix: string; key: ModuleKey }> =
+  TOGGLEABLE_MODULES.flatMap((m) => m.routes.map((prefix) => ({ prefix, key: m.key }))).sort(
+    (a, b) => b.prefix.length - a.prefix.length,
+  );
 
 /** Какому отключаемому модулю принадлежит путь (или null — это ядро/нейтральный путь). */
 export function moduleForPath(path: string): ModuleKey | null {
@@ -94,4 +197,9 @@ export function isPathDisabled(disabledModules: readonly string[], path: string)
 }
 
 /** Группы в порядке отображения на странице настроек. */
-export const MODULE_GROUP_ORDER: readonly ModuleGroup[] = ['Работа', 'Картотека', 'Деньги', 'Система'];
+export const MODULE_GROUP_ORDER: readonly ModuleGroup[] = [
+  'Работа',
+  'Картотека',
+  'Деньги',
+  'Система',
+];

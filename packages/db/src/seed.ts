@@ -174,12 +174,19 @@ async function seedTenant(
   db: ReturnType<typeof makeDb>,
   data: typeof tenants.$inferInsert,
 ): Promise<string> {
-  const existing = await db.select().from(tenants).where(eq(tenants.subdomain, data.subdomain)).limit(1);
+  const existing = await db
+    .select()
+    .from(tenants)
+    .where(eq(tenants.subdomain, data.subdomain))
+    .limit(1);
   if (existing[0]) {
     console.info(`  = tenant: ${data.subdomain} (already exists)`);
     return existing[0].id;
   }
-  const [created] = await db.insert(tenants).values({ ...data, status: 'active' }).returning();
+  const [created] = await db
+    .insert(tenants)
+    .values({ ...data, status: 'active' })
+    .returning();
   if (!created) throw new Error('Tenant insert returned nothing');
   console.info(`  + tenant: ${data.subdomain}`);
   return created.id;
@@ -211,11 +218,7 @@ async function seedUsers(db: ReturnType<typeof makeDb>, tid: string, prefix: str
   ];
 
   for (const u of seeds) {
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.tenantId, tid))
-      .limit(50);
+    const existing = await db.select().from(users).where(eq(users.tenantId, tid)).limit(50);
     if (existing.some((x) => x.username === u.username)) {
       console.info(`  = user: ${prefix}/${u.username} (already exists)`);
       continue;
@@ -1208,10 +1211,7 @@ async function seedStage5(
         .update(workOrders)
         .set({ paidAmountKopecks: amount })
         .where(
-          and(
-            eq(workOrders.tenantId, tenantIdValue),
-            eq(workOrders.ticketId, closedTicketId),
-          ),
+          and(eq(workOrders.tenantId, tenantIdValue), eq(workOrders.ticketId, closedTicketId)),
         );
       console.info(`  + ${prefix} payment for closed ticket`);
     }
@@ -1229,7 +1229,13 @@ async function seedCash(
   prefix: string,
 ): Promise<void> {
   const accountSeeds: Array<typeof cashAccounts.$inferInsert> = [
-    { tenantId: tenantIdValue, name: 'Наличные', kind: 'cash', defaultForMethod: 'cash', sortOrder: 10 },
+    {
+      tenantId: tenantIdValue,
+      name: 'Наличные',
+      kind: 'cash',
+      defaultForMethod: 'cash',
+      sortOrder: 10,
+    },
     {
       tenantId: tenantIdValue,
       name: 'Расчётный счёт',
@@ -1237,7 +1243,13 @@ async function seedCash(
       defaultForMethod: 'bank_transfer',
       sortOrder: 20,
     },
-    { tenantId: tenantIdValue, name: 'Карта', kind: 'card', defaultForMethod: 'card', sortOrder: 30 },
+    {
+      tenantId: tenantIdValue,
+      name: 'Карта',
+      kind: 'card',
+      defaultForMethod: 'card',
+      sortOrder: 30,
+    },
   ];
 
   let createdAccounts = 0;
@@ -1262,7 +1274,12 @@ async function seedCash(
       systemCode: 'ticket_payment',
       sortOrder: 10,
     },
-    { tenantId: tenantIdValue, name: 'Продажа техники и запчастей', direction: 'income', sortOrder: 20 },
+    {
+      tenantId: tenantIdValue,
+      name: 'Продажа техники и запчастей',
+      direction: 'income',
+      sortOrder: 20,
+    },
     { tenantId: tenantIdValue, name: 'Прочий доход', direction: 'income', sortOrder: 30 },
     // Расходы
     { tenantId: tenantIdValue, name: 'Зарплата', direction: 'expense', sortOrder: 10 },
@@ -1337,7 +1354,9 @@ async function seedCash(
   `);
 
   if (createdAccounts + createdCategories > 0) {
-    console.info(`  + ${prefix} cash: accounts=${createdAccounts}, categories=${createdCategories}`);
+    console.info(
+      `  + ${prefix} cash: accounts=${createdAccounts}, categories=${createdCategories}`,
+    );
   } else {
     console.info(`  = ${prefix} cash already seeded`);
   }

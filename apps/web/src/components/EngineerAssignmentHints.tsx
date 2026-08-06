@@ -49,8 +49,7 @@ export function EngineerAssignmentHints({
   if (q.error || !q.data) return null;
 
   const hints = q.data;
-  const effectiveMode =
-    mode === 'auto' ? (selectedEngineerId ? 'selected' : 'overview') : mode;
+  const effectiveMode = mode === 'auto' ? (selectedEngineerId ? 'selected' : 'overview') : mode;
 
   if (effectiveMode === 'selected') {
     if (!selectedEngineerId) return null;
@@ -117,10 +116,7 @@ export function EngineerAssignmentHints({
                 </span>
               )}
               {h.attestationWarning && (
-                <AlertTriangle
-                  className="text-warning h-3 w-3"
-                  aria-label="нет аттестации"
-                />
+                <AlertTriangle className="text-warning h-3 w-3" aria-label="нет аттестации" />
               )}
               <span className="text-muted-foreground tabular-nums">
                 {h.activeLoad} {plural(h.activeLoad)}
@@ -157,9 +153,7 @@ function Chip({
         ? 'bg-success/10 text-success'
         : 'bg-muted text-muted-foreground';
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${cls}`}
-    >
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${cls}`}>
       <Icon className="h-3 w-3" />
       {children}
     </span>

@@ -9,10 +9,7 @@
  *
  * Зависит только от @erfolg/db (никаких импортов из modules/) — lib остаётся самодостаточным.
  */
-import {
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { withTenantTx, type Db } from '@erfolg/db';
 import { sql } from 'drizzle-orm';
 import { logger } from './logger';
 import { maskEmail } from './mask';

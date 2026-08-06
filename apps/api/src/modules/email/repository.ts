@@ -139,12 +139,16 @@ export async function getConfig(db: Db, tenantId: string): Promise<EmailConfigDt
         smtpPort: emailConfigs.smtpPort,
         smtpSecure: emailConfigs.smtpSecure,
         smtpUser: emailConfigs.smtpUser,
-        hasSmtpPassword: sql<boolean>`${emailConfigs.smtpPasswordEnc} IS NOT NULL`.as('has_smtp_pw'),
+        hasSmtpPassword: sql<boolean>`${emailConfigs.smtpPasswordEnc} IS NOT NULL`.as(
+          'has_smtp_pw',
+        ),
         imapHost: emailConfigs.imapHost,
         imapPort: emailConfigs.imapPort,
         imapSecure: emailConfigs.imapSecure,
         imapUser: emailConfigs.imapUser,
-        hasImapPassword: sql<boolean>`${emailConfigs.imapPasswordEnc} IS NOT NULL`.as('has_imap_pw'),
+        hasImapPassword: sql<boolean>`${emailConfigs.imapPasswordEnc} IS NOT NULL`.as(
+          'has_imap_pw',
+        ),
         signature: emailConfigs.signature,
         updatedAt: emailConfigs.updatedAt,
       })
@@ -198,9 +202,7 @@ export async function getTransportConfig(
     const r = rows[0];
     if (!r) return null;
     const from =
-      r.fromName && r.fromEmail
-        ? `${r.fromName} <${r.fromEmail}>`
-        : (r.fromEmail ?? null);
+      r.fromName && r.fromEmail ? `${r.fromName} <${r.fromEmail}>` : (r.fromEmail ?? null);
     return {
       enabled: r.enabled,
       from,
@@ -318,7 +320,9 @@ export async function listMessages(
         attachmentKind: emailMessages.attachmentKind,
         isRead: sql<boolean>`${emailMessages.readAt} IS NOT NULL`.as('is_read'),
         isSpam: emailMessages.isSpam,
-        hasAttachments: sql<boolean>`${emailMessages.attachmentName} IS NOT NULL`.as('has_attachments'),
+        hasAttachments: sql<boolean>`${emailMessages.attachmentName} IS NOT NULL`.as(
+          'has_attachments',
+        ),
         error: emailMessages.error,
         sentByUserId: emailMessages.sentByUserId,
         sentAt: emailMessages.sentAt,

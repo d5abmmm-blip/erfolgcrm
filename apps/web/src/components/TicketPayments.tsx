@@ -168,15 +168,13 @@ export function TicketPayments({ ticketId, canManage }: Props) {
               <span className="text-muted-foreground text-xs font-medium">Гасит счёт</span>
               <select
                 {...form.register('invoiceId')}
-                className="bg-background mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
               >
                 {payable.map((inv) => (
                   <option key={inv.id} value={inv.id}>
                     Счёт {inv.invoiceNumber} — осталось{' '}
                     {kopecksToRub(
-                      (
-                        BigInt(inv.totalAmountKopecks) - BigInt(inv.paidAmountKopecks)
-                      ).toString(),
+                      (BigInt(inv.totalAmountKopecks) - BigInt(inv.paidAmountKopecks)).toString(),
                     )}{' '}
                     ₽
                   </option>
@@ -184,8 +182,8 @@ export function TicketPayments({ ticketId, canManage }: Props) {
                 <option value={NO_INVOICE}>Без счёта</option>
               </select>
               <span className="text-muted-foreground mt-1 block text-[11px]">
-                Пока платёж не привязан к счёту, счёт считается неоплаченным и по нему
-                уходят напоминания клиенту.
+                Пока платёж не привязан к счёту, счёт считается неоплаченным и по нему уходят
+                напоминания клиенту.
               </span>
             </label>
           )}
@@ -197,12 +195,12 @@ export function TicketPayments({ ticketId, canManage }: Props) {
               min="0"
               {...form.register('amountRub', { valueAsNumber: true })}
               placeholder="Сумма ₽"
-              className="bg-background rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm tabular-nums outline-none focus:ring-2"
               required
             />
             <select
               {...form.register('method')}
-              className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
               <option value="cash">Наличные</option>
               <option value="card">Карта</option>
@@ -212,12 +210,12 @@ export function TicketPayments({ ticketId, canManage }: Props) {
               type="text"
               {...form.register('comment')}
               placeholder="Комментарий"
-              className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             <button
               type="submit"
               disabled={add.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-2 text-sm font-medium transition"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {add.isPending ? 'Сохраняем…' : 'Внести'}
             </button>

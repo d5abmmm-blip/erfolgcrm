@@ -201,14 +201,14 @@ export function MobileScanPage() {
             </div>
           )}
           {scanning && (
-            <div className="border-primary/80 pointer-events-none absolute inset-x-8 top-1/3 bottom-1/3 rounded-lg border-2 shadow-[0_0_0_2000px_rgba(0,0,0,0.4)]" />
+            <div className="border-primary/80 pointer-events-none absolute inset-x-8 bottom-1/3 top-1/3 rounded-lg border-2 shadow-[0_0_0_2000px_rgba(0,0,0,0.4)]" />
           )}
           {scanning && torchSupported && (
             <button
               type="button"
               onClick={() => void toggleTorch()}
               aria-label={torchOn ? 'Выключить фонарик' : 'Включить фонарик'}
-              className="absolute top-3 right-3 grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white"
+              className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white"
             >
               {torchOn ? <FlashlightOff className="h-5 w-5" /> : <Flashlight className="h-5 w-5" />}
             </button>

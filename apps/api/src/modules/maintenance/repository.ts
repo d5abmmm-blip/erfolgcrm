@@ -128,10 +128,7 @@ export async function deactivateSchedulesForAsset(
       .update(maintenanceSchedules)
       .set({ isActive: false })
       .where(
-        and(
-          eq(maintenanceSchedules.assetId, assetId),
-          eq(maintenanceSchedules.isActive, true),
-        ),
+        and(eq(maintenanceSchedules.assetId, assetId), eq(maintenanceSchedules.isActive, true)),
       )
       .returning({ id: maintenanceSchedules.id });
     return rows.length;
@@ -245,9 +242,7 @@ export async function recordPerformed(
         .limit(1);
       const interval = scheduleRows[0]?.intervalDays;
       if (interval && interval > 0) {
-        const next = new Date(
-          input.performedAt.getTime() + interval * 24 * 60 * 60 * 1000,
-        );
+        const next = new Date(input.performedAt.getTime() + interval * 24 * 60 * 60 * 1000);
         await tx
           .update(maintenanceSchedules)
           .set({ lastDoneAt: input.performedAt, nextDueAt: next })
@@ -295,11 +290,7 @@ export async function listLog(
 }
 
 /** Проверка что asset принадлежит этому tenant'у. */
-export async function assetExists(
-  db: Db,
-  tenantId: string,
-  assetId: string,
-): Promise<boolean> {
+export async function assetExists(db: Db, tenantId: string, assetId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ count: sql<string>`COUNT(*)` })

@@ -98,7 +98,10 @@ export const salesRouter = router({
   pay: staffProcedure
     .input(z.object({ id: z.string().uuid(), accountId: z.string().uuid(), paidOn: isoDate }))
     .mutation(({ ctx, input }) =>
-      svc.paySaleCmd(buildCmdCtx(ctx), input.id, { accountId: input.accountId, paidOn: input.paidOn }),
+      svc.paySaleCmd(buildCmdCtx(ctx), input.id, {
+        accountId: input.accountId,
+        paidOn: input.paidOn,
+      }),
     ),
 
   unpay: staffProcedure

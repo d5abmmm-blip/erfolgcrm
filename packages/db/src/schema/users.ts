@@ -4,7 +4,17 @@
  * email опционален (для восстановления пароля + приглашений).
  */
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, integer, jsonb, pgEnum, pgTable, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { encryptedText, fkUuid, pk, tenantId, timestamps } from './_shared';
 
 export const userRoleEnum = pgEnum('user_role', ['director', 'dispatcher', 'engineer']);
@@ -50,7 +60,9 @@ export const users = pgTable(
      * Используется для snapshot cost_per_unit в work_order_lines.
      * Для не-engineer ролей значение игнорируется (хранится 0 по умолчанию).
      */
-    hourlyCostRateKopecks: bigint('hourly_cost_rate_kopecks', { mode: 'bigint' }).notNull().default(0n),
+    hourlyCostRateKopecks: bigint('hourly_cost_rate_kopecks', { mode: 'bigint' })
+      .notNull()
+      .default(0n),
 
     /**
      * Индивидуальная ЗП сотрудника: персональный оклад (копейки) + бонус % от работ.

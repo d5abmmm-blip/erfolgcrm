@@ -10,14 +10,7 @@
  * Кнопка «Напомнить» — только у клиентов с просроченными счетами (выбор владельца).
  */
 import { useEffect, useState } from 'react';
-import {
-  Wallet,
-  AlertTriangle,
-  Mail,
-  MailX,
-  Check,
-  Clock,
-} from 'lucide-react';
+import { Wallet, AlertTriangle, Mail, MailX, Check, Clock } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { formatRub, formatRubWhole } from '../lib/money';
@@ -131,7 +124,10 @@ export function ReceivablesPage() {
       } else {
         setToast({ tone: 'error', msg: 'Не удалось отправить — попробуйте позже' });
       }
-      await Promise.all([utils.invoices.receivables.invalidate(), utils.dashboard.navBadges.invalidate()]);
+      await Promise.all([
+        utils.invoices.receivables.invalidate(),
+        utils.dashboard.navBadges.invalidate(),
+      ]);
     } catch (err) {
       setToast({
         tone: 'error',
@@ -151,7 +147,9 @@ export function ReceivablesPage() {
           <Wallet className="h-3.5 w-3.5" />
           Финансы
         </div>
-        <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Дебиторка — кто должен компании</h1>
+        <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">
+          Дебиторка — кто должен компании
+        </h1>
         <p className="text-muted-foreground text-sm">
           Неоплаченные счета клиентов. Авто-письмо о просрочке уходит само раз в неделю — кнопка
           «Напомнить» отправляет сразу.
@@ -159,7 +157,9 @@ export function ReceivablesPage() {
       </div>
 
       {q.isLoading && (
-        <div className="text-muted-foreground bg-card rounded-lg border p-6 text-sm">Загружаем…</div>
+        <div className="text-muted-foreground bg-card rounded-lg border p-6 text-sm">
+          Загружаем…
+        </div>
       )}
       {q.error && (
         <div className="text-destructive bg-destructive/10 border-destructive/30 rounded-lg border p-4 text-sm">
@@ -179,8 +179,8 @@ export function ReceivablesPage() {
                 {formatRubWhole(data.summary.totalOutstandingKopecks)}
               </div>
               <div className="text-muted-foreground mt-1 text-sm">
-                {data.summary.invoiceCount} неоплаченных {pluralInvoices(data.summary.invoiceCount)} ·{' '}
-                {data.summary.debtorCount} {pluralClients(data.summary.debtorCount)}
+                {data.summary.invoiceCount} неоплаченных {pluralInvoices(data.summary.invoiceCount)}{' '}
+                · {data.summary.debtorCount} {pluralClients(data.summary.debtorCount)}
               </div>
             </div>
             <div
@@ -339,7 +339,9 @@ export function ReceivablesPage() {
                                 Напомнить
                               </button>
                             ) : (
-                              <span className="text-muted-foreground text-xs">срок не наступил</span>
+                              <span className="text-muted-foreground text-xs">
+                                срок не наступил
+                              </span>
                             )}
                           </td>
                         </tr>

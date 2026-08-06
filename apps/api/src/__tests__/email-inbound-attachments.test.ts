@@ -37,7 +37,10 @@ function makeFakeStorage(): FakeStorage {
       return { url: 'fake://put', headers: {}, expiresAt: new Date(Date.now() + 60_000) };
     },
     presignGet(key: string): Promise<PresignedGet> {
-      return Promise.resolve({ url: `fake://get/${key}`, expiresAt: new Date(Date.now() + 60_000) });
+      return Promise.resolve({
+        url: `fake://get/${key}`,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
     },
     async putBuffer(key, data, mimeType) {
       puts.push({ key, size: data.length, mimeType });
@@ -155,7 +158,9 @@ describe('входящие — вложения', () => {
 
     // 2 строки в email_attachments.
     const rows = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ id: emailAttachments.id, key: emailAttachments.objectKey }).from(emailAttachments),
+      tx
+        .select({ id: emailAttachments.id, key: emailAttachments.objectKey })
+        .from(emailAttachments),
     );
     expect(rows.length).toBe(2);
 
@@ -188,7 +193,12 @@ describe('входящие — вложения', () => {
       messageId: '<att-mixed@client.ru>',
       attachmentCount: 2,
       attachments: [
-        { filename: 'bad.bin', content: ok, contentType: 'application/octet-stream', size: ok.length },
+        {
+          filename: 'bad.bin',
+          content: ok,
+          contentType: 'application/octet-stream',
+          size: ok.length,
+        },
         { filename: 'good.txt', content: ok, contentType: 'text/plain', size: ok.length },
       ],
     });
@@ -222,7 +232,9 @@ describe('входящие — спам', () => {
 
     const onlySpam = await caller.email.list({ direction: 'in', spam: true });
     expect(onlySpam.items.some((m) => m.subject === '***SPAM*** выгодное предложение')).toBe(true);
-    expect(onlySpam.items.find((m) => m.subject === '***SPAM*** выгодное предложение')?.isSpam).toBe(true);
+    expect(
+      onlySpam.items.find((m) => m.subject === '***SPAM*** выгодное предложение')?.isSpam,
+    ).toBe(true);
   });
 });
 

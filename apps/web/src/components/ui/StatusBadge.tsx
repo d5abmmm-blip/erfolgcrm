@@ -33,12 +33,7 @@ const DOT_CLS: Record<StatusBadgeVariant, string> = {
  * Точка-индикатор дублирует цвет насыщенным пятном — статус считывается
  * боковым зрением даже при беглом просмотре таблицы.
  */
-export function StatusBadge({
-  variant,
-  children,
-  className,
-  compact = false,
-}: StatusBadgeProps) {
+export function StatusBadge({ variant, children, className, compact = false }: StatusBadgeProps) {
   return (
     <span
       className={cn(
@@ -48,10 +43,7 @@ export function StatusBadge({
         className,
       )}
     >
-      <span
-        className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLS[variant])}
-        aria-hidden
-      />
+      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLS[variant])} aria-hidden />
       {children}
     </span>
   );

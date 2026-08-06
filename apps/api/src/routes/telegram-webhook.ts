@@ -49,16 +49,9 @@ export function makeTelegramWebhookRouter(): Router {
         return;
       }
       const update = req.body as TgUpdate;
-      const result = await processWebhook(
-        { db, tenant: t },
-        secret,
-        update,
-      );
+      const result = await processWebhook({ db, tenant: t }, secret, update);
       if (!result.ok) {
-        logger.warn(
-          { subdomain, reason: result.reason },
-          'telegram webhook rejected',
-        );
+        logger.warn({ subdomain, reason: result.reason }, 'telegram webhook rejected');
       }
       res.status(200).end();
     } catch (err: unknown) {

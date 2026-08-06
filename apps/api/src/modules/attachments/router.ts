@@ -8,12 +8,7 @@
 import { z } from 'zod';
 import { engineerProcedure, router } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
-import {
-  confirmUploadCmd,
-  createUploadUrlCmd,
-  deleteCmd,
-  listByReferenceQuery,
-} from './service';
+import { confirmUploadCmd, createUploadUrlCmd, deleteCmd, listByReferenceQuery } from './service';
 
 const kindEnum = z.enum([
   'ticket_photo',
@@ -25,13 +20,7 @@ const kindEnum = z.enum([
   'document',
 ]);
 
-const refTypeEnum = z.enum([
-  'ticket',
-  'asset',
-  'inventory_batch',
-  'work_order_line',
-  'contract',
-]);
+const refTypeEnum = z.enum(['ticket', 'asset', 'inventory_batch', 'work_order_line', 'contract']);
 
 export const attachmentsRouter = router({
   createUploadUrl: engineerProcedure

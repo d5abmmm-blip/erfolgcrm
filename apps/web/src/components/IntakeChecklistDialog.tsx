@@ -51,7 +51,11 @@ type Props = CreateProps | ViewProps;
 
 const STATUS_OPTS: ReadonlyArray<{ v: ItemStatus; label: string; cls: string }> = [
   { v: 'ok', label: 'OK', cls: 'bg-success/10 text-success border-success/30' },
-  { v: 'issue', label: 'Замечание', cls: 'bg-destructive/10 text-destructive border-destructive/30' },
+  {
+    v: 'issue',
+    label: 'Замечание',
+    cls: 'bg-destructive/10 text-destructive border-destructive/30',
+  },
   { v: 'na', label: 'Н/Д', cls: 'bg-muted text-muted-foreground border-border' },
 ];
 
@@ -423,9 +427,7 @@ function ViewDialog({ open, onClose, checklistId }: ViewProps) {
                     <div className="text-muted-foreground mt-1 text-xs">{it.comment}</div>
                   )}
                   {it.photoAttachmentId && (
-                    <div className="text-muted-foreground mt-1 text-[11px]">
-                      Прикреплено фото
-                    </div>
+                    <div className="text-muted-foreground mt-1 text-[11px]">Прикреплено фото</div>
                   )}
                 </li>
               );

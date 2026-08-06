@@ -251,11 +251,7 @@ export async function listSales(
   });
 }
 
-export async function getSale(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<SaleDetailDto | null> {
+export async function getSale(db: Db, tenantId: string, id: string): Promise<SaleDetailDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select(listSelect)
@@ -549,7 +545,11 @@ function periodCond(period: SalesPeriod) {
   return sql`${from} ${to}`;
 }
 
-async function aggregateTotals(tx: Tx, tenantId: string, period: SalesPeriod): Promise<SalesTotals> {
+async function aggregateTotals(
+  tx: Tx,
+  tenantId: string,
+  period: SalesPeriod,
+): Promise<SalesTotals> {
   const rows = (await tx.execute(sql`
     SELECT
       COALESCE(SUM(total_kopecks), 0)::bigint::text         AS revenue,

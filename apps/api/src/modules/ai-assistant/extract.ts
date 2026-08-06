@@ -17,16 +17,9 @@ import mammoth from 'mammoth';
 /** Максимум символов извлечённого текста на один документ (~5–7k токенов). */
 const MAX_TEXT_CHARS = 20_000;
 
-const DOCX_MIME =
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const IMAGE_MIMES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/webp',
-  'image/gif',
-]);
+const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 
 export interface IncomingAttachment {
   name: string;
@@ -65,9 +58,7 @@ async function extractDocx(buf: Buffer): Promise<string> {
  * Разобрать одно вложение. Никогда не бросает — на ошибке возвращает kind:'unsupported'
  * с пояснением, чтобы ассистент мог честно сообщить пользователю.
  */
-export async function processAttachment(
-  att: IncomingAttachment,
-): Promise<ProcessedAttachment> {
+export async function processAttachment(att: IncomingAttachment): Promise<ProcessedAttachment> {
   const mime = att.mimeType.toLowerCase();
   let buf: Buffer;
   try {

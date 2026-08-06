@@ -88,9 +88,7 @@ function EngineerEarnings() {
       <div className="flex items-end justify-between">
         <div>
           <h2 className="text-xl font-semibold">Мой заработок</h2>
-          <p className="text-muted-foreground text-sm">
-            На основе закрытых нарядов в периоде
-          </p>
+          <p className="text-muted-foreground text-sm">На основе закрытых нарядов в периоде</p>
         </div>
         <PeriodTabs value={period} onChange={setPeriod} />
       </div>
@@ -111,7 +109,9 @@ function EngineerEarnings() {
       {data && (
         <div className="space-y-4">
           <div className="bg-card rounded-lg border p-6">
-            <div className="text-muted-foreground text-xs uppercase">К выплате · {PERIOD_LABEL[period]}</div>
+            <div className="text-muted-foreground text-xs uppercase">
+              К выплате · {PERIOD_LABEL[period]}
+            </div>
             <div className="text-success mt-1 text-4xl font-semibold tabular-nums">
               {formatRubFromKopecks(data.grandTotalKopecks)}
             </div>
@@ -216,14 +216,14 @@ export function PayrollSettingsPage() {
         </Link>
         <h2 className="mt-2 text-xl font-semibold md:text-2xl">Правила расчёта ЗП</h2>
         <p className="text-muted-foreground text-sm">
-          Правило по умолчанию + персональная зарплата по каждому сотруднику ниже.
-          Расчёт on-the-fly по закрытым нарядам.
+          Правило по умолчанию + персональная зарплата по каждому сотруднику ниже. Расчёт on-the-fly
+          по закрытым нарядам.
         </p>
       </div>
 
       <section className="bg-card space-y-4 rounded-lg border p-5">
         <div>
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
             Правило по умолчанию (для тех, кому не задана персональная зарплата ниже)
           </div>
           <label className="text-sm font-medium">Режим расчёта</label>
@@ -252,7 +252,7 @@ export function PayrollSettingsPage() {
               max={100}
               value={pieceworkPercent}
               onChange={(e) => setPieceworkPercent(e.target.value)}
-              className="border-input bg-background mt-1 block w-32 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="border-input bg-background focus:ring-primary/40 mt-1 block w-32 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
             />
           </div>
         )}
@@ -266,7 +266,7 @@ export function PayrollSettingsPage() {
                 inputMode="decimal"
                 value={baseSalaryRub}
                 onChange={(e) => setBaseSalaryRub(e.target.value)}
-                className="border-input bg-background mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
               />
             </div>
             <div>
@@ -277,7 +277,7 @@ export function PayrollSettingsPage() {
                 max={100}
                 value={bonusPercent}
                 onChange={(e) => setBonusPercent(e.target.value)}
-                className="border-input bg-background mt-1 block w-32 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="border-input bg-background focus:ring-primary/40 mt-1 block w-32 rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
               />
             </div>
           </div>
@@ -297,9 +297,7 @@ export function PayrollSettingsPage() {
             )}
             Сохранить правило
           </button>
-          {setRuleM.isSuccess && (
-            <span className="text-success text-xs">Сохранено</span>
-          )}
+          {setRuleM.isSuccess && <span className="text-success text-xs">Сохранено</span>}
         </div>
       </section>
 
@@ -330,7 +328,9 @@ export function PayrollSettingsPage() {
             <span
               className={cn(
                 'bg-background inline-block h-5 w-5 transform rounded-full shadow transition',
-                (ruleQ.data?.engineersSeeEarnings ?? true) ? 'translate-x-[22px]' : 'translate-x-0.5',
+                (ruleQ.data?.engineersSeeEarnings ?? true)
+                  ? 'translate-x-[22px]'
+                  : 'translate-x-0.5',
               )}
             />
           </button>
@@ -341,13 +341,13 @@ export function PayrollSettingsPage() {
         <div className="border-b p-4">
           <h3 className="font-semibold">Зарплата по сотрудникам (оклад + бонус)</h3>
           <p className="text-muted-foreground mt-1 text-xs">
-            У каждого — свой оклад (₽/мес) и бонус % от выполненных работ. Пусто в обеих
-            ячейках — действует правило по умолчанию выше.
+            У каждого — свой оклад (₽/мес) и бонус % от выполненных работ. Пусто в обеих ячейках —
+            действует правило по умолчанию выше.
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
-            Этот же процент идёт в себестоимость работ: в отчёте «Рентабельность» работа
-            инженера считается по нему. Оклад в себестоимость заявки не входит — он
-            постоянный расход и виден в кассе.
+            Этот же процент идёт в себестоимость работ: в отчёте «Рентабельность» работа инженера
+            считается по нему. Оклад в себестоимость заявки не входит — он постоянный расход и виден
+            в кассе.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -419,9 +419,7 @@ function ModeOption({
       onClick={onClick}
       className={cn(
         'rounded-md border p-3 text-left transition',
-        checked
-          ? 'border-primary bg-primary/5'
-          : 'border-input hover:border-primary/40',
+        checked ? 'border-primary bg-primary/5' : 'border-input hover:border-primary/40',
       )}
     >
       <div className="font-medium">{title}</div>
@@ -451,7 +449,8 @@ function UserPayoutRow({
   onSave: (baseKopecks: string | null, bonus: number | null) => Promise<unknown>;
   isSaving: boolean;
 }) {
-  const initialSalary = baseSalaryKopecks !== null ? (Number(baseSalaryKopecks) / 100).toString() : '';
+  const initialSalary =
+    baseSalaryKopecks !== null ? (Number(baseSalaryKopecks) / 100).toString() : '';
   const initialBonus = bonusPercent !== null ? String(bonusPercent) : '';
   const [salary, setSalary] = useState(initialSalary);
   const [bonus, setBonus] = useState(initialBonus);
@@ -477,7 +476,7 @@ function UserPayoutRow({
       <td className="p-3 font-medium">
         {fullName}
         {usesDefault && (
-          <span className="bg-muted text-muted-foreground ml-2 rounded px-1.5 py-0.5 text-[10px] align-middle">
+          <span className="bg-muted text-muted-foreground ml-2 rounded px-1.5 py-0.5 align-middle text-[10px]">
             по умолчанию
           </span>
         )}
@@ -490,7 +489,7 @@ function UserPayoutRow({
           placeholder="—"
           value={salary}
           onChange={(e) => setSalary(e.target.value)}
-          className="border-input bg-background w-28 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="border-input bg-background focus:ring-primary/40 w-28 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2"
         />
       </td>
       <td className="p-3 text-right">
@@ -501,7 +500,7 @@ function UserPayoutRow({
           placeholder="—"
           value={bonus}
           onChange={(e) => setBonus(e.target.value)}
-          className="border-input bg-background w-20 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="border-input bg-background focus:ring-primary/40 w-20 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2"
         />
       </td>
       <td className="p-3 text-right">
@@ -519,13 +518,7 @@ function UserPayoutRow({
   );
 }
 
-function PeriodTabs({
-  value,
-  onChange,
-}: {
-  value: Period;
-  onChange: (p: Period) => void;
-}) {
+function PeriodTabs({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   const periods: Period[] = ['today', 'week', 'month', 'quarter'];
   return (
     <div className="bg-secondary inline-flex rounded-md p-0.5 text-xs">
@@ -551,12 +544,32 @@ function PeriodTabs({
 /* ===================== Ведомость — единственный экран ЗП директора ===================== */
 
 const MONTHS_RU = [
-  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
 ];
 const MONTHS_SHORT = [
-  'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
-  'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
+  'Янв',
+  'Фев',
+  'Мар',
+  'Апр',
+  'Май',
+  'Июн',
+  'Июл',
+  'Авг',
+  'Сен',
+  'Окт',
+  'Ноя',
+  'Дек',
 ];
 
 function kopToRubInput(kopecks: number): string {
@@ -801,7 +814,10 @@ function PayrollVedomost() {
   };
   const doPost = () => {
     if (!postAccountId) return;
-    postM.mutate({ month: monthKey, accountId: postAccountId }, { onSuccess: () => setPostOpen(false) });
+    postM.mutate(
+      { month: monthKey, accountId: postAccountId },
+      { onSuccess: () => setPostOpen(false) },
+    );
   };
 
   // ── Годовая сводка ──
@@ -911,7 +927,7 @@ function PayrollVedomost() {
                 inputMode="decimal"
                 value={percent}
                 onChange={(e) => setPercent(e.target.value)}
-                className="border-input bg-background w-14 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="border-input bg-background focus:ring-primary/40 w-14 rounded-md border px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2"
               />
               <button
                 type="button"
@@ -964,7 +980,7 @@ function PayrollVedomost() {
         </div>
 
         {saveM.error && !reasonOpen && (
-          <div className="bg-destructive/10 text-destructive border-b border-destructive/30 p-3 text-sm">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 border-b p-3 text-sm">
             {saveM.error.message}
           </div>
         )}
@@ -1062,10 +1078,10 @@ function PayrollVedomost() {
                           value={r.employeeName}
                           onChange={(e) => setField(idx, 'employeeName', e.target.value)}
                           placeholder="Имя сотрудника"
-                          className="border-input bg-background w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          className="border-input bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2"
                         />
                       </td>
-                      <td className="text-muted-foreground p-3 text-right tabular-nums whitespace-nowrap">
+                      <td className="text-muted-foreground whitespace-nowrap p-3 text-right tabular-nums">
                         {worksKop === undefined ? '—' : formatRubFromKopecks(String(worksKop))}
                       </td>
                       {(['piecework', 'salary', 'advance', 'bonus'] as const).map((field) => (
@@ -1080,7 +1096,7 @@ function PayrollVedomost() {
                           />
                         </td>
                       ))}
-                      <td className="p-3 text-right font-semibold tabular-nums whitespace-nowrap">
+                      <td className="whitespace-nowrap p-3 text-right font-semibold tabular-nums">
                         {formatRubFromKopecks(kopStr(rowTotal))}
                       </td>
                       <td className="p-2 text-right">
@@ -1103,7 +1119,9 @@ function PayrollVedomost() {
                 <tr className="bg-muted/40 border-t-2 font-semibold tabular-nums">
                   <td className="p-3">Всего</td>
                   <td className="text-muted-foreground p-3 text-right">—</td>
-                  <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.piecework))}</td>
+                  <td className="p-3 text-right">
+                    {formatRubFromKopecks(kopStr(totals.piecework))}
+                  </td>
                   <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.salary))}</td>
                   <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.advance))}</td>
                   <td className="p-3 text-right">{formatRubFromKopecks(kopStr(totals.bonus))}</td>
@@ -1145,7 +1163,7 @@ function PayrollVedomost() {
               type="number"
               value={summaryYear}
               onChange={(e) => setSummaryYear(Number(e.target.value) || now.getFullYear())}
-              className="border-input bg-background w-24 rounded-md border px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="border-input bg-background focus:ring-primary/40 w-24 rounded-md border px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2"
             />
             <button
               type="button"
@@ -1230,7 +1248,7 @@ function PayrollVedomost() {
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               placeholder="Например: исправлена сумма премии по инженеру Иванову"
-              className="border-input bg-background mt-3 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="border-input bg-background focus:ring-primary/40 mt-3 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2"
             />
             {saveM.error && (
               <div className="text-destructive mt-2 text-xs">{saveM.error.message}</div>
@@ -1287,7 +1305,7 @@ function PayrollVedomost() {
             <select
               value={postAccountId}
               onChange={(e) => setPostAccountId(e.target.value)}
-              className="border-input bg-background mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="border-input bg-background focus:ring-primary/40 mt-1 block w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2"
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>

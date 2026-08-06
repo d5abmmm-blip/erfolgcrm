@@ -157,7 +157,10 @@ export async function runAssistant(
   // Инженеру не показываем staff-only инструменты; в read_only — не показываем write-инструменты.
   const toolDefs = toolDefsForRole(role, mode);
 
-  const messages = buildBaseMessages(history, { customInstructions: llmCfg.customInstructions, mode });
+  const messages = buildBaseMessages(history, {
+    customInstructions: llmCfg.customInstructions,
+    mode,
+  });
 
   // Вложения относятся к последнему ходу пользователя (приходят только с обычным
   // send, не с confirm). Разбираем и вклеиваем перед прогоном через модель.
@@ -225,7 +228,8 @@ export async function runAssistant(
 
     // Первый WRITE-вызов → стоп и запрос подтверждения. В read_only write-инструментов
     // модели не давали, но на всякий случай ловим write-вызовы в цикле ниже.
-    const writeCall = mode === 'full' ? reply.toolCalls.find((tc) => isWriteTool(tc.name)) : undefined;
+    const writeCall =
+      mode === 'full' ? reply.toolCalls.find((tc) => isWriteTool(tc.name)) : undefined;
     if (writeCall) {
       const tool = getTool(writeCall.name);
       const args = safeParseArgs(writeCall.argumentsJson);
@@ -252,7 +256,8 @@ export async function runAssistant(
       } else if (tool.kind === 'write') {
         // Возможно только в read_only (в full write перехватывается выше как confirm).
         content = JSON.stringify({
-          error: 'Ассистент в режиме «только чтение»: изменения недоступны. Могу показать данные и посоветовать.',
+          error:
+            'Ассистент в режиме «только чтение»: изменения недоступны. Могу показать данные и посоветовать.',
         });
       } else {
         try {

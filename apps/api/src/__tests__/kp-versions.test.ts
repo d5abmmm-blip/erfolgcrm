@@ -73,9 +73,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await withTenantTx(getDb(), erfolgId, async (tx) => {
     if (ticketId) await tx.delete(tickets).where(eq(tickets.id, ticketId));
-    await tx
-      .delete(clients)
-      .where(eq(clients.displayName, `${TEST_PREFIX}-Client`));
+    await tx.delete(clients).where(eq(clients.displayName, `${TEST_PREFIX}-Client`));
   });
 });
 

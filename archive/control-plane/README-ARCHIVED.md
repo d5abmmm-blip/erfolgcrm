@@ -4,6 +4,7 @@ SaaS-портал (регистрация тенантов, биллинг/ЮKas
 ErfolgCRM v2 в личный single-tenant режим — код сохранён, из workspace исключён.
 
 Как вернуть:
+
 1. Переместить этот каталог обратно в `apps/control-plane`.
 2. Вернуть reference `./apps/control-plane` в корневой `tsconfig.json`.
 3. Вернуть скрипт `"dev:control-plane"` в корневой `package.json` (и при желании — в `dev`).

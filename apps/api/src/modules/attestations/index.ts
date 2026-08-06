@@ -1,10 +1,6 @@
 /** Публичный API модуля attestations (Stage 10'.I). */
 export { attestationsRouter } from './router';
-export {
-  ATTESTATION_CATEGORIES,
-  isKnownCategory,
-  type AttestationCategory,
-} from './categories';
+export { ATTESTATION_CATEGORIES, isKnownCategory, type AttestationCategory } from './categories';
 export {
   checkAttestationForAssignment,
   createAttestation,

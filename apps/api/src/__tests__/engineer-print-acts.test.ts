@@ -98,7 +98,12 @@ describe('documentClient — реквизиты для акта', () => {
   it('инженер НЕ получает реквизиты по неназначенной заявке', async () => {
     const ticketId = await makeTicket(null);
     await expect(
-      documentClientQuery(getDb(), tenant, { role: 'engineer', userId: erfolgEngineerId }, ticketId),
+      documentClientQuery(
+        getDb(),
+        tenant,
+        { role: 'engineer', userId: erfolgEngineerId },
+        ticketId,
+      ),
     ).rejects.toThrow(/только назначенному инженеру/);
   });
 

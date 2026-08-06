@@ -11,7 +11,15 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { asc, eq } from 'drizzle-orm';
-import { clients, getDb, invoices, tenants, withTenantTx, workOrderLines, type Db } from '@erfolg/db';
+import {
+  clients,
+  getDb,
+  invoices,
+  tenants,
+  withTenantTx,
+  workOrderLines,
+  type Db,
+} from '@erfolg/db';
 import {
   buildCommerceMlExport,
   parseIncomingPayments,
@@ -22,11 +30,7 @@ import {
 import { logger } from '../../lib/logger';
 import { writeAudit } from '../../lib/audit';
 import { addPayment } from '../payments/repository';
-import {
-  countPendingOnecExport,
-  listPendingOnecExport,
-  markManyOnecSynced,
-} from '../invoices';
+import { countPendingOnecExport, listPendingOnecExport, markManyOnecSynced } from '../invoices';
 import {
   completeExchange,
   findEnabledTokenHashByTenant,
@@ -140,7 +144,7 @@ async function buildLinesForInvoice(
       let vatAmount = 0;
       if (vatRate !== 'without_vat' && vatRate !== '0') {
         const rate = Number(vatRate);
-        vatAmount = Math.round((total * rate) / (100 + rate) * 100) / 100;
+        vatAmount = Math.round(((total * rate) / (100 + rate)) * 100) / 100;
       }
       return {
         id: r.id,
@@ -359,7 +363,10 @@ export async function receivePaymentsFromOnecCmd(
           errors.push({ ref, message: `cannot pay invoice in status ${invoice.status}` });
           continue;
         }
-        const amount = typeof r.amountKopecks === 'string' ? BigInt(r.amountKopecks) : BigInt(Math.round(r.amountKopecks));
+        const amount =
+          typeof r.amountKopecks === 'string'
+            ? BigInt(r.amountKopecks)
+            : BigInt(Math.round(r.amountKopecks));
         // Идемпотентность: external id из 1С уникален per payment. Повтор того же
         // webhook'а (network retry в 1С) не должен создавать дубль платежа.
         // External id берём из явного поля r.externalPaymentId, либо fallback на ref
@@ -388,12 +395,7 @@ export async function receivePaymentsFromOnecCmd(
       }
     }
     await completeExchange(db, tenant.id, exchange.id, {
-      status:
-        errors.length === 0
-          ? 'success'
-          : processed + skipped > 0
-            ? 'partial'
-            : 'failed',
+      status: errors.length === 0 ? 'success' : processed + skipped > 0 ? 'partial' : 'failed',
       result: {
         processedIds: [],
         errors: errors.map((e) => ({ id: e.ref, message: e.message })),
@@ -441,7 +443,10 @@ export async function verifyTenantIncomingToken(
 export async function ensureEnabledOrThrow(db: Db, tenantId: string): Promise<void> {
   const hash = await findEnabledTokenHashByTenant(db, tenantId);
   if (!hash) {
-    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: '1С-обмен не настроен для этого тенанта' });
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: '1С-обмен не настроен для этого тенанта',
+    });
   }
 }
 

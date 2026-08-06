@@ -6,12 +6,7 @@
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 
 import { BRAND_PRIMARY, BRAND_GREY, BRAND_LIGHT_GREY } from './branding';
-import {
-  type PrintIntakeInput,
-  formatDate,
-  repairTypeLabel,
-  riskClassLabel,
-} from './shared';
+import { type PrintIntakeInput, formatDate, repairTypeLabel, riskClassLabel } from './shared';
 
 interface BuildIntakeActInput extends PrintIntakeInput {
   /** PNG data URL, or empty string when generation failed. */
@@ -77,9 +72,20 @@ function headerBlock(input: BuildIntakeActInput): Content {
             color: BRAND_PRIMARY,
           },
           ...(input.tenant.slogan
-            ? [{ text: input.tenant.slogan, fontSize: 9, color: BRAND_GREY, margin: [0, 2, 0, 0] as [number, number, number, number] }]
+            ? [
+                {
+                  text: input.tenant.slogan,
+                  fontSize: 9,
+                  color: BRAND_GREY,
+                  margin: [0, 2, 0, 0] as [number, number, number, number],
+                },
+              ]
             : []),
-          { text: input.tenant.legalName, fontSize: 9, margin: [0, 4, 0, 0] as [number, number, number, number] },
+          {
+            text: input.tenant.legalName,
+            fontSize: 9,
+            margin: [0, 4, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
@@ -106,9 +112,7 @@ function partiesBlock(input: BuildIntakeActInput): Content {
           { text: 'Исполнитель:', bold: true, fontSize: 10 },
           { text: t.legalName, fontSize: 10 },
           { text: `ИНН ${t.inn ?? '—'}${t.kpp ? ` / КПП ${t.kpp}` : ''}`, fontSize: 9 },
-          ...(t.legalAddress
-            ? [{ text: t.legalAddress, fontSize: 9 }]
-            : []),
+          ...(t.legalAddress ? [{ text: t.legalAddress, fontSize: 9 }] : []),
         ],
       },
       {
@@ -206,21 +210,32 @@ function signaturesBlock(input: BuildIntakeActInput): Content {
         width: '*',
         stack: [
           { text: 'Исполнитель', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
           {
             text: input.tenant.director || 'Директор',
             fontSize: 9,
             color: BRAND_GREY,
             margin: [0, 2, 0, 0] as [number, number, number, number],
           },
-          { text: 'М.П.', fontSize: 9, color: BRAND_GREY, margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            text: 'М.П.',
+            fontSize: 9,
+            color: BRAND_GREY,
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       },
       {
         width: '*',
         stack: [
           { text: 'Заказчик', bold: true, fontSize: 10 },
-          { text: '_________________________', margin: [0, 14, 0, 0] as [number, number, number, number] },
+          {
+            text: '_________________________',
+            margin: [0, 14, 0, 0] as [number, number, number, number],
+          },
           {
             text: clientName,
             fontSize: 9,

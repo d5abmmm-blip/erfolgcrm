@@ -58,4 +58,3 @@ export const aiDailySummaries = pgTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.summaryDate] })],
 );
-

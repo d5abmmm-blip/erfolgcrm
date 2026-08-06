@@ -22,10 +22,7 @@ import {
   workOrderLines,
   type Db,
 } from '@erfolg/db';
-import {
-  recalcWorkOrderCostFromLines,
-  sumLineCostKopecks,
-} from '../work-orders/repository';
+import { recalcWorkOrderCostFromLines, sumLineCostKopecks } from '../work-orders/repository';
 
 export class NotEnoughStockError extends Error {
   constructor(
@@ -116,14 +113,24 @@ export async function issueToWorkOrder(
 
     let remaining = requestedT;
     const consumed: IssueResult['consumed'] = [];
-    const updates: Array<{ batchId: string; newRemaining: bigint; takenT: bigint; unitCost: bigint }> = [];
+    const updates: Array<{
+      batchId: string;
+      newRemaining: bigint;
+      takenT: bigint;
+      unitCost: bigint;
+    }> = [];
 
     for (const batch of batches) {
       if (remaining <= 0n) break;
       const availableT = toThousandths(batch.quantityRemaining);
       const takeT = availableT < remaining ? availableT : remaining;
       const newRemaining = availableT - takeT;
-      updates.push({ batchId: batch.id, newRemaining, takenT: takeT, unitCost: batch.unitCostKopecks });
+      updates.push({
+        batchId: batch.id,
+        newRemaining,
+        takenT: takeT,
+        unitCost: batch.unitCostKopecks,
+      });
       consumed.push({
         batchId: batch.id,
         quantity: fromThousandths(takeT),
@@ -137,11 +144,7 @@ export async function issueToWorkOrder(
         (acc, b) => acc + toThousandths(b.quantityRemaining),
         0n,
       );
-      throw new NotEnoughStockError(
-        input.itemId,
-        input.quantity,
-        fromThousandths(totalAvailable),
-      );
+      throw new NotEnoughStockError(input.itemId, input.quantity, fromThousandths(totalAvailable));
     }
 
     // Применяем UPDATE по каждой партии и INSERT в movements.
@@ -149,9 +152,7 @@ export async function issueToWorkOrder(
       await tx
         .update(inventoryBatches)
         .set({ quantityRemaining: fromThousandths(u.newRemaining) })
-        .where(
-          and(eq(inventoryBatches.id, u.batchId), eq(inventoryBatches.tenantId, tenantId)),
-        );
+        .where(and(eq(inventoryBatches.id, u.batchId), eq(inventoryBatches.tenantId, tenantId)));
       await tx.insert(inventoryMovements).values({
         tenantId,
         itemId: input.itemId,
@@ -184,9 +185,7 @@ export async function issueToWorkOrder(
       .from(workOrderLines)
       .where(eq(workOrderLines.id, input.workOrderLineId))
       .limit(1);
-    const lineCostBefore = woRow
-      ? await sumLineCostKopecks(tx, woRow.workOrderId)
-      : 0n;
+    const lineCostBefore = woRow ? await sumLineCostKopecks(tx, woRow.workOrderId) : 0n;
 
     // Привязываем item к строке наряда + snapshot cost (8.C).
     await tx
@@ -309,11 +308,7 @@ export interface ListMovementsOpts {
   limit?: number;
 }
 
-export async function listMovements(
-  db: Db,
-  tenantId: string,
-  opts: ListMovementsOpts,
-) {
+export async function listMovements(db: Db, tenantId: string, opts: ListMovementsOpts) {
   return withTenantTx(db, tenantId, async (tx) => {
     const conds = [];
     if (opts.itemId) conds.push(eq(inventoryMovements.itemId, opts.itemId));

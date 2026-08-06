@@ -19,9 +19,7 @@ export interface PeriodPreset {
  */
 export function resolvePeriod(input: PeriodPreset): repo.PeriodInput {
   const now = new Date();
-  const startOfDay = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
+  const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const tomorrow = new Date(startOfDay);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
@@ -36,9 +34,7 @@ export function resolvePeriod(input: PeriodPreset): repo.PeriodInput {
     }
     case 'month': {
       // С 1 числа текущего месяца
-      const start = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-      );
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
       return { start, end: tomorrow };
     }
     case 'quarter': {
@@ -78,27 +74,15 @@ export async function getMetricsCmd(
   };
 }
 
-export async function listOverdueInvoicesQuery(
-  db: Db,
-  tenantId: string,
-  limit?: number,
-) {
+export async function listOverdueInvoicesQuery(db: Db, tenantId: string, limit?: number) {
   return repo.listOverdueInvoices(db, tenantId, limit);
 }
 
-export async function listSlaAtRiskQuery(
-  db: Db,
-  tenantId: string,
-  limit?: number,
-) {
+export async function listSlaAtRiskQuery(db: Db, tenantId: string, limit?: number) {
   return repo.listSlaAtRisk(db, tenantId, limit);
 }
 
-export async function listLowStockQuery(
-  db: Db,
-  tenantId: string,
-  limit?: number,
-) {
+export async function listLowStockQuery(db: Db, tenantId: string, limit?: number) {
   return repo.listLowStock(db, tenantId, limit);
 }
 

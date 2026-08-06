@@ -75,10 +75,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await withTenantTx(getDb(), erfolgId, async (tx) => {
     await tx.delete(tickets).where(like(tickets.symptom, `${TEST_PREFIX}%`));
-    await tx
-      .update(users)
-      .set({ telegramChatId: null })
-      .where(eq(users.tenantId, erfolgId));
+    await tx.update(users).set({ telegramChatId: null }).where(eq(users.tenantId, erfolgId));
   });
 });
 
@@ -244,7 +241,10 @@ describe('Callback-кнопки в Telegram', () => {
     await handleUpdate(handlerCtx(), makeCallback(`r:pt:${ticketId}`));
 
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ blockedReason: tickets.blockedReason }).from(tickets).where(eq(tickets.id, ticketId)),
+      tx
+        .select({ blockedReason: tickets.blockedReason })
+        .from(tickets)
+        .where(eq(tickets.id, ticketId)),
     );
     expect(row?.blockedReason).toBeNull();
 
@@ -258,7 +258,9 @@ describe('Callback-кнопки в Telegram', () => {
     const fetchSpy = stubFetch();
     const ticketId = await makeTestTicket();
     await handleUpdate(handlerCtx(), makeCallback(`r:iw:${ticketId}`, CHAT_B));
-    const answerCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('answerCallbackQuery'));
+    const answerCall = fetchSpy.mock.calls.find((c) =>
+      String(c[0]).includes('answerCallbackQuery'),
+    );
     expect(answerCall).toBeDefined();
     const body = JSON.parse((answerCall?.[1]?.body as string) ?? '{}');
     expect(String(body.text)).toMatch(/привяз/i);

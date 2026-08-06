@@ -19,9 +19,10 @@ import {
 import { handleUpdate } from './handler';
 import type { TgUpdate } from '../../lib/telegram-client';
 
-export async function getConfigQuery(
-  ctx: { db: Db; tenant: ResolvedTenant },
-): Promise<TelegramConfigPublicDto | null> {
+export async function getConfigQuery(ctx: {
+  db: Db;
+  tenant: ResolvedTenant;
+}): Promise<TelegramConfigPublicDto | null> {
   return getPublicConfig(ctx.db, ctx.tenant);
 }
 

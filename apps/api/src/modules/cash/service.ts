@@ -16,7 +16,9 @@ export type PeriodPreset = 'today' | 'week' | 'month' | 'quarter' | 'year';
 /** Пресет периода → [start, end) в UTC. Границы по UTC (не зависят от tz сервера). */
 export function resolvePeriod(preset: PeriodPreset): repo.PeriodInput {
   const now = new Date();
-  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const startOfToday = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   const end = new Date(startOfToday);
   end.setUTCDate(end.getUTCDate() + 1); // конец = завтра 00:00 UTC (сегодня включительно)
 
@@ -100,18 +102,18 @@ export async function createAccountCmd(ctx: CmdCtx, input: repo.CreateAccountInp
     action: 'create',
     entityType: 'cash_account',
     entityId: account.id,
-    after: { name: account.name, kind: account.kind, openingBalanceKopecks: account.openingBalanceKopecks },
+    after: {
+      name: account.name,
+      kind: account.kind,
+      openingBalanceKopecks: account.openingBalanceKopecks,
+    },
     ip: ctx.audit.ip,
     userAgent: ctx.audit.userAgent,
   });
   return account;
 }
 
-export async function updateAccountCmd(
-  ctx: CmdCtx,
-  id: string,
-  patch: repo.UpdateAccountInput,
-) {
+export async function updateAccountCmd(ctx: CmdCtx, id: string, patch: repo.UpdateAccountInput) {
   let account;
   try {
     account = await repo.updateAccount(ctx.db, ctx.tenant.id, id, patch);

@@ -187,11 +187,7 @@ export async function listLeads(
   });
 }
 
-export async function getLeadById(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<LeadDto | null> {
+export async function getLeadById(db: Db, tenantId: string, id: string): Promise<LeadDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select({ lead: leads, assignedName: users.fullName })
@@ -322,7 +318,7 @@ export async function convertLeadToClient(
 
     const isLegal = opts.clientType === 'legal';
     const fio = opts.individualFullName?.trim() || null;
-    const displayName = isLegal ? lead.name : (buildDisplayNameFromFio(fio ?? '') || lead.name);
+    const displayName = isLegal ? lead.name : buildDisplayNameFromFio(fio ?? '') || lead.name;
 
     const inserted = await tx.execute<{ id: string }>(sql`
       INSERT INTO clients (

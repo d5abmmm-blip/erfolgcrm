@@ -76,9 +76,7 @@ export function TelegramLinkSection({ userId }: Props) {
           Привязать Telegram
         </button>
       )}
-      {createCode.error && (
-        <p className="text-destructive text-xs">{createCode.error.message}</p>
-      )}
+      {createCode.error && <p className="text-destructive text-xs">{createCode.error.message}</p>}
       {link && (
         <div className="space-y-2">
           <p className="text-muted-foreground text-xs">
@@ -111,8 +109,8 @@ export function TelegramLinkSection({ userId }: Props) {
             </button>
           </div>
           <p className="text-muted-foreground text-xs">
-            Ссылка действует {createCode.data?.ttlMinutes ?? 15} минут. После «Start» бот
-            подтвердит привязку, статус здесь обновится при следующем открытии.
+            Ссылка действует {createCode.data?.ttlMinutes ?? 15} минут. После «Start» бот подтвердит
+            привязку, статус здесь обновится при следующем открытии.
           </p>
           <button
             type="button"

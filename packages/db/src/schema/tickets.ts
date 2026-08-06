@@ -54,26 +54,13 @@ export const ticketSourceEnum = pgEnum('ticket_source', [
 ]);
 
 /** Зеркало IntakeMethod из @erfolg/shared */
-export const intakeMethodEnum = pgEnum('intake_method', [
-  'onsite_visit',
-  'brought_in',
-  'pickup',
-]);
+export const intakeMethodEnum = pgEnum('intake_method', ['onsite_visit', 'brought_in', 'pickup']);
 
 /** Зеркало TicketPriority */
-export const ticketPriorityEnum = pgEnum('ticket_priority', [
-  'low',
-  'normal',
-  'high',
-  'urgent',
-]);
+export const ticketPriorityEnum = pgEnum('ticket_priority', ['low', 'normal', 'high', 'urgent']);
 
 /** Зеркало RepairType: paid / warranty / service_contract */
-export const repairTypeEnum = pgEnum('repair_type', [
-  'paid',
-  'warranty',
-  'service_contract',
-]);
+export const repairTypeEnum = pgEnum('repair_type', ['paid', 'warranty', 'service_contract']);
 
 /**
  * Структурная причина простоя заявки («почему техника стоит») — для доски.
@@ -101,11 +88,7 @@ export const ticketEventTypeEnum = pgEnum('ticket_event_type', [
   'document_printed',
 ]);
 
-export const workOrderLineTypeEnum = pgEnum('work_order_line_type', [
-  'work',
-  'part',
-  'expense',
-]);
+export const workOrderLineTypeEnum = pgEnum('work_order_line_type', ['work', 'part', 'expense']);
 
 export const vatRateEnum = pgEnum('vat_rate', ['0', '5', '10', '20', 'without_vat']);
 
@@ -258,10 +241,7 @@ export const tickets = pgTable(
       .on(t.publicTrackToken)
       .where(sql`public_track_token IS NOT NULL`),
     /** closed_at заполнен ⟺ status='closed'; cancelled_at — для status='cancelled' */
-    check(
-      'tickets_closed_consistency',
-      sql`(status = 'closed') = (closed_at IS NOT NULL)`,
-    ),
+    check('tickets_closed_consistency', sql`(status = 'closed') = (closed_at IS NOT NULL)`),
     check(
       'tickets_cancelled_consistency',
       sql`(status = 'cancelled') = (cancelled_at IS NOT NULL)`,
@@ -319,12 +299,13 @@ export const ticketEvents = pgTable(
     ticketId: fkUuid('ticket_id'),
     userId: uuid('user_id'),
     type: ticketEventTypeEnum('type').notNull(),
-    payload: jsonb('payload').$type<TicketEventPayload>().notNull().default(sql`'{}'::jsonb`),
+    payload: jsonb('payload')
+      .$type<TicketEventPayload>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('ticket_events_tenant_ticket_idx').on(t.tenantId, t.ticketId, t.createdAt),
-  ],
+  (t) => [index('ticket_events_tenant_ticket_idx').on(t.tenantId, t.ticketId, t.createdAt)],
 );
 
 /**
@@ -353,7 +334,9 @@ export const workOrders = pgTable(
     /** Все суммы в копейках — bigint, чтобы избежать float-ошибок. */
     worksAmountKopecks: bigint('works_amount_kopecks', { mode: 'bigint' }).notNull().default(0n),
     partsAmountKopecks: bigint('parts_amount_kopecks', { mode: 'bigint' }).notNull().default(0n),
-    expensesAmountKopecks: bigint('expenses_amount_kopecks', { mode: 'bigint' }).notNull().default(0n),
+    expensesAmountKopecks: bigint('expenses_amount_kopecks', { mode: 'bigint' })
+      .notNull()
+      .default(0n),
     totalAmountKopecks: bigint('total_amount_kopecks', { mode: 'bigint' }).notNull().default(0n),
     /**
      * Этап 5: материализованная сумма платежей по этой заявке.
@@ -419,7 +402,5 @@ export const workOrderLines = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [
-    index('work_order_lines_tenant_order_idx').on(t.tenantId, t.workOrderId, t.orderIdx),
-  ],
+  (t) => [index('work_order_lines_tenant_order_idx').on(t.tenantId, t.workOrderId, t.orderIdx)],
 );

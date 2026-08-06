@@ -35,7 +35,10 @@ function mockCaller() {
     users: { create: rec('users.create') },
   };
   // tools.run типизирован под реальный Caller; в юнит-тесте это мок.
-  return { caller: caller as unknown as Parameters<NonNullable<ReturnType<typeof getTool>>['run']>[0], calls };
+  return {
+    caller: caller as unknown as Parameters<NonNullable<ReturnType<typeof getTool>>['run']>[0],
+    calls,
+  };
 }
 
 describe('реестр инструментов', () => {
@@ -144,7 +147,9 @@ describe('RBAC: staff-only read-инструменты (финансы / зая�
 
   it('search_clients теперь staff-only (PII-2): инженеру не отдаётся и блокируется по правам', async () => {
     // Инженер вызвать не может — requireStaff бросает FORBIDDEN до обращения к caller.
-    await expect(callTool('search_clients', 'engineer')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(callTool('search_clients', 'engineer')).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
     // И модели инженера этот инструмент даже не предлагается.
     expect(toolDefsForRole('engineer').map((d) => d.function.name)).not.toContain('search_clients');
     // Staff по-прежнему видит его в списке.
@@ -213,7 +218,9 @@ describe('create_client', () => {
   it('бросает понятную ошибку, если у организации нет названия', () => {
     const { caller } = mockCaller();
     // reqString бросает синхронно (в service.ts это ловится try/catch вокруг await run).
-    expect(() => getTool('create_client')!.run(caller, { clientType: 'legal' })).toThrow(/displayName/);
+    expect(() => getTool('create_client')!.run(caller, { clientType: 'legal' })).toThrow(
+      /displayName/,
+    );
   });
 });
 
@@ -270,9 +277,11 @@ describe('create_engineer', () => {
 
 describe('previews', () => {
   it('write-инструменты дают непустой текст подтверждения', () => {
-    expect(getTool('create_client')!.preview!({ clientType: 'legal', displayName: 'ООО Ромашка' })).toContain(
-      'ООО Ромашка',
+    expect(
+      getTool('create_client')!.preview!({ clientType: 'legal', displayName: 'ООО Ромашка' }),
+    ).toContain('ООО Ромашка');
+    expect(getTool('create_engineer')!.preview!({ fullName: 'Петров Пётр' })).toContain(
+      'Петров Пётр',
     );
-    expect(getTool('create_engineer')!.preview!({ fullName: 'Петров Пётр' })).toContain('Петров Пётр');
   });
 });

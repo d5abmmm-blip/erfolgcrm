@@ -105,26 +105,16 @@ export const invoices = pgTable(
       .where(sql`deleted_at IS NULL`),
     index('invoices_overdue_check_idx')
       .on(t.tenantId, t.dueDate)
-      .where(
-        sql`deleted_at IS NULL AND status IN ('issued', 'partially_paid', 'overdue')`,
-      ),
+      .where(sql`deleted_at IS NULL AND status IN ('issued', 'partially_paid', 'overdue')`),
     index('invoices_pending_onec_export_idx')
       .on(t.tenantId, t.updatedAt)
-      .where(
-        sql`deleted_at IS NULL AND onec_synced_at IS NULL AND status <> 'draft'`,
-      ),
+      .where(sql`deleted_at IS NULL AND onec_synced_at IS NULL AND status <> 'draft'`),
     check(
       'invoices_amounts_non_negative',
       sql`total_amount_kopecks >= 0 AND vat_amount_kopecks >= 0 AND paid_amount_kopecks >= 0`,
     ),
-    check(
-      'invoices_paid_not_exceeds_total',
-      sql`paid_amount_kopecks <= total_amount_kopecks`,
-    ),
-    check(
-      'invoices_vat_not_exceeds_total',
-      sql`vat_amount_kopecks <= total_amount_kopecks`,
-    ),
+    check('invoices_paid_not_exceeds_total', sql`paid_amount_kopecks <= total_amount_kopecks`),
+    check('invoices_vat_not_exceeds_total', sql`vat_amount_kopecks <= total_amount_kopecks`),
     check('invoices_due_after_issue', sql`due_date >= issue_date`),
   ],
 );

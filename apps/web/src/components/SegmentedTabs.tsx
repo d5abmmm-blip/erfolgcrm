@@ -27,7 +27,9 @@ export function SegmentedTabs<T extends string>({
         'bg-secondary text-secondary-foreground rounded-md p-0.5 text-sm',
         grow ? 'grid gap-0.5' : 'inline-flex',
       )}
-      style={grow ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined}
+      style={
+        grow ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined
+      }
     >
       {options.map((o) => (
         <button

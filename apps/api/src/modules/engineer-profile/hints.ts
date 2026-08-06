@@ -18,11 +18,7 @@ import type { Db } from '@erfolg/db';
 import { listUsers } from '../users/repository';
 import { boardTickets, getAssetRequiredAttestation } from '../tickets/repository';
 import { getActiveCategoriesForEngineer } from '../attestations/repository';
-import {
-  listSkills,
-  listActiveAvailability,
-  type AvailabilityKind,
-} from './repository';
+import { listSkills, listActiveAvailability, type AvailabilityKind } from './repository';
 
 export interface AssignmentHint {
   userId: string;
@@ -86,10 +82,7 @@ export async function assignmentHints(
   const loadByUser = new Map<string, number>();
   for (const card of board) {
     if (!card.assignedEngineerId) continue;
-    loadByUser.set(
-      card.assignedEngineerId,
-      (loadByUser.get(card.assignedEngineerId) ?? 0) + 1,
-    );
+    loadByUser.set(card.assignedEngineerId, (loadByUser.get(card.assignedEngineerId) ?? 0) + 1);
   }
 
   // Навыки: множество deviceType (нижним регистром) по инженеру.

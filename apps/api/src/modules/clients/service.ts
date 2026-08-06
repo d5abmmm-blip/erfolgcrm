@@ -35,11 +35,7 @@ interface AuditCtx {
 }
 
 /** Список PII-полей, для которых в audit пишем только сам факт изменения, без значений. */
-const PII_FIELDS = new Set([
-  'individualFullName',
-  'individualPhone',
-  'individualAddress',
-]);
+const PII_FIELDS = new Set(['individualFullName', 'individualPhone', 'individualAddress']);
 
 function sanitizeForAudit(input: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -176,11 +172,7 @@ export async function getClientQuery(
   return c;
 }
 
-export async function searchClientsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  q: string,
-) {
+export async function searchClientsQuery(db: Db, tenant: ResolvedTenant, q: string) {
   return repoSearchClients(db, tenant.id, q);
 }
 

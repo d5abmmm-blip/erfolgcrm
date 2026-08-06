@@ -97,7 +97,10 @@ describe('Профиль инженера: навыки', () => {
     expect(mine.sort()).toEqual(['Рентген-аппарат', 'УЗИ-аппарат']);
 
     // Замена целиком
-    await caller.engineerProfile.setSkills({ userId: engineerId, deviceTypes: ['Автоклав (стерилизатор)'] });
+    await caller.engineerProfile.setSkills({
+      userId: engineerId,
+      deviceTypes: ['Автоклав (стерилизатор)'],
+    });
     skills = await caller.engineerProfile.listSkills();
     mine = skills.filter((s) => s.userId === engineerId).map((s) => s.deviceType);
     expect(mine).toEqual(['Автоклав (стерилизатор)']);

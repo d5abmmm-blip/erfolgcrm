@@ -10,8 +10,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "references": [
-    { "path": "../../packages/db" },
-    { "path": "../../packages/shared" }
-  ]
+  "references": [{ "path": "../../packages/db" }, { "path": "../../packages/shared" }]
 }

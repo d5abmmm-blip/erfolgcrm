@@ -7,13 +7,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  clients,
-  getDb,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   addNote,

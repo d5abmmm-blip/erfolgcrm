@@ -152,9 +152,7 @@ describe('calendar.month — события месяца', () => {
     expect(visit?.date).toBe('2031-03-10');
     expect(visit?.time).not.toBeNull();
 
-    const deadline = events.find(
-      (e) => e.type === 'ticket_deadline' && e.id === deadlineTicketId,
-    );
+    const deadline = events.find((e) => e.type === 'ticket_deadline' && e.id === deadlineTicketId);
     expect(deadline?.date).toBe('2031-03-20');
 
     const contractEnd = events.find(
@@ -165,9 +163,7 @@ describe('calendar.month — события месяца', () => {
     const maint = events.find((e) => e.type === 'maintenance' && e.title.includes(TEST_PREFIX));
     expect(maint?.date).toBe('2031-03-15');
 
-    const warranty = events.find(
-      (e) => e.type === 'warranty_end' && e.title.includes(TEST_PREFIX),
-    );
+    const warranty = events.find((e) => e.type === 'warranty_end' && e.title.includes(TEST_PREFIX));
     expect(warranty?.date).toBe('2031-03-25');
 
     // Отсортировано по дате.
@@ -296,7 +292,9 @@ describe('calendar — напоминания', () => {
 
     // «Перематываем время»: remind_at в прошлое.
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.execute(sql`UPDATE calendar_events SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`),
+      tx.execute(
+        sql`UPDATE calendar_events SET remind_at = now() - interval '1 minute' WHERE id = ${id}::uuid`,
+      ),
     );
 
     const dueBefore = await listDueCalendarReminders(getDb(), erfolgId);

@@ -23,11 +23,7 @@ import {
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import { createTicket, type CreateTicketInput } from '../tickets/repository';
-import {
-  addTicketNoteCmd,
-  engineerReactCmd,
-  type EngineerReactAction,
-} from '../tickets/service';
+import { addTicketNoteCmd, engineerReactCmd, type EngineerReactAction } from '../tickets/service';
 import { clearUnansweredCount } from '../../lib/nudge-state';
 import {
   createClient as repoCreateClient,
@@ -60,8 +56,7 @@ interface HandlerCtx {
 
 /** Ожидание свободного текста после кнопки «Другое» — Redis, TTL 10 минут. */
 const PENDING_NOTE_TTL_SEC = 10 * 60;
-const pendingNoteKey = (tenantId: string, chatId: number) =>
-  `erfolg:tg-note:${tenantId}:${chatId}`;
+const pendingNoteKey = (tenantId: string, chatId: number) => `erfolg:tg-note:${tenantId}:${chatId}`;
 
 export async function handleUpdate(ctx: HandlerCtx, update: TgUpdate): Promise<void> {
   if (update.callback_query) {
@@ -88,7 +83,12 @@ export async function handleUpdate(ctx: HandlerCtx, update: TgUpdate): Promise<v
   }
 
   // /start или /заявка — сброс state и начало диалога.
-  if (text === '/start' || text === '/заявка' || text === '/zayavka' || text === '/zayavka@erfolg_bot') {
+  if (
+    text === '/start' ||
+    text === '/заявка' ||
+    text === '/zayavka' ||
+    text === '/zayavka@erfolg_bot'
+  ) {
     const state: ConversationState = { step: 'ASK_NAME', startedAt: Date.now() };
     await saveConversation(ctx.tenant.id, chatId, state);
     await sendMessage(ctx.botToken, { chat_id: chatId, text: STEP_PROMPTS.ASK_NAME });
@@ -224,10 +224,7 @@ async function pushToDispatchers(
 async function dispatcherTargets(ctx: HandlerCtx): Promise<string[]> {
   if (ctx.defaultDispatcherUserId) return [ctx.defaultDispatcherUserId];
   return withTenantTx(ctx.db, ctx.tenant.id, async (tx) => {
-    const rows = await tx
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'dispatcher'));
+    const rows = await tx.select({ id: users.id }).from(users).where(eq(users.role, 'dispatcher'));
     return rows.map((r) => r.id);
   });
 }

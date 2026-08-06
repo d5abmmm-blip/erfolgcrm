@@ -11,12 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
   const calls: Array<Record<string, unknown>> = [];
-  const addSpy = vi.fn(
-    async (_name: string, _data: unknown, opts: Record<string, unknown>) => {
-      calls.push(opts);
-      return { id: 'mock' };
-    },
-  );
+  const addSpy = vi.fn(async (_name: string, _data: unknown, opts: Record<string, unknown>) => {
+    calls.push(opts);
+    return { id: 'mock' };
+  });
   return { calls, addSpy };
 });
 

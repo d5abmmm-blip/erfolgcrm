@@ -10,15 +10,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'wouter';
-import {
-  Award,
-  ChevronLeft,
-  Loader2,
-  Pencil,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { Award, ChevronLeft, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
@@ -58,7 +50,7 @@ export function AttestationsPage() {
   if (!isStaff) {
     return (
       <div className="mx-auto max-w-2xl p-6">
-        <div className="bg-destructive/10 text-destructive rounded-lg border border-destructive/30 p-4 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-lg border p-4 text-sm">
           Раздел доступен только директору и диспетчеру.
         </div>
       </div>
@@ -81,9 +73,9 @@ export function AttestationsPage() {
               Аттестация инженеров
             </h1>
             <p className="text-muted-foreground text-sm">
-              Допуски инженеров к работе с категориями медтехники. Когда у техники
-              задана требуемая категория, диспетчер увидит предупреждение при
-              назначении инженера без действующей аттестации.
+              Допуски инженеров к работе с категориями медтехники. Когда у техники задана требуемая
+              категория, диспетчер увидит предупреждение при назначении инженера без действующей
+              аттестации.
             </p>
           </div>
           {isDirector && (
@@ -140,10 +132,11 @@ export function AttestationsPage() {
             {listQ.data?.map((a) => {
               const meta = STATUS_META[a.status];
               return (
-                <tr key={a.id} className={cn('hover:bg-muted/30', a.status === 'expired' && 'opacity-70')}>
-                  <td className="p-3 font-medium">
-                    {a.engineerFullName ?? '—'}
-                  </td>
+                <tr
+                  key={a.id}
+                  className={cn('hover:bg-muted/30', a.status === 'expired' && 'opacity-70')}
+                >
+                  <td className="p-3 font-medium">{a.engineerFullName ?? '—'}</td>
                   <td className="p-3">{a.category}</td>
                   <td className="text-muted-foreground p-3 text-xs">
                     {a.issuedBy && <div>{a.issuedBy}</div>}
@@ -224,7 +217,11 @@ function DeleteButton({ id }: { id: string }) {
         onClick={() => setOpen(true)}
         className="bg-secondary hover:bg-destructive/10 hover:text-destructive rounded-md p-1.5 disabled:opacity-40"
       >
-        {m.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        {m.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="h-3.5 w-3.5" />
+        )}
       </button>
       <ConfirmDialog
         open={open}
@@ -315,7 +312,7 @@ function FormFields({
           onChange={(e) => setEngineerId(e.target.value)}
           required
           disabled={isEdit}
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-60"
         >
           <option value="">— выберите —</option>
           {engineersQ.data?.map((e) => (
@@ -336,7 +333,7 @@ function FormFields({
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           required
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           <option value="">— выберите —</option>
           {cats.data?.map((c) => (
@@ -354,7 +351,7 @@ function FormFields({
             value={issuedAt}
             onChange={(e) => setIssuedAt(e.target.value)}
             required
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
         <div>
@@ -363,7 +360,7 @@ function FormFields({
             type="date"
             value={validUntil}
             onChange={(e) => setValidUntil(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
       </div>
@@ -374,7 +371,7 @@ function FormFields({
           value={issuedBy}
           onChange={(e) => setIssuedBy(e.target.value)}
           placeholder="Учебный центр / производитель"
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
       <div>
@@ -383,7 +380,7 @@ function FormFields({
           type="text"
           value={certNo}
           onChange={(e) => setCertNo(e.target.value)}
-          className="bg-background w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
         />
       </div>
       <div>
@@ -392,7 +389,7 @@ function FormFields({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         />
       </div>
     </div>
@@ -478,7 +475,7 @@ function CreateAttestationModal({
           isEdit={false}
         />
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
             {error}
           </div>
         )}
@@ -493,7 +490,7 @@ function CreateAttestationModal({
           <button
             type="submit"
             disabled={m.isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-60"
           >
             {m.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Создать
@@ -563,7 +560,7 @@ function EditAttestationModal({
           isEdit
         />
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-2 text-xs">
+          <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-2 text-xs">
             {error}
           </div>
         )}
@@ -578,7 +575,7 @@ function EditAttestationModal({
           <button
             type="submit"
             disabled={m.isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-60"
           >
             {m.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Сохранить

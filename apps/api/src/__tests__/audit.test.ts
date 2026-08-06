@@ -18,11 +18,7 @@ import { eq } from 'drizzle-orm';
 import { auditLogs, getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { writeAudit } from '../lib/audit';
-import {
-  getAuditStats,
-  listAuditLogs,
-  listEntityTypes,
-} from '../modules/audit/repository';
+import { getAuditStats, listAuditLogs, listEntityTypes } from '../modules/audit/repository';
 
 const ENTITY_TYPE = 'audit_test_entity';
 
@@ -53,7 +49,10 @@ async function clearTestData(): Promise<void> {
 
 beforeEach(clearTestData);
 
-async function seedRows(count: number, opts: { tenantId?: string; ip?: string; spread?: boolean } = {}) {
+async function seedRows(
+  count: number,
+  opts: { tenantId?: string; ip?: string; spread?: boolean } = {},
+) {
   const tid = opts.tenantId ?? erfolgId;
   for (let i = 0; i < count; i++) {
     await writeAudit(getDb(), tid, {

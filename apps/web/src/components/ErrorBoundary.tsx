@@ -33,8 +33,8 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="text-2xl">⚠️</div>
           <h1 className="mt-2 text-lg font-semibold">Что-то пошло не так</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Произошёл сбой на этой странице. Данные не потеряны — попробуйте перезагрузить.
-            Если повторяется — сообщите директору.
+            Произошёл сбой на этой странице. Данные не потеряны — попробуйте перезагрузить. Если
+            повторяется — сообщите директору.
           </p>
           <button
             type="button"

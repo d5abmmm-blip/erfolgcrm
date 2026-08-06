@@ -21,7 +21,10 @@ async function main() {
     .delete(users)
     .where(or(like(users.username, 'test_crud_%'), eq(users.username, 'smoke_user')))
     .returning({ username: users.username });
-  console.info(`Removed ${removed.length} stale test users:`, removed.map((r) => r.username));
+  console.info(
+    `Removed ${removed.length} stale test users:`,
+    removed.map((r) => r.username),
+  );
   process.exit(0);
 }
 

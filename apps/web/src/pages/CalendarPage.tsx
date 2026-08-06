@@ -8,7 +8,15 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'wouter';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Square } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Square,
+} from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { CalendarTasksPanel } from '../components/CalendarTasksPanel';
@@ -33,15 +41,9 @@ interface CalendarEvent {
   remind: boolean;
 }
 
-type DialogState =
-  | { mode: 'create'; date: string }
-  | { mode: 'edit'; event: CalendarEvent }
-  | null;
+type DialogState = { mode: 'create'; date: string } | { mode: 'edit'; event: CalendarEvent } | null;
 
-const TYPE_META: Record<
-  EventType,
-  { label: string; dot: string; chip: string }
-> = {
+const TYPE_META: Record<EventType, { label: string; dot: string; chip: string }> = {
   ticket: {
     label: 'Выезд / работа по заявке',
     dot: 'bg-primary',
@@ -253,9 +255,7 @@ export function CalendarPage() {
                     <div
                       className={cn(
                         'mb-1 grid h-6 w-6 place-items-center rounded-full text-xs font-medium',
-                        isToday
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground',
+                        isToday ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
                       )}
                     >
                       {dayNum}
@@ -270,7 +270,10 @@ export function CalendarPage() {
                           )}
                         >
                           <span
-                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TYPE_META[ev.type].dot)}
+                            className={cn(
+                              'h-1.5 w-1.5 shrink-0 rounded-full',
+                              TYPE_META[ev.type].dot,
+                            )}
                             aria-hidden
                           />
                           {ev.time && <span className="tabular-nums">{ev.time}</span>}
@@ -332,10 +335,7 @@ export function CalendarPage() {
                 const inner = (
                   <>
                     <span
-                      className={cn(
-                        'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                        TYPE_META[ev.type].dot,
-                      )}
+                      className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', TYPE_META[ev.type].dot)}
                       aria-hidden
                     />
                     <span className="min-w-0 flex-1">

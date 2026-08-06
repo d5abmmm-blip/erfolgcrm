@@ -3,24 +3,11 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  clients,
-  getDb,
-  payments,
-  tickets,
-  withTenantTx,
-  workOrders,
-} from '@erfolg/db';
+import { clients, getDb, payments, tickets, withTenantTx, workOrders } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
-import {
-  addPayment,
-  deletePayment,
-} from '../modules/payments/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import { addPayment, deletePayment } from '../modules/payments/repository';
 
 let erfolgId = '';
 let primaryClientId = '';

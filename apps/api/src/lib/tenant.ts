@@ -51,10 +51,7 @@ export function extractSubdomain(req: Request): string | null {
 const TENANT_CACHE_TTL_MS = 60_000;
 const tenantCache = new Map<string, { value: ResolvedTenant | null; until: number }>();
 
-export async function resolveTenant(
-  db: Db,
-  req: Request,
-): Promise<ResolvedTenant | null> {
+export async function resolveTenant(db: Db, req: Request): Promise<ResolvedTenant | null> {
   const subdomain = extractSubdomain(req);
   if (!subdomain) return null;
 

@@ -1,30 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useForm, type SubmitHandler } from 'react-hook-form';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronLeft,
-  Loader2,
-  Mail,
-  Sparkles,
-  X,
-} from 'lucide-react';
-import type {
-  IntakeMethod,
-  RepairType,
-  TicketPriority,
-  TicketSource,
-} from '@erfolg/shared';
+import { AlertTriangle, CheckCircle2, ChevronLeft, Loader2, Mail, Sparkles, X } from 'lucide-react';
+import type { IntakeMethod, RepairType, TicketPriority, TicketSource } from '@erfolg/shared';
 import { SLA_HOURS_BY_PRIORITY, computeSlaTargetAt } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
 import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
-import {
-  TicketTemplatePicker,
-  type TemplateDefaults,
-} from '../components/TicketTemplatePicker';
+import { TicketTemplatePicker, type TemplateDefaults } from '../components/TicketTemplatePicker';
 import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 import { RepairArchiveBlock } from '../components/RepairArchiveBlock';
 import { cn } from '../lib/utils';
@@ -115,10 +99,7 @@ export function NewTicketPage() {
   const assetId = form.watch('assetId');
 
   // Контакты подгружаются из клиента
-  const clientDetail = trpc.clients.get.useQuery(
-    { id: clientId || '' },
-    { enabled: !!clientId },
-  );
+  const clientDetail = trpc.clients.get.useQuery({ id: clientId || '' }, { enabled: !!clientId });
 
   // Активные контракты выбранного клиента — для блока «Договор».
   const clientContracts = trpc.contracts.listActiveByClient.useQuery(
@@ -136,10 +117,7 @@ export function NewTicketPage() {
   const assignedEngineerId = form.watch('assignedEngineerId');
   // Тип техники для подсказок при назначении: из сохранённой единицы (по assetId)
   // или из выбранной модели каталога в режиме «Новый аппарат».
-  const selectedAsset = trpc.assets.get.useQuery(
-    { id: assetId || '' },
-    { enabled: !!assetId },
-  );
+  const selectedAsset = trpc.assets.get.useQuery({ id: assetId || '' }, { enabled: !!assetId });
   const hintDeviceType = assetId
     ? (selectedAsset.data?.deviceType ?? null)
     : addingAsset
@@ -268,9 +246,7 @@ export function NewTicketPage() {
         });
         assetIdToUse = created.id;
       } catch (e) {
-        setServerError(
-          `Не удалось завести аппарат: ${e instanceof Error ? e.message : String(e)}`,
-        );
+        setServerError(`Не удалось завести аппарат: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
     }
@@ -314,8 +290,7 @@ export function NewTicketPage() {
         href="/tickets"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К списку заявок
+        <ChevronLeft className="h-4 w-4" />К списку заявок
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold md:text-2xl">Новая заявка</h1>
@@ -376,7 +351,9 @@ export function NewTicketPage() {
               {!emailDraft.data.client && (
                 <div className="text-warning flex items-start gap-1.5">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>Клиент по адресу не найден — выберите существующего или создайте нового.</span>
+                  <span>
+                    Клиент по адресу не найден — выберите существующего или создайте нового.
+                  </span>
                 </div>
               )}
               {emailDraft.data.deviceHint && (
@@ -413,10 +390,7 @@ export function NewTicketPage() {
       >
         <div>
           <Label required>Клиент</Label>
-          <ClientPicker
-            value={clientId || null}
-            onChange={(id) => form.setValue('clientId', id)}
-          />
+          <ClientPicker value={clientId || null} onChange={(id) => form.setValue('clientId', id)} />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -451,14 +425,14 @@ export function NewTicketPage() {
                     value={naSerial}
                     onChange={(e) => setNaSerial(e.target.value)}
                     placeholder="Серийный №"
-                    className="bg-background w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                    className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
                   />
                   <input
                     type="text"
                     value={naInventory}
                     onChange={(e) => setNaInventory(e.target.value)}
                     placeholder="Инвентарный №"
-                    className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                    className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
                   />
                 </div>
                 <p className="text-muted-foreground text-xs">
@@ -481,7 +455,7 @@ export function NewTicketPage() {
             <select
               {...form.register('contactId')}
               disabled={!clientId}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-50"
             >
               <option value="">— не выбран —</option>
               {(clientDetail.data?.contacts ?? []).map((c) => (
@@ -499,7 +473,7 @@ export function NewTicketPage() {
           <select
             {...form.register('contractId')}
             disabled={!clientId}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-50"
           >
             <option value="">— без договора —</option>
             {(clientContracts.data ?? []).map((c) => (
@@ -512,16 +486,16 @@ export function NewTicketPage() {
             <p className="text-muted-foreground mt-1 text-xs">Сначала выберите клиента</p>
           ) : isBudgetClient ? (
             <p className="text-warning mt-1 text-xs">
-              Бюджетная организация — обычно работают по контракту (44-ФЗ). Если контракта
-              нет, заявку всё равно можно завести.{' '}
-              <Link href="/contracts/new" className="underline hover:text-primary">
+              Бюджетная организация — обычно работают по контракту (44-ФЗ). Если контракта нет,
+              заявку всё равно можно завести.{' '}
+              <Link href="/contracts/new" className="hover:text-primary underline">
                 Создать договор
               </Link>
             </p>
           ) : (
             <p className="text-muted-foreground mt-1 text-xs">
               Опционально.{' '}
-              <Link href="/contracts/new" className="underline hover:text-primary">
+              <Link href="/contracts/new" className="hover:text-primary underline">
                 Создать новый
               </Link>
             </p>
@@ -583,7 +557,7 @@ export function NewTicketPage() {
             rows={4}
             {...form.register('symptom', { required: true })}
             placeholder="«При включении монитор показывает заставку, после чего гаснет…»"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
           <RepairArchiveBlock
             symptom={watchedSymptom}
@@ -599,7 +573,7 @@ export function NewTicketPage() {
             rows={2}
             {...form.register('notes')}
             placeholder="Видны только сотрудникам сервиса"
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </div>
 
@@ -608,11 +582,9 @@ export function NewTicketPage() {
             <Label>Назначить инженера</Label>
             <select
               {...form.register('assignedEngineerId')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             >
-              <option value="">
-                {engineers.isLoading ? 'загрузка…' : 'назначим позже'}
-              </option>
+              <option value="">{engineers.isLoading ? 'загрузка…' : 'назначим позже'}</option>
               {(engineers.data ?? []).map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.fullName}
@@ -620,9 +592,7 @@ export function NewTicketPage() {
               ))}
             </select>
             {engineers.error && (
-              <p className="text-destructive mt-1 text-xs">
-                Не удалось загрузить список инженеров
-              </p>
+              <p className="text-destructive mt-1 text-xs">Не удалось загрузить список инженеров</p>
             )}
             <EngineerAssignmentHints
               deviceType={hintDeviceType}
@@ -635,7 +605,7 @@ export function NewTicketPage() {
             <input
               type="date"
               {...form.register('deadlineAt')}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </div>
         </div>
@@ -657,7 +627,7 @@ export function NewTicketPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-4 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? 'Создание…' : 'Создать заявку'}
           </button>
@@ -703,13 +673,7 @@ function Pills<T extends string>({
   );
 }
 
-function Label({
-  children,
-  required = false,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-}) {
+function Label({ children, required = false }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="text-foreground mb-1 flex items-center gap-1 text-xs font-medium">
       {children}

@@ -135,10 +135,7 @@ async function main(): Promise<void> {
   }
 
   function worksSummaryFor(orderId: number): string | null {
-    const parts = [
-      ...(worksByOrder.get(orderId) ?? []),
-      ...(detailsByOrder.get(orderId) ?? []),
-    ];
+    const parts = [...(worksByOrder.get(orderId) ?? []), ...(detailsByOrder.get(orderId) ?? [])];
     if (!parts.length) return null;
     const uniq = Array.from(new Set(parts.map((p) => p.trim()).filter(Boolean)));
     const joined = uniq.join('; ');
@@ -153,8 +150,13 @@ async function main(): Promise<void> {
   const db = DRY_RUN ? null : makeDb(DATABASE_URL);
   let tenantIdValue = 'DRYRUN-TENANT';
   if (db) {
-    const t = await db.select().from(tenants).where(eq(tenants.subdomain, TENANT_SUBDOMAIN)).limit(1);
-    if (!t[0]) throw new Error(`tenant "${TENANT_SUBDOMAIN}" не найден — проверьте IMPORT_TENANT/seed.`);
+    const t = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.subdomain, TENANT_SUBDOMAIN))
+      .limit(1);
+    if (!t[0])
+      throw new Error(`tenant "${TENANT_SUBDOMAIN}" не найден — проверьте IMPORT_TENANT/seed.`);
     tenantIdValue = t[0].id;
   }
 
@@ -211,7 +213,10 @@ async function main(): Promise<void> {
   if (!db) throw new Error('no db');
   console.info('\nЗапись в БД…');
   for (let i = 0; i < rows.length; i += 500) {
-    await db.insert(repairArchive).values(rows.slice(i, i + 500)).onConflictDoNothing();
+    await db
+      .insert(repairArchive)
+      .values(rows.slice(i, i + 500))
+      .onConflictDoNothing();
   }
   console.info(`  ✓ repair_archive: ${rows.length}`);
   console.info('\n✓ Загрузка архива завершена.');

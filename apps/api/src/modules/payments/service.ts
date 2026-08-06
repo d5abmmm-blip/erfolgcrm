@@ -25,11 +25,7 @@ export async function listByTicketQuery(
   return repoList(db, tenant.id, ticketId);
 }
 
-export async function getTotalsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  ticketId: string,
-) {
+export async function getTotalsQuery(db: Db, tenant: ResolvedTenant, ticketId: string) {
   return repoGetTotal(db, tenant.id, ticketId);
 }
 

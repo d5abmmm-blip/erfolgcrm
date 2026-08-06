@@ -58,7 +58,10 @@ export async function processPurge(payload: StorageCleanupPayload): Promise<void
     shouldPurge = true;
   });
   if (!shouldPurge) {
-    logger.debug({ attachmentId: payload.attachmentId }, 'storage-cleanup skipped (restored or already purged)');
+    logger.debug(
+      { attachmentId: payload.attachmentId },
+      'storage-cleanup skipped (restored or already purged)',
+    );
     return;
   }
   await getObjectStorage().remove(payload.objectKey);
@@ -68,7 +71,10 @@ export async function processPurge(payload: StorageCleanupPayload): Promise<void
       .set({ purgedAt: sql`now()` })
       .where(and(eq(attachments.id, payload.attachmentId), isNull(attachments.purgedAt)));
   });
-  logger.info({ attachmentId: payload.attachmentId, objectKey: payload.objectKey }, 'storage-cleanup purged');
+  logger.info(
+    { attachmentId: payload.attachmentId, objectKey: payload.objectKey },
+    'storage-cleanup purged',
+  );
 }
 
 export function registerStorageCleanupWorker(): void {

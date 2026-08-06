@@ -35,12 +35,7 @@ const templateLineSchema = z.object({
   name: z.string().trim().min(1, 'Название обязательно').max(500),
   unit: z.string().trim().min(1).max(20).default('шт'),
   quantity: z.string().regex(QUANTITY_REGEX, 'Количество в формате «12.345»'),
-  unitPriceRub: z
-    .number()
-    .int('Цена в целых рублях')
-    .min(0)
-    .max(MAX_UNIT_PRICE_RUB)
-    .nullable(),
+  unitPriceRub: z.number().int('Цена в целых рублях').min(0).max(MAX_UNIT_PRICE_RUB).nullable(),
   inventoryItemId: z.string().uuid().nullable(),
 });
 
@@ -90,9 +85,7 @@ export const ticketTemplatesRouter = router({
 
   update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateInputSchema }))
-    .mutation(({ ctx, input }) =>
-      updateTemplateCmd(buildCmdCtx(ctx), input.id, input.patch),
-    ),
+    .mutation(({ ctx, input }) => updateTemplateCmd(buildCmdCtx(ctx), input.id, input.patch)),
 
   archive: staffProcedure
     .input(z.object({ id: z.string().uuid() }))

@@ -58,7 +58,8 @@ export function makeBackupRouter(): Router {
       logger.error({ err }, 'backup pg_dump spawn failed');
       if (!res.headersSent) {
         res.status(500).json({
-          error: 'Не удалось запустить создание копии. Проверьте, что PostgreSQL запущен и доступен.',
+          error:
+            'Не удалось запустить создание копии. Проверьте, что PostgreSQL запущен и доступен.',
         });
       } else {
         res.destroy();
@@ -95,58 +96,70 @@ export function makeBackupRouter(): Router {
   // POST /import?t=&exp=&sig=&dryRun=1 — загрузка старой базы (JSON-экспорт WinServisePro).
   // Тело — сырой JSON-файл. Авторизация — HMAC-токен (директор, requestImportToken).
   // dryRun=1 — сухой прогон (ничего не пишет, только отчёт). Импортёр идемпотентен.
-  router.post('/import', express.raw({ type: '*/*', limit: MAX_IMPORT_BYTES }), async (req, res) => {
-    const tenantId = asStr(req.query.t);
-    const exp = Number(asStr(req.query.exp) || 0);
-    const sig = asStr(req.query.sig);
-    const dryRun = asStr(req.query.dryRun) === '1';
+  router.post(
+    '/import',
+    express.raw({ type: '*/*', limit: MAX_IMPORT_BYTES }),
+    async (req, res) => {
+      const tenantId = asStr(req.query.t);
+      const exp = Number(asStr(req.query.exp) || 0);
+      const sig = asStr(req.query.sig);
+      const dryRun = asStr(req.query.dryRun) === '1';
 
-    if (!verifyImportToken({ tenantId, exp, sig })) {
-      return res.status(403).json({ error: 'Недействительный или истёкший токен. Откройте страницу заново.' });
-    }
-    const body = req.body as Buffer;
-    if (!body || body.length === 0) {
-      return res.status(400).json({ error: 'Пустой файл.' });
-    }
-    // Валидируем, что это JSON, до запуска импортёра — понятная ошибка вместо краша.
-    try {
-      JSON.parse(body.toString('utf8'));
-    } catch {
-      return res.status(400).json({ error: 'Файл не похож на JSON-экспорт базы.' });
-    }
-
-    const tmpFile = join(tmpdir(), `ws-import-${randomUUID()}.json`);
-    try {
-      await writeFile(tmpFile, body);
-    } catch (err) {
-      logger.error({ err }, 'import: не удалось сохранить временный файл');
-      return res.status(500).json({ error: 'Не удалось принять файл.' });
-    }
-
-    const child = spawnWinServiceImport(tmpFile, { dryRun, tenantId });
-    let out = '';
-    let errOut = '';
-    const cap = (s: string, chunk: Buffer) => (s.length < 64_000 ? s + chunk.toString('utf8') : s);
-    child.stdout.on('data', (c: Buffer) => (out = cap(out, c)));
-    child.stderr.on('data', (c: Buffer) => (errOut = cap(errOut, c)));
-
-    child.on('error', (err) => {
-      logger.error({ err }, 'import: не удалось запустить импортёр');
-      void unlink(tmpFile).catch(() => {});
-      if (!res.headersSent) res.status(500).json({ error: 'Не удалось запустить импорт.' });
-    });
-
-    child.on('close', (code) => {
-      void unlink(tmpFile).catch(() => {});
-      const report = (out + (errOut ? `\n${errOut}` : '')).trim();
-      if (code === 0) {
-        res.json({ ok: true, dryRun, report });
-      } else {
-        logger.error({ code, errOut: errOut.slice(0, 2000) }, 'import: импортёр завершился с ошибкой');
-        res.status(422).json({ ok: false, dryRun, error: 'Импорт завершился с ошибкой.', report });
+      if (!verifyImportToken({ tenantId, exp, sig })) {
+        return res
+          .status(403)
+          .json({ error: 'Недействительный или истёкший токен. Откройте страницу заново.' });
       }
-    });
-  });
+      const body = req.body as Buffer;
+      if (!body || body.length === 0) {
+        return res.status(400).json({ error: 'Пустой файл.' });
+      }
+      // Валидируем, что это JSON, до запуска импортёра — понятная ошибка вместо краша.
+      try {
+        JSON.parse(body.toString('utf8'));
+      } catch {
+        return res.status(400).json({ error: 'Файл не похож на JSON-экспорт базы.' });
+      }
+
+      const tmpFile = join(tmpdir(), `ws-import-${randomUUID()}.json`);
+      try {
+        await writeFile(tmpFile, body);
+      } catch (err) {
+        logger.error({ err }, 'import: не удалось сохранить временный файл');
+        return res.status(500).json({ error: 'Не удалось принять файл.' });
+      }
+
+      const child = spawnWinServiceImport(tmpFile, { dryRun, tenantId });
+      let out = '';
+      let errOut = '';
+      const cap = (s: string, chunk: Buffer) =>
+        s.length < 64_000 ? s + chunk.toString('utf8') : s;
+      child.stdout.on('data', (c: Buffer) => (out = cap(out, c)));
+      child.stderr.on('data', (c: Buffer) => (errOut = cap(errOut, c)));
+
+      child.on('error', (err) => {
+        logger.error({ err }, 'import: не удалось запустить импортёр');
+        void unlink(tmpFile).catch(() => {});
+        if (!res.headersSent) res.status(500).json({ error: 'Не удалось запустить импорт.' });
+      });
+
+      child.on('close', (code) => {
+        void unlink(tmpFile).catch(() => {});
+        const report = (out + (errOut ? `\n${errOut}` : '')).trim();
+        if (code === 0) {
+          res.json({ ok: true, dryRun, report });
+        } else {
+          logger.error(
+            { code, errOut: errOut.slice(0, 2000) },
+            'import: импортёр завершился с ошибкой',
+          );
+          res
+            .status(422)
+            .json({ ok: false, dryRun, error: 'Импорт завершился с ошибкой.', report });
+        }
+      });
+    },
+  );
 
   return router;
 }

@@ -9,12 +9,7 @@
  * TicketTemplateNameConflictError, который сервис маппит в TRPC CONFLICT.
  */
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
-import {
-  ticketTemplates,
-  withTenantTx,
-  type Db,
-  type TicketTemplateLine,
-} from '@erfolg/db';
+import { ticketTemplates, withTenantTx, type Db, type TicketTemplateLine } from '@erfolg/db';
 import {
   TicketTemplateArchivedError,
   TicketTemplateNameConflictError,
@@ -109,11 +104,7 @@ export async function getTemplate(
   id: string,
 ): Promise<TicketTemplateDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
-    const rows = await tx
-      .select()
-      .from(ticketTemplates)
-      .where(eq(ticketTemplates.id, id))
-      .limit(1);
+    const rows = await tx.select().from(ticketTemplates).where(eq(ticketTemplates.id, id)).limit(1);
     return rows[0] ? toDto(rows[0]) : null;
   });
 }
@@ -157,8 +148,7 @@ export async function updateTemplate(
     const setObj: Record<string, unknown> = {};
     if (patch.name !== undefined) setObj.name = patch.name;
     if (patch.description !== undefined) setObj.description = patch.description;
-    if (patch.defaultRepairType !== undefined)
-      setObj.defaultRepairType = patch.defaultRepairType;
+    if (patch.defaultRepairType !== undefined) setObj.defaultRepairType = patch.defaultRepairType;
     if (patch.defaultPriority !== undefined) setObj.defaultPriority = patch.defaultPriority;
     if (patch.defaultEstimatedMinutes !== undefined)
       setObj.defaultEstimatedMinutes = patch.defaultEstimatedMinutes;

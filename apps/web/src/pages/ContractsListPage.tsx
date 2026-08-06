@@ -57,7 +57,7 @@ export function ContractsListPage() {
 
   const list = trpc.contracts.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined),
+    status: status || undefined,
     page,
   });
 
@@ -82,10 +82,7 @@ export function ContractsListPage() {
       key: 'client',
       label: 'Клиент',
       render: (c) => (
-        <Link
-          href={`/clients/${c.clientId}`}
-          className="text-muted-foreground hover:text-primary"
-        >
+        <Link href={`/clients/${c.clientId}`} className="text-muted-foreground hover:text-primary">
           {c.clientDisplayName}
         </Link>
       ),
@@ -146,7 +143,7 @@ export function ContractsListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="search"
@@ -156,7 +153,7 @@ export function ContractsListPage() {
               setPage(1);
             }}
             placeholder="Поиск по номеру, клиенту"
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
         <select
@@ -165,7 +162,7 @@ export function ContractsListPage() {
             setStatus(e.target.value as StatusOption);
             setPage(1);
           }}
-          className="bg-background rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -184,12 +181,7 @@ export function ContractsListPage() {
         rowKey={(c) => c.id}
       />
 
-      <Pagination
-        page={page}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
     </div>
   );
 }

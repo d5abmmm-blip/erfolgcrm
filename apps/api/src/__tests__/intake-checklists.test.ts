@@ -11,13 +11,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { like, or } from 'drizzle-orm';
-import {
-  getDb,
-  intakeChecklistItems,
-  intakeChecklists,
-  tickets,
-  withTenantTx,
-} from '@erfolg/db';
+import { getDb, intakeChecklistItems, intakeChecklists, tickets, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   createChecklistWithItems,
@@ -118,10 +112,7 @@ describe('createChecklistWithItems', () => {
     expect(fetched).not.toBeNull();
     expect(fetched!.kind).toBe('handover');
     expect(fetched!.items).toHaveLength(2);
-    expect(fetched!.items.map((i) => i.label)).toEqual([
-      `${NOTE_PREFIX}A`,
-      `${NOTE_PREFIX}B`,
-    ]);
+    expect(fetched!.items.map((i) => i.label)).toEqual([`${NOTE_PREFIX}A`, `${NOTE_PREFIX}B`]);
   });
 });
 

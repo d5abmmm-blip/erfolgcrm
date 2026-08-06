@@ -215,11 +215,7 @@ export interface ListTicketsOpts {
 }
 
 /** Атомарный INC сквозного счётчика для (tenant, kind, year). */
-export async function nextTicketNumber(
-  tx: Tx,
-  tenantId: string,
-  year: number,
-): Promise<string> {
+export async function nextTicketNumber(tx: Tx, tenantId: string, year: number): Promise<string> {
   const result = await tx.execute(sql`
     INSERT INTO tenant_counters (tenant_id, kind, year, last_value)
     VALUES (${tenantId}::uuid, ${TICKET_COUNTER_KIND}, ${year}, 1)
@@ -263,9 +259,7 @@ function buildListFilters(opts: ListTicketsOpts, helperTicketIds: string[] = [])
     // второй инженер на выезде свою же заявку в кабинете не видел.
     const mine = eq(tickets.assignedEngineerId, opts.engineerId);
     filters.push(
-      helperTicketIds.length > 0
-        ? (or(mine, inArray(tickets.id, helperTicketIds)) as SQL)
-        : mine,
+      helperTicketIds.length > 0 ? (or(mine, inArray(tickets.id, helperTicketIds)) as SQL) : mine,
     );
   }
   if (opts.clientId) filters.push(eq(tickets.clientId, opts.clientId));
@@ -407,9 +401,7 @@ export async function listTickets(
     // Список id берём заранее: фильтр строится синхронно, а помощники лежат
     // в отдельной таблице. Заявок у одного инженера сотни — список короткий.
     const helperIds =
-      opts.engineerId && opts.unassigned !== true
-        ? await helperTicketIds(tx, opts.engineerId)
-        : [];
+      opts.engineerId && opts.unassigned !== true ? await helperTicketIds(tx, opts.engineerId) : [];
     const whereClause = buildListFilters(opts, helperIds);
     const items = await tx
       .select({
@@ -532,10 +524,7 @@ export async function getTicket(
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .leftJoin(engineerUser, eq(engineerUser.id, tickets.assignedEngineerId))
       .leftJoin(dispatcherUser, eq(dispatcherUser.id, tickets.assignedDispatcherId))
-      .leftJoin(
-        contracts,
-        and(eq(contracts.id, tickets.contractId), isNull(contracts.deletedAt)),
-      )
+      .leftJoin(contracts, and(eq(contracts.id, tickets.contractId), isNull(contracts.deletedAt)))
       // Удалённая заявка не открывается — это же чтение гейтит update/changeStatus/reopen.
       .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)))
       .limit(1);
@@ -588,10 +577,7 @@ const PARTS_ACTIVE_STATUSES: TicketStatus[] = [
  * daysWaiting считается от blocked_since (когда встал; фолбэк на received_at для
  * старых записей). Сортировка: дольше всех — сверху. Клиент/техника/инженер — LEFT JOIN.
  */
-export async function partsWaitingList(
-  db: Db,
-  tenantId: string,
-): Promise<PartWaitingItem[]> {
+export async function partsWaitingList(db: Db, tenantId: string): Promise<PartWaitingItem[]> {
   const engineerUser = alias(users, 'engineer_user');
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
@@ -980,7 +966,7 @@ export async function setWaitingForPart(
     if (!before) throw new TicketNotFoundError();
 
     // Заметку храним только когда флаг включён; при снятии чистим её.
-    const nextNote = waiting ? (note?.trim() || null) : null;
+    const nextNote = waiting ? note?.trim() || null : null;
     const changed =
       before.waitingForPart !== waiting || (before.waitingForPartNote ?? null) !== nextNote;
 
@@ -1049,11 +1035,7 @@ export async function getOrCreateTrackToken(
 }
 
 /** Отозвать публичную ссылку (обнулить токен). Старая ссылка перестаёт работать. */
-export async function revokeTrackToken(
-  db: Db,
-  tenantId: string,
-  ticketId: string,
-): Promise<void> {
+export async function revokeTrackToken(db: Db, tenantId: string, ticketId: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({ id: tickets.id })
@@ -1382,10 +1364,7 @@ export interface RepoScheduleResult {
  *
  * Бросает TicketNotFoundError если заявка не найдена в текущем tenant'е (RLS).
  */
-export async function repoSchedule(
-  tx: Tx,
-  input: RepoScheduleInput,
-): Promise<RepoScheduleResult> {
+export async function repoSchedule(tx: Tx, input: RepoScheduleInput): Promise<RepoScheduleResult> {
   const current = await tx
     .select({
       id: tickets.id,

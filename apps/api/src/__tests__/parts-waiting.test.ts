@@ -86,10 +86,7 @@ describe('partsWaitingList', () => {
     const id = await makeTicket();
     await setWaitingForPart(getDb(), erfolgId, null, id, true, 'деталь');
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .update(tickets)
-        .set({ status: 'closed', closedAt: new Date() })
-        .where(eq(tickets.id, id)),
+      tx.update(tickets).set({ status: 'closed', closedAt: new Date() }).where(eq(tickets.id, id)),
     );
     const all = await partsWaitingList(getDb(), erfolgId);
     expect(all.some((x) => x.id === id)).toBe(false);
@@ -106,7 +103,8 @@ describe('partsWaitingList', () => {
 
 describe('navBadges.partsWaiting', () => {
   it('растёт на новую ждущую заявку (staff), 0 для инженера', async () => {
-    const before = (await getNavBadgeCounts(getDb(), erfolgId, 'director', engineerId)).partsWaiting;
+    const before = (await getNavBadgeCounts(getDb(), erfolgId, 'director', engineerId))
+      .partsWaiting;
 
     const id = await makeTicket();
     await setWaitingForPart(getDb(), erfolgId, null, id, true, 'деталь');

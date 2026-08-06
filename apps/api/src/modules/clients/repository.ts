@@ -8,13 +8,7 @@
  */
 import { and, asc, count, desc, eq, or, sql, type SQL } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
-import {
-  assets,
-  clients,
-  contacts,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { assets, clients, contacts, withTenantTx, type Db } from '@erfolg/db';
 
 export interface ContactDto {
   id: string;
@@ -114,9 +108,7 @@ export async function listClients(
   else filters.push(eq(clients.status, 'active'));
   if (opts.search) {
     const q = `%${opts.search.trim()}%`;
-    filters.push(
-      or(ruIlike(clients.displayName, q), ruIlike(clients.inn, q)) as SQL,
-    );
+    filters.push(or(ruIlike(clients.displayName, q), ruIlike(clients.inn, q)) as SQL);
   }
   const whereClause = filters.length ? and(...filters) : undefined;
 
@@ -142,10 +134,7 @@ export async function listClients(
       .limit(PAGE_SIZE_DEFAULT)
       .offset(offset);
 
-    const totalRow = await tx
-      .select({ value: count() })
-      .from(clients)
-      .where(whereClause);
+    const totalRow = await tx.select({ value: count() }).from(clients).where(whereClause);
 
     return {
       items: items.map((r) => ({
@@ -281,7 +270,9 @@ export async function searchClients(
   db: Db,
   tenantId: string,
   q: string,
-): Promise<Array<{ id: string; displayName: string; inn: string | null; type: 'legal' | 'individual' }>> {
+): Promise<
+  Array<{ id: string; displayName: string; inn: string | null; type: 'legal' | 'individual' }>
+> {
   const query = `%${q.trim()}%`;
   return withTenantTx(db, tenantId, async (tx) => {
     return tx
@@ -383,16 +374,20 @@ export async function updateClient(
   return withTenantTx(db, tenantId, async (tx) => {
     const setClauses: SQL[] = [];
     if (patch.displayName !== undefined) setClauses.push(sql`display_name = ${patch.displayName}`);
-    if (patch.subtype !== undefined) setClauses.push(sql`subtype = ${patch.subtype}::client_subtype`);
+    if (patch.subtype !== undefined)
+      setClauses.push(sql`subtype = ${patch.subtype}::client_subtype`);
     if (patch.inn !== undefined) setClauses.push(sql`inn = ${patch.inn}`);
     if (patch.kpp !== undefined) setClauses.push(sql`kpp = ${patch.kpp}`);
     if (patch.ogrn !== undefined) setClauses.push(sql`ogrn = ${patch.ogrn}`);
-    if (patch.legalAddress !== undefined) setClauses.push(sql`legal_address = ${patch.legalAddress}`);
+    if (patch.legalAddress !== undefined)
+      setClauses.push(sql`legal_address = ${patch.legalAddress}`);
     if (patch.phone !== undefined) setClauses.push(sql`phone = ${patch.phone}`);
     if (patch.email !== undefined) setClauses.push(sql`email = ${patch.email}`);
-    if (patch.treasuryAccount !== undefined) setClauses.push(sql`treasury_account = ${patch.treasuryAccount}`);
+    if (patch.treasuryAccount !== undefined)
+      setClauses.push(sql`treasury_account = ${patch.treasuryAccount}`);
     if (patch.eksAccount !== undefined) setClauses.push(sql`eks_account = ${patch.eksAccount}`);
-    if (patch.personalAccount !== undefined) setClauses.push(sql`personal_account = ${patch.personalAccount}`);
+    if (patch.personalAccount !== undefined)
+      setClauses.push(sql`personal_account = ${patch.personalAccount}`);
     if (patch.notes !== undefined) setClauses.push(sql`notes = ${patch.notes}`);
     if (patch.individualFullName !== undefined)
       setClauses.push(sql`individual_full_name = ${patch.individualFullName}`);
@@ -407,11 +402,7 @@ export async function updateClient(
   });
 }
 
-export async function archiveClient(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<void> {
+export async function archiveClient(db: Db, tenantId: string, id: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
       .update(clients)
@@ -429,16 +420,9 @@ export async function archiveClient(
  * (service.ts — можно ли выбрать клиента). Клиент вернулся бы наполовину:
  * в списках есть, в кабинете безымянный, в trade-in невыбираемый.
  */
-export async function unarchiveClient(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<void> {
+export async function unarchiveClient(db: Db, tenantId: string, id: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
-    await tx
-      .update(clients)
-      .set({ status: 'active', deletedAt: null })
-      .where(eq(clients.id, id));
+    await tx.update(clients).set({ status: 'active', deletedAt: null }).where(eq(clients.id, id));
   });
 }
 
@@ -504,11 +488,7 @@ export async function updateContact(
   });
 }
 
-export async function deleteContact(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<void> {
+export async function deleteContact(db: Db, tenantId: string, id: string): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     await tx.delete(contacts).where(eq(contacts.id, id));
   });

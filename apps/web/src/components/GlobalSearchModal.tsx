@@ -115,9 +115,8 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
         key: `a:${a.id}`,
         href: `/assets/${a.id}`,
         title: a.model,
-        subtitle: [assetIdentifierLine(a) || null, a.ownerClientName]
-          .filter(Boolean)
-          .join(' · ') || null,
+        subtitle:
+          [assetIdentifierLine(a) || null, a.ownerClientName].filter(Boolean).join(' · ') || null,
         group: 'Техника',
       });
     }
@@ -241,7 +240,9 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
   );
 }
 
-function groupHits(flat: FlatHit[]): Array<{ group: string; items: Array<FlatHit & { idx: number }> }> {
+function groupHits(
+  flat: FlatHit[],
+): Array<{ group: string; items: Array<FlatHit & { idx: number }> }> {
   const out: Array<{ group: string; items: Array<FlatHit & { idx: number }> }> = [];
   flat.forEach((hit, idx) => {
     const last = out[out.length - 1];
@@ -281,14 +282,10 @@ function SearchResultsBody({
     );
   }
   if (isLoading) {
-    return (
-      <p className="text-muted-foreground p-6 text-center text-sm">Ищем…</p>
-    );
+    return <p className="text-muted-foreground p-6 text-center text-sm">Ищем…</p>;
   }
   if (flat.length === 0) {
-    return (
-      <p className="text-muted-foreground p-6 text-center text-sm">Ничего не найдено.</p>
-    );
+    return <p className="text-muted-foreground p-6 text-center text-sm">Ничего не найдено.</p>;
   }
   return (
     <div className="py-1">
@@ -305,16 +302,12 @@ function SearchResultsBody({
               onMouseEnter={() => onHover(hit.idx)}
               className={cn(
                 'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm transition',
-                hit.idx === activeIdx
-                  ? 'bg-secondary text-secondary-foreground'
-                  : 'hover:bg-muted',
+                hit.idx === activeIdx ? 'bg-secondary text-secondary-foreground' : 'hover:bg-muted',
               )}
             >
               <span className="font-medium leading-tight">{hit.title}</span>
               {hit.subtitle ? (
-                <span className="text-muted-foreground text-xs leading-tight">
-                  {hit.subtitle}
-                </span>
+                <span className="text-muted-foreground text-xs leading-tight">{hit.subtitle}</span>
               ) : null}
             </button>
           ))}

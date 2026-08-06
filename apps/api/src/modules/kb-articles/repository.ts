@@ -145,9 +145,7 @@ export async function listArticles(
       filters.push(sql`${kbArticles.assetModels} @> ARRAY[${opts.assetModel}]::text[]`);
     }
     if (opts.attachedAssetId) {
-      filters.push(
-        sql`${kbArticles.attachedAssetIds} @> ARRAY[${opts.attachedAssetId}]::uuid[]`,
-      );
+      filters.push(sql`${kbArticles.attachedAssetIds} @> ARRAY[${opts.attachedAssetId}]::uuid[]`);
     }
 
     const queryRaw = (opts.query ?? '').trim().toLowerCase();
@@ -204,11 +202,7 @@ export async function getArticle(
   id: string,
 ): Promise<KbArticleDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
-    const rows = await tx
-      .select()
-      .from(kbArticles)
-      .where(eq(kbArticles.id, id))
-      .limit(1);
+    const rows = await tx.select().from(kbArticles).where(eq(kbArticles.id, id)).limit(1);
     return rows[0] ? toDto(rows[0]) : null;
   });
 }
@@ -249,14 +243,9 @@ export async function updateArticle(
     if (patch.body !== undefined) setObj.body = patch.body;
     if (patch.tags !== undefined) setObj.tags = patch.tags;
     if (patch.assetModels !== undefined) setObj.assetModels = patch.assetModels;
-    if (patch.attachedAssetIds !== undefined)
-      setObj.attachedAssetIds = patch.attachedAssetIds;
+    if (patch.attachedAssetIds !== undefined) setObj.attachedAssetIds = patch.attachedAssetIds;
     if (Object.keys(setObj).length === 0) {
-      const existing = await tx
-        .select()
-        .from(kbArticles)
-        .where(eq(kbArticles.id, id))
-        .limit(1);
+      const existing = await tx.select().from(kbArticles).where(eq(kbArticles.id, id)).limit(1);
       if (!existing[0]) throw new KbArticleNotFoundError();
       return toDto(existing[0]);
     }
@@ -272,11 +261,7 @@ export async function updateArticle(
   });
 }
 
-export async function archiveArticle(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<KbArticleDto> {
+export async function archiveArticle(db: Db, tenantId: string, id: string): Promise<KbArticleDto> {
   return withTenantTx(db, tenantId, async (tx) => {
     const updated = await tx
       .update(kbArticles)
@@ -285,11 +270,7 @@ export async function archiveArticle(
       .returning();
     const row = updated[0];
     if (!row) {
-      const existing = await tx
-        .select()
-        .from(kbArticles)
-        .where(eq(kbArticles.id, id))
-        .limit(1);
+      const existing = await tx.select().from(kbArticles).where(eq(kbArticles.id, id)).limit(1);
       if (!existing[0]) throw new KbArticleNotFoundError();
       return toDto(existing[0]);
     }

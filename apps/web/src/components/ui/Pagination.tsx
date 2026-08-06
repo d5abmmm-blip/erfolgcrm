@@ -50,13 +50,7 @@ function pageItems(page: number, totalPages: number, siblingCount = 1): PageItem
  * индикатор «Страница N из M · всего T» и поле «перейти к странице» для длинных списков.
  * Отображается только если total > pageSize.
  */
-export function Pagination({
-  page,
-  total,
-  pageSize,
-  onPageChange,
-  className,
-}: PaginationProps) {
+export function Pagination({ page, total, pageSize, onPageChange, className }: PaginationProps) {
   if (total <= pageSize) return null;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const items = pageItems(page, totalPages);
@@ -82,7 +76,7 @@ export function Pagination({
           aria-label="Предыдущая страница"
           disabled={page === 1}
           onClick={() => go(page - 1)}
-          className="hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent rounded-md border px-2 py-1 transition"
+          className="hover:bg-muted rounded-md border px-2 py-1 transition disabled:opacity-40 disabled:hover:bg-transparent"
         >
           ←
         </button>
@@ -116,7 +110,7 @@ export function Pagination({
           aria-label="Следующая страница"
           disabled={page >= totalPages}
           onClick={() => go(page + 1)}
-          className="hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent rounded-md border px-2 py-1 transition"
+          className="hover:bg-muted rounded-md border px-2 py-1 transition disabled:opacity-40 disabled:hover:bg-transparent"
         >
           →
         </button>
@@ -128,13 +122,7 @@ export function Pagination({
 }
 
 /** Быстрый переход к странице по номеру — полезно для длинных списков (сотни страниц). */
-function JumpToPage({
-  totalPages,
-  onGo,
-}: {
-  totalPages: number;
-  onGo: (p: number) => void;
-}) {
+function JumpToPage({ totalPages, onGo }: { totalPages: number; onGo: (p: number) => void }) {
   const [value, setValue] = useState('');
 
   const submit = () => {

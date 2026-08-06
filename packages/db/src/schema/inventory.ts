@@ -101,18 +101,9 @@ export const inventoryBatches = pgTable(
     index('inventory_batches_fefo_idx')
       .on(t.tenantId, t.itemId, sql`${t.expiresAt} ASC NULLS LAST`, t.receivedAt)
       .where(sql`${t.quantityRemaining} > 0`),
-    check(
-      'inventory_batches_qty_nonneg',
-      sql`${t.quantityRemaining} >= 0`,
-    ),
-    check(
-      'inventory_batches_qty_le_initial',
-      sql`${t.quantityRemaining} <= ${t.quantityInitial}`,
-    ),
-    check(
-      'inventory_batches_qty_initial_pos',
-      sql`${t.quantityInitial} > 0`,
-    ),
+    check('inventory_batches_qty_nonneg', sql`${t.quantityRemaining} >= 0`),
+    check('inventory_batches_qty_le_initial', sql`${t.quantityRemaining} <= ${t.quantityInitial}`),
+    check('inventory_batches_qty_initial_pos', sql`${t.quantityInitial} > 0`),
   ],
 );
 

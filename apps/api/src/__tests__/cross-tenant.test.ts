@@ -222,9 +222,9 @@ describe('RLS — withTenantTx с несуществующим tenant_id', () =>
   });
 
   it('бросает ошибку при пустом tenant_id', async () => {
-    await expect(
-      withTenantTx(getDb(), '', async (tx) => tx.select().from(users)),
-    ).rejects.toThrow(/tenantId is required/);
+    await expect(withTenantTx(getDb(), '', async (tx) => tx.select().from(users))).rejects.toThrow(
+      /tenantId is required/,
+    );
   });
 });
 

@@ -24,11 +24,7 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  deleteLine,
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { deleteLine, getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import { issueToWorkOrder } from '../modules/inventory-movements/repository';
 
 let erfolgId = '';

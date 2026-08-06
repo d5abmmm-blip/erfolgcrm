@@ -72,7 +72,10 @@ export function registerWorker<TPayload, TResult>(
     ...opts.workerOptions,
   });
   worker.on('failed', (job, err) =>
-    logger.warn({ queue: opts.name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'job failed'),
+    logger.warn(
+      { queue: opts.name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message },
+      'job failed',
+    ),
   );
   worker.on('error', (err) => logger.error({ queue: opts.name, err }, 'worker error'));
   workers.push(worker);

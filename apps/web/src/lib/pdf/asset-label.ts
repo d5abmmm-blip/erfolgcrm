@@ -45,7 +45,15 @@ export function buildAssetLabelDoc(input: BuildLabelInput): TDocumentDefinitions
     },
     {
       canvas: [
-        { type: 'line', x1: 0, y1: 1, x2: 54 * MM, y2: 1, lineWidth: 0.6, lineColor: BRAND_PRIMARY },
+        {
+          type: 'line',
+          x1: 0,
+          y1: 1,
+          x2: 54 * MM,
+          y2: 1,
+          lineWidth: 0.6,
+          lineColor: BRAND_PRIMARY,
+        },
       ],
       margin: [0, 1, 0, 2],
     },

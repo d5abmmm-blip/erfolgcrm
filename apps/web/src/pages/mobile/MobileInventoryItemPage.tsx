@@ -100,7 +100,7 @@ export function MobileInventoryItemPage() {
         </div>
 
         {it.notes && (
-          <div className="bg-muted/40 rounded-md p-3 text-sm whitespace-pre-wrap">{it.notes}</div>
+          <div className="bg-muted/40 whitespace-pre-wrap rounded-md p-3 text-sm">{it.notes}</div>
         )}
       </div>
 
@@ -124,9 +124,7 @@ export function MobileInventoryItemPage() {
             {(movements.data ?? []).map((m) => (
               <li key={m.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    {MOVEMENT_KIND_LABEL[m.kind] ?? m.kind}
-                  </div>
+                  <div className="text-sm font-medium">{MOVEMENT_KIND_LABEL[m.kind] ?? m.kind}</div>
                   {m.comment && (
                     <div className="text-muted-foreground truncate text-xs">{m.comment}</div>
                   )}

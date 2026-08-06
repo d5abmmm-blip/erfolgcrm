@@ -69,9 +69,7 @@ export const leads = pgTable(
     source: leadSourceEnum('source').notNull().default('other'),
 
     /** Потенциальная сумма сделки, руб. */
-    estimatedValue: numeric('estimated_value', { precision: 14, scale: 2 })
-      .notNull()
-      .default('0'),
+    estimatedValue: numeric('estimated_value', { precision: 14, scale: 2 }).notNull().default('0'),
 
     /** Ответственный менеджер (users.id). Имя резолвится join'ом в DTO. */
     assignedUserId: uuid('assigned_user_id'),

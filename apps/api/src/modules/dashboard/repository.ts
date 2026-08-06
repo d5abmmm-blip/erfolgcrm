@@ -407,11 +407,7 @@ export interface LowStockRow {
   deficit: string;
 }
 
-export async function listLowStock(
-  db: Db,
-  tenantId: string,
-  limit = 100,
-): Promise<LowStockRow[]> {
+export async function listLowStock(db: Db, tenantId: string, limit = 100): Promise<LowStockRow[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = (await tx.execute(sql`
       SELECT
@@ -549,14 +545,13 @@ export async function getDailySummary(
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 1);
 
-  const [metrics, overdueInvoices, slaAtRisk, lowStock, maintenanceToday] =
-    await Promise.all([
-      getMetrics(db, tenantId, { start, end }),
-      listOverdueInvoices(db, tenantId, 50),
-      listSlaAtRisk(db, tenantId, 50),
-      listLowStock(db, tenantId, 50),
-      listMaintenanceForToday(db, tenantId, true, 100),
-    ]);
+  const [metrics, overdueInvoices, slaAtRisk, lowStock, maintenanceToday] = await Promise.all([
+    getMetrics(db, tenantId, { start, end }),
+    listOverdueInvoices(db, tenantId, 50),
+    listSlaAtRisk(db, tenantId, 50),
+    listLowStock(db, tenantId, 50),
+    listMaintenanceForToday(db, tenantId, true, 100),
+  ]);
 
   const startIso = start.toISOString();
   const endIso = end.toISOString();
@@ -600,4 +595,3 @@ export async function getDailySummary(
     closedTicketsToday,
   };
 }
-

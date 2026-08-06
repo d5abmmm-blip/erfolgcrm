@@ -18,13 +18,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
-import {
-  clients,
-  getDb,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { changeStatus, createTicket } from '../modules/tickets/repository';
 import type { Context } from '../trpc/context';
@@ -80,7 +74,8 @@ async function clearTestTickets(): Promise<void> {
     tx.select({ id: users.id, role: users.role }).from(users),
   );
   const eng = fresh.find((u) => u.id === engineerId) ?? fresh.find((u) => u.role === 'engineer');
-  const disp = fresh.find((u) => u.id === dispatcherId) ?? fresh.find((u) => u.role === 'dispatcher');
+  const disp =
+    fresh.find((u) => u.id === dispatcherId) ?? fresh.find((u) => u.role === 'dispatcher');
   if (eng) engineerId = eng.id;
   if (disp) dispatcherId = disp.id;
   directorId = engineerId;
@@ -101,7 +96,8 @@ function fakeRes() {
 }
 
 function makeCtx(role: 'director' | 'dispatcher' | 'engineer'): Context {
-  const userId = role === 'director' ? directorId : role === 'dispatcher' ? dispatcherId : engineerId;
+  const userId =
+    role === 'director' ? directorId : role === 'dispatcher' ? dispatcherId : engineerId;
   const session: SessionData = {
     tenantId: erfolgId,
     userId,
@@ -218,17 +214,17 @@ describe('ticket state machine: реальные защиты (на router/servi
   it('engineer не может ставить closed (router: ENGINEER_ALLOWED_STATUSES)', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx('engineer'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'closed' }),
-    ).rejects.toBeInstanceOf(TRPCError);
+    await expect(caller.tickets.changeStatus({ id, status: 'closed' })).rejects.toBeInstanceOf(
+      TRPCError,
+    );
   });
 
   it('engineer не может ставить cancelled', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx('engineer'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'cancelled' }),
-    ).rejects.toBeInstanceOf(TRPCError);
+    await expect(caller.tickets.changeStatus({ id, status: 'cancelled' })).rejects.toBeInstanceOf(
+      TRPCError,
+    );
   });
 
   it('engineer МОЖЕТ ставить diagnostics/in_progress/act_pending', async () => {
@@ -243,9 +239,9 @@ describe('ticket state machine: реальные защиты (на router/servi
     await changeStatus(getDb(), erfolgId, null, id, 'cancelled');
     // Диспетчер пытается reopen → FORBIDDEN
     const caller = appRouter.createCaller(makeCtx('dispatcher'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'received' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.tickets.changeStatus({ id, status: 'received' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 
   it('reopen из closed: директор может через service-уровень', async () => {
@@ -264,17 +260,17 @@ describe('ticket state machine: валидация переходов на servi
   it('received → closed через service: BAD_REQUEST (нельзя пропустить act_pending)', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx('dispatcher'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'closed' }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.tickets.changeStatus({ id, status: 'closed' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
   });
 
   it('received → in_progress через service: BAD_REQUEST (нельзя пропустить diagnostics)', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx('dispatcher'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'in_progress' }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.tickets.changeStatus({ id, status: 'in_progress' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
   });
 
   it('received → received (идемпотентно): no-op без ошибки', async () => {
@@ -317,9 +313,9 @@ describe('ticket state machine: валидация переходов на servi
     const id = await createBaseTicket();
     await changeStatus(getDb(), erfolgId, null, id, 'diagnostics');
     const caller = appRouter.createCaller(makeCtx('dispatcher'));
-    await expect(
-      caller.tickets.changeStatus({ id, status: 'estimate' }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.tickets.changeStatus({ id, status: 'estimate' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
   });
 
   it('diagnostics → in_progress через service: OK (новый поток без сметы/согласования)', async () => {

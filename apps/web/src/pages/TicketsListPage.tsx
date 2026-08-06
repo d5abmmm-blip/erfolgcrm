@@ -26,11 +26,7 @@ import {
 } from '../lib/dictionaries';
 
 /** Статусы в фильтре списка: рабочие + завершённые. Устаревшие «Смета»/«Согласование» скрыты. */
-const FILTER_STATUSES: readonly TicketStatus[] = [
-  ...ACTIVE_TICKET_STATUSES,
-  'closed',
-  'cancelled',
-];
+const FILTER_STATUSES: readonly TicketStatus[] = [...ACTIVE_TICKET_STATUSES, 'closed', 'cancelled'];
 
 interface TicketRow {
   id: string;
@@ -101,10 +97,7 @@ export function TicketsListPage() {
       key: 'client',
       label: 'Клиент',
       render: (t) => (
-        <Link
-          href={`/clients/${t.clientId}`}
-          className="text-muted-foreground hover:text-primary"
-        >
+        <Link href={`/clients/${t.clientId}`} className="text-muted-foreground hover:text-primary">
           {t.clientDisplayName}
         </Link>
       ),
@@ -120,10 +113,7 @@ export function TicketsListPage() {
         });
         return (
           <div>
-            <Link
-              href={`/assets/${t.assetId}`}
-              className="text-foreground hover:text-primary"
-            >
+            <Link href={`/assets/${t.assetId}`} className="text-foreground hover:text-primary">
               {t.assetModel}
             </Link>
             {ids && <div className="text-muted-foreground font-mono text-xs">{ids}</div>}
@@ -206,7 +196,7 @@ export function TicketsListPage() {
               setPage(1);
             }}
             placeholder="T-номер, клиент, модель техники, симптом…"
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
       </div>
@@ -286,21 +276,17 @@ export function TicketsListPage() {
         rowKey={(t) => t.id}
       />
 
-      <Pagination
-        page={page}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
     </div>
   );
 }
 
 function ViewToggle({ current }: { current: 'table' | 'kanban' }) {
-  const options: Array<{ v: 'table' | 'kanban'; href: string; icon: typeof List; label: string }> = [
-    { v: 'table', href: '/tickets', icon: List, label: 'Список' },
-    { v: 'kanban', href: '/tickets/kanban', icon: LayoutGrid, label: 'Канбан' },
-  ];
+  const options: Array<{ v: 'table' | 'kanban'; href: string; icon: typeof List; label: string }> =
+    [
+      { v: 'table', href: '/tickets', icon: List, label: 'Список' },
+      { v: 'kanban', href: '/tickets/kanban', icon: LayoutGrid, label: 'Канбан' },
+    ];
   return (
     <div className="bg-secondary inline-flex rounded-md p-0.5">
       {options.map(({ v, href, icon: Icon, label }) => (
@@ -322,13 +308,7 @@ function ViewToggle({ current }: { current: 'table' | 'kanban' }) {
   );
 }
 
-function SlaBadge({
-  target,
-  status,
-}: {
-  target: Date | null;
-  status: TicketStatus;
-}) {
+function SlaBadge({ target, status }: { target: Date | null; status: TicketStatus }) {
   if (status === 'closed' || status === 'cancelled') return null;
   if (!target) return <span className="text-muted-foreground text-xs">—</span>;
   const diffMs = new Date(target).getTime() - Date.now();

@@ -212,77 +212,77 @@ function StaffApp() {
     <SectionDisabled />
   ) : (
     <Switch>
-          <Route path="/" component={DashboardPage} />
-          <Route path="/board" component={BoardPage} />
-          <Route path="/parts-waiting" component={PartsWaitingPage} />
-          <Route path="/tickets" component={TicketsListPage} />
-          <Route path="/tickets/kanban" component={TicketsKanbanPage} />
-          <Route path="/schedule" component={SchedulePage} />
-          <Route path="/calendar" component={CalendarPage} />
-          <Route path="/tickets/new" component={NewTicketPage} />
-          <Route path="/tickets/:id" component={TicketCardPage} />
-          <Route path="/leads" component={LeadsListPage} />
-          <Route path="/leads/new" component={LeadFormPage} />
-          <Route path="/leads/:id/edit" component={LeadFormPage} />
-          <Route path="/leads/:id" component={LeadCardPage} />
-          <Route path="/clients" component={ClientsListPage} />
-          <Route path="/clients/new" component={ClientFormPage} />
-          <Route path="/clients/:id/edit" component={ClientFormPage} />
-          <Route path="/clients/:id/cabinet-users" component={ClientCabinetUsersPage} />
-          <Route path="/clients/:id" component={ClientCardPage} />
-          <Route path="/assets" component={AssetsListPage} />
-          <Route path="/asset-models" component={AssetModelsPage} />
-          <Route path="/assets/new" component={AssetFormPage} />
-          <Route path="/assets/:id/edit" component={AssetFormPage} />
-          <Route path="/assets/:id" component={AssetCardPage} />
-          <Route path="/inventory" component={InventoryListPage} />
-          <Route path="/inventory/:id" component={InventoryItemPage} />
-          <Route path="/maintenance" component={MaintenancePage} />
-          <Route path="/warranties" component={WarrantiesListPage} />
-          <Route path="/warranties/new" component={WarrantyFormPage} />
-          <Route path="/warranties/:id/edit" component={WarrantyFormPage} />
-          <Route path="/trade-in" component={TradeInListPage} />
-          <Route path="/trade-in/new" component={TradeInFormPage} />
-          <Route path="/trade-in/:id/edit" component={TradeInFormPage} />
-          <Route path="/roadmap" component={RoadmapPage} />
-          <Route path="/contracts" component={ContractsListPage} />
-          <Route path="/contracts/new" component={ContractFormPage} />
-          <Route path="/contracts/:id/edit" component={ContractFormPage} />
-          <Route path="/contracts/:id" component={ContractCardPage} />
-          <Route path="/finance" component={FinanceOverviewPage} />
-          <Route path="/finance/receivables" component={ReceivablesPage} />
-          <Route path="/finance/transactions" component={CashJournalPage} />
-          <Route path="/finance/accounts" component={CashAccountsPage} />
-          <Route path="/finance/invoices" component={InvoicesPage} />
-          <Route path="/invoices" component={InvoicesPage} />
-          <Route path="/invoices/:id" component={InvoiceCardPage} />
-          <Route path="/sales" component={SalesPage} />
-          <Route path="/sales/new" component={SalesFormPage} />
-          <Route path="/sales/:id" component={SalesFormPage} />
-          <Route path="/tenders" component={TendersListPage} />
-          <Route path="/tenders/new" component={TenderFormPage} />
-          <Route path="/tenders/:id" component={TenderFormPage} />
-          <Route path="/payroll" component={PayrollPage} />
-          <Route path="/reports" component={ReportsPage} />
-          <Route path="/templates" component={TemplatesPage} />
-          <Route path="/kb" component={KbPage} />
-          <Route path="/mail" component={MailListPage} />
-          <Route path="/settings" component={SettingsPage} />
-          <Route path="/settings/modules" component={ModulesSettingsPage} />
-          <Route path="/settings/backup" component={BackupSettingsPage} />
-          <Route path="/settings/telegram" component={TelegramSettingsPage} />
-          <Route path="/settings/onec" component={OnecSettingsPage} />
-          <Route path="/settings/ai" component={AiSettingsPage} />
-          <Route path="/settings/email" component={MailSettingsPage} />
-          <Route path="/settings/notifications" component={NotificationsSettingsPage} />
-          <Route path="/settings/payroll" component={PayrollSettingsPage} />
-          <Route path="/settings/users" component={UsersPage} />
-          <Route path="/settings/attestations" component={AttestationsPage} />
-          <Route path="/settings/audit" component={AuditLogPage} />
-          <Route path="/settings/security" component={SecurityPage} />
-          <Route>
-            <NotFound />
-          </Route>
+      <Route path="/" component={DashboardPage} />
+      <Route path="/board" component={BoardPage} />
+      <Route path="/parts-waiting" component={PartsWaitingPage} />
+      <Route path="/tickets" component={TicketsListPage} />
+      <Route path="/tickets/kanban" component={TicketsKanbanPage} />
+      <Route path="/schedule" component={SchedulePage} />
+      <Route path="/calendar" component={CalendarPage} />
+      <Route path="/tickets/new" component={NewTicketPage} />
+      <Route path="/tickets/:id" component={TicketCardPage} />
+      <Route path="/leads" component={LeadsListPage} />
+      <Route path="/leads/new" component={LeadFormPage} />
+      <Route path="/leads/:id/edit" component={LeadFormPage} />
+      <Route path="/leads/:id" component={LeadCardPage} />
+      <Route path="/clients" component={ClientsListPage} />
+      <Route path="/clients/new" component={ClientFormPage} />
+      <Route path="/clients/:id/edit" component={ClientFormPage} />
+      <Route path="/clients/:id/cabinet-users" component={ClientCabinetUsersPage} />
+      <Route path="/clients/:id" component={ClientCardPage} />
+      <Route path="/assets" component={AssetsListPage} />
+      <Route path="/asset-models" component={AssetModelsPage} />
+      <Route path="/assets/new" component={AssetFormPage} />
+      <Route path="/assets/:id/edit" component={AssetFormPage} />
+      <Route path="/assets/:id" component={AssetCardPage} />
+      <Route path="/inventory" component={InventoryListPage} />
+      <Route path="/inventory/:id" component={InventoryItemPage} />
+      <Route path="/maintenance" component={MaintenancePage} />
+      <Route path="/warranties" component={WarrantiesListPage} />
+      <Route path="/warranties/new" component={WarrantyFormPage} />
+      <Route path="/warranties/:id/edit" component={WarrantyFormPage} />
+      <Route path="/trade-in" component={TradeInListPage} />
+      <Route path="/trade-in/new" component={TradeInFormPage} />
+      <Route path="/trade-in/:id/edit" component={TradeInFormPage} />
+      <Route path="/roadmap" component={RoadmapPage} />
+      <Route path="/contracts" component={ContractsListPage} />
+      <Route path="/contracts/new" component={ContractFormPage} />
+      <Route path="/contracts/:id/edit" component={ContractFormPage} />
+      <Route path="/contracts/:id" component={ContractCardPage} />
+      <Route path="/finance" component={FinanceOverviewPage} />
+      <Route path="/finance/receivables" component={ReceivablesPage} />
+      <Route path="/finance/transactions" component={CashJournalPage} />
+      <Route path="/finance/accounts" component={CashAccountsPage} />
+      <Route path="/finance/invoices" component={InvoicesPage} />
+      <Route path="/invoices" component={InvoicesPage} />
+      <Route path="/invoices/:id" component={InvoiceCardPage} />
+      <Route path="/sales" component={SalesPage} />
+      <Route path="/sales/new" component={SalesFormPage} />
+      <Route path="/sales/:id" component={SalesFormPage} />
+      <Route path="/tenders" component={TendersListPage} />
+      <Route path="/tenders/new" component={TenderFormPage} />
+      <Route path="/tenders/:id" component={TenderFormPage} />
+      <Route path="/payroll" component={PayrollPage} />
+      <Route path="/reports" component={ReportsPage} />
+      <Route path="/templates" component={TemplatesPage} />
+      <Route path="/kb" component={KbPage} />
+      <Route path="/mail" component={MailListPage} />
+      <Route path="/settings" component={SettingsPage} />
+      <Route path="/settings/modules" component={ModulesSettingsPage} />
+      <Route path="/settings/backup" component={BackupSettingsPage} />
+      <Route path="/settings/telegram" component={TelegramSettingsPage} />
+      <Route path="/settings/onec" component={OnecSettingsPage} />
+      <Route path="/settings/ai" component={AiSettingsPage} />
+      <Route path="/settings/email" component={MailSettingsPage} />
+      <Route path="/settings/notifications" component={NotificationsSettingsPage} />
+      <Route path="/settings/payroll" component={PayrollSettingsPage} />
+      <Route path="/settings/users" component={UsersPage} />
+      <Route path="/settings/attestations" component={AttestationsPage} />
+      <Route path="/settings/audit" component={AuditLogPage} />
+      <Route path="/settings/security" component={SecurityPage} />
+      <Route>
+        <NotFound />
+      </Route>
     </Switch>
   );
 
@@ -324,8 +324,8 @@ function SectionDisabled() {
       <div>
         <h1 className="text-xl font-semibold">Раздел отключён</h1>
         <p className="text-muted-foreground mt-1 max-w-md text-sm">
-          Этот раздел скрыт в настройках компании. Данные не удалены — раздел можно вернуть
-          в «Настройки → Разделы».
+          Этот раздел скрыт в настройках компании. Данные не удалены — раздел можно вернуть в
+          «Настройки → Разделы».
         </p>
       </div>
       <div className="flex gap-2">

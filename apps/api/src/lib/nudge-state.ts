@@ -21,7 +21,8 @@ const ask = (t: string, ticket: string) => `erfolg:eng-nudge:ask:${t}:${ticket}`
 const cnt = (t: string, ticket: string) => `erfolg:eng-nudge:count:${t}:${ticket}`;
 const daily = (t: string, u: string, d: string) => `erfolg:eng-nudge:daily:${t}:${u}:${d}`;
 const morning = (t: string, u: string, d: string) => `erfolg:eng-nudge:morning:${t}:${u}:${d}`;
-const visit = (t: string, ticket: string, d: string) => `erfolg:eng-nudge:visit:${t}:${ticket}:${d}`;
+const visit = (t: string, ticket: string, d: string) =>
+  `erfolg:eng-nudge:visit:${t}:${ticket}:${d}`;
 
 /** true — по заявке давно не спрашивали, слот занят нами (SET NX). */
 export async function tryAcquireAskSlot(tenantId: string, ticketId: string): Promise<boolean> {
@@ -84,7 +85,13 @@ export async function tryMarkMorningSent(
   userId: string,
   dateStr: string,
 ): Promise<boolean> {
-  const set = await getRedis().set(morning(tenantId, userId, dateStr), '1', 'EX', SENT_FLAG_TTL_SEC, 'NX');
+  const set = await getRedis().set(
+    morning(tenantId, userId, dateStr),
+    '1',
+    'EX',
+    SENT_FLAG_TTL_SEC,
+    'NX',
+  );
   return set !== null;
 }
 
@@ -93,6 +100,12 @@ export async function tryMarkVisitReminderSent(
   ticketId: string,
   dateStr: string,
 ): Promise<boolean> {
-  const set = await getRedis().set(visit(tenantId, ticketId, dateStr), '1', 'EX', SENT_FLAG_TTL_SEC, 'NX');
+  const set = await getRedis().set(
+    visit(tenantId, ticketId, dateStr),
+    '1',
+    'EX',
+    SENT_FLAG_TTL_SEC,
+    'NX',
+  );
   return set !== null;
 }

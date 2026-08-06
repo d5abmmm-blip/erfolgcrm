@@ -59,7 +59,9 @@ export const tasks = pgTable(
   },
   (t) => [
     // Для сетки календаря: задачи с датой в месяце.
-    index('tasks_tenant_due_idx').on(t.tenantId, t.dueDate).where(sql`deleted_at IS NULL`),
+    index('tasks_tenant_due_idx')
+      .on(t.tenantId, t.dueDate)
+      .where(sql`deleted_at IS NULL`),
     // Для «моих задач» инженера.
     index('tasks_tenant_assignee_idx')
       .on(t.tenantId, t.assigneeUserId)

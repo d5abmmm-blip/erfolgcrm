@@ -60,20 +60,38 @@ describe('resolveWorkPercent — какой процент платим за р�
   });
 
   it('задан только личный процент, оклада нет → берём личный процент', () => {
-    expect(resolveWorkPercent(rule({ bonusPercent: 15 }), cfg({ baseSalaryKopecks: null, bonusPercent: 25 }))).toBe(25);
+    expect(
+      resolveWorkPercent(
+        rule({ bonusPercent: 15 }),
+        cfg({ baseSalaryKopecks: null, bonusPercent: 25 }),
+      ),
+    ).toBe(25);
   });
 
   it('личного правила нет, общий режим «оклад + бонус» → бонусный процент', () => {
-    expect(resolveWorkPercent(rule({ mode: 'salary_bonus', bonusPercent: 15, pieceworkPercent: 30 }), undefined)).toBe(15);
+    expect(
+      resolveWorkPercent(
+        rule({ mode: 'salary_bonus', bonusPercent: 15, pieceworkPercent: 30 }),
+        undefined,
+      ),
+    ).toBe(15);
   });
 
   it('личного правила нет, общий режим «сделка» → сдельный процент', () => {
-    expect(resolveWorkPercent(rule({ mode: 'piecework', bonusPercent: 15, pieceworkPercent: 30 }), undefined)).toBe(30);
+    expect(
+      resolveWorkPercent(
+        rule({ mode: 'piecework', bonusPercent: 15, pieceworkPercent: 30 }),
+        undefined,
+      ),
+    ).toBe(30);
   });
 
   it('оба поля личного правила пустые → это НЕ личное правило, берём общее', () => {
     expect(
-      resolveWorkPercent(rule({ bonusPercent: 15 }), cfg({ baseSalaryKopecks: null, bonusPercent: null })),
+      resolveWorkPercent(
+        rule({ bonusPercent: 15 }),
+        cfg({ baseSalaryKopecks: null, bonusPercent: null }),
+      ),
     ).toBe(15);
   });
 
@@ -81,7 +99,10 @@ describe('resolveWorkPercent — какой процент платим за р�
     // Зарплата грузит личные настройки только у активных (loadUserPayoutConfigs:
     // AND is_active = true). Себестоимость обязана вести себя так же.
     expect(
-      resolveWorkPercent(rule({ mode: 'piecework', pieceworkPercent: 30 }), cfg({ isActive: false, bonusPercent: 99 })),
+      resolveWorkPercent(
+        rule({ mode: 'piecework', pieceworkPercent: 30 }),
+        cfg({ isActive: false, bonusPercent: 99 }),
+      ),
     ).toBe(30);
   });
 });

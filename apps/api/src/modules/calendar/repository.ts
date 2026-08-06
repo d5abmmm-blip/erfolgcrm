@@ -69,8 +69,7 @@ export async function listMonthEvents(
   // День timestamptz-поля в поясе tenant'а (строкой YYYY-MM-DD).
   const dayOf = (col: unknown) =>
     sql<string>`to_char(${col} at time zone ${timezone}, 'YYYY-MM-DD')`;
-  const timeOf = (col: unknown) =>
-    sql<string>`to_char(${col} at time zone ${timezone}, 'HH24:MI')`;
+  const timeOf = (col: unknown) => sql<string>`to_char(${col} at time zone ${timezone}, 'HH24:MI')`;
   const inMonth = (col: unknown) =>
     sql`(${col} at time zone ${timezone})::date >= ${monthStart}::date
         and (${col} at time zone ${timezone})::date < ${monthEnd}::date`;
@@ -153,12 +152,7 @@ export async function listMonthEvents(
       })
       .from(maintenanceSchedules)
       .leftJoin(assets, eq(assets.id, maintenanceSchedules.assetId))
-      .where(
-        and(
-          eq(maintenanceSchedules.isActive, true),
-          inMonth(maintenanceSchedules.nextDueAt),
-        ),
-      );
+      .where(and(eq(maintenanceSchedules.isActive, true), inMonth(maintenanceSchedules.nextDueAt)));
     for (const r of maint) {
       events.push({
         type: 'maintenance',
@@ -400,18 +394,11 @@ export async function markCalendarReminderSent(
   id: string,
 ): Promise<void> {
   await withTenantTx(db, tenantId, (tx) =>
-    tx
-      .update(calendarEvents)
-      .set({ remindedAt: new Date() })
-      .where(eq(calendarEvents.id, id)),
+    tx.update(calendarEvents).set({ remindedAt: new Date() }).where(eq(calendarEvents.id, id)),
   );
 }
 
-export async function deleteCalendarEvent(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<boolean> {
+export async function deleteCalendarEvent(db: Db, tenantId: string, id: string): Promise<boolean> {
   // Soft delete — единый паттерн проекта (deleted_at).
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx

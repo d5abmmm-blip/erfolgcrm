@@ -28,10 +28,7 @@ import {
   type TicketTemplateDto,
   type UpdateTemplateInput,
 } from './repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine as repoUpsertLine,
-} from '../work-orders/repository';
+import { getOrCreateWorkOrder, upsertLine as repoUpsertLine } from '../work-orders/repository';
 import {
   getTicket as repoGetTicket,
   updateTicket as repoUpdateTicket,
@@ -49,10 +46,7 @@ export async function listTemplatesQuery(
   return repoList(ctx.db, ctx.tenant.id, opts);
 }
 
-export async function getTemplateQuery(
-  ctx: CmdCtx,
-  id: string,
-): Promise<TicketTemplateDto> {
+export async function getTemplateQuery(ctx: CmdCtx, id: string): Promise<TicketTemplateDto> {
   const tpl = await repoGet(ctx.db, ctx.tenant.id, id);
   if (!tpl) throw new TRPCError({ code: 'NOT_FOUND', message: 'Шаблон не найден' });
   return tpl;
@@ -109,10 +103,7 @@ export async function updateTemplateCmd(
   return tpl;
 }
 
-export async function archiveTemplateCmd(
-  ctx: CmdCtx,
-  id: string,
-): Promise<TicketTemplateDto> {
+export async function archiveTemplateCmd(ctx: CmdCtx, id: string): Promise<TicketTemplateDto> {
   let tpl: TicketTemplateDto;
   try {
     tpl = await repoArchive(ctx.db, ctx.tenant.id, id);
@@ -132,10 +123,7 @@ export async function archiveTemplateCmd(
   return tpl;
 }
 
-export async function unarchiveTemplateCmd(
-  ctx: CmdCtx,
-  id: string,
-): Promise<TicketTemplateDto> {
+export async function unarchiveTemplateCmd(ctx: CmdCtx, id: string): Promise<TicketTemplateDto> {
   let tpl: TicketTemplateDto;
   try {
     tpl = await repoUnarchive(ctx.db, ctx.tenant.id, id);
@@ -215,13 +203,7 @@ export async function applyTemplateCmd(
     appliedDefaults.priority = true;
   }
   if (Object.keys(ticketPatch).length > 0) {
-    await repoUpdateTicket(
-      ctx.db,
-      ctx.tenant.id,
-      ctx.session.userId,
-      input.ticketId,
-      ticketPatch,
-    );
+    await repoUpdateTicket(ctx.db, ctx.tenant.id, ctx.session.userId, input.ticketId, ticketPatch);
   }
   // estimated_minutes — это поле расписания (Stage 11). Перезаписываем только если
   // тикет ещё не запланирован, чтобы не сломать существующий график инженера.

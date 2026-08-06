@@ -40,7 +40,10 @@ export function SalesOverview({ period, periodLabel }: { period: Period; periodL
     setExporting(true);
     setExportError(null);
     try {
-      const safe = periodLabel.replace(/[^\wа-яё\- ]/gi, '').trim().replace(/\s+/g, '_');
+      const safe = periodLabel
+        .replace(/[^\wа-яё\- ]/gi, '')
+        .trim()
+        .replace(/\s+/g, '_');
       await downloadSalesAnalyticsXlsx(a, periodLabel, `Продажи_${safe || 'период'}.xlsx`);
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Не удалось собрать Excel');
@@ -253,14 +256,20 @@ function MonthlyBars({
               {monthLabel(r.month)} {r.month.slice(2, 4)}
             </span>
             <div className="bg-muted relative h-5 flex-1 overflow-hidden rounded">
-              <div className="absolute inset-y-0 left-0 flex h-full" style={{ width: `${barPct}%` }}>
+              <div
+                className="absolute inset-y-0 left-0 flex h-full"
+                style={{ width: `${barPct}%` }}
+              >
                 <div className="bg-primary/50 h-full" style={{ width: `${costPct}%` }} />
                 <div className="bg-success h-full" style={{ width: `${profitPct}%` }} />
               </div>
             </div>
             <span className="w-48 shrink-0 text-right text-xs tabular-nums">
               <span className="font-medium">{formatRubWhole(r.revenueKopecks)}</span>
-              <span className="text-muted-foreground"> · приб {formatRubWhole(r.profitKopecks)}</span>
+              <span className="text-muted-foreground">
+                {' '}
+                · приб {formatRubWhole(r.profitKopecks)}
+              </span>
             </span>
           </div>
         );

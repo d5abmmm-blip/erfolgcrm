@@ -18,10 +18,7 @@ import { useLocation } from 'wouter';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
-import {
-  WeekScheduleCalendar,
-  type ScheduledTicket,
-} from '../components/WeekScheduleCalendar';
+import { WeekScheduleCalendar, type ScheduledTicket } from '../components/WeekScheduleCalendar';
 import { UnscheduledTicketsList } from '../components/UnscheduledTicketsList';
 
 interface UserListRow {
@@ -86,18 +83,11 @@ export function SchedulePage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOfWeek(new Date()));
   const [toast, setToast] = useState<string | null>(null);
 
-  const isStaff =
-    me.data?.user.role === 'director' || me.data?.user.role === 'dispatcher';
+  const isStaff = me.data?.user.role === 'director' || me.data?.user.role === 'dispatcher';
 
-  const engineersQ = trpc.users.list.useQuery(
-    { onlyEngineers: true },
-    { enabled: isStaff },
-  );
+  const engineersQ = trpc.users.list.useQuery({ onlyEngineers: true }, { enabled: isStaff });
 
-  const scheduleQ = trpc.tickets.weeklySchedule.useQuery(
-    { weekStart },
-    { enabled: isStaff },
-  );
+  const scheduleQ = trpc.tickets.weeklySchedule.useQuery({ weekStart }, { enabled: isStaff });
 
   const scheduleMut = trpc.tickets.schedule.useMutation({
     onSuccess: async () => {
@@ -149,8 +139,7 @@ export function SchedulePage() {
   }
 
   const today = new Date();
-  const isCurrentWeek =
-    weekStart.getTime() === getMondayOfWeek(today).getTime();
+  const isCurrentWeek = weekStart.getTime() === getMondayOfWeek(today).getTime();
 
   return (
     <div className="mx-auto flex max-w-[100rem] flex-col gap-4 p-4 md:p-6 lg:h-full">
@@ -206,9 +195,7 @@ export function SchedulePage() {
 
       <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_1fr]">
         <aside className="lg:min-h-0">
-          <UnscheduledTicketsList
-            onTicketClick={(id) => navigate(`/tickets/${id}`)}
-          />
+          <UnscheduledTicketsList onTicketClick={(id) => navigate(`/tickets/${id}`)} />
         </aside>
 
         <section className="min-w-0 lg:min-h-0 lg:overflow-auto">

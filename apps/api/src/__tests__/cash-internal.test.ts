@@ -83,7 +83,9 @@ describe('внутренние операции кассы', () => {
     expect(summary.incomeKopecks).toBe('50000');
     expect(summary.expenseKopecks).toBe('0');
     // Статей внутренних операций нет в разбивке.
-    const catNames = [...summary.incomeByCategory, ...summary.expenseByCategory].map((c) => c.categoryName);
+    const catNames = [...summary.incomeByCategory, ...summary.expenseByCategory].map(
+      (c) => c.categoryName,
+    );
     expect(catNames).not.toContain(INTERNAL_INCOME_CATEGORY);
     expect(catNames).not.toContain(INTERNAL_EXPENSE_CATEGORY);
 
@@ -95,7 +97,9 @@ describe('внутренние операции кассы', () => {
     // Помесячная динамика: 2099-05 без тумблера — 500 ₽, с тумблером — 1500/300.
     const flowDefault = (await getMonthlyFlow(db, erfolgId, 6)).find((m) => m.month === '2099-05');
     expect(flowDefault?.incomeKopecks ?? '0').toBe('50000');
-    const flowFull = (await getMonthlyFlow(db, erfolgId, 6, true)).find((m) => m.month === '2099-05');
+    const flowFull = (await getMonthlyFlow(db, erfolgId, 6, true)).find(
+      (m) => m.month === '2099-05',
+    );
     expect(flowFull?.incomeKopecks).toBe('150000');
     expect(flowFull?.expenseKopecks).toBe('30000');
 

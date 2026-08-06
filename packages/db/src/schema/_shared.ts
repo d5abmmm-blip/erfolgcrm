@@ -7,7 +7,11 @@ import { customType, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /** UUID v7 PK — генерируем в приложении, fallback gen_random_uuid() в БД для надёжности */
-export const pk = () => uuid('id').primaryKey().notNull().default(sql`gen_random_uuid()`);
+export const pk = () =>
+  uuid('id')
+    .primaryKey()
+    .notNull()
+    .default(sql`gen_random_uuid()`);
 
 /** UUID FK — uuid NOT NULL, без PK. Для колонок типа user_id, plan_id и т.п. */
 export const fkUuid = (name: string) => uuid(name).notNull();

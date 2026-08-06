@@ -91,10 +91,14 @@ async function main() {
     SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') AS exists
   `;
   if (!exists[0]?.exists) {
-    await sql.unsafe(`CREATE ROLE app_runtime LOGIN PASSWORD '${runtimePass.replace(/'/g, "''")}' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`);
+    await sql.unsafe(
+      `CREATE ROLE app_runtime LOGIN PASSWORD '${runtimePass.replace(/'/g, "''")}' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
+    );
     console.info('  + role app_runtime created');
   } else {
-    await sql.unsafe(`ALTER ROLE app_runtime WITH PASSWORD '${runtimePass.replace(/'/g, "''")}' NOSUPERUSER NOBYPASSRLS`);
+    await sql.unsafe(
+      `ALTER ROLE app_runtime WITH PASSWORD '${runtimePass.replace(/'/g, "''")}' NOSUPERUSER NOBYPASSRLS`,
+    );
     console.info('  = role app_runtime updated (password reset)');
   }
 
@@ -126,7 +130,9 @@ async function main() {
         SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=${trigger}) AS exists
       `;
       if (!tablesExist[0]?.exists) {
-        console.info(`  ! ${file} skipped — trigger table "${trigger}" does not exist (run pnpm migrate first)`);
+        console.info(
+          `  ! ${file} skipped — trigger table "${trigger}" does not exist (run pnpm migrate first)`,
+        );
         continue;
       }
     }

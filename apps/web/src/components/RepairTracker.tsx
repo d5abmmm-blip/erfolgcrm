@@ -85,8 +85,8 @@ function StageRow({
           className={cn(
             'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
             done && 'bg-success/15 text-success',
-            current && 'bg-primary text-primary-foreground ring-4 ring-primary/15',
-            !done && !current && 'bg-card text-muted-foreground border-2 border-border',
+            current && 'bg-primary text-primary-foreground ring-primary/15 ring-4',
+            !done && !current && 'bg-card text-muted-foreground border-border border-2',
           )}
         >
           {done ? (
@@ -97,10 +97,7 @@ function StageRow({
         </div>
         {!isLast && (
           <div
-            className={cn(
-              'my-1 w-0.5 flex-1',
-              done ? 'bg-success' : 'bg-border',
-            )}
+            className={cn('my-1 w-0.5 flex-1', done ? 'bg-success' : 'bg-border')}
             style={{ minHeight: showWaiting ? '2.75rem' : '1.5rem' }}
           />
         )}

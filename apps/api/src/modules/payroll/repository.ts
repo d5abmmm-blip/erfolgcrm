@@ -84,18 +84,13 @@ export interface SetRuleInput {
   bonusPercent?: number;
 }
 
-export async function setRule(
-  db: Db,
-  tenantId: string,
-  input: SetRuleInput,
-): Promise<PayrollRule> {
+export async function setRule(db: Db, tenantId: string, input: SetRuleInput): Promise<PayrollRule> {
   return withTenantTx(db, tenantId, async (tx) => {
     const values = {
       tenantId,
       mode: input.mode,
       pieceworkPercent: input.pieceworkPercent ?? DEFAULT_RULE.pieceworkPercent,
-      baseSalaryKopecks:
-        input.baseSalaryKopecks ?? BigInt(DEFAULT_RULE.baseSalaryKopecks),
+      baseSalaryKopecks: input.baseSalaryKopecks ?? BigInt(DEFAULT_RULE.baseSalaryKopecks),
       bonusPercent: input.bonusPercent ?? DEFAULT_RULE.bonusPercent,
     };
     const inserted = await tx
@@ -481,10 +476,7 @@ export async function computePayouts(
   const rows = [...byId.values()]
     .map(({ agg, cfg }) => computeRow(rule, agg, cfg))
     .sort((a, b) => Number(BigInt(b.totalEarningsKopecks) - BigInt(a.totalEarningsKopecks)));
-  const grandTotal = rows.reduce(
-    (acc, r) => acc + BigInt(r.totalEarningsKopecks),
-    0n,
-  );
+  const grandTotal = rows.reduce((acc, r) => acc + BigInt(r.totalEarningsKopecks), 0n);
   return {
     rule,
     period: {
@@ -626,11 +618,7 @@ export async function createPayout(
         }
       }
 
-      const categoryId = await ensureExpenseCategory(
-        tx,
-        tenantId,
-        categoryNameForKind(input.kind),
-      );
+      const categoryId = await ensureExpenseCategory(tx, tenantId, categoryNameForKind(input.kind));
       const comment = input.comment?.trim() || (input.kind === 'bonus' ? 'Премия' : 'Выплата ЗП');
 
       const cashRow = await tx
@@ -732,11 +720,7 @@ export async function updatePayout(
           .set({ deletedAt: new Date() })
           .where(eq(cashTransactions.id, cur.cashTransactionId));
       }
-      const categoryId = await ensureExpenseCategory(
-        tx,
-        tenantId,
-        categoryNameForKind(cur.kind),
-      );
+      const categoryId = await ensureExpenseCategory(tx, tenantId, categoryNameForKind(cur.kind));
       const cashRow = await tx
         .insert(cashTransactions)
         .values({

@@ -48,42 +48,40 @@ export const intakeChecklistsRouter = router({
       return row;
     }),
 
-  create: staffProcedure
-    .input(createInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const row = await createChecklistWithItems(
-        ctx.db,
-        ctx.tenant.id,
-        input.ticketId,
-        input.kind,
-        input.items.map((it) => ({
-          label: it.label,
-          status: it.status,
-          comment: it.comment ?? null,
-          photoAttachmentId: it.photoAttachmentId ?? null,
-        })),
-        {
-          completedByUserId: ctx.session.userId,
-          clientSignatureName: input.clientSignatureName ?? null,
-          notes: input.notes ?? null,
-        },
-      );
-      await writeAudit(ctx.db, ctx.tenant.id, {
-        userId: ctx.session.userId,
-        action: 'create',
-        entityType: 'intake_checklist',
-        entityId: row.id,
-        after: {
-          ticketId: row.ticketId,
-          kind: row.kind,
-          itemsCount: row.itemsCount,
-          issuesCount: row.issuesCount,
-        },
-        ip: ctx.ip,
-        userAgent: ctx.userAgent,
-      });
-      return row;
-    }),
+  create: staffProcedure.input(createInputSchema).mutation(async ({ ctx, input }) => {
+    const row = await createChecklistWithItems(
+      ctx.db,
+      ctx.tenant.id,
+      input.ticketId,
+      input.kind,
+      input.items.map((it) => ({
+        label: it.label,
+        status: it.status,
+        comment: it.comment ?? null,
+        photoAttachmentId: it.photoAttachmentId ?? null,
+      })),
+      {
+        completedByUserId: ctx.session.userId,
+        clientSignatureName: input.clientSignatureName ?? null,
+        notes: input.notes ?? null,
+      },
+    );
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'create',
+      entityType: 'intake_checklist',
+      entityId: row.id,
+      after: {
+        ticketId: row.ticketId,
+        kind: row.kind,
+        itemsCount: row.itemsCount,
+        issuesCount: row.issuesCount,
+      },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+    return row;
+  }),
 
   delete: staffProcedure
     .input(z.object({ checklistId: z.string().uuid() }))

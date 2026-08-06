@@ -37,14 +37,8 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createAssetWithEvent } from '../modules/assets/repository';
-import {
-  changeStatus,
-  createTicket,
-} from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
+import { changeStatus, createTicket } from '../modules/tickets/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import { issueToWorkOrder } from '../modules/inventory-movements/repository';
 import {
   createDraft as createInvoiceDraft,
@@ -84,7 +78,10 @@ beforeAll(async () => {
   engineerId = eng.id;
   originalEngineerRate = eng.rate;
   await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx.update(users).set({ hourlyCostRateKopecks: HOURLY_RATE_KOPECKS }).where(eq(users.id, engineerId)),
+    tx
+      .update(users)
+      .set({ hourlyCostRateKopecks: HOURLY_RATE_KOPECKS })
+      .where(eq(users.id, engineerId)),
   );
 });
 
@@ -92,7 +89,10 @@ afterAll(async () => {
   // Restore engineer rate
   if (engineerId && originalEngineerRate >= 0n) {
     await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.update(users).set({ hourlyCostRateKopecks: originalEngineerRate }).where(eq(users.id, engineerId)),
+      tx
+        .update(users)
+        .set({ hourlyCostRateKopecks: originalEngineerRate })
+        .where(eq(users.id, engineerId)),
     );
   }
   // Cleanup test data. Порядок (миграция 0038: invoices/payments теперь RESTRICT,
@@ -301,12 +301,7 @@ describe('e2e: полный цикл от заявки до полностью �
           qty: workOrderLines.quantity,
         })
         .from(workOrderLines)
-        .where(
-          and(
-            eq(workOrderLines.workOrderId, wo.id),
-            eq(workOrderLines.lineType, 'work'),
-          ),
-        ),
+        .where(and(eq(workOrderLines.workOrderId, wo.id), eq(workOrderLines.lineType, 'work'))),
     );
     expect(workLineRows).toHaveLength(2);
     const workCost = workLineRows.reduce(
@@ -402,10 +397,7 @@ describe('e2e: полный цикл от заявки до полностью �
     });
 
     const auditRows = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select({ id: auditLogs.id })
-        .from(auditLogs)
-        .where(eq(auditLogs.entityId, ticketId)),
+      tx.select({ id: auditLogs.id }).from(auditLogs).where(eq(auditLogs.entityId, ticketId)),
     );
     // Хотя repository.changeStatus сам не пишет audit (это делает service-уровень),
     // мы добавили хотя бы одну запись выше — проверим что аудит работает по этому entityId.

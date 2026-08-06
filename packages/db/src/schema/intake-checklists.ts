@@ -7,7 +7,16 @@
  * intake_checklists — заголовок чек-листа (kind = 'intake' | 'handover').
  * intake_checklist_items — пункты с status [ok|issue|na] + comment + опц. фото.
  */
-import { index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { fkUuid, pk, tenantId } from './_shared';
 
 export const checklistKindEnum = pgEnum('checklist_kind', ['intake', 'handover']);
@@ -42,7 +51,5 @@ export const intakeChecklistItems = pgTable(
     comment: text('comment'),
     photoAttachmentId: uuid('photo_attachment_id'),
   },
-  (t) => [
-    index('intake_checklist_items_tenant_checklist_idx').on(t.tenantId, t.checklistId),
-  ],
+  (t) => [index('intake_checklist_items_tenant_checklist_idx').on(t.tenantId, t.checklistId)],
 );

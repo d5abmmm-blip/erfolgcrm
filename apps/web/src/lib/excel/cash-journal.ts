@@ -2,7 +2,14 @@
  * Excel «Журнал кассы» — выгрузка движения денег за выбранные фильтры.
  * Одна строка = одна операция. Доход/расход/перевод, счёт, статья, сумма, клиент, комментарий.
  */
-import { DATE_FMT, MONEY_FMT, downloadWorkbook, getExcelJS, kopecksToRub, makeTableSheet } from './shared';
+import {
+  DATE_FMT,
+  MONEY_FMT,
+  downloadWorkbook,
+  getExcelJS,
+  kopecksToRub,
+  makeTableSheet,
+} from './shared';
 
 export interface CashJournalRow {
   kind: 'income' | 'expense' | 'transfer';

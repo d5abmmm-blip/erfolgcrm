@@ -15,13 +15,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  assets,
-  getDb,
-  metrologyCalibrations,
-  metrologySiDetails,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, getDb, metrologyCalibrations, metrologySiDetails, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   addCalibration,
@@ -66,10 +60,7 @@ async function clearTestData(): Promise<void> {
         .where(like(metrologySiDetails.typeName, `${TYPE_PREFIX}%`));
       // Сброс requires_metrology у тестовых ассетов.
       for (const aid of erfolgAssetIds) {
-        await tx
-          .update(assets)
-          .set({ requiresMetrology: false })
-          .where(eq(assets.id, aid));
+        await tx.update(assets).set({ requiresMetrology: false }).where(eq(assets.id, aid));
       }
     });
   }

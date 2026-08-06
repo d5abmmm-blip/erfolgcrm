@@ -18,12 +18,7 @@ import {
   directorProcedure,
 } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
-import {
-  CLIENT_COOKIE_NAME,
-  loginClient,
-  logoutClient,
-  type LoginResult,
-} from './auth';
+import { CLIENT_COOKIE_NAME, loginClient, logoutClient, type LoginResult } from './auth';
 import {
   changeMyClientPassword,
   ClientUserConflictError,
@@ -154,9 +149,7 @@ export const clientCabinetRouter = router({
       getMyInvoices(db, tenant.id, clientUser.clientId),
       getClientDisplayName(db, tenant.id, clientUser.clientId),
     ]);
-    const open = activeTickets.filter(
-      (t) => t.status !== 'closed' && t.status !== 'cancelled',
-    );
+    const open = activeTickets.filter((t) => t.status !== 'closed' && t.status !== 'cancelled');
     const unpaid = invoicesAll.filter(
       (i) => i.status === 'issued' || i.status === 'partially_paid' || i.status === 'overdue',
     );
@@ -291,23 +284,16 @@ export const clientCabinetRouter = router({
    */
   exportMyData: clientUserProcedure.query(async ({ ctx }) => {
     const { db, tenant, clientUser } = ctx;
-    const [
-      profile,
-      consents,
-      tickets,
-      myAssets,
-      myInvoices,
-      myPayments,
-      myContracts,
-    ] = await Promise.all([
-      getMyProfileForExport(db, tenant.id, clientUser.clientUserId),
-      getClientConsents(db, tenant.id, clientUser.clientUserId),
-      getMyTicketsForExport(db, tenant.id, clientUser.clientId),
-      getMyAssets(db, tenant.id, clientUser.clientId),
-      getMyInvoices(db, tenant.id, clientUser.clientId),
-      getMyPaymentsForExport(db, tenant.id, clientUser.clientId),
-      getMyContracts(db, tenant.id, clientUser.clientId),
-    ]);
+    const [profile, consents, tickets, myAssets, myInvoices, myPayments, myContracts] =
+      await Promise.all([
+        getMyProfileForExport(db, tenant.id, clientUser.clientUserId),
+        getClientConsents(db, tenant.id, clientUser.clientUserId),
+        getMyTicketsForExport(db, tenant.id, clientUser.clientId),
+        getMyAssets(db, tenant.id, clientUser.clientId),
+        getMyInvoices(db, tenant.id, clientUser.clientId),
+        getMyPaymentsForExport(db, tenant.id, clientUser.clientId),
+        getMyContracts(db, tenant.id, clientUser.clientId),
+      ]);
 
     await writeAudit(db, tenant.id, {
       userId: null,
@@ -353,11 +339,7 @@ export const clientCabinetRouter = router({
   requestAccountDeletion: clientUserProcedure.mutation(async ({ ctx }) => {
     const { db, tenant, clientUser, res } = ctx;
 
-    const ok = await markClientUserDeletionRequested(
-      db,
-      tenant.id,
-      clientUser.clientUserId,
-    );
+    const ok = await markClientUserDeletionRequested(db, tenant.id, clientUser.clientUserId);
     if (!ok) {
       throw new TRPCError({
         code: 'NOT_FOUND',
@@ -392,9 +374,7 @@ export const clientCabinetRouter = router({
 export const adminClientUsersRouter = router({
   list: directorProcedure
     .input(z.object({ clientId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      listClientUsersForClient(ctx.db, ctx.tenant.id, input.clientId),
-    ),
+    .query(({ ctx, input }) => listClientUsersForClient(ctx.db, ctx.tenant.id, input.clientId)),
 
   create: directorProcedure
     .input(
@@ -438,12 +418,7 @@ export const adminClientUsersRouter = router({
   setActive: directorProcedure
     .input(z.object({ id: z.string().uuid(), isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
-      const updated = await setClientUserActive(
-        ctx.db,
-        ctx.tenant.id,
-        input.id,
-        input.isActive,
-      );
+      const updated = await setClientUserActive(ctx.db, ctx.tenant.id, input.id, input.isActive);
       if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Учётка не найдена' });
       }
@@ -462,12 +437,7 @@ export const adminClientUsersRouter = router({
   resetPassword: directorProcedure
     .input(z.object({ id: z.string().uuid(), newPassword: passwordSchema }))
     .mutation(async ({ ctx, input }) => {
-      const ok = await resetClientUserPassword(
-        ctx.db,
-        ctx.tenant.id,
-        input.id,
-        input.newPassword,
-      );
+      const ok = await resetClientUserPassword(ctx.db, ctx.tenant.id, input.id, input.newPassword);
       if (!ok) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Учётка не найдена' });
       }

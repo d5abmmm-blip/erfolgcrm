@@ -36,7 +36,7 @@ export function MobileInventoryPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Поиск по названию или артикулу"
-          className="bg-background w-full rounded-lg border py-3 pl-9 pr-3 text-base outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-lg border py-3 pl-9 pr-3 text-base outline-none focus:ring-2"
           autoComplete="off"
         />
       </div>
@@ -73,10 +73,7 @@ export function MobileInventoryPage() {
                     )}
                   </div>
                   <div
-                    className={cn(
-                      'shrink-0 text-right tabular-nums',
-                      isLow && 'text-destructive',
-                    )}
+                    className={cn('shrink-0 text-right tabular-nums', isLow && 'text-destructive')}
                   >
                     <div className="flex items-center gap-1 text-lg font-bold">
                       {isLow && <AlertCircle className="h-4 w-4" />}

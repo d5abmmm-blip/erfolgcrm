@@ -52,10 +52,10 @@ export const auditLogs = pgTable('audit_logs', {
  * 152-ФЗ: должны быть свидетельства согласия для каждого субъекта ПДн.
  */
 export const consentTypeEnum = pgEnum('consent_type', [
-  'pdn_processing',          // согласие на обработку ПДн (общее, при регистрации)
-  'pdn_processing_client',   // согласие клиента-физлица на обработку при создании заявки
-  'marketing',               // согласие на маркетинг (опционально)
-  'cookie',                  // согласие на куки в личном кабинете
+  'pdn_processing', // согласие на обработку ПДн (общее, при регистрации)
+  'pdn_processing_client', // согласие клиента-физлица на обработку при создании заявки
+  'marketing', // согласие на маркетинг (опционально)
+  'cookie', // согласие на куки в личном кабинете
 ]);
 
 export const consentRecords = pgTable('consent_records', {

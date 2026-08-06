@@ -74,7 +74,7 @@ export function AssetCardPage() {
   if (asset.error || !asset.data) {
     return (
       <div className="mx-auto max-w-2xl p-8">
-        <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/30 p-4 text-sm">
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-4 text-sm">
           {asset.error?.message ?? 'Техника не найдена'}
         </div>
       </div>
@@ -114,25 +114,30 @@ export function AssetCardPage() {
           </Link>
           <button
             type="button"
-            onClick={() => void (async () => {
-              const win = openPrintWindow();
-              const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                import('../lib/pdf'),
-                import('../lib/pdf/branding'),
-              ]);
-              await printAssetLabel({
-                asset: {
-                  model: a.model,
-                  manufacturer: a.manufacturer ?? null,
-                  serialNumber: a.serialNumber ?? null,
-                  inventoryNumber: a.inventoryNumber ?? null,
-                  riskClass: a.riskClass ?? null,
-                },
-                ticket: null,
-                fallbackBarcode: a.id,
-                tenantDisplayName: ERFOLG_FALLBACK.displayName,
-              }, win);
-            })()}
+            onClick={() =>
+              void (async () => {
+                const win = openPrintWindow();
+                const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
+                  import('../lib/pdf'),
+                  import('../lib/pdf/branding'),
+                ]);
+                await printAssetLabel(
+                  {
+                    asset: {
+                      model: a.model,
+                      manufacturer: a.manufacturer ?? null,
+                      serialNumber: a.serialNumber ?? null,
+                      inventoryNumber: a.inventoryNumber ?? null,
+                      riskClass: a.riskClass ?? null,
+                    },
+                    ticket: null,
+                    fallbackBarcode: a.id,
+                    tenantDisplayName: ERFOLG_FALLBACK.displayName,
+                  },
+                  win,
+                );
+              })()
+            }
             className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
           >
             <Tag className="h-3.5 w-3.5" />
@@ -152,9 +157,7 @@ export function AssetCardPage() {
                 Техника
               </div>
               <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">{a.model}</h1>
-              {a.deviceType && (
-                <div className="text-muted-foreground text-sm">{a.deviceType}</div>
-              )}
+              {a.deviceType && <div className="text-muted-foreground text-sm">{a.deviceType}</div>}
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                 <span
                   className={cn(
@@ -165,9 +168,7 @@ export function AssetCardPage() {
                   {statusBadge.label}
                 </span>
                 {a.serialNumber && (
-                  <span className="text-muted-foreground font-mono">
-                    s/n {a.serialNumber}
-                  </span>
+                  <span className="text-muted-foreground font-mono">s/n {a.serialNumber}</span>
                 )}
                 {a.requiredAttestationCategory && (
                   <span
@@ -200,9 +201,7 @@ export function AssetCardPage() {
           <InfoBlock label="Тип">{a.deviceType ?? '—'}</InfoBlock>
           <InfoBlock label="Класс риска">{a.riskClass ?? '—'}</InfoBlock>
           <InfoBlock label="Гарантия до">{a.warrantyUntil ?? '—'}</InfoBlock>
-          <InfoBlock label="Введена в эксплуатацию">
-            {a.commissionedAt ?? '—'}
-          </InfoBlock>
+          <InfoBlock label="Введена в эксплуатацию">{a.commissionedAt ?? '—'}</InfoBlock>
           <InfoBlock label="Инв. №">{a.inventoryNumber ?? '—'}</InfoBlock>
           <InfoBlock label="Расположение" icon={<MapPin className="h-3.5 w-3.5" />}>
             {a.location ?? '—'}
@@ -216,7 +215,7 @@ export function AssetCardPage() {
         </div>
 
         {a.notes && (
-          <div className="mt-4 rounded-md border bg-muted/30 p-3 text-sm">
+          <div className="bg-muted/30 mt-4 rounded-md border p-3 text-sm">
             <div className="text-muted-foreground mb-1 text-xs uppercase">Заметки</div>
             {a.notes}
           </div>
@@ -226,8 +225,8 @@ export function AssetCardPage() {
       <SimilarCasesBlock assetId={a.id} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="bg-card lg:col-span-2 rounded-lg border p-4 md:p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+        <section className="bg-card rounded-lg border p-4 md:p-6 lg:col-span-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
             <History className="h-4 w-4" />
             Хронология ({events.data?.length ?? 0})
           </h2>
@@ -242,21 +241,19 @@ export function AssetCardPage() {
           </ol>
         </section>
 
-        <section className="bg-card rounded-lg border p-4 md:p-6 space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+        <section className="bg-card space-y-4 rounded-lg border p-4 md:p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
             <Activity className="h-4 w-4" />
             Действия
           </h2>
 
           <div>
-            <div className="text-muted-foreground mb-1 text-xs uppercase">
-              Изменить статус
-            </div>
+            <div className="text-muted-foreground mb-1 text-xs uppercase">Изменить статус</div>
             <div className="flex gap-2">
               <select
                 value={statusDraft ?? a.lifecycleStatus}
                 onChange={(e) => setStatusDraft(e.target.value)}
-                className="bg-background flex-1 rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                className="bg-background focus:ring-primary/40 flex-1 rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
               >
                 <option value="in_service">В работе</option>
                 <option value="in_repair">В ремонте</option>
@@ -276,7 +273,7 @@ export function AssetCardPage() {
                     patch: { lifecycleStatus: statusDraft as 'in_service' },
                   })
                 }
-                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-1.5 text-sm"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
               >
                 Применить
               </button>
@@ -284,23 +281,19 @@ export function AssetCardPage() {
           </div>
 
           <div>
-            <div className="text-muted-foreground mb-1 text-xs uppercase">
-              Добавить заметку
-            </div>
+            <div className="text-muted-foreground mb-1 text-xs uppercase">Добавить заметку</div>
             <textarea
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               rows={3}
               placeholder="Что произошло?"
-              className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
             />
             <button
               type="button"
               disabled={!noteDraft.trim() || addNote.isPending}
-              onClick={() =>
-                addNote.mutate({ assetId: a.id, comment: noteDraft.trim() })
-              }
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 mt-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm"
+              onClick={() => addNote.mutate({ assetId: a.id, comment: noteDraft.trim() })}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />
               Добавить
@@ -313,7 +306,7 @@ export function AssetCardPage() {
                 type="button"
                 onClick={() => setDecommissionOpen(true)}
                 disabled={decommission.isPending}
-                className="hover:bg-destructive/10 text-destructive disabled:opacity-50 inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm transition"
+                className="hover:bg-destructive/10 text-destructive border-destructive/30 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition disabled:opacity-50"
               >
                 <Archive className="h-3.5 w-3.5" />
                 Списать
@@ -357,7 +350,7 @@ function InfoBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border bg-muted/30 p-2">
+    <div className="bg-muted/30 rounded-md border p-2">
       <div className="text-muted-foreground flex items-center gap-1 text-[10px] uppercase tracking-wide">
         {icon}
         {label}
@@ -387,7 +380,7 @@ function EventRow({
     minute: '2-digit',
   });
 
-  let icon = <StickyNote className="h-4 w-4 text-muted-foreground" />;
+  let icon = <StickyNote className="text-muted-foreground h-4 w-4" />;
   let title = 'Событие';
   let body: React.ReactNode = null;
 
@@ -420,7 +413,9 @@ function EventRow({
   } else if (type === 'note') {
     icon = <StickyNote className="text-warning h-4 w-4" />;
     title = 'Заметка';
-    body = <div className="text-foreground mt-0.5 whitespace-pre-wrap text-sm">{payload.comment}</div>;
+    body = (
+      <div className="text-foreground mt-0.5 whitespace-pre-wrap text-sm">{payload.comment}</div>
+    );
   }
 
   return (

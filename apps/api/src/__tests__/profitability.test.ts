@@ -117,7 +117,8 @@ async function makeClosedWO(opts: {
       .update(tickets)
       .set({
         status: opts.closed === false ? 'in_progress' : 'closed',
-        closedAt: opts.closed === false ? null : new Date(Date.now() - opts.closedDaysAgo * 86_400_000),
+        closedAt:
+          opts.closed === false ? null : new Date(Date.now() - opts.closedDaysAgo * 86_400_000),
       })
       .where(eq(tickets.id, ticketId));
   });
@@ -130,8 +131,22 @@ describe('reports.profitability — рентабельность (фича №12
     const assetId = await makeAsset(deviceType);
 
     // 2 закрытых наряда: 100000/60000/40000 и 200000/110000/90000.
-    await makeClosedWO({ assetId, engineerId: engId, closedDaysAgo: 1, total: 100_000n, cost: 60_000n, margin: 40_000n });
-    await makeClosedWO({ assetId, engineerId: engId, closedDaysAgo: 2, total: 200_000n, cost: 110_000n, margin: 90_000n });
+    await makeClosedWO({
+      assetId,
+      engineerId: engId,
+      closedDaysAgo: 1,
+      total: 100_000n,
+      cost: 60_000n,
+      margin: 40_000n,
+    });
+    await makeClosedWO({
+      assetId,
+      engineerId: engId,
+      closedDaysAgo: 2,
+      total: 200_000n,
+      cost: 110_000n,
+      margin: 90_000n,
+    });
 
     const report = await profitabilityReport(getDb(), erfolgId, {});
 
@@ -157,10 +172,20 @@ describe('reports.profitability — рентабельность (фича №12
   it('фильтр периода: наряд, закрытый вне периода, не попадает', async () => {
     const deviceType = `${PREFIX}OLD-${Date.now()}`;
     const assetId = await makeAsset(deviceType);
-    await makeClosedWO({ assetId, engineerId: null, closedDaysAgo: 400, total: 500_000n, cost: 0n, margin: 500_000n });
+    await makeClosedWO({
+      assetId,
+      engineerId: null,
+      closedDaysAgo: 400,
+      total: 500_000n,
+      cost: 0n,
+      margin: 500_000n,
+    });
 
     // Период — последние 30 дней; наряд закрыт 400 дней назад → исключён.
-    const report = await profitabilityReport(getDb(), erfolgId, { from: isoDaysAgo(30), to: todayIso() });
+    const report = await profitabilityReport(getDb(), erfolgId, {
+      from: isoDaysAgo(30),
+      to: todayIso(),
+    });
     expect(report.byEquipment.find((r) => r.key === deviceType)).toBeUndefined();
 
     // Без периода — попадает.
@@ -170,7 +195,14 @@ describe('reports.profitability — рентабельность (фича №12
 
   it('наряд без инженера и без типа техники идёт в «Не назначен» / «Без типа»', async () => {
     // Мой безынженерный/безтиповый закрытый наряд гарантирует наличие null-строк.
-    await makeClosedWO({ assetId: null, engineerId: null, closedDaysAgo: 1, total: 80_000n, cost: 20_000n, margin: 60_000n });
+    await makeClosedWO({
+      assetId: null,
+      engineerId: null,
+      closedDaysAgo: 1,
+      total: 80_000n,
+      cost: 20_000n,
+      margin: 60_000n,
+    });
 
     const report = await profitabilityReport(getDb(), erfolgId, {});
     const noEng = report.byEngineer.find((r) => r.key === null);
@@ -184,7 +216,15 @@ describe('reports.profitability — рентабельность (фича №12
   it('незакрытый наряд не учитывается', async () => {
     const deviceType = `${PREFIX}OPEN-${Date.now()}`;
     const assetId = await makeAsset(deviceType);
-    await makeClosedWO({ assetId, engineerId: null, closedDaysAgo: 0, total: 999_000n, cost: 0n, margin: 999_000n, closed: false });
+    await makeClosedWO({
+      assetId,
+      engineerId: null,
+      closedDaysAgo: 0,
+      total: 999_000n,
+      cost: 0n,
+      margin: 999_000n,
+      closed: false,
+    });
 
     const report = await profitabilityReport(getDb(), erfolgId, {});
     expect(report.byEquipment.find((r) => r.key === deviceType)).toBeUndefined();
@@ -192,8 +232,22 @@ describe('reports.profitability — рентабельность (фича №12
 
   it('summary агрегирует суммы (>= вклада) и инвариант total = cost + margin по строке', async () => {
     const engId = await makeEngineer('Инженер Сводка');
-    await makeClosedWO({ assetId: null, engineerId: engId, closedDaysAgo: 1, total: 100_000n, cost: 60_000n, margin: 40_000n });
-    await makeClosedWO({ assetId: null, engineerId: engId, closedDaysAgo: 2, total: 200_000n, cost: 110_000n, margin: 90_000n });
+    await makeClosedWO({
+      assetId: null,
+      engineerId: engId,
+      closedDaysAgo: 1,
+      total: 100_000n,
+      cost: 60_000n,
+      margin: 40_000n,
+    });
+    await makeClosedWO({
+      assetId: null,
+      engineerId: engId,
+      closedDaysAgo: 2,
+      total: 200_000n,
+      cost: 110_000n,
+      margin: 90_000n,
+    });
 
     const report = await profitabilityReport(getDb(), erfolgId, {});
     // Сводка по всему тенанту → абсолютный минимум = наш вклад (параллельные тесты только добавляют).
@@ -214,10 +268,24 @@ describe('reports.profitability — рентабельность (фича №12
 
   it('marginPercent = null при нулевой выручке; отрицательная маржа даёт отрицательный %', async () => {
     const engZero = await makeEngineer('Инженер Ноль');
-    await makeClosedWO({ assetId: null, engineerId: engZero, closedDaysAgo: 1, total: 0n, cost: 0n, margin: 0n });
+    await makeClosedWO({
+      assetId: null,
+      engineerId: engZero,
+      closedDaysAgo: 1,
+      total: 0n,
+      cost: 0n,
+      margin: 0n,
+    });
 
     const engLoss = await makeEngineer('Инженер Убыток');
-    await makeClosedWO({ assetId: null, engineerId: engLoss, closedDaysAgo: 1, total: 100_000n, cost: 150_000n, margin: -50_000n });
+    await makeClosedWO({
+      assetId: null,
+      engineerId: engLoss,
+      closedDaysAgo: 1,
+      total: 100_000n,
+      cost: 150_000n,
+      margin: -50_000n,
+    });
 
     const report = await profitabilityReport(getDb(), erfolgId, {});
     const zero = report.byEngineer.find((r) => r.key === engZero);

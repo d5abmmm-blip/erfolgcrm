@@ -86,10 +86,7 @@ describe('<QueryError>', () => {
 
   it('называет, что именно не загрузилось, и объясняет причину', () => {
     render(
-      <QueryError
-        error={trpcError('boom', 'INTERNAL_SERVER_ERROR')}
-        what="журнал действий"
-      />,
+      <QueryError error={trpcError('boom', 'INTERNAL_SERVER_ERROR')} what="журнал действий" />,
     );
     expect(screen.queryByText('Не удалось загрузить журнал действий')).not.toBeNull();
     expect(screen.queryByText('Ошибка на сервере — данные не загружены')).not.toBeNull();
@@ -101,15 +98,11 @@ describe('<QueryError>', () => {
     // себя как при пустых данных. Обнаружено проверкой в браузере, не тестом.
     render(<QueryError error={null} paused what="журнал действий" />);
     expect(screen.queryByText('Не удалось загрузить журнал действий')).not.toBeNull();
-    expect(
-      screen.queryByText('Нет связи с сервером — загрузка приостановлена'),
-    ).not.toBeNull();
+    expect(screen.queryByText('Нет связи с сервером — загрузка приостановлена')).not.toBeNull();
   });
 
   it('ошибка важнее паузы: показываем причину, а не общую фразу про связь', () => {
-    render(
-      <QueryError error={trpcError('x', 'FORBIDDEN', 403)} paused what="журнал действий" />,
-    );
+    render(<QueryError error={trpcError('x', 'FORBIDDEN', 403)} paused what="журнал действий" />);
     expect(screen.queryByText('Недостаточно прав, чтобы посмотреть эти данные')).not.toBeNull();
   });
 

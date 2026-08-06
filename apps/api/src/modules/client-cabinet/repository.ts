@@ -112,12 +112,7 @@ export async function createClientUser(
     const dup = await tx
       .select({ id: clientUsers.id })
       .from(clientUsers)
-      .where(
-        and(
-          sql`lower(${clientUsers.email}) = ${email}`,
-          isNull(clientUsers.deletedAt),
-        ),
-      )
+      .where(and(sql`lower(${clientUsers.email}) = ${email}`, isNull(clientUsers.deletedAt)))
       .limit(1);
     if (dup[0]) throw new ClientUserConflictError();
 
@@ -147,9 +142,7 @@ export async function listClientUsersForClient(
     const rows = await tx
       .select()
       .from(clientUsers)
-      .where(
-        and(eq(clientUsers.clientId, clientId), isNull(clientUsers.deletedAt)),
-      )
+      .where(and(eq(clientUsers.clientId, clientId), isNull(clientUsers.deletedAt)))
       .orderBy(clientUsers.fullName);
     return rows.map(toRow);
   });
@@ -159,18 +152,13 @@ export async function findClientUserByEmail(
   db: Db,
   tenantId: string,
   email: string,
-): Promise<(typeof clientUsers.$inferSelect) | null> {
+): Promise<typeof clientUsers.$inferSelect | null> {
   const lowered = normEmail(email);
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select()
       .from(clientUsers)
-      .where(
-        and(
-          sql`lower(${clientUsers.email}) = ${lowered}`,
-          isNull(clientUsers.deletedAt),
-        ),
-      )
+      .where(and(sql`lower(${clientUsers.email}) = ${lowered}`, isNull(clientUsers.deletedAt)))
       .limit(1);
     return rows[0] ?? null;
   });
@@ -196,7 +184,7 @@ export async function getClientUserById(
   db: Db,
   tenantId: string,
   id: string,
-): Promise<(typeof clientUsers.$inferSelect) | null> {
+): Promise<typeof clientUsers.$inferSelect | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
       .select()
@@ -225,22 +213,12 @@ export async function setClientUserActive(
       const active = await tx
         .select({ token: clientSessions.sessionToken })
         .from(clientSessions)
-        .where(
-          and(
-            eq(clientSessions.clientUserId, id),
-            isNull(clientSessions.revokedAt),
-          ),
-        );
+        .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
       tokensToDrop = active.map((s) => s.token);
       await tx
         .update(clientSessions)
         .set({ revokedAt: new Date() })
-        .where(
-          and(
-            eq(clientSessions.clientUserId, id),
-            isNull(clientSessions.revokedAt),
-          ),
-        );
+        .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
       // 152-ФЗ: отзываем активные согласия при блокировке учётки
       await tx
         .update(consentRecords)
@@ -262,11 +240,7 @@ export async function setClientUserActive(
   return result.row;
 }
 
-export async function softDeleteClientUser(
-  db: Db,
-  tenantId: string,
-  id: string,
-): Promise<boolean> {
+export async function softDeleteClientUser(db: Db, tenantId: string, id: string): Promise<boolean> {
   const result = await withTenantTx(db, tenantId, async (tx) => {
     const [u] = await tx
       .update(clientUsers)
@@ -278,22 +252,12 @@ export async function softDeleteClientUser(
       const active = await tx
         .select({ token: clientSessions.sessionToken })
         .from(clientSessions)
-        .where(
-          and(
-            eq(clientSessions.clientUserId, id),
-            isNull(clientSessions.revokedAt),
-          ),
-        );
+        .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
       tokens = active.map((s) => s.token);
       await tx
         .update(clientSessions)
         .set({ revokedAt: new Date() })
-        .where(
-          and(
-            eq(clientSessions.clientUserId, id),
-            isNull(clientSessions.revokedAt),
-          ),
-        );
+        .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
       // 152-ФЗ: отзыв активных согласий при удалении учётки
       await tx
         .update(consentRecords)
@@ -332,21 +296,11 @@ export async function resetClientUserPassword(
     const active = await tx
       .select({ token: clientSessions.sessionToken })
       .from(clientSessions)
-      .where(
-        and(
-          eq(clientSessions.clientUserId, id),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
     await tx
       .update(clientSessions)
       .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(clientSessions.clientUserId, id),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
     return { ok: true as const, tokens: active.map((s) => s.token) };
   });
   if (result.tokens.length > 0) {
@@ -381,29 +335,16 @@ export async function changeMyClientPassword(
     const ok = await verify(current.passwordHash, oldPassword);
     if (!ok) throw new ClientWrongPasswordError();
 
-    await tx
-      .update(clientUsers)
-      .set({ passwordHash: newHash })
-      .where(eq(clientUsers.id, id));
+    await tx.update(clientUsers).set({ passwordHash: newHash }).where(eq(clientUsers.id, id));
 
     const active = await tx
       .select({ token: clientSessions.sessionToken })
       .from(clientSessions)
-      .where(
-        and(
-          eq(clientSessions.clientUserId, id),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
     await tx
       .update(clientSessions)
       .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(clientSessions.clientUserId, id),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, id), isNull(clientSessions.revokedAt)));
     return { ok: true as const, tokens: active.map((s) => s.token) };
   });
   if (result.tokens.length > 0) {
@@ -425,11 +366,7 @@ export async function updateMyClientProfile(
     if (patch.phone !== undefined) set.phone = patch.phone?.trim() || null;
     if (patch.position !== undefined) set.position = patch.position?.trim() || null;
     if (Object.keys(set).length === 0) {
-      const [cur] = await tx
-        .select()
-        .from(clientUsers)
-        .where(eq(clientUsers.id, id))
-        .limit(1);
+      const [cur] = await tx.select().from(clientUsers).where(eq(clientUsers.id, id)).limit(1);
       return cur ? toRow(cur) : null;
     }
     const [updated] = await tx
@@ -499,12 +436,7 @@ export async function createClientSession(
     } satisfies CachedClientSession;
   });
 
-  await getRedis().set(
-    REDIS_KEY(token),
-    JSON.stringify(cached),
-    'EX',
-    CLIENT_SESSION_TTL_SECONDS,
-  );
+  await getRedis().set(REDIS_KEY(token), JSON.stringify(cached), 'EX', CLIENT_SESSION_TTL_SECONDS);
   return { token, expiresAt };
 }
 
@@ -570,11 +502,7 @@ export async function touchClientSession(db: Db, token: string): Promise<void> {
   }
 }
 
-export async function revokeClientSession(
-  db: Db,
-  tenantId: string,
-  token: string,
-): Promise<void> {
+export async function revokeClientSession(db: Db, tenantId: string, token: string): Promise<void> {
   await getRedis().del(REDIS_KEY(token));
   await withTenantTx(db, tenantId, async (tx) => {
     await tx
@@ -615,9 +543,7 @@ export async function getMyAssets(
         riskClass: assets.riskClass,
       })
       .from(assets)
-      .where(
-        and(eq(assets.ownerClientId, clientId), isNull(assets.deletedAt)),
-      )
+      .where(and(eq(assets.ownerClientId, clientId), isNull(assets.deletedAt)))
       .orderBy(assets.model);
     return rows;
   });
@@ -643,11 +569,7 @@ export async function getMyAssetById(
       })
       .from(assets)
       .where(
-        and(
-          eq(assets.id, assetId),
-          eq(assets.ownerClientId, clientId),
-          isNull(assets.deletedAt),
-        ),
+        and(eq(assets.id, assetId), eq(assets.ownerClientId, clientId), isNull(assets.deletedAt)),
       )
       .limit(1);
     return rows[0] ?? null;
@@ -735,11 +657,7 @@ export async function getMyTicketById(
       .leftJoin(assets, eq(assets.id, tickets.assetId))
       .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
       .where(
-        and(
-          eq(tickets.id, ticketId),
-          eq(tickets.clientId, clientId),
-          isNull(tickets.deletedAt),
-        ),
+        and(eq(tickets.id, ticketId), eq(tickets.clientId, clientId), isNull(tickets.deletedAt)),
       )
       .limit(1);
     if (!row) return null;
@@ -791,9 +709,7 @@ export async function getMyInvoices(
         createdAt: invoices.createdAt,
       })
       .from(invoices)
-      .where(
-        and(eq(invoices.clientId, clientId), isNull(invoices.deletedAt)),
-      )
+      .where(and(eq(invoices.clientId, clientId), isNull(invoices.deletedAt)))
       .orderBy(desc(invoices.createdAt));
     return rows.map((r) => ({
       ...r,
@@ -830,9 +746,7 @@ export async function getMyContracts(
         validUntil: contracts.validUntil,
       })
       .from(contracts)
-      .where(
-        and(eq(contracts.clientId, clientId), isNull(contracts.deletedAt)),
-      )
+      .where(and(eq(contracts.clientId, clientId), isNull(contracts.deletedAt)))
       .orderBy(desc(contracts.contractDate));
     return rows;
   });
@@ -973,21 +887,11 @@ export async function revokeAllClientSessions(
     const active = await tx
       .select({ token: clientSessions.sessionToken })
       .from(clientSessions)
-      .where(
-        and(
-          eq(clientSessions.clientUserId, clientUserId),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, clientUserId), isNull(clientSessions.revokedAt)));
     await tx
       .update(clientSessions)
       .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(clientSessions.clientUserId, clientUserId),
-          isNull(clientSessions.revokedAt),
-        ),
-      );
+      .where(and(eq(clientSessions.clientUserId, clientUserId), isNull(clientSessions.revokedAt)));
     return active.map((s) => s.token);
   });
   if (tokens.length > 0) {
@@ -1010,12 +914,7 @@ export async function markClientUserDeletionRequested(
     const [updated] = await tx
       .update(clientUsers)
       .set({ deletionRequestedAt: new Date(), isActive: false })
-      .where(
-        and(
-          eq(clientUsers.id, clientUserId),
-          isNull(clientUsers.deletedAt),
-        ),
-      )
+      .where(and(eq(clientUsers.id, clientUserId), isNull(clientUsers.deletedAt)))
       .returning({ id: clientUsers.id });
     return Boolean(updated);
   });
@@ -1056,9 +955,7 @@ export async function getMyTicketsForExport(
         assetId: tickets.assetId,
       })
       .from(tickets)
-      .where(
-        and(eq(tickets.clientId, clientId), isNull(tickets.deletedAt)),
-      )
+      .where(and(eq(tickets.clientId, clientId), isNull(tickets.deletedAt)))
       .orderBy(desc(tickets.receivedAt));
     return rows;
   });
@@ -1092,9 +989,7 @@ export async function getMyPaymentsForExport(
       })
       .from(payments)
       .innerJoin(tickets, eq(tickets.id, payments.ticketId))
-      .where(
-        and(eq(tickets.clientId, clientId), isNull(tickets.deletedAt)),
-      )
+      .where(and(eq(tickets.clientId, clientId), isNull(tickets.deletedAt)))
       .orderBy(desc(payments.paidAt));
     return rows.map((r) => ({
       ...r,
@@ -1139,12 +1034,7 @@ export async function getMyProfileForExport(
       })
       .from(clientUsers)
       .leftJoin(clients, eq(clients.id, clientUsers.clientId))
-      .where(
-        and(
-          eq(clientUsers.id, clientUserId),
-          isNull(clientUsers.deletedAt),
-        ),
-      )
+      .where(and(eq(clientUsers.id, clientUserId), isNull(clientUsers.deletedAt)))
       .limit(1);
     return row ?? null;
   });

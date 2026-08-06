@@ -10,7 +10,12 @@ import { ChatPanel } from './ChatPanel';
 import { HeaderNudges } from './HeaderNudges';
 
 interface SessionInfo {
-  user: { id: string; username: string; fullName: string; role: 'director' | 'dispatcher' | 'engineer' };
+  user: {
+    id: string;
+    username: string;
+    fullName: string;
+    role: 'director' | 'dispatcher' | 'engineer';
+  };
   tenant: { id: string; subdomain: string; displayName: string; disabledModules: string[] };
 }
 
@@ -130,7 +135,7 @@ export function AppShell({ children, session }: AppShellProps) {
                         {badge > 0 && (
                           <span
                             className={cn(
-                              'ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-5 tabular-nums',
+                              'ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums leading-5',
                               isActive
                                 ? 'bg-primary-foreground/25 text-primary-foreground'
                                 : 'bg-primary text-primary-foreground',
@@ -178,8 +183,9 @@ export function AppShell({ children, session }: AppShellProps) {
           <div className="flex shrink-0 items-center gap-3">
             <span className="bg-primary h-5 w-1 rounded-full" aria-hidden />
             <h1 className="text-base font-semibold md:text-lg">
-              {NAV_ITEMS.find((n) => (n.href === '/' ? location === '/' : location.startsWith(n.href)))
-                ?.label ?? 'ErfolgCRM'}
+              {NAV_ITEMS.find((n) =>
+                n.href === '/' ? location === '/' : location.startsWith(n.href),
+              )?.label ?? 'ErfolgCRM'}
             </h1>
             <span className="bg-secondary text-muted-foreground hidden rounded-md px-2 py-0.5 text-xs md:inline">
               {session.tenant.displayName}

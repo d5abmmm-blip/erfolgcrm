@@ -76,13 +76,11 @@ async function ensureRefsExist(
   }
   if (refs.dispatcherId) {
     const ok = await userBelongsToTenant(db, tenantId, refs.dispatcherId);
-    if (!ok)
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Диспетчер не найден в tenant' });
+    if (!ok) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Диспетчер не найден в tenant' });
   }
   if (refs.engineerId) {
     const ok = await userBelongsToTenant(db, tenantId, refs.engineerId);
-    if (!ok)
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Инженер не найден в tenant' });
+    if (!ok) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Инженер не найден в tenant' });
   }
   if (refs.contractId) {
     await assertContractInTenant(db, tenantId, refs.contractId);
@@ -245,12 +243,9 @@ export async function updateTicketCmd(
 
   // Stage 10'.I — compliance-проверка для итогового назначения (engineer + asset).
   // Берём патч-значения там где они заданы, иначе значения из before.
-  const effectiveAssetId =
-    patch.assetId !== undefined ? patch.assetId : before.assetId;
+  const effectiveAssetId = patch.assetId !== undefined ? patch.assetId : before.assetId;
   const effectiveEngineerId =
-    patch.assignedEngineerId !== undefined
-      ? patch.assignedEngineerId
-      : before.assignedEngineerId;
+    patch.assignedEngineerId !== undefined ? patch.assignedEngineerId : before.assignedEngineerId;
   const attestationWarning = await attestationWarningFor(
     ctx.db,
     ctx.tenant.id,
@@ -361,8 +356,7 @@ export async function changeStatusCmd(
   // reopen из закрытого/отменённого — только director (RBAC проверяется в роутере),
   // здесь валидируем согласованность переходов
   const isReopen =
-    (before.status === 'closed' || before.status === 'cancelled') &&
-    REOPEN_STATUSES.has(newStatus);
+    (before.status === 'closed' || before.status === 'cancelled') && REOPEN_STATUSES.has(newStatus);
   if (isReopen && ctx.session.role !== 'director') {
     throw new TRPCError({
       code: 'FORBIDDEN',
@@ -594,10 +588,7 @@ export async function setBlockedReasonCmd(
  * Выдать (создав при первом обращении) публичную ссылку отслеживания заявки.
  * RBAC (staff) — в роутере. Идемпотентно: повторный вызов отдаёт тот же токен.
  */
-export async function getTrackShareCmd(
-  ctx: CmdCtx,
-  ticketId: string,
-): Promise<{ token: string }> {
+export async function getTrackShareCmd(ctx: CmdCtx, ticketId: string): Promise<{ token: string }> {
   let token: string;
   try {
     token = await repoGetOrCreateTrackToken(ctx.db, ctx.tenant.id, ticketId);
@@ -617,10 +608,7 @@ export async function getTrackShareCmd(
 }
 
 /** Отозвать публичную ссылку отслеживания (старая ссылка перестаёт работать). */
-export async function revokeTrackShareCmd(
-  ctx: CmdCtx,
-  ticketId: string,
-): Promise<{ ok: true }> {
+export async function revokeTrackShareCmd(ctx: CmdCtx, ticketId: string): Promise<{ ok: true }> {
   try {
     await repoRevokeTrackToken(ctx.db, ctx.tenant.id, ticketId);
   } catch (err) {
@@ -639,10 +627,7 @@ export async function revokeTrackShareCmd(
 }
 
 /** Доска «кто чем занят / почему стоит» — все активные заявки одним запросом (staff). */
-export async function boardQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-): Promise<BoardTicketDto[]> {
+export async function boardQuery(db: Db, tenant: ResolvedTenant): Promise<BoardTicketDto[]> {
   return repoBoardTickets(db, tenant.id);
 }
 
@@ -816,7 +801,12 @@ export async function engineerReactCmd(
       message: `По ${before.ticketNumber} уже стоит «ждём запчасть».`,
     };
   }
-  await setBlockedReasonCmd(ctx, ticketId, 'waiting_part', 'Отметил инженер (ответ на напоминание)');
+  await setBlockedReasonCmd(
+    ctx,
+    ticketId,
+    'waiting_part',
+    'Отметил инженер (ответ на напоминание)',
+  );
   await snoozeAsk(ctx.tenant.id, ticketId);
   await clearUnansweredCount(ctx.tenant.id, ticketId);
   return {
@@ -925,11 +915,7 @@ export async function documentClientQuery(
   };
 }
 
-export async function listTicketsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  opts: ListTicketsOpts,
-) {
+export async function listTicketsQuery(db: Db, tenant: ResolvedTenant, opts: ListTicketsOpts) {
   return repoListTickets(db, tenant.id, opts);
 }
 

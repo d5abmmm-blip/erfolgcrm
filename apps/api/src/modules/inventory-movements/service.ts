@@ -27,10 +27,7 @@ export interface IssueCmdInput {
   comment?: string | null;
 }
 
-export async function issueToWorkOrderCmd(
-  ctx: CmdCtx,
-  input: IssueCmdInput,
-): Promise<IssueResult> {
+export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Promise<IssueResult> {
   if (!(await itemExists(ctx.db, ctx.tenant.id, input.itemId))) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -73,11 +70,7 @@ export async function issueToWorkOrderCmd(
   return result;
 }
 
-export async function listMovementsQuery(
-  db: Db,
-  tenant: ResolvedTenant,
-  opts: ListMovementsOpts,
-) {
+export async function listMovementsQuery(db: Db, tenant: ResolvedTenant, opts: ListMovementsOpts) {
   return repoList(db, tenant.id, opts);
 }
 

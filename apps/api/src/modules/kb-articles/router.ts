@@ -14,11 +14,7 @@
  *   - attachedAssetIds — uuid[].
  */
 import { z } from 'zod';
-import {
-  router,
-  engineerProcedure,
-  staffProcedure,
-} from '../../trpc/trpc';
+import { router, engineerProcedure, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   archiveArticleCmd,
@@ -35,9 +31,7 @@ const MAX_BODY_LENGTH = 100_000;
 const tagsSchema = z
   .array(z.string().trim().min(1).max(50))
   .max(50)
-  .transform((arr) =>
-    Array.from(new Set(arr.map((t) => t.toLowerCase()))).sort(),
-  );
+  .transform((arr) => Array.from(new Set(arr.map((t) => t.toLowerCase()))).sort());
 
 const assetModelsSchema = z
   .array(z.string().trim().min(1).max(200))
@@ -85,20 +79,14 @@ const searchSimilarSchema = z
     assetId: z.string().uuid().optional(),
     limit: z.number().int().min(1).max(20).optional(),
   })
-  .refine(
-    (v) =>
-      Boolean(
-        (v.query && v.query.length > 0) || v.ticketId || v.assetId,
-      ),
-    { message: 'Нужен хотя бы один из параметров: query, ticketId или assetId' },
-  );
+  .refine((v) => Boolean((v.query && v.query.length > 0) || v.ticketId || v.assetId), {
+    message: 'Нужен хотя бы один из параметров: query, ticketId или assetId',
+  });
 
 export const kbArticlesRouter = router({
   list: engineerProcedure
     .input(listSchema)
-    .query(({ ctx, input }) =>
-      listArticlesQuery(buildCmdCtx(ctx), input ?? {}),
-    ),
+    .query(({ ctx, input }) => listArticlesQuery(buildCmdCtx(ctx), input ?? {})),
 
   get: engineerProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -108,23 +96,19 @@ export const kbArticlesRouter = router({
     .input(searchSimilarSchema)
     .query(({ ctx, input }) => searchSimilarQuery(buildCmdCtx(ctx), input)),
 
-  create: staffProcedure
-    .input(createSchema)
-    .mutation(({ ctx, input }) =>
-      createArticleCmd(buildCmdCtx(ctx), {
-        title: input.title,
-        body: input.body,
-        tags: input.tags,
-        assetModels: input.assetModels,
-        attachedAssetIds: input.attachedAssetIds,
-      }),
-    ),
+  create: staffProcedure.input(createSchema).mutation(({ ctx, input }) =>
+    createArticleCmd(buildCmdCtx(ctx), {
+      title: input.title,
+      body: input.body,
+      tags: input.tags,
+      assetModels: input.assetModels,
+      attachedAssetIds: input.attachedAssetIds,
+    }),
+  ),
 
   update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateSchema }))
-    .mutation(({ ctx, input }) =>
-      updateArticleCmd(buildCmdCtx(ctx), input.id, input.patch),
-    ),
+    .mutation(({ ctx, input }) => updateArticleCmd(buildCmdCtx(ctx), input.id, input.patch)),
 
   archive: staffProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -132,7 +116,5 @@ export const kbArticlesRouter = router({
 
   unarchive: staffProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      unarchiveArticleCmd(buildCmdCtx(ctx), input.id),
-    ),
+    .mutation(({ ctx, input }) => unarchiveArticleCmd(buildCmdCtx(ctx), input.id)),
 });

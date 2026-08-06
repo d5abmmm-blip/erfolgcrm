@@ -95,7 +95,7 @@ export function ClientNewTicketPage() {
         </Field>
 
         {error && (
-          <div className="bg-destructive/10 text-destructive rounded-md border border-destructive/20 px-3 py-2 text-sm">
+          <div className="bg-destructive/10 text-destructive border-destructive/20 rounded-md border px-3 py-2 text-sm">
             {error}
           </div>
         )}

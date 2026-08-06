@@ -20,7 +20,6 @@ export function PWARegister() {
     updateServiceWorker,
   } = useRegisterSW({
     onRegisterError(error) {
-       
       console.error('SW registration failed', error);
     },
   });

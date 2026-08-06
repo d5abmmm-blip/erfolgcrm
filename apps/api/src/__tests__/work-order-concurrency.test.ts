@@ -26,14 +26,8 @@ import {
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
-import {
-  getOrCreateWorkOrder,
-  upsertLine,
-} from '../modules/work-orders/repository';
-import {
-  NotEnoughStockError,
-  issueToWorkOrder,
-} from '../modules/inventory-movements/repository';
+import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import { NotEnoughStockError, issueToWorkOrder } from '../modules/inventory-movements/repository';
 import {
   createDraft as createInvoiceDraft,
   transitionToIssued,
@@ -156,7 +150,10 @@ describe('concurrency: параллельная FEFO-выдача', () => {
 
     // Movements ровно 1 (от успешного issue).
     const movs = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx.select({ id: inventoryMovements.id }).from(inventoryMovements).where(eq(inventoryMovements.itemId, itemId)),
+      tx
+        .select({ id: inventoryMovements.id })
+        .from(inventoryMovements)
+        .where(eq(inventoryMovements.itemId, itemId)),
     );
     expect(movs.length).toBe(1);
   });
@@ -232,54 +229,58 @@ describe('concurrency: параллельные платежи на один inv
     expect(inv?.status).toBe('paid');
   });
 
-  it('три параллельных платежа на один invoice → все три успешны, sum верный', { timeout: 30_000 }, async () => {
-    const { id: ticketId } = await createTicket(getDb(), erfolgId, null, {
-      clientId: primaryClientId,
-      symptom: `${TEST_PREFIX}pay-race-3`,
-    });
-    const wo = await getOrCreateWorkOrder(getDb(), erfolgId, ticketId);
-    await upsertLine(getDb(), erfolgId, wo.id, null, {
-      lineType: 'work',
-      name: `${TEST_PREFIX}pay-w-3`,
-      unit: 'шт',
-      quantity: '1',
-      unitPriceKopecks: 90_000n,
-    });
-    const draft = await createInvoiceDraft(getDb(), erfolgId, {
-      workOrderId: wo.id,
-      notes: `${TEST_PREFIX}pay-inv-3`,
-    });
-    await transitionToIssued(getDb(), erfolgId, draft.id, {});
+  it(
+    'три параллельных платежа на один invoice → все три успешны, sum верный',
+    { timeout: 30_000 },
+    async () => {
+      const { id: ticketId } = await createTicket(getDb(), erfolgId, null, {
+        clientId: primaryClientId,
+        symptom: `${TEST_PREFIX}pay-race-3`,
+      });
+      const wo = await getOrCreateWorkOrder(getDb(), erfolgId, ticketId);
+      await upsertLine(getDb(), erfolgId, wo.id, null, {
+        lineType: 'work',
+        name: `${TEST_PREFIX}pay-w-3`,
+        unit: 'шт',
+        quantity: '1',
+        unitPriceKopecks: 90_000n,
+      });
+      const draft = await createInvoiceDraft(getDb(), erfolgId, {
+        workOrderId: wo.id,
+        notes: `${TEST_PREFIX}pay-inv-3`,
+      });
+      await transitionToIssued(getDb(), erfolgId, draft.id, {});
 
-    const amounts = [30_000n, 30_000n, 30_000n];
-    const results = await Promise.allSettled(
-      amounts.map((amt, i) =>
-        addPayment(getDb(), erfolgId, {
-          ticketId,
-          invoiceId: draft.id,
-          amountKopecks: amt,
-          method: i === 0 ? 'cash' : i === 1 ? 'card' : 'bank_transfer',
-          paidAt: new Date(),
-          comment: `${TEST_PREFIX}p3-${i}`,
-          userId: null,
-        }),
-      ),
-    );
+      const amounts = [30_000n, 30_000n, 30_000n];
+      const results = await Promise.allSettled(
+        amounts.map((amt, i) =>
+          addPayment(getDb(), erfolgId, {
+            ticketId,
+            invoiceId: draft.id,
+            amountKopecks: amt,
+            method: i === 0 ? 'cash' : i === 1 ? 'card' : 'bank_transfer',
+            paidAt: new Date(),
+            comment: `${TEST_PREFIX}p3-${i}`,
+            userId: null,
+          }),
+        ),
+      );
 
-    const ok = results.filter((r) => r.status === 'fulfilled');
-    const rejected = results.filter((r) => r.status === 'rejected');
-    expect(rejected.length).toBe(0);
-    expect(ok.length).toBe(3);
+      const ok = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(rejected.length).toBe(0);
+      expect(ok.length).toBe(3);
 
-    const [inv] = await withTenantTx(getDb(), erfolgId, (tx) =>
-      tx
-        .select({ paid: invoices.paidAmountKopecks, status: invoices.status })
-        .from(invoices)
-        .where(eq(invoices.id, draft.id)),
-    );
-    expect(inv?.paid).toBe(90_000n);
-    expect(inv?.status).toBe('paid');
-  });
+      const [inv] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx
+          .select({ paid: invoices.paidAmountKopecks, status: invoices.status })
+          .from(invoices)
+          .where(eq(invoices.id, draft.id)),
+      );
+      expect(inv?.paid).toBe(90_000n);
+      expect(inv?.status).toBe('paid');
+    },
+  );
 });
 
 describe('FINDING: work_order не имеет status — повторный invoice идемпотентен', () => {

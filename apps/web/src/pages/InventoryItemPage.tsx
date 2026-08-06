@@ -17,10 +17,7 @@ export function InventoryItemPage() {
     null,
   );
 
-  const item = trpc.inventoryItems.get.useQuery(
-    { id: itemId },
-    { enabled: itemId.length > 0 },
-  );
+  const item = trpc.inventoryItems.get.useQuery({ id: itemId }, { enabled: itemId.length > 0 });
   const batches = trpc.inventoryBatches.listByItem.useQuery(
     { itemId },
     { enabled: itemId.length > 0 },
@@ -41,7 +38,7 @@ export function InventoryItemPage() {
   });
 
   if (!match) return null;
-  if (item.isLoading) return <div className="p-6 text-muted-foreground text-sm">Загрузка…</div>;
+  if (item.isLoading) return <div className="text-muted-foreground p-6 text-sm">Загрузка…</div>;
   // Без этой ветки сбой загрузки выглядел как «Позиция не найдена» — то есть склад
   // сообщал об удалении позиции, которая на самом деле на месте.
   if (item.error) {
@@ -56,7 +53,7 @@ export function InventoryItemPage() {
       </div>
     );
   }
-  if (!item.data) return <div className="p-6 text-destructive text-sm">Позиция не найдена</div>;
+  if (!item.data) return <div className="text-destructive p-6 text-sm">Позиция не найдена</div>;
 
   const it = item.data;
 
@@ -66,8 +63,7 @@ export function InventoryItemPage() {
         href="/inventory"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
       >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        К списку склада
+        <ArrowLeft className="h-3.5 w-3.5" />К списку склада
       </Link>
 
       <header className="bg-card rounded-lg border p-4">
@@ -93,7 +89,10 @@ export function InventoryItemPage() {
         <div className="text-muted-foreground mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
           <Info label="Артикул" value={it.sku} />
           <Info label="Категория" value={it.category} />
-          <Info label="Мин. остаток" value={it.minStock !== '0' ? `${it.minStock} ${it.unit}` : null} />
+          <Info
+            label="Мин. остаток"
+            value={it.minStock !== '0' ? `${it.minStock} ${it.unit}` : null}
+          />
           <Info label="Единица" value={it.unit} />
         </div>
       </header>
@@ -130,13 +129,18 @@ export function InventoryItemPage() {
                 const expired = b.expiresAt && b.expiresAt.getTime() < Date.now();
                 const empty = Number(b.quantityRemaining) === 0;
                 return (
-                  <tr key={b.id} className={cn('hover:bg-muted/20 transition', empty && 'opacity-50')}>
+                  <tr
+                    key={b.id}
+                    className={cn('hover:bg-muted/20 transition', empty && 'opacity-50')}
+                  >
                     <td className="px-3 py-2 font-mono text-xs">{b.batchCode ?? '—'}</td>
                     <td className="px-3 py-2">{b.supplier ?? '—'}</td>
                     <td className="text-muted-foreground px-3 py-2 text-xs">
                       {b.receivedAt.toLocaleDateString('ru-RU')}
                     </td>
-                    <td className={cn('px-3 py-2 text-xs', expired && 'text-destructive font-medium')}>
+                    <td
+                      className={cn('px-3 py-2 text-xs', expired && 'text-destructive font-medium')}
+                    >
                       {b.expiresAt ? b.expiresAt.toLocaleDateString('ru-RU') : 'без срока'}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -213,7 +217,9 @@ export function InventoryItemPage() {
                     {m.createdAt.toLocaleString('ru-RU')}
                   </td>
                   <td className="px-3 py-2">
-                    <KindBadge kind={m.kind as 'inbound' | 'outbound' | 'adjustment' | 'writeoff'} />
+                    <KindBadge
+                      kind={m.kind as 'inbound' | 'outbound' | 'adjustment' | 'writeoff'}
+                    />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.quantity}</td>
                   <td className="text-muted-foreground px-3 py-2 text-xs">
@@ -229,9 +235,7 @@ export function InventoryItemPage() {
         )}
       </section>
 
-      {batches.data && batches.data.length > 0 && (
-        <BatchAttachments batches={batches.data} />
-      )}
+      {batches.data && batches.data.length > 0 && <BatchAttachments batches={batches.data} />}
 
       {showBatchForm && (
         <InventoryBatchForm
@@ -267,7 +271,7 @@ function BatchAttachments({ batches }: { batches: BatchSlim[] }) {
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          className="bg-background rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2"
         >
           {batches.map((b) => (
             <option key={b.id} value={b.id}>

@@ -95,9 +95,7 @@ export function ConfirmDialog({
           {title}
         </h3>
         {description && (
-          <p className="text-muted-foreground mt-2 text-sm whitespace-pre-line">
-            {description}
-          </p>
+          <p className="text-muted-foreground mt-2 whitespace-pre-line text-sm">{description}</p>
         )}
         {error && (
           <div className="bg-destructive/10 text-destructive border-destructive/30 mt-3 rounded-md border p-2 text-xs">

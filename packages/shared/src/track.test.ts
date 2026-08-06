@@ -42,8 +42,16 @@ describe('buildTrackTimeline', () => {
   it('в ремонте (in_progress): пройденные стадии done с датами из событий, ремонт — current', () => {
     const events: TrackTimelineEventInput[] = [
       { type: 'created', createdAt: received, payload: {} },
-      { type: 'status_change', createdAt: new Date('2026-07-02T14:10:00Z'), payload: { to: 'diagnostics' } },
-      { type: 'status_change', createdAt: new Date('2026-07-03T11:20:00Z'), payload: { to: 'in_progress' } },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-02T14:10:00Z'),
+        payload: { to: 'diagnostics' },
+      },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-03T11:20:00Z'),
+        payload: { to: 'in_progress' },
+      },
     ];
     const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, events });
     expect(tl.currentIndex).toBe(2);
@@ -60,8 +68,16 @@ describe('buildTrackTimeline', () => {
 
   it('устаревшие estimate/approval пишут дату в стадию «Диагностика» — берётся первое достижение', () => {
     const events: TrackTimelineEventInput[] = [
-      { type: 'status_change', createdAt: new Date('2026-07-03T09:00:00Z'), payload: { to: 'estimate' } },
-      { type: 'status_change', createdAt: new Date('2026-07-03T15:00:00Z'), payload: { to: 'approval' } },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-03T09:00:00Z'),
+        payload: { to: 'estimate' },
+      },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-03T15:00:00Z'),
+        payload: { to: 'approval' },
+      },
     ];
     const tl = buildTrackTimeline({ status: 'approval', receivedAt: received, events });
     expect(tl.stages[1]!.at).toBe('2026-07-03T09:00:00.000Z');
@@ -76,10 +92,19 @@ describe('buildTrackTimeline', () => {
 
   it('отменённая заявка: cancelled=true, currentIndex=−1, пройденные из событий — done', () => {
     const events: TrackTimelineEventInput[] = [
-      { type: 'status_change', createdAt: new Date('2026-07-02T14:10:00Z'), payload: { to: 'diagnostics' } },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-02T14:10:00Z'),
+        payload: { to: 'diagnostics' },
+      },
     ];
     const cancelledAt = new Date('2026-07-02T18:00:00Z');
-    const tl = buildTrackTimeline({ status: 'cancelled', receivedAt: received, cancelledAt, events });
+    const tl = buildTrackTimeline({
+      status: 'cancelled',
+      receivedAt: received,
+      cancelledAt,
+      events,
+    });
     expect(tl.cancelled).toBe(true);
     expect(tl.currentIndex).toBe(-1);
     expect(tl.cancelledAt).toBe(cancelledAt.toISOString());
@@ -106,8 +131,16 @@ describe('buildTrackTimeline', () => {
     // act_pending → in_progress («отозвать на доделку»): в истории есть событие to:act_pending,
     // но текущий статус in_progress. Стадия «Готово к выдаче» (ready) должна быть «впереди» БЕЗ даты.
     const events: TrackTimelineEventInput[] = [
-      { type: 'status_change', createdAt: new Date('2026-07-03T11:00:00Z'), payload: { to: 'in_progress' } },
-      { type: 'status_change', createdAt: new Date('2026-07-04T09:00:00Z'), payload: { to: 'act_pending' } },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-03T11:00:00Z'),
+        payload: { to: 'in_progress' },
+      },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-04T09:00:00Z'),
+        payload: { to: 'act_pending' },
+      },
     ];
     const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, events });
     expect(tl.currentIndex).toBe(2); // repair
@@ -118,12 +151,29 @@ describe('buildTrackTimeline', () => {
 
   it('reopen (closed→in_progress): «выдана» снова впереди и без даты закрытия', () => {
     const events: TrackTimelineEventInput[] = [
-      { type: 'status_change', createdAt: new Date('2026-07-05T10:00:00Z'), payload: { to: 'act_pending' } },
-      { type: 'status_change', createdAt: new Date('2026-07-05T16:00:00Z'), payload: { to: 'closed' } },
-      { type: 'status_change', createdAt: new Date('2026-07-06T09:00:00Z'), payload: { to: 'in_progress' } },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-05T10:00:00Z'),
+        payload: { to: 'act_pending' },
+      },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-05T16:00:00Z'),
+        payload: { to: 'closed' },
+      },
+      {
+        type: 'status_change',
+        createdAt: new Date('2026-07-06T09:00:00Z'),
+        payload: { to: 'in_progress' },
+      },
     ];
     // closedAt в БД сброшен в null при reopen, но событие to:'closed' остаётся в истории.
-    const tl = buildTrackTimeline({ status: 'in_progress', receivedAt: received, closedAt: null, events });
+    const tl = buildTrackTimeline({
+      status: 'in_progress',
+      receivedAt: received,
+      closedAt: null,
+      events,
+    });
     expect(tl.stages[4]!.state).toBe('upcoming'); // issued
     expect(tl.stages[4]!.at).toBeNull();
     expect(tl.stages[3]!.at).toBeNull(); // ready тоже впереди

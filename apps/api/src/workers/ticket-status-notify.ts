@@ -15,15 +15,7 @@
  */
 import { eq } from 'drizzle-orm';
 import type { TicketStatus } from '@erfolg/shared';
-import {
-  assets,
-  clients,
-  getDb,
-  tenants,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { assets, clients, getDb, tenants, tickets, users, withTenantTx } from '@erfolg/db';
 import { logger } from '../lib/logger';
 import { normalizeEmailAddress } from '../lib/email-address';
 import { maskEmail } from '../lib/mask';
@@ -54,9 +46,7 @@ export interface TicketStatusNotifyResult {
 }
 
 /** Продюсер: ставим job в очередь после успешной смены статуса. */
-export async function enqueueTicketStatusNotify(
-  payload: TicketStatusNotifyPayload,
-): Promise<void> {
+export async function enqueueTicketStatusNotify(payload: TicketStatusNotifyPayload): Promise<void> {
   await getQueue<TicketStatusNotifyPayload>(QUEUE_NAME).add(JOB_NAME, payload, {
     // Дедуп: одинаковый ticket+to за короткий промежуток не должен залить клиента.
     // ВАЖНО: BullMQ запрещает ':' в custom jobId (молча отвергает job) → только дефис.
@@ -79,10 +69,7 @@ interface LoadedTicket {
   readyNotifiedAt: Date | null;
 }
 
-async function loadTicketDetails(
-  tenantId: string,
-  ticketId: string,
-): Promise<LoadedTicket | null> {
+async function loadTicketDetails(tenantId: string, ticketId: string): Promise<LoadedTicket | null> {
   return withTenantTx(getDb(), tenantId, async (tx) => {
     const rows = await tx
       .select({
@@ -139,10 +126,7 @@ async function isReadyNotifyEnabled(tenantId: string): Promise<boolean> {
 /** Фича B — отметить, что письмо «готово» по заявке уже отправлено (guard идемпотентности). */
 async function markReadyNotified(tenantId: string, ticketId: string): Promise<void> {
   await withTenantTx(getDb(), tenantId, async (tx) => {
-    await tx
-      .update(tickets)
-      .set({ readyNotifiedAt: new Date() })
-      .where(eq(tickets.id, ticketId));
+    await tx.update(tickets).set({ readyNotifiedAt: new Date() }).where(eq(tickets.id, ticketId));
   });
 }
 

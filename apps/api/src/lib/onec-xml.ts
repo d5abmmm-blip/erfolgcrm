@@ -82,7 +82,11 @@ function vatRateLabel(r: OnecLineItem['vatRate']): string {
   return `${r}%`;
 }
 
-function counterpartyXml(role: 'Поставщик' | 'Покупатель', c: OnecCounterparty, indent = '      '): string {
+function counterpartyXml(
+  role: 'Поставщик' | 'Покупатель',
+  c: OnecCounterparty,
+  indent = '      ',
+): string {
   const lines = [
     `${indent}<Контрагент>`,
     `${indent}  <Ид>${escapeXml(c.id)}</Ид>`,
@@ -146,7 +150,9 @@ export function buildCommerceMlExport(input: BuildExportInput): string {
   const docs = input.documents.map((d) => documentXml(d)).join('\n');
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<КоммерческаяИнформация ВерсияСхемы="2.05" ДатаФормирования="' + escapeXml(input.generatedAt) + '">',
+    '<КоммерческаяИнформация ВерсияСхемы="2.05" ДатаФормирования="' +
+      escapeXml(input.generatedAt) +
+      '">',
     '  <ИдПакета>' + escapeXml(input.packageId) + '</ИдПакета>',
     docs,
     '</КоммерческаяИнформация>',

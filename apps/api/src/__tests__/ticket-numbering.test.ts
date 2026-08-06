@@ -86,9 +86,7 @@ describe('nextTicketNumber: сквозная нумерация', () => {
       nextTicketNumber(tx, erfolgId, TEST_YEAR),
     );
     expect(ea).toBe(`T-${TEST_YEAR}-000001`);
-    const da = await withTenantTx(getDb(), demoId, (tx) =>
-      nextTicketNumber(tx, demoId, TEST_YEAR),
-    );
+    const da = await withTenantTx(getDb(), demoId, (tx) => nextTicketNumber(tx, demoId, TEST_YEAR));
     expect(da).toBe(`T-${TEST_YEAR}-000001`);
   });
 

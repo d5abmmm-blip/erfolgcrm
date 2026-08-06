@@ -32,8 +32,8 @@ export function NotificationsSettingsPage() {
       </div>
 
       <p className="text-muted-foreground text-sm">
-        Письма клиентам о ходе заявки. Чтобы рассылка работала, у клиента должен быть указан
-        e-mail и должна быть настроена отправка почты.
+        Письма клиентам о ходе заявки. Чтобы рассылка работала, у клиента должен быть указан e-mail
+        и должна быть настроена отправка почты.
       </p>
 
       {q.isLoading ? (
@@ -44,13 +44,11 @@ export function NotificationsSettingsPage() {
       ) : (
         <div className="bg-card flex items-start justify-between gap-4 rounded-lg border p-4">
           <div>
-            <div className="font-medium">
-              Уведомлять клиента по эл. почте, когда техника готова
-            </div>
+            <div className="font-medium">Уведомлять клиента по эл. почте, когда техника готова</div>
             <div className="text-muted-foreground mt-1 text-xs">
-              Письмо «техника готова к выдаче» уйдёт при переводе заявки в статус «Ожидает
-              акта». Без e-mail у клиента письмо не отправляется. По одной заявке письмо
-              отправляется один раз.
+              Письмо «техника готова к выдаче» уйдёт при переводе заявки в статус «Ожидает акта».
+              Без e-mail у клиента письмо не отправляется. По одной заявке письмо отправляется один
+              раз.
             </div>
           </div>
           <button

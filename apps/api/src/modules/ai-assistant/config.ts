@@ -7,13 +7,7 @@
  * отдаётся — только флаг hasApiKey. Запись write-only: пустой ключ = не менять.
  */
 import { sql, eq } from 'drizzle-orm';
-import {
-  decryptSql,
-  getTenantEncryptionKey,
-  llmConfigs,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { decryptSql, getTenantEncryptionKey, llmConfigs, withTenantTx, type Db } from '@erfolg/db';
 import type { ApiStyle, AssistantMode, LlmRuntimeConfig } from './llm';
 
 interface TenantKeyCtx {

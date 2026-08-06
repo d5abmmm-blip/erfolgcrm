@@ -17,14 +17,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import {
-  getDb,
-  invoices,
-  payments,
-  tickets,
-  users,
-  withTenantTx,
-} from '@erfolg/db';
+import { getDb, invoices, payments, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { archiveClient, createClient } from '../modules/clients/repository';
 import { createTicket } from '../modules/tickets/repository';
@@ -123,7 +116,10 @@ async function makeInvoice(
   // issue_date заведомо раньше любого due (constraint due_date >= issue_date).
   const issue = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
   await withTenantTx(getDb(), erfolgId, async (tx) => {
-    await tx.update(invoices).set({ dueDate: due, issueDate: issue }).where(eq(invoices.id, issued.id));
+    await tx
+      .update(invoices)
+      .set({ dueDate: due, issueDate: issue })
+      .where(eq(invoices.id, issued.id));
   });
   return { invoiceId: issued.id, ticketId };
 }
@@ -243,12 +239,16 @@ describe('receivables — Дебиторка (фича №10)', () => {
     expect(inv).toBeDefined();
     if (!inv) return;
 
-    const r1 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    const r1 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, {
+      dryRun: false,
+    });
     expect(r1.outcome).toBe('sent');
     expect(sentMail.some((m) => m.to === 'remind@example.com')).toBe(true);
 
     // Повторный вызов сразу — cooldown НЕ мешает ручной кнопке.
-    const r2 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    const r2 = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, {
+      dryRun: false,
+    });
     expect(r2.outcome).toBe('sent');
 
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
@@ -264,7 +264,9 @@ describe('receivables — Дебиторка (фича №10)', () => {
     expect(inv).toBeDefined();
     if (!inv) return;
 
-    const res = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, { dryRun: false });
+    const res = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, {
+      dryRun: false,
+    });
     expect(res.outcome).toBe('skipped_no_email');
     const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx.select({ count: invoices.reminderCount }).from(invoices).where(eq(invoices.id, inv.id)),
@@ -293,12 +295,9 @@ describe('архивный клиент: письма гасим, долг ос�
 
     await archiveClient(getDb(), erfolgId, clientId);
 
-    const res = await sendInvoiceReminder(
-      getDb(),
-      { id: erfolgId, name: 'ТестКомпания' },
-      inv,
-      { dryRun: false },
-    );
+    const res = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, {
+      dryRun: false,
+    });
     expect(res.outcome).toBe('skipped_archived');
     expect(sentMail.some((m) => m.to === 'archived-nomail@example.com')).toBe(false);
 
@@ -357,12 +356,9 @@ describe('архивный клиент: письма гасим, долг ос�
     expect(inv).toBeDefined();
     if (!inv) return;
 
-    const res = await sendInvoiceReminder(
-      getDb(),
-      { id: erfolgId, name: 'ТестКомпания' },
-      inv,
-      { dryRun: false },
-    );
+    const res = await sendInvoiceReminder(getDb(), { id: erfolgId, name: 'ТестКомпания' }, inv, {
+      dryRun: false,
+    });
     expect(res.outcome).toBe('skipped_bad_email');
     expect(sentMail.some((m) => m.to === 'Магомед')).toBe(false);
 

@@ -62,7 +62,10 @@ export async function processScheduledSend(payload: ScheduledPayload): Promise<v
   const msg = await getMessage(db, tenantId, messageId);
   // Идемпотентность: шлём только если письмо всё ещё запланировано.
   if (!msg || msg.status !== 'scheduled') {
-    logger.info({ tenantId, messageId, status: msg?.status }, 'email-scheduled: пропуск (не scheduled)');
+    logger.info(
+      { tenantId, messageId, status: msg?.status },
+      'email-scheduled: пропуск (не scheduled)',
+    );
     return;
   }
 
@@ -80,7 +83,9 @@ export async function processScheduledSend(payload: ScheduledPayload): Promise<v
       : null;
 
   // Подпись добавляется при фактической отправке (черновик/scheduled хранится без неё).
-  const finalText = cfg?.signature ? `${msg.bodyText ?? ''}\n\n${cfg.signature}` : (msg.bodyText ?? '');
+  const finalText = cfg?.signature
+    ? `${msg.bodyText ?? ''}\n\n${cfg.signature}`
+    : (msg.bodyText ?? '');
 
   let status: 'sent' | 'skipped' | 'failed' = 'failed';
   let sentMessageId: string | null = null;
@@ -132,7 +137,10 @@ async function listActiveTenantIds(): Promise<string[]> {
   return rows.filter((r) => r.status === 'active').map((r) => r.id);
 }
 
-async function listScheduled(db: Db, tenantId: string): Promise<Array<{ id: string; scheduledAt: Date }>> {
+async function listScheduled(
+  db: Db,
+  tenantId: string,
+): Promise<Array<{ id: string; scheduledAt: Date }>> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = (await tx.execute<{ id: string; scheduled_at: Date }>(sql`
       SELECT id, scheduled_at FROM email_messages

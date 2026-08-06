@@ -142,7 +142,12 @@ export function MobileTasksPage() {
                 )}
               </button>
               <div className="min-w-0 flex-1">
-                <div className={cn('text-sm font-medium', done && 'text-muted-foreground line-through')}>
+                <div
+                  className={cn(
+                    'text-sm font-medium',
+                    done && 'text-muted-foreground line-through',
+                  )}
+                >
                   {t.title}
                 </div>
                 {t.notes && <p className="text-muted-foreground mt-0.5 text-xs">{t.notes}</p>}
@@ -161,7 +166,6 @@ export function MobileTasksPage() {
           );
         })}
       </ul>
-
     </div>
   );
 }

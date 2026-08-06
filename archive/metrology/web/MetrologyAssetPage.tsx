@@ -5,16 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useRoute } from 'wouter';
-import {
-  ChevronLeft,
-  FileCheck2,
-  FileText,
-  Loader2,
-  Pencil,
-  Plus,
-  Upload,
-  X,
-} from 'lucide-react';
+import { ChevronLeft, FileCheck2, FileText, Loader2, Pencil, Plus, Upload, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
@@ -25,19 +16,14 @@ export function MetrologyAssetPage() {
 
   const utils = trpc.useUtils();
   const siQ = trpc.metrology.getSi.useQuery({ assetId }, { enabled: !!assetId });
-  const calsQ = trpc.metrology.getCalibrations.useQuery(
-    { assetId },
-    { enabled: !!assetId },
-  );
+  const calsQ = trpc.metrology.getCalibrations.useQuery({ assetId }, { enabled: !!assetId });
   // Документы (PDF протоколы) прикреплены к ассету kind='document'.
   // Используем для резолва presigned GET по documentAttachmentId.
   const attachmentsQ = trpc.attachments.listByReference.useQuery(
     { referenceType: 'asset' as const, referenceId: assetId },
     { enabled: !!assetId },
   );
-  const attachmentById = new Map(
-    (attachmentsQ.data ?? []).map((a) => [a.id, a]),
-  );
+  const attachmentById = new Map((attachmentsQ.data ?? []).map((a) => [a.id, a]));
 
   const [editOpen, setEditOpen] = useState(false);
   const [calibrationOpen, setCalibrationOpen] = useState(false);
@@ -75,7 +61,10 @@ export function MetrologyAssetPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
-      <Link href="/metrology" className="text-primary inline-flex items-center text-sm hover:underline">
+      <Link
+        href="/metrology"
+        className="text-primary inline-flex items-center text-sm hover:underline"
+      >
         <ChevronLeft className="h-4 w-4" />
         Реестр СИ
       </Link>
@@ -88,14 +77,10 @@ export function MetrologyAssetPage() {
             </div>
             <h1 className="text-xl font-semibold md:text-2xl">{si.assetModel}</h1>
             {si.assetSerial && (
-              <div className="text-muted-foreground font-mono text-xs">
-                сер. № {si.assetSerial}
-              </div>
+              <div className="text-muted-foreground font-mono text-xs">сер. № {si.assetSerial}</div>
             )}
             {si.ownerClientName && (
-              <div className="text-muted-foreground text-xs">
-                Клиент: {si.ownerClientName}
-              </div>
+              <div className="text-muted-foreground text-xs">Клиент: {si.ownerClientName}</div>
             )}
           </div>
           <button
@@ -111,10 +96,7 @@ export function MetrologyAssetPage() {
         <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
           <Field label="Класс точности" value={si.accuracyClass} />
           <Field label="Диапазон" value={si.measurementRange} />
-          <Field
-            label="Межповерочный интервал"
-            value={`${si.calibrationIntervalMonths} мес.`}
-          />
+          <Field label="Межповерочный интервал" value={`${si.calibrationIntervalMonths} мес.`} />
           <Field label="Госреестр СИ" value={si.patternRegistryNumber} />
           <Field label="Последняя поверка" value={si.lastCalibrationAt ?? '—'} />
           <Field
@@ -177,9 +159,7 @@ export function MetrologyAssetPage() {
                   <td className="p-3 text-xs tabular-nums">{c.performedAt}</td>
                   <td className="p-3 text-xs tabular-nums">{c.validUntil}</td>
                   <td className="p-3 font-mono text-xs">{c.certificateNumber ?? '—'}</td>
-                  <td className="text-muted-foreground p-3 text-xs">
-                    {c.calibratorOrg ?? '—'}
-                  </td>
+                  <td className="text-muted-foreground p-3 text-xs">{c.calibratorOrg ?? '—'}</td>
                   <td className="p-3">
                     <ResultBadge result={c.result} />
                   </td>
@@ -199,9 +179,7 @@ export function MetrologyAssetPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="text-muted-foreground p-3 text-xs">
-                    {c.notes ?? '—'}
-                  </td>
+                  <td className="text-muted-foreground p-3 text-xs">{c.notes ?? '—'}</td>
                 </tr>
               );
             })}
@@ -259,9 +237,7 @@ function Field({
 }) {
   return (
     <div>
-      <div className="text-muted-foreground text-[11px] uppercase tracking-wide">
-        {label}
-      </div>
+      <div className="text-muted-foreground text-[11px] uppercase tracking-wide">{label}</div>
       <div className={cn('mt-0.5 text-sm', className)}>{value || '—'}</div>
     </div>
   );
@@ -272,9 +248,7 @@ function ResultBadge({ result }: { result: 'passed' | 'failed' }) {
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium uppercase',
-        result === 'passed'
-          ? 'bg-success/10 text-success'
-          : 'bg-destructive/10 text-destructive',
+        result === 'passed' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive',
       )}
     >
       {result === 'passed' ? (
@@ -398,7 +372,7 @@ function EditSiModal({
             value={typeName}
             onChange={(e) => setTypeName(e.target.value)}
             required
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         <div className="grid grid-cols-2 gap-3">
@@ -407,7 +381,7 @@ function EditSiModal({
               type="text"
               value={pattern}
               onChange={(e) => setPattern(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </FieldLabel>
           <FieldLabel label="Класс точности">
@@ -415,7 +389,7 @@ function EditSiModal({
               type="text"
               value={accuracy}
               onChange={(e) => setAccuracy(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </FieldLabel>
         </div>
@@ -424,7 +398,7 @@ function EditSiModal({
             type="text"
             value={range}
             onChange={(e) => setRange(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         <FieldLabel label="Межповерочный интервал, мес." required>
@@ -435,7 +409,7 @@ function EditSiModal({
             value={interval}
             onChange={(e) => setInterval(Number(e.target.value))}
             required
-            className="bg-background w-32 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-32 rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         {error && (
@@ -557,7 +531,7 @@ function CalibrationModal({
               value={performedAt}
               onChange={(e) => setPerformedAt(e.target.value)}
               required
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </FieldLabel>
           <FieldLabel label="Действительна до" required>
@@ -566,7 +540,7 @@ function CalibrationModal({
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
               required
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
           </FieldLabel>
         </div>
@@ -575,7 +549,7 @@ function CalibrationModal({
             type="text"
             value={certNo}
             onChange={(e) => setCertNo(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 font-mono text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         <FieldLabel label="Поверитель (организация)">
@@ -583,14 +557,14 @@ function CalibrationModal({
             type="text"
             value={org}
             onChange={(e) => setOrg(e.target.value)}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         <FieldLabel label="Результат" required>
           <select
             value={result}
             onChange={(e) => setResult(e.target.value as 'passed' | 'failed')}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           >
             <option value="passed">Годна</option>
             <option value="failed">Брак / непригодна</option>
@@ -601,7 +575,7 @@ function CalibrationModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
           />
         </FieldLabel>
         <FieldLabel label="Протокол поверки (PDF)">
@@ -636,13 +610,7 @@ function CalibrationModal({
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
-function PdfPicker({
-  file,
-  onChange,
-}: {
-  file: File | null;
-  onChange: (f: File | null) => void;
-}) {
+function PdfPicker({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -716,9 +684,7 @@ function PdfPicker({
           onChange={(e) => handle(e.target.files?.[0] ?? undefined)}
         />
       </div>
-      {localError && (
-        <div className="text-destructive mt-1 text-xs">{localError}</div>
-      )}
+      {localError && <div className="text-destructive mt-1 text-xs">{localError}</div>}
     </>
   );
 }

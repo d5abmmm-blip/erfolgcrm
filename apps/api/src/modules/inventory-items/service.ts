@@ -37,10 +37,7 @@ export async function getItemQuery(
   return repoGet(db, tenant.id, itemId);
 }
 
-export async function createItemCmd(
-  ctx: CmdCtx,
-  input: UpsertItemInput,
-): Promise<{ id: string }> {
+export async function createItemCmd(ctx: CmdCtx, input: UpsertItemInput): Promise<{ id: string }> {
   const result = await repoCreate(ctx.db, ctx.tenant.id, input);
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
@@ -75,7 +72,8 @@ export async function deleteItemCmd(ctx: CmdCtx, itemId: string): Promise<void> 
   if (await hasMovements(ctx.db, ctx.tenant.id, itemId)) {
     throw new TRPCError({
       code: 'CONFLICT',
-      message: 'Нельзя удалить позицию, по которой есть движения. Деактивируйте через смену категории.',
+      message:
+        'Нельзя удалить позицию, по которой есть движения. Деактивируйте через смену категории.',
     });
   }
   await repoDelete(ctx.db, ctx.tenant.id, itemId);

@@ -154,10 +154,7 @@ export async function listAssets(
       .limit(PAGE_SIZE_DEFAULT)
       .offset(offset);
 
-    const totalRow = await tx
-      .select({ value: count() })
-      .from(assets)
-      .where(whereClause);
+    const totalRow = await tx.select({ value: count() }).from(assets).where(whereClause);
 
     return {
       items,
@@ -242,29 +239,31 @@ export async function searchAssets(
 > {
   const query = `%${q.trim()}%`;
   return withTenantTx(db, tenantId, async (tx) => {
-    return tx
-      .select({
-        id: assets.id,
-        model: assets.model,
-        serialNumber: assets.serialNumber,
-        // Ищем по инвентарному номеру давно, а в выдаче его не было: находка
-        // выглядела как «совпало непонятно с чем».
-        inventoryNumber: assets.inventoryNumber,
-        ownerClientId: assets.ownerClientId,
-        ownerDisplayName: clients.displayName,
-      })
-      .from(assets)
-      // leftJoin (не inner): техника без клиента тоже находится поиском.
-      .leftJoin(clients, eq(assets.ownerClientId, clients.id))
-      .where(
-        or(
-          ruIlike(assets.model, query),
-          ruIlike(assets.serialNumber, query),
-          ruIlike(assets.inventoryNumber, query),
-        ),
-      )
-      .orderBy(asc(assets.model))
-      .limit(10);
+    return (
+      tx
+        .select({
+          id: assets.id,
+          model: assets.model,
+          serialNumber: assets.serialNumber,
+          // Ищем по инвентарному номеру давно, а в выдаче его не было: находка
+          // выглядела как «совпало непонятно с чем».
+          inventoryNumber: assets.inventoryNumber,
+          ownerClientId: assets.ownerClientId,
+          ownerDisplayName: clients.displayName,
+        })
+        .from(assets)
+        // leftJoin (не inner): техника без клиента тоже находится поиском.
+        .leftJoin(clients, eq(assets.ownerClientId, clients.id))
+        .where(
+          or(
+            ruIlike(assets.model, query),
+            ruIlike(assets.serialNumber, query),
+            ruIlike(assets.inventoryNumber, query),
+          ),
+        )
+        .orderBy(asc(assets.model))
+        .limit(10)
+    );
   });
 }
 
@@ -362,11 +361,7 @@ export async function updateAssetWithEvents(
   patch: UpdateAssetInput,
 ): Promise<{ events: Array<{ type: AssetEventType; payload: AssetEventPayload }> }> {
   return withTenantTx(db, tenantId, async (tx) => {
-    const current = await tx
-      .select()
-      .from(assets)
-      .where(eq(assets.id, id))
-      .limit(1);
+    const current = await tx.select().from(assets).where(eq(assets.id, id)).limit(1);
     const before = current[0];
     if (!before) {
       // RLS отсёк или несуществующий id — отдаем пустой результат, service бросит NOT_FOUND
@@ -395,10 +390,7 @@ export async function updateAssetWithEvents(
     await tx.update(assets).set(setObj).where(eq(assets.id, id));
 
     const events: Array<{ type: AssetEventType; payload: AssetEventPayload }> = [];
-    if (
-      patch.lifecycleStatus !== undefined &&
-      patch.lifecycleStatus !== before.lifecycleStatus
-    ) {
+    if (patch.lifecycleStatus !== undefined && patch.lifecycleStatus !== before.lifecycleStatus) {
       events.push({
         type: 'status_change',
         payload: { from: before.lifecycleStatus, to: patch.lifecycleStatus },
@@ -463,10 +455,7 @@ export async function addNote(
 }
 
 /** Distinct manufacturers для autosuggest в форме. */
-export async function listManufacturers(
-  db: Db,
-  tenantId: string,
-): Promise<string[]> {
+export async function listManufacturers(db: Db, tenantId: string): Promise<string[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx.execute<{ manufacturer: string }>(sql`
       SELECT DISTINCT manufacturer FROM assets
@@ -483,10 +472,7 @@ export async function listManufacturers(
  * Берём из обеих таблиц: реально заведённой техники и каталога моделей,
  * чтобы подсказки были даже до первой единицы техники.
  */
-export async function listDeviceTypes(
-  db: Db,
-  tenantId: string,
-): Promise<string[]> {
+export async function listDeviceTypes(db: Db, tenantId: string): Promise<string[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx.execute<{ device_type: string }>(sql`
       SELECT DISTINCT device_type FROM (

@@ -27,8 +27,18 @@ import type { CmdCtx } from '../../trpc/helpers';
 type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
 
 const MONTHS_RU = [
-  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+  'январь',
+  'февраль',
+  'март',
+  'апрель',
+  'май',
+  'июнь',
+  'июль',
+  'август',
+  'сентябрь',
+  'октябрь',
+  'ноябрь',
+  'декабрь',
 ];
 function monthLabel(month: string): string {
   const [y, m] = month.split('-');
@@ -97,7 +107,8 @@ function toDto(row: PayrollSheet): PayrollSheetDto {
     entries: row.entries ?? [],
     savedAt: row.updatedAt.toISOString(),
     cashTransactionId: row.cashTransactionId ?? null,
-    postedAmountKopecks: row.postedAmountKopecks != null ? row.postedAmountKopecks.toString() : null,
+    postedAmountKopecks:
+      row.postedAmountKopecks != null ? row.postedAmountKopecks.toString() : null,
     postedAccountId: row.postedAccountId ?? null,
     postedAt: row.postedAt ? row.postedAt.toISOString() : null,
   };

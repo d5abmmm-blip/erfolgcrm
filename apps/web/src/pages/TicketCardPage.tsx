@@ -34,11 +34,7 @@ import {
   XCircle,
   Trash2,
 } from 'lucide-react';
-import type {
-  TicketEventType,
-  TicketPriority,
-  TicketStatus,
-} from '@erfolg/shared';
+import type { TicketEventType, TicketPriority, TicketStatus } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
@@ -164,7 +160,9 @@ export function TicketCardPage() {
     },
   });
   const addNote = trpc.tickets.addNote.useMutation({ onSuccess: invalidateAll });
-  const setWaitingForPart = trpc.tickets.setWaitingForPart.useMutation({ onSuccess: invalidateAll });
+  const setWaitingForPart = trpc.tickets.setWaitingForPart.useMutation({
+    onSuccess: invalidateAll,
+  });
   const cancel = trpc.tickets.cancel.useMutation({ onSuccess: invalidateAll });
   const reopen = trpc.tickets.reopen.useMutation({ onSuccess: invalidateAll });
   const del = trpc.tickets.delete.useMutation({
@@ -274,40 +272,69 @@ export function TicketCardPage() {
         await assemblePdfInputs();
 
       if (kind === 'intake_act') {
-        await printIntakeAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData }, win);
+        await printIntakeAct(
+          { tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData },
+          win,
+        );
       } else if (kind === 'invoice') {
         if (!workOrderData) {
           win?.close();
           setPrintError('Нельзя сформировать счёт: наряд ещё не создан или не содержит позиций.');
           return;
         }
-        await printInvoice({ tenant: tenantData, client: clientData, ticket: ticketData, workOrder: workOrderData }, win);
+        await printInvoice(
+          { tenant: tenantData, client: clientData, ticket: ticketData, workOrder: workOrderData },
+          win,
+        );
       } else if (kind === 'work_act') {
         if (!workOrderData) {
           win?.close();
           setPrintError('Нельзя сформировать акт работ: наряд ещё не создан.');
           return;
         }
-        await printWorkAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData }, win);
+        await printWorkAct(
+          {
+            tenant: tenantData,
+            client: clientData,
+            asset: assetData,
+            ticket: ticketData,
+            workOrder: workOrderData,
+          },
+          win,
+        );
       } else if (kind === 'defect_act') {
         if (!workOrderData) {
           win?.close();
-          setPrintError('Нельзя сформировать дефектный акт: наряд ещё не создан (нет диагностики и заключения).');
+          setPrintError(
+            'Нельзя сформировать дефектный акт: наряд ещё не создан (нет диагностики и заключения).',
+          );
           return;
         }
-        await printDefectAct({ tenant: tenantData, client: clientData, asset: assetData, ticket: ticketData, workOrder: workOrderData }, win);
+        await printDefectAct(
+          {
+            tenant: tenantData,
+            client: clientData,
+            asset: assetData,
+            ticket: ticketData,
+            workOrder: workOrderData,
+          },
+          win,
+        );
       } else {
         if (!assetData) {
           win?.close();
           setPrintError('Нельзя сформировать ярлык: к заявке не привязана техника.');
           return;
         }
-        await printAssetLabel({
-          asset: assetData,
-          ticket: ticketData,
-          fallbackBarcode: t.assetId ?? t.id,
-          tenantDisplayName: tenantData.displayName,
-        }, win);
+        await printAssetLabel(
+          {
+            asset: assetData,
+            ticket: ticketData,
+            fallbackBarcode: t.assetId ?? t.id,
+            tenantDisplayName: tenantData.displayName,
+          },
+          win,
+        );
       }
       // Ярлык — не документ; recordPrint фиксирует только акты/счета.
       if (kind !== 'asset_label') {
@@ -464,20 +491,45 @@ export function TicketCardPage() {
           {isStaff && <TrackShareButton ticketId={t.id} />}
           {/* Инженеру — акты только по своим заявкам. Счёт/пакет/приём — дело staff. */}
           {isStaff && (
-            <PrintBtn icon={FileText} label="Акт приёма" onClick={() => void printDocument('intake_act', 'акт приёма')} />
+            <PrintBtn
+              icon={FileText}
+              label="Акт приёма"
+              onClick={() => void printDocument('intake_act', 'акт приёма')}
+            />
           )}
           {canPrintDocs && (
-            <PrintBtn icon={FileWarning} label="Дефектный акт" onClick={() => void printDocument('defect_act', 'дефектный акт')} />
+            <PrintBtn
+              icon={FileWarning}
+              label="Дефектный акт"
+              onClick={() => void printDocument('defect_act', 'дефектный акт')}
+            />
           )}
           {isStaff && (
-            <PrintBtn icon={FileText} label="Счёт" onClick={() => void printDocument('invoice', 'счёт на оплату')} />
+            <PrintBtn
+              icon={FileText}
+              label="Счёт"
+              onClick={() => void printDocument('invoice', 'счёт на оплату')}
+            />
           )}
           {canPrintDocs && (
-            <PrintBtn icon={Printer} label="Акт работ" onClick={() => void printDocument('work_act', 'акт выполненных работ')} />
+            <PrintBtn
+              icon={Printer}
+              label="Акт работ"
+              onClick={() => void printDocument('work_act', 'акт выполненных работ')}
+            />
           )}
-          <PrintBtn icon={Tag} label="Ярлык" onClick={() => void printDocument('asset_label', 'ярлык на технику')} />
+          <PrintBtn
+            icon={Tag}
+            label="Ярлык"
+            onClick={() => void printDocument('asset_label', 'ярлык на технику')}
+          />
           {isStaff && (
-            <PrintBtn icon={Files} label="Пакет документов" emphasis onClick={() => void printPackage()} />
+            <PrintBtn
+              icon={Files}
+              label="Пакет документов"
+              emphasis
+              onClick={() => void printPackage()}
+            />
           )}
         </div>
       </div>
@@ -534,16 +586,12 @@ export function TicketCardPage() {
               <SlaInline target={t.slaTargetAt} status={t.status} />
             </div>
             {t.cancelReason && (
-              <div className="text-destructive mt-1 text-xs">
-                Причина отмены: {t.cancelReason}
-              </div>
+              <div className="text-destructive mt-1 text-xs">Причина отмены: {t.cancelReason}</div>
             )}
           </div>
           <div className="text-right">
             <div className="text-muted-foreground text-xs">Итого</div>
-            <div className="text-2xl font-semibold tabular-nums">
-              {kopecksToRub(totalKop)} ₽
-            </div>
+            <div className="text-2xl font-semibold tabular-nums">{kopecksToRub(totalKop)} ₽</div>
             <div className="text-muted-foreground text-xs">
               {vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`}
             </div>
@@ -552,7 +600,10 @@ export function TicketCardPage() {
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <InfoBlock label="Клиент" icon={User}>
-            <Link href={`/clients/${t.clientId}`} className="text-foreground hover:text-primary font-medium">
+            <Link
+              href={`/clients/${t.clientId}`}
+              className="text-foreground hover:text-primary font-medium"
+            >
               {t.clientDisplayName || '—'}
             </Link>
           </InfoBlock>
@@ -571,13 +622,13 @@ export function TicketCardPage() {
             ) : clientFull.isLoading ? (
               <span className="text-muted-foreground text-xs">Загрузка…</span>
             ) : (
-              <span className="text-muted-foreground text-xs">контакт удалён из карточки клиента</span>
+              <span className="text-muted-foreground text-xs">
+                контакт удалён из карточки клиента
+              </span>
             )}
           </InfoBlock>
           <InfoBlock label="Где техника" icon={MapPin}>
-            <div className="font-medium">
-              {INTAKE_LABELS[t.intakeMethod] ?? t.intakeMethod}
-            </div>
+            <div className="font-medium">{INTAKE_LABELS[t.intakeMethod] ?? t.intakeMethod}</div>
           </InfoBlock>
           <InfoBlock label="Назначен инженер" icon={Wrench}>
             {t.assignedEngineerName ?? <span className="text-muted-foreground">не назначен</span>}
@@ -645,9 +696,7 @@ export function TicketCardPage() {
                 </ol>
               </div>
             )}
-            {tab === 'payments' && (
-              <TicketPayments ticketId={t.id} canManage={isStaff} />
-            )}
+            {tab === 'payments' && <TicketPayments ticketId={t.id} canManage={isStaff} />}
             {tab === 'docs' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold">Фото и сканы документов</h3>
@@ -678,7 +727,9 @@ export function TicketCardPage() {
               ) : (events.data ?? []).slice(0, 8).length === 0 ? (
                 <li className="text-muted-foreground">Событий пока нет</li>
               ) : (
-                (events.data ?? []).slice(0, 8).map((ev) => <EventRow key={ev.id} event={ev} compact />)
+                (events.data ?? [])
+                  .slice(0, 8)
+                  .map((ev) => <EventRow key={ev.id} event={ev} compact />)
               )}
             </ol>
           </section>
@@ -699,10 +750,7 @@ export function TicketCardPage() {
             deletePending={del.isPending}
             deleteError={del.error?.message ?? null}
             pending={
-              changeStatus.isPending ||
-              update.isPending ||
-              cancel.isPending ||
-              reopen.isPending
+              changeStatus.isPending || update.isPending || cancel.isPending || reopen.isPending
             }
           />
 
@@ -887,8 +935,8 @@ function TrackShareButton({ ticketId }: { ticketId: string }) {
               <h3 className="text-sm font-semibold">Ссылка для клиента</h3>
             </div>
             <p className="text-muted-foreground mt-1 text-sm">
-              Клиент откроет её и увидит стадию ремонта — как отслеживание посылки. Логин не
-              нужен. Можно отправить в письме или мессенджере.
+              Клиент откроет её и увидит стадию ремонта — как отслеживание посылки. Логин не нужен.
+              Можно отправить в письме или мессенджере.
             </p>
 
             {getLink.isPending && (
@@ -1058,13 +1106,10 @@ function AssetCard({
           <div className="text-muted-foreground mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
             <div>
               Серийник:{' '}
-              <span className="font-mono">
-                {asset.data?.serialNumber ?? serialNumber ?? '—'}
-              </span>
+              <span className="font-mono">{asset.data?.serialNumber ?? serialNumber ?? '—'}</span>
             </div>
             <div>
-              Инв. №:{' '}
-              <span className="font-mono">{asset.data?.inventoryNumber ?? '—'}</span>
+              Инв. №: <span className="font-mono">{asset.data?.inventoryNumber ?? '—'}</span>
             </div>
             <div>Класс риска: {asset.data?.riskClass ?? '—'}</div>
             <div>Гарантия до: {asset.data?.warrantyUntil ?? '—'}</div>
@@ -1155,7 +1200,7 @@ function ActionsPanel({
             <select
               value={statusDraft ?? t.status}
               onChange={(e) => setStatusDraft(e.target.value as TicketStatus)}
-              className="bg-background flex-1 rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 flex-1 rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
             >
               {allowedStatuses.map((s) => (
                 <option key={s} value={s}>
@@ -1167,7 +1212,7 @@ function ActionsPanel({
               type="button"
               disabled={pending || !statusDraft || statusDraft === t.status}
               onClick={() => statusDraft && onChangeStatus(statusDraft)}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 rounded-md px-3 py-1.5 text-sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
             >
               Применить
             </button>
@@ -1177,7 +1222,7 @@ function ActionsPanel({
               type="button"
               onClick={() => onChangeStatus('act_pending')}
               disabled={pending}
-              className="text-primary hover:bg-primary/10 mt-2 w-full rounded-md border border-primary/30 px-3 py-1.5 text-xs"
+              className="text-primary hover:bg-primary/10 border-primary/30 mt-2 w-full rounded-md border px-3 py-1.5 text-xs"
             >
               Перевести в «Ожидает акта»
             </button>
@@ -1278,7 +1323,7 @@ function ActionsPanel({
           onChange={(e) => setNoteDraft(e.target.value)}
           rows={2}
           placeholder="Что произошло?"
-          className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
         />
         <button
           type="button"
@@ -1287,7 +1332,7 @@ function ActionsPanel({
             onAddNote(noteDraft.trim());
             setNoteDraft('');
           }}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 mt-1.5 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-1.5 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs disabled:opacity-50"
         >
           Добавить
         </button>
@@ -1300,7 +1345,7 @@ function ActionsPanel({
               type="button"
               onClick={() => setCancelOpen(true)}
               disabled={pending}
-              className="text-destructive border-destructive/30 hover:bg-destructive/10 disabled:opacity-50 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
+              className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition disabled:opacity-50"
             >
               <XCircle className="h-3.5 w-3.5" />
               Отменить заявку
@@ -1310,7 +1355,7 @@ function ActionsPanel({
               type="button"
               onClick={onReopen}
               disabled={pending}
-              className="text-primary border-primary/30 hover:bg-primary/10 disabled:opacity-50 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition"
+              className="text-primary border-primary/30 hover:bg-primary/10 inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Переоткрыть
@@ -1320,7 +1365,7 @@ function ActionsPanel({
             type="button"
             onClick={() => setDeleteOpen(true)}
             disabled={pending || deletePending}
-            className="text-destructive/80 hover:bg-destructive/10 disabled:opacity-50 mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition"
+            className="text-destructive/80 hover:bg-destructive/10 mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Удалить заявку
@@ -1432,13 +1477,13 @@ function WaitingForPartPanel({
             rows={2}
             maxLength={500}
             placeholder="Например: плата питания Mindray, поставщик МедКомплект, срок ~2 нед."
-            className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
           />
           <button
             type="button"
             disabled={pending || noteDraft.trim() === (note ?? '')}
             onClick={() => onSave(true, noteDraft.trim() || null)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 mt-1.5 rounded-md px-3 py-1.5 text-xs"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 mt-1.5 rounded-md px-3 py-1.5 text-xs disabled:opacity-50"
           >
             Сохранить заметку
           </button>
@@ -1608,7 +1653,7 @@ function AssignSelect({
         value={value ?? ''}
         disabled={disabled || loading}
         onChange={(e) => onApply(e.target.value || null)}
-        className="bg-background w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-50"
       >
         <option value="">{loading ? 'загрузка…' : 'не назначен'}</option>
         {options.map((u) => (
@@ -1642,13 +1687,7 @@ function InfoBlock({
   );
 }
 
-function SlaInline({
-  target,
-  status,
-}: {
-  target: Date | null;
-  status: TicketStatus;
-}) {
+function SlaInline({ target, status }: { target: Date | null; status: TicketStatus }) {
   if (status === 'closed' || status === 'cancelled') return null;
   if (!target) return null;
   const diffMs = new Date(target).getTime() - Date.now();
@@ -1665,7 +1704,12 @@ function SlaInline({
     label = `SLA через ${diffH < 24 ? Math.round(diffH) + 'ч' : Math.round(diffH / 24) + 'д'}`;
   }
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium', cls)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium',
+        cls,
+      )}
+    >
       <Clock className="h-3 w-3" />
       {label}
     </span>
@@ -1803,10 +1847,7 @@ function TicketInvoiceSection({
 }) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const invoices = trpc.invoices.listByTicket.useQuery(
-    { ticketId },
-    { enabled: !!ticketId },
-  );
+  const invoices = trpc.invoices.listByTicket.useQuery({ ticketId }, { enabled: !!ticketId });
   const createDraft = trpc.invoices.createDraft.useMutation({
     onSuccess: async (inv) => {
       await utils.invoices.listByTicket.invalidate({ ticketId });
@@ -1902,9 +1943,8 @@ function ChecklistsTab({
     <div className="space-y-4">
       <h3 className="text-sm font-semibold">Чек-листы приёмки и выдачи</h3>
       <p className="text-muted-foreground text-xs">
-        Фиксируем состояние техники при приёме (царапины, комплектация, работоспособность) и
-        при выдаче. Каждый пункт можно сопроводить фото и комментарием — это исключает споры
-        с клиентом.
+        Фиксируем состояние техники при приёме (царапины, комплектация, работоспособность) и при
+        выдаче. Каждый пункт можно сопроводить фото и комментарием — это исключает споры с клиентом.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -1948,9 +1988,7 @@ function ChecklistsTab({
             >
               <div className="flex-1 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {c.kind === 'intake' ? 'Приёмка' : 'Выдача'}
-                  </span>
+                  <span className="font-medium">{c.kind === 'intake' ? 'Приёмка' : 'Выдача'}</span>
                   <span className="text-muted-foreground text-xs">
                     {new Date(c.completedAt).toLocaleString('ru-RU')}
                   </span>

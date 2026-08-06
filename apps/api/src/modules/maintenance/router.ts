@@ -62,9 +62,7 @@ export const maintenanceRouter = router({
           .strict(),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      updateScheduleCmd(buildCmdCtx(ctx), input.id, input.patch),
-    ),
+    .mutation(({ ctx, input }) => updateScheduleCmd(buildCmdCtx(ctx), input.id, input.patch)),
 
   recordPerformed: engineerProcedure
     .input(

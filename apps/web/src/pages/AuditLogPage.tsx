@@ -112,13 +112,18 @@ export function AuditLogPage() {
   const [filters, setFilters] = useState<FiltersState>(EMPTY_FILTERS);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const statsQ = trpc.audit.stats.useQuery(undefined, { enabled: me.data?.user.role === 'director' });
+  const statsQ = trpc.audit.stats.useQuery(undefined, {
+    enabled: me.data?.user.role === 'director',
+  });
   const entityTypesQ = trpc.audit.entityTypes.useQuery(undefined, {
     enabled: me.data?.user.role === 'director',
   });
-  const usersQ = trpc.users.list.useQuery({ includeBlocked: true }, {
-    enabled: me.data?.user.role === 'director',
-  });
+  const usersQ = trpc.users.list.useQuery(
+    { includeBlocked: true },
+    {
+      enabled: me.data?.user.role === 'director',
+    },
+  );
 
   const queryInput = useMemo(
     () => ({
@@ -189,8 +194,8 @@ export function AuditLogPage() {
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Аудит</h1>
           <p className="text-muted-foreground text-sm">
-            Полный журнал изменений в системе. Хранится 5 лет (152-ФЗ).
-            Записи нельзя редактировать или удалять.
+            Полный журнал изменений в системе. Хранится 5 лет (152-ФЗ). Записи нельзя редактировать
+            или удалять.
           </p>
         </div>
       </div>
@@ -264,9 +269,7 @@ export function AuditLogPage() {
             <label className="text-muted-foreground mb-1 block text-xs">Пользователь</label>
             <select
               value={filters.userId ?? ''}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, userId: e.target.value || null }))
-              }
+              onChange={(e) => setFilters((f) => ({ ...f, userId: e.target.value || null }))}
               className="bg-background w-full rounded-md border px-2 py-1.5 text-sm"
             >
               <option value="">Все</option>
@@ -301,14 +304,14 @@ export function AuditLogPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative min-w-[200px] flex-1">
             <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
             <input
               type="search"
               value={filters.search}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               placeholder="Поиск по ID объекта, IP или User-Agent…"
-              className="bg-background w-full rounded-md border py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2"
             />
           </div>
           {hasFilters && (
@@ -353,13 +356,16 @@ export function AuditLogPage() {
               colSpan={7}
               onRetry={() => void listQ.refetch()}
             />
-            {!listQ.isLoading && !listQ.error && listQ.fetchStatus !== 'paused' && rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-muted-foreground p-6 text-center">
-                  Событий нет.
-                </td>
-              </tr>
-            )}
+            {!listQ.isLoading &&
+              !listQ.error &&
+              listQ.fetchStatus !== 'paused' &&
+              rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-muted-foreground p-6 text-center">
+                    Событий нет.
+                  </td>
+                </tr>
+              )}
             {rows.map((r) => {
               const isOpen = expanded.has(r.id);
               const tone = ACTION_TONE[r.action] ?? 'bg-muted text-muted-foreground';
@@ -369,23 +375,19 @@ export function AuditLogPage() {
                     className="hover:bg-muted/30 cursor-pointer"
                     onClick={() => toggleExpand(r.id)}
                   >
-                    <td className="p-2 text-muted-foreground">
+                    <td className="text-muted-foreground p-2">
                       {isOpen ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
                         <ChevronRight className="h-4 w-4" />
                       )}
                     </td>
-                    <td className="p-3 text-xs tabular-nums">
-                      {formatTs(r.ts)}
-                    </td>
+                    <td className="p-3 text-xs tabular-nums">{formatTs(r.ts)}</td>
                     <td className="p-3 text-xs">
                       {r.userName ? (
                         <>
                           <div className="font-medium">{r.userName}</div>
-                          {r.userRole && (
-                            <div className="text-muted-foreground">{r.userRole}</div>
-                          )}
+                          {r.userRole && <div className="text-muted-foreground">{r.userRole}</div>}
                         </>
                       ) : (
                         <span className="text-muted-foreground italic">система</span>
@@ -401,9 +403,7 @@ export function AuditLogPage() {
                         {ACTION_LABEL[r.action] ?? r.action}
                       </span>
                     </td>
-                    <td className="p-3 text-xs">
-                      {ENTITY_LABEL[r.entityType] ?? r.entityType}
-                    </td>
+                    <td className="p-3 text-xs">{ENTITY_LABEL[r.entityType] ?? r.entityType}</td>
                     <td className="text-muted-foreground p-3 font-mono text-[11px]">
                       {r.entityId ? r.entityId.slice(0, 8) + '…' : '—'}
                     </td>
@@ -466,14 +466,12 @@ function DetailView({ row }: { row: DetailRow }) {
           <div className="text-muted-foreground mb-1 text-[10px] uppercase tracking-wide">
             ID объекта (полный)
           </div>
-          <div className="font-mono break-all">{row.entityId}</div>
+          <div className="break-all font-mono">{row.entityId}</div>
         </div>
       )}
       {row.before != null && (
         <div>
-          <div className="text-muted-foreground mb-1 text-[10px] uppercase tracking-wide">
-            До
-          </div>
+          <div className="text-muted-foreground mb-1 text-[10px] uppercase tracking-wide">До</div>
           <pre className="bg-background overflow-x-auto rounded border p-2 text-[11px]">
             {JSON.stringify(row.before, null, 2)}
           </pre>

@@ -52,7 +52,10 @@ function buildFallbackDescription(
   diagnosis: string | null,
 ): string {
   const names = (arr: WorkOrderLineDto[]) =>
-    arr.map((l) => l.name.trim()).filter(Boolean).join('; ');
+    arr
+      .map((l) => l.name.trim())
+      .filter(Boolean)
+      .join('; ');
   const segments: string[] = [];
   if (works.length > 0) segments.push(`Выполнены работы: ${names(works)}.`);
   if (parts.length > 0) segments.push(`Установлены/заменены запчасти: ${names(parts)}.`);
@@ -108,18 +111,25 @@ export async function draftRepairDescriptionQuery(
   if (symptom) userLines.push(`Симптом (со слов клиента): ${symptom}`);
   if (wo.diagnosis?.trim()) userLines.push(`Диагноз инженера: ${wo.diagnosis.trim()}`);
   if (works.length > 0)
-    userLines.push(`Выполненные работы (строки наряда): ${works.map((w) => w.name.trim()).filter(Boolean).join('; ')}`);
+    userLines.push(
+      `Выполненные работы (строки наряда): ${works
+        .map((w) => w.name.trim())
+        .filter(Boolean)
+        .join('; ')}`,
+    );
   if (parts.length > 0)
-    userLines.push(`Использованные запчасти: ${parts.map((p) => p.name.trim()).filter(Boolean).join('; ')}`);
+    userLines.push(
+      `Использованные запчасти: ${parts
+        .map((p) => p.name.trim())
+        .filter(Boolean)
+        .join('; ')}`,
+    );
 
   const ai = await phraseWithLlm(db, tenant, system, userLines.join('\n'));
   return ai ? { text: ai.trim(), aiUsed: true } : { text: fallback, aiUsed: false };
 }
 
-export async function ensureWorkOrderCmd(
-  ctx: CmdCtx,
-  ticketId: string,
-): Promise<WorkOrderDto> {
+export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise<WorkOrderDto> {
   const result = await repoGetOrCreate(ctx.db, ctx.tenant.id, ticketId);
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
@@ -158,22 +168,16 @@ export async function upsertLineCmd(
   input: UpsertLineCmdInput,
 ): Promise<{ id: string; workOrderId: string }> {
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, input.ticketId);
-  const result = await repoUpsertLine(
-    ctx.db,
-    ctx.tenant.id,
-    workOrderId,
-    input.lineId ?? null,
-    {
-      lineType: input.lineType,
-      name: input.name,
-      unit: input.unit,
-      quantity: input.quantity,
-      unitPriceKopecks: input.unitPriceKopecks,
-      engineerId: input.engineerId,
-      comment: input.comment,
-      orderIdx: input.orderIdx,
-    },
-  );
+  const result = await repoUpsertLine(ctx.db, ctx.tenant.id, workOrderId, input.lineId ?? null, {
+    lineType: input.lineType,
+    name: input.name,
+    unit: input.unit,
+    quantity: input.quantity,
+    unitPriceKopecks: input.unitPriceKopecks,
+    engineerId: input.engineerId,
+    comment: input.comment,
+    orderIdx: input.orderIdx,
+  });
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
     action: input.lineId ? 'update' : 'create',
@@ -192,11 +196,7 @@ export async function upsertLineCmd(
   return { id: result.id, workOrderId };
 }
 
-export async function deleteLineCmd(
-  ctx: CmdCtx,
-  ticketId: string,
-  lineId: string,
-): Promise<void> {
+export async function deleteLineCmd(ctx: CmdCtx, ticketId: string, lineId: string): Promise<void> {
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
   await repoDeleteLine(ctx.db, ctx.tenant.id, workOrderId, lineId);
   await writeAudit(ctx.db, ctx.tenant.id, {

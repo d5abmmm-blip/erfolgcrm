@@ -62,11 +62,13 @@ export const invoicesRouter = router({
 
   listForTenant: staffProcedure
     .input(
-      z.object({
-        status: invoiceStatusEnum.optional(),
-        limit: z.number().int().min(1).max(200).optional(),
-        page: z.number().int().min(1).optional(),
-      }).optional(),
+      z
+        .object({
+          status: invoiceStatusEnum.optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+          page: z.number().int().min(1).optional(),
+        })
+        .optional(),
     )
     .query(({ ctx, input }) => {
       const limit = input?.limit ?? 50;

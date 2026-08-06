@@ -108,16 +108,12 @@ export async function hashRecoveryCodes(codes: string[]): Promise<string[]> {
  * Проверяет код против списка хешей. При попадании возвращает индекс
  * (вызывающий должен удалить хеш для одноразовости). null = не совпало.
  */
-export async function verifyRecoveryCode(
-  code: string,
-  hashes: string[],
-): Promise<number | null> {
+export async function verifyRecoveryCode(code: string, hashes: string[]): Promise<number | null> {
   const cleaned = normalizeRecoveryCode(code);
   for (let i = 0; i < hashes.length; i++) {
     const h = hashes[i];
     if (!h) continue;
     try {
-       
       if (await verify(h, cleaned)) return i;
     } catch {
       // ignore malformed hash

@@ -6,13 +6,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { like } from 'drizzle-orm';
-import {
-  cashAccounts,
-  cashCategories,
-  cashTransactions,
-  getDb,
-  withTenantTx,
-} from '@erfolg/db';
+import { cashAccounts, cashCategories, cashTransactions, getDb, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
   createAccount,

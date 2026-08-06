@@ -6,11 +6,11 @@
 
 ## Что бэкапится (3 части — все нужны для полного восстановления)
 
-| Часть | Что | Чем | Куда |
-|-------|-----|-----|------|
-| **База данных** | клиенты, заявки, счета, оплаты, архив ИИ и т.д. | `pg_dump -Fc` (custom) | `/root/backups/erfolg_prod_auto_*.dump` |
-| **Файлы вложений** | сканы, фото, PDF (в БД лежат только ссылки `object_key`) | `tar` тома `storage_data` | `/root/backups/erfolg_prod_files_*.tar.gz` |
-| **Конфигурация** | `.env` (все секреты) + `docker-compose.server.yml` | `tar`, права 600 | `/root/backups/erfolg_prod_secrets_*.tar.gz` |
+| Часть              | Что                                                      | Чем                       | Куда                                         |
+| ------------------ | -------------------------------------------------------- | ------------------------- | -------------------------------------------- |
+| **База данных**    | клиенты, заявки, счета, оплаты, архив ИИ и т.д.          | `pg_dump -Fc` (custom)    | `/root/backups/erfolg_prod_auto_*.dump`      |
+| **Файлы вложений** | сканы, фото, PDF (в БД лежат только ссылки `object_key`) | `tar` тома `storage_data` | `/root/backups/erfolg_prod_files_*.tar.gz`   |
+| **Конфигурация**   | `.env` (все секреты) + `docker-compose.server.yml`       | `tar`, права 600          | `/root/backups/erfolg_prod_secrets_*.tar.gz` |
 
 > ⚠️ Без части «Файлы» восстановление БД даст записи о вложениях с **битыми ссылками** —
 > сами файлы не вернутся.
@@ -84,6 +84,7 @@ chmod +x /root/erfolgcrm/scripts/prod/backup-db.sh /root/erfolgcrm/scripts/prod/
 ## Восстановление
 
 **База (в НОВУЮ БД, боевую не трогая — так проверяют дамп):**
+
 ```bash
 docker exec erfolgcrm-postgres-prod createdb -U erfolg erfolg_restore_test
 docker exec -i erfolgcrm-postgres-prod pg_restore -U erfolg -d erfolg_restore_test \
@@ -93,12 +94,14 @@ docker exec erfolgcrm-postgres-prod dropdb -U erfolg erfolg_restore_test
 ```
 
 **База (перезапись боевой — ТОЛЬКО осознанно, после бэкапа текущего состояния):**
+
 ```bash
 docker exec -i erfolgcrm-postgres-prod pg_restore -U erfolg -d erfolg_prod \
   --clean --if-exists < /root/backups/erfolg_prod_auto_<дата>.dump
 ```
 
 **Файлы:** распаковать архив в точку монтирования тома `storage_data`:
+
 ```bash
 VOL=$(docker inspect erfolgcrm-api-prod \
   -f '{{range .Mounts}}{{if eq .Destination "/data/storage"}}{{.Name}}{{end}}{{end}}')
@@ -109,24 +112,26 @@ tar xzf /root/backups/erfolg_prod_files_<дата>.tar.gz -C "$VP"
 ## Как понять, что бэкап здоров (еженедельный ручной чек)
 
 Раз в неделю глазами:
+
 ```bash
 ls -laht /root/backups | head            # есть СЕГОДНЯШНИЕ *.dump, *_files_*.tar.gz И *_secrets_*.tar.gz
 tail -n 5 /root/backups/backup.log       # строки 'OK db:' и 'OK secrets:' (не ERROR/Permission denied)
 tail -n 12 /root/backups/verify.log      # последние строки — 'секреты расшифровываются' и 'VERIFY OK'
 crontab -l | grep -E 'backup-db|verify-restore'   # обе строки на месте
 ```
+
 Здоровое состояние: за сегодня есть все три части; в `backup.log` — `OK db:` и `OK secrets:`;
 в `verify.log` — `VERIFY OK` не старше недели, и в нём же строка про расшифровку секретов.
 
 ## Если упало
 
-| Симптом | Что значит | Действие |
-|---------|-----------|----------|
-| `backup.log` кончается на `ERROR`/`Permission denied` | ночной бэкап не сделался | запустить руками `/bin/bash .../backup-db.sh`, разобрать stderr в `/root/backups/backup.err` |
-| нет сегодняшнего `*_files_*.tar.gz`, но `.dump` есть | архив файлов пропущен (api пересоздавался / гонка с деплоем) | перезапустить бэкап вручную; если повторяется — проверить том `storage_data` |
-| `verify.log` = `VERIFY FAILED` | свежий дамп не разворачивается | НЕ удалять старые копии; проверить более ранний дамп через `verify-restore.sh`, эскалировать |
-| `verify.log` = `СЕКРЕТЫ НЕ РАСШИФРОВЫВАЮТСЯ` | **ключ `PII_ENCRYPTION_KEY` не подходит к копии** | Найти верный ключ (`docker exec erfolgcrm-api-prod printenv PII_ENCRYPTION_KEY`), сверить с `.env`, вынести копию наружу. Данные из копии читаются и так, но доступы (почта, бот, ИИ, 2FA) придётся заводить заново |
-| `backup.log` = `КЛЮЧ ПДн НЕ ЗАБЭКАПЛЕН` | `.env` не найден там, где ожидает скрипт | проверить путь проекта; при нестандартном расположении задать `BACKUP_PROJECT_DIR` в строке крона |
+| Симптом                                               | Что значит                                                   | Действие                                                                                                                                                                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backup.log` кончается на `ERROR`/`Permission denied` | ночной бэкап не сделался                                     | запустить руками `/bin/bash .../backup-db.sh`, разобрать stderr в `/root/backups/backup.err`                                                                                                                        |
+| нет сегодняшнего `*_files_*.tar.gz`, но `.dump` есть  | архив файлов пропущен (api пересоздавался / гонка с деплоем) | перезапустить бэкап вручную; если повторяется — проверить том `storage_data`                                                                                                                                        |
+| `verify.log` = `VERIFY FAILED`                        | свежий дамп не разворачивается                               | НЕ удалять старые копии; проверить более ранний дамп через `verify-restore.sh`, эскалировать                                                                                                                        |
+| `verify.log` = `СЕКРЕТЫ НЕ РАСШИФРОВЫВАЮТСЯ`          | **ключ `PII_ENCRYPTION_KEY` не подходит к копии**            | Найти верный ключ (`docker exec erfolgcrm-api-prod printenv PII_ENCRYPTION_KEY`), сверить с `.env`, вынести копию наружу. Данные из копии читаются и так, но доступы (почта, бот, ИИ, 2FA) придётся заводить заново |
+| `backup.log` = `КЛЮЧ ПДн НЕ ЗАБЭКАПЛЕН`               | `.env` не найден там, где ожидает скрипт                     | проверить путь проекта; при нестандартном расположении задать `BACKUP_PROJECT_DIR` в строке крона                                                                                                                   |
 
 ## Копия вне сервера (off-box)
 
@@ -144,9 +149,11 @@ crontab -l | grep -E 'backup-db|verify-restore'   # обе строки на м�
 провал → `.../fail`. Если ожидаемого ночного пинга нет (сервер лёг / крон не запустился), healthchecks.io
 сам шлёт письмо директору — это ловит даже полный отказ, который «письмо-при-сбое» поймать не может.
 URL задаётся в строке крона на сервере (в репо не хранится):
+
 ```cron
 0 3 * * * BACKUP_HEALTHCHECK_URL=https://hc-ping.com/<uuid> /bin/bash /root/erfolgcrm/scripts/prod/backup-db.sh >> /root/backups/backup.log 2>&1
 ```
+
 Настройка: завести бесплатный check на healthchecks.io (period 1 day, grace ~2 hours), вписать его
 ping-URL в строку крона. Требуется `curl` на хосте.
 

@@ -60,7 +60,11 @@ describe('RLS — атаки на чужой client_id', () => {
 
   it('UPDATE чужого клиента → 0 affected, имя не меняется', async () => {
     const [erfolgClient] = await withTenantTx(getDb(), erfolgId, async (tx) =>
-      tx.select().from(clients).where(eq(clients.displayName, 'ООО «Стом. клиника Улыбка»')).limit(1),
+      tx
+        .select()
+        .from(clients)
+        .where(eq(clients.displayName, 'ООО «Стом. клиника Улыбка»'))
+        .limit(1),
     );
     if (!erfolgClient) throw new Error('seed missing');
 

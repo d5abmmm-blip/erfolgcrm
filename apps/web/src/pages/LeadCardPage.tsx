@@ -4,14 +4,7 @@
  */
 import { useState } from 'react';
 import { Link, useLocation, useRoute } from 'wouter';
-import {
-  Archive,
-  ChevronLeft,
-  Loader2,
-  Pencil,
-  Target,
-  UserPlus,
-} from 'lucide-react';
+import { Archive, ChevronLeft, Loader2, Pencil, Target, UserPlus } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { SILENT_ERROR } from '../lib/error-message';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -83,7 +76,10 @@ export function LeadCardPage() {
   if (lead.error || !lead.data) {
     return (
       <div className="mx-auto max-w-3xl space-y-3 p-6">
-        <Link href="/leads" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm">
+        <Link
+          href="/leads"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+        >
           <ChevronLeft className="h-4 w-4" /> К списку лидов
         </Link>
         <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-3 text-sm">
@@ -113,8 +109,7 @@ export function LeadCardPage() {
         href="/leads"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
       >
-        <ChevronLeft className="h-4 w-4" />
-        К списку лидов
+        <ChevronLeft className="h-4 w-4" />К списку лидов
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -175,9 +170,7 @@ export function LeadCardPage() {
                   onClick={() => setStatus(s)}
                   className={
                     'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition disabled:opacity-50 ' +
-                    (isLost
-                      ? 'text-destructive hover:bg-destructive/10'
-                      : 'hover:bg-muted')
+                    (isLost ? 'text-destructive hover:bg-destructive/10' : 'hover:bg-muted')
                   }
                 >
                   → {m.label}
@@ -308,8 +301,7 @@ export function LeadCardPage() {
                 <button
                   type="button"
                   disabled={
-                    convert.isPending ||
-                    (clientType === 'individual' && !individualFullName.trim())
+                    convert.isPending || (clientType === 'individual' && !individualFullName.trim())
                   }
                   onClick={() =>
                     convert.mutate({

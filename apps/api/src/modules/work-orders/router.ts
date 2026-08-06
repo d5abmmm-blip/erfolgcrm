@@ -8,11 +8,7 @@
  */
 import { z } from 'zod';
 import { VatRate, WorkOrderLineType } from '@erfolg/shared';
-import {
-  router,
-  engineerProcedure,
-  staffProcedure,
-} from '../../trpc/trpc';
+import { router, engineerProcedure, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   deleteLineCmd,
@@ -52,9 +48,7 @@ const updateHeaderSchema = z
 export const workOrdersRouter = router({
   getByTicket: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId),
-    ),
+    .query(({ ctx, input }) => getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
   ensure: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
@@ -81,26 +75,18 @@ export const workOrdersRouter = router({
 
   deleteLine: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid(), lineId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      deleteLineCmd(buildCmdCtx(ctx), input.ticketId, input.lineId),
-    ),
+    .mutation(({ ctx, input }) => deleteLineCmd(buildCmdCtx(ctx), input.ticketId, input.lineId)),
 
   updateHeader: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid(), patch: updateHeaderSchema }))
-    .mutation(({ ctx, input }) =>
-      updateHeaderCmd(buildCmdCtx(ctx), input.ticketId, input.patch),
-    ),
+    .mutation(({ ctx, input }) => updateHeaderCmd(buildCmdCtx(ctx), input.ticketId, input.patch)),
 
   setVatRate: staffProcedure
     .input(z.object({ ticketId: z.string().uuid(), vatRate: VatRate }))
-    .mutation(({ ctx, input }) =>
-      setVatRateCmd(buildCmdCtx(ctx), input.ticketId, input.vatRate),
-    ),
+    .mutation(({ ctx, input }) => setVatRateCmd(buildCmdCtx(ctx), input.ticketId, input.vatRate)),
 
   /** Фича №13 — ИИ-черновик текста «Выполненные работы» из строк наряда (engineer). */
   draftRepairDescription: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      draftRepairDescriptionQuery(ctx.db, ctx.tenant, input.ticketId),
-    ),
+    .mutation(({ ctx, input }) => draftRepairDescriptionQuery(ctx.db, ctx.tenant, input.ticketId)),
 });

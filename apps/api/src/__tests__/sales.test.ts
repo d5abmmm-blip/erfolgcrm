@@ -128,8 +128,12 @@ describe('продажи ↔ касса', () => {
       ],
     }); // total 5000 ₽, закупка 3000 ₽
     await withTenantTx(db, erfolgId, async (tx) => {
-      await tx.execute(sql`UPDATE sales SET created_at = '2099-03-10T10:00:00Z' WHERE id = ${s1.id}::uuid`);
-      await tx.execute(sql`UPDATE sales SET created_at = '2099-03-20T10:00:00Z' WHERE id = ${s2.id}::uuid`);
+      await tx.execute(
+        sql`UPDATE sales SET created_at = '2099-03-10T10:00:00Z' WHERE id = ${s1.id}::uuid`,
+      );
+      await tx.execute(
+        sql`UPDATE sales SET created_at = '2099-03-20T10:00:00Z' WHERE id = ${s2.id}::uuid`,
+      );
     });
 
     const a = await salesAnalytics(db, erfolgId, { from: '2099-03-01', to: '2099-03-31' });

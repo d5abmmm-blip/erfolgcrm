@@ -48,11 +48,14 @@ export function ClientLoginPage() {
             Заявки и счета вашей клиники — в одном окне
           </h1>
           <p className="max-w-md text-base opacity-90">
-            Отслеживайте ремонты медтехники, скачивайте счета на оплату, подавайте новые заявки
-            без звонка диспетчеру.
+            Отслеживайте ремонты медтехники, скачивайте счета на оплату, подавайте новые заявки без
+            звонка диспетчеру.
           </p>
           <ul className="space-y-3 text-sm opacity-95">
-            <Feature icon={ShieldCheck} text="Защищённый канал, доступ только для вашей организации" />
+            <Feature
+              icon={ShieldCheck}
+              text="Защищённый канал, доступ только для вашей организации"
+            />
             <Feature icon={Building2} text="История ремонтов и ТО по каждой единице техники" />
           </ul>
         </div>
@@ -131,7 +134,15 @@ export function ClientLoginPage() {
 const inputCls =
   'border-input bg-background focus-visible:ring-ring placeholder:text-muted-foreground/60 flex h-10 w-full rounded-md border px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2';
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-1.5">
       <span className="text-foreground text-sm font-medium">{label}</span>

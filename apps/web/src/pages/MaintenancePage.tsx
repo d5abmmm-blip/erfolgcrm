@@ -134,15 +134,18 @@ export function MaintenancePage() {
                       <td className="text-muted-foreground px-3 py-2 text-xs">
                         {s.lastDoneAt ? s.lastDoneAt.toLocaleDateString('ru-RU') : 'не было'}
                       </td>
-                      <td className={cn('px-3 py-2 text-xs', overdue && 'text-destructive font-semibold')}>
+                      <td
+                        className={cn(
+                          'px-3 py-2 text-xs',
+                          overdue && 'text-destructive font-semibold',
+                        )}
+                      >
                         {s.nextDueAt.toLocaleDateString('ru-RU')}
                       </td>
                       <td className="px-2 py-2 text-right">
                         <button
                           type="button"
-                          onClick={() =>
-                            setRecordFor({ scheduleId: s.id, assetId: s.assetId })
-                          }
+                          onClick={() => setRecordFor({ scheduleId: s.id, assetId: s.assetId })}
                           className="hover:bg-muted rounded-md border px-2 py-1 text-xs transition"
                         >
                           Записать
@@ -229,9 +232,7 @@ function KindBadge({ kind }: { kind: 'planned' | 'urgent' }) {
     <span
       className={cn(
         'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        kind === 'planned'
-          ? 'bg-primary/10 text-primary'
-          : 'bg-destructive/10 text-destructive',
+        kind === 'planned' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive',
       )}
     >
       {kind === 'planned' ? 'Плановое' : 'Срочное'}

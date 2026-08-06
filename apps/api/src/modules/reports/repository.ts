@@ -100,7 +100,9 @@ export async function engineerPerformance(
         ticketsCount: sql<number>`COUNT(DISTINCT ${tickets.id})::int`,
         closedCount: sql<number>`COUNT(DISTINCT ${tickets.id}) FILTER (WHERE ${tickets.status} = 'closed')::int`,
         totalAmountKopecks: sql<string>`COALESCE(SUM(${workOrders.totalAmountKopecks}), 0)::bigint::text`,
-        avgCloseDays: sql<number | null>`ROUND((AVG(EXTRACT(EPOCH FROM (${tickets.closedAt} - ${tickets.createdAt})) / 86400))::numeric, 1)::float`,
+        avgCloseDays: sql<
+          number | null
+        >`ROUND((AVG(EXTRACT(EPOCH FROM (${tickets.closedAt} - ${tickets.createdAt})) / 86400))::numeric, 1)::float`,
       })
       .from(tickets)
       .leftJoin(users, eq(users.id, tickets.assignedEngineerId))

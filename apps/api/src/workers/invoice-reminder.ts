@@ -79,7 +79,10 @@ export async function processInvoiceReminderTick(): Promise<TickStats> {
     // remindersSent/remindersSkipped остаются нулями — поля не убраны, чтобы не
     // ломать чтение статистики; при возврате рассылки заполнятся снова.
   }
-  logger.info(stats, 'invoice-reminder tick complete: только пометка просрочки, рассылка отключена');
+  logger.info(
+    stats,
+    'invoice-reminder tick complete: только пометка просрочки, рассылка отключена',
+  );
   return stats;
 }
 

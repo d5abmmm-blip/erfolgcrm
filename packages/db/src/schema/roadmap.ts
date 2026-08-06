@@ -5,7 +5,16 @@
  * Цель: «выручка 5 млн за Q3 2026» — target/current/unit дают прогресс-бар,
  * isDone — ручная отметка завершения (прогресс может быть нелинейным).
  */
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { pk, tenantId, timestamps } from './_shared';
 

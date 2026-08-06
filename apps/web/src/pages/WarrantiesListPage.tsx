@@ -71,8 +71,8 @@ export function WarrantiesListPage() {
 
   const list = trpc.warranties.list.useQuery({
     search: debounced || undefined,
-    status: (status || undefined),
-    type: (type || undefined),
+    status: status || undefined,
+    type: type || undefined,
     page,
   });
   const stats = trpc.warranties.stats.useQuery();
@@ -111,7 +111,10 @@ export function WarrantiesListPage() {
       className: 'text-xs',
       render: (w) =>
         w.clientId ? (
-          <Link href={`/clients/${w.clientId}`} className="text-muted-foreground hover:text-primary">
+          <Link
+            href={`/clients/${w.clientId}`}
+            className="text-muted-foreground hover:text-primary"
+          >
             {w.clientDisplayName}
           </Link>
         ) : (
@@ -319,8 +322,7 @@ function StatCard({
   active: boolean;
   onClick: () => void;
 }) {
-  const toneCls =
-    tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-destructive' : '';
+  const toneCls = tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-destructive' : '';
   return (
     <button
       type="button"

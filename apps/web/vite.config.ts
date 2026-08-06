@@ -104,12 +104,7 @@ export default defineConfig({
             '@radix-ui/react-slot',
             '@radix-ui/react-tooltip',
           ],
-          tanstack: [
-            '@tanstack/react-query',
-            '@trpc/client',
-            '@trpc/react-query',
-            '@trpc/server',
-          ],
+          tanstack: ['@tanstack/react-query', '@trpc/client', '@trpc/react-query', '@trpc/server'],
           qrcode: ['qrcode'],
           zxing: ['@zxing/browser', '@zxing/library'],
           workbox: ['workbox-window'],

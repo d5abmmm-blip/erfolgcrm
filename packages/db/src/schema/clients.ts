@@ -109,10 +109,7 @@ export const clients = pgTable(
     /** Фильтр в списке клиентов */
     index('clients_tenant_status_idx').on(t.tenantId, t.status),
     /** subtype может быть задан только для юрлица */
-    check(
-      'clients_subtype_legal_only',
-      sql`subtype IS NULL OR type = 'legal'`,
-    ),
+    check('clients_subtype_legal_only', sql`subtype IS NULL OR type = 'legal'`),
   ],
 );
 

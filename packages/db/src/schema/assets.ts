@@ -132,9 +132,7 @@ export const assetModels = pgTable(
 
     ...timestamps,
   },
-  (t) => [
-    index('asset_models_tenant_model_idx').on(t.tenantId, t.model),
-  ],
+  (t) => [index('asset_models_tenant_model_idx').on(t.tenantId, t.model)],
 );
 
 /**
@@ -156,10 +154,11 @@ export const assetEvents = pgTable(
     /** Кто сделал. NULL для системных событий (cron, миграции). */
     userId: uuid('user_id'),
     type: assetEventTypeEnum('type').notNull(),
-    payload: jsonb('payload').$type<AssetEventPayload>().notNull().default(sql`'{}'::jsonb`),
+    payload: jsonb('payload')
+      .$type<AssetEventPayload>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('asset_events_tenant_asset_idx').on(t.tenantId, t.assetId, t.createdAt),
-  ],
+  (t) => [index('asset_events_tenant_asset_idx').on(t.tenantId, t.assetId, t.createdAt)],
 );

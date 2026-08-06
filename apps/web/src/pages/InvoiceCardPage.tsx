@@ -17,10 +17,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PromptDialog } from '../components/ui/PromptDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { INVOICE_STATUS_META } from '../lib/dictionaries';
-import {
-  invoiceNotesSchema,
-  type InvoiceNotesValues,
-} from './InvoiceCardPage.schemas';
+import { invoiceNotesSchema, type InvoiceNotesValues } from './InvoiceCardPage.schemas';
 
 const VAT_LABEL: Record<string, string> = {
   '0': '0%',
@@ -173,37 +170,39 @@ export function InvoiceCardPage() {
             ? ticketQuery.receivedAt.toISOString()
             : String(ticketQuery.receivedAt)
           : new Date().toISOString(),
-        repairType:
-          (ticketQuery?.repairType) ?? 'paid',
+        repairType: ticketQuery?.repairType ?? 'paid',
         symptom: ticketQuery?.symptom ?? null,
         barcode: ticketQuery?.barcode ?? inv.data.ticketId,
       };
-      await printInvoice({
-        tenant: { ...ERFOLG_FALLBACK },
-        client: clientData,
-        ticket: ticketData,
-        workOrder: {
-          // Итог и ставка НДС берутся из «замороженного» снимка счёта (зафиксированы при
-          // выставлении), а НЕ из живого наряда — иначе после правки наряда суммы в PDF
-          // разойдутся с уже выставленным счётом. Детализация строк — из наряда (best available).
-          vatRate: inv.data.vatRate,
-          worksAmountKopecks: Number(workOrderQuery.worksAmountKopecks),
-          partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
-          expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
-          totalAmountKopecks: Number(inv.data.totalAmountKopecks),
-          lines: workOrderQuery.lines.map((l) => ({
-            lineType: l.lineType,
-            name: l.name,
-            unit: l.unit,
-            quantity: Number(l.quantity),
-            unitPriceKopecks: Number(l.unitPriceKopecks),
-            amountKopecks: Number(l.amountKopecks),
-          })),
+      await printInvoice(
+        {
+          tenant: { ...ERFOLG_FALLBACK },
+          client: clientData,
+          ticket: ticketData,
+          workOrder: {
+            // Итог и ставка НДС берутся из «замороженного» снимка счёта (зафиксированы при
+            // выставлении), а НЕ из живого наряда — иначе после правки наряда суммы в PDF
+            // разойдутся с уже выставленным счётом. Детализация строк — из наряда (best available).
+            vatRate: inv.data.vatRate,
+            worksAmountKopecks: Number(workOrderQuery.worksAmountKopecks),
+            partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
+            expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
+            totalAmountKopecks: Number(inv.data.totalAmountKopecks),
+            lines: workOrderQuery.lines.map((l) => ({
+              lineType: l.lineType,
+              name: l.name,
+              unit: l.unit,
+              quantity: Number(l.quantity),
+              unitPriceKopecks: Number(l.unitPriceKopecks),
+              amountKopecks: Number(l.amountKopecks),
+            })),
+          },
+          invoiceNumber: inv.data.invoiceNumber,
+          issueDate: inv.data.issueDate,
+          dueDate: inv.data.dueDate,
         },
-        invoiceNumber: inv.data.invoiceNumber,
-        issueDate: inv.data.issueDate,
-        dueDate: inv.data.dueDate,
-      }, win);
+        win,
+      );
     } catch (err) {
       win?.close();
       setDialog({
@@ -227,9 +226,7 @@ export function InvoiceCardPage() {
         >
           <ChevronLeft className="h-4 w-4" />К списку счетов
         </Link>
-        <div className="text-destructive mt-4">
-          {inv.error?.message ?? 'Счёт не найден'}
-        </div>
+        <div className="text-destructive mt-4">{inv.error?.message ?? 'Счёт не найден'}</div>
       </div>
     );
   }
@@ -349,9 +346,7 @@ export function InvoiceCardPage() {
           <Row label="Оплачено" value={formatRub(data.paidAmountKopecks)} />
           {data.issuedAt && <Row label="Выставлен в" value={formatDateTime(data.issuedAt)} />}
           {data.paidAt && <Row label="Оплачен в" value={formatDateTime(data.paidAt)} />}
-          {data.cancelledAt && (
-            <Row label="Отменён в" value={formatDateTime(data.cancelledAt)} />
-          )}
+          {data.cancelledAt && <Row label="Отменён в" value={formatDateTime(data.cancelledAt)} />}
           {data.cancelReason && (
             <div className="md:col-span-2">
               <dt className="text-muted-foreground text-xs">Причина отмены</dt>
@@ -379,11 +374,14 @@ export function InvoiceCardPage() {
           )}
         </div>
         {editingNotes ? (
-          <form onSubmit={(e) => void notesForm.handleSubmit(onSubmitNotes)(e)} className="space-y-2">
+          <form
+            onSubmit={(e) => void notesForm.handleSubmit(onSubmitNotes)(e)}
+            className="space-y-2"
+          >
             <textarea
               {...notesForm.register('notes')}
               rows={3}
-              className="bg-background w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
             />
             {notesForm.formState.errors.notes && (
               <div className="text-destructive text-xs">

@@ -74,12 +74,7 @@ export function InventoryListPage() {
         const minStock = Number(it.minStock);
         const isLow = minStock > 0 && remaining < minStock;
         return (
-          <div
-            className={cn(
-              'text-right tabular-nums',
-              isLow && 'text-destructive font-semibold',
-            )}
-          >
+          <div className={cn('text-right tabular-nums', isLow && 'text-destructive font-semibold')}>
             <span className="inline-flex items-center gap-1">
               {isLow && <AlertCircle className="h-3.5 w-3.5" />}
               {remaining} {it.unit}
@@ -109,9 +104,7 @@ export function InventoryListPage() {
             Склад
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Запчасти и расходники</h1>
-          <p className="text-muted-foreground text-sm">
-            Справочник позиций с FEFO-учётом партий
-          </p>
+          <p className="text-muted-foreground text-sm">Справочник позиций с FEFO-учётом партий</p>
         </div>
         <button
           type="button"
@@ -134,7 +127,7 @@ export function InventoryListPage() {
               setPage(1);
             }}
             placeholder="Поиск по названию или артикулу"
-            className="bg-background w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>
       </div>
@@ -148,12 +141,7 @@ export function InventoryListPage() {
         rowKey={(it) => it.id}
       />
 
-      <Pagination
-        page={page}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-      />
+      <Pagination page={page} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
 
       {showForm && (
         <InventoryItemForm
