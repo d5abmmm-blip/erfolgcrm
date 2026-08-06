@@ -1,11 +1,17 @@
 /**
- * Разовый перенос ПДн из шифрованных колонок в открытые.
+ * Перенос ПДн из шифрованных колонок в открытые.
  *
  * Пара к миграциям 0078 (клиенты и контакты) и 0079 (переписка): миграции создают
  * пустые открытые колонки, этот скрипт их наполняет. Ключ шифрования в .sql-файл
  * не передать, поэтому расшифровка живёт отдельно, здесь.
  *
- * ЧТО ПЕРЕНОСИТ: см. список MOVES ниже — ПДн клиентов, контактных лиц и переписку.
+ * ⚠️ СВОЮ ОСНОВНУЮ РАБОТУ СКРИПТ УЖЕ СДЕЛАЛ (бой, 21.07.2026: 937 значений, сверка
+ * сошлась построчно), и уборка 0081 удалила перенесённые колонки. Осталась ОДНА пара —
+ * `clients.phone_encrypted` → `individual_phone`: на бою нашлись 3 физлица, у которых
+ * зашифрованный телефон есть, а открытого нет. Скрипт живёт ради них: когда владелец
+ * решит, что делать с этими номерами, он их перенесёт (либо колонку удалят как есть).
+ *
+ * ЧТО ПЕРЕНОСИТ: см. список MOVES ниже.
  *
  * ⚠️ ЧЕГО НЕ ТРОГАЕТ СОЗНАТЕЛЬНО — служебные секреты, они ОСТАЮТСЯ зашифрованными:
  *   email_configs.smtp_password_encrypted / imap_password_encrypted,
@@ -64,23 +70,13 @@ interface Move {
   to: string;
 }
 
+// Остальные пары (ФИО/адрес клиентов, ПДн контактов, вся переписка) убраны вместе
+// с колонками в миграции 0081 — переносить больше нечего и не из чего.
+// ⚠️ Пароли ящика (email_configs.smtp/imap_password_encrypted), токены Telegram,
+// ключ ИИ и секреты 2FA НЕ переносятся сознательно: это секреты доступа, они
+// остаются зашифрованными, и ради них PII_ENCRYPTION_KEY нужен по-прежнему.
 const MOVES: Move[] = [
-  // Миграция 0078 — ПДн клиентов и контактов.
-  { table: 'clients', from: 'full_name_encrypted', to: 'individual_full_name' },
   { table: 'clients', from: 'phone_encrypted', to: 'individual_phone' },
-  { table: 'clients', from: 'address_encrypted', to: 'individual_address' },
-  { table: 'contacts', from: 'full_name_encrypted', to: 'full_name' },
-  { table: 'contacts', from: 'phone_encrypted', to: 'phone' },
-  // Миграция 0079 — переписка с клиентами.
-  // ⚠️ Пароли ящика (email_configs.smtp/imap_password_encrypted) НЕ переносятся
-  // сознательно: это секреты доступа, а не переписка, и они остаются зашифрованными.
-  { table: 'email_messages', from: 'to_addr_encrypted', to: 'to_addr' },
-  { table: 'email_messages', from: 'from_addr_encrypted', to: 'from_addr' },
-  { table: 'email_messages', from: 'subject_encrypted', to: 'subject' },
-  { table: 'email_messages', from: 'body_text_encrypted', to: 'body_text' },
-  { table: 'email_messages', from: 'body_html_encrypted', to: 'body_html' },
-  { table: 'email_messages', from: 'cc_addr_encrypted', to: 'cc_addr' },
-  { table: 'email_messages', from: 'bcc_addr_encrypted', to: 'bcc_addr' },
 ];
 
 /**
@@ -117,20 +113,22 @@ async function countPending(db: Db, m: Move): Promise<number> {
  * переноса и не понял бы, что дело в ключе. Проба читает ОДНУ строку и ничего не пишет.
  */
 async function probeKey(db: Db, key: string): Promise<void> {
+  // Проба идёт по телефону: колонка с ФИО удалена уборкой 0081, телефон — последняя
+  // оставшаяся шифрованная ПДн-колонка (см. шапку файла).
   const probe = await db.execute<{ len: number }>(
-    sql`SELECT length(pgp_sym_decrypt(full_name_encrypted::bytea, ${key})::text) AS len
-        FROM clients WHERE full_name_encrypted IS NOT NULL LIMIT 1`,
+    sql`SELECT length(pgp_sym_decrypt(phone_encrypted::bytea, ${key})::text) AS len
+        FROM clients WHERE phone_encrypted IS NOT NULL LIMIT 1`,
   );
   const arr = probe as unknown as Array<{ len: number }>;
   if (arr.length === 0) {
-    console.info('Проба ключа: зашифрованных ФИО в базе нет — проверять нечего.');
+    console.info('Проба ключа: зашифрованных телефонов в базе нет — проверять нечего.');
     return;
   }
   if (!arr[0]?.len || arr[0].len <= 0) {
-    throw new Error('Ключ расшифровал ФИО в пустую строку — данные повреждены.');
+    throw new Error('Ключ расшифровал телефон в пустую строку — данные повреждены.');
   }
-  // Печатаем ДЛИНУ, а не само ФИО: длина доказывает, что ключ подошёл, и не является ПДн.
-  console.info(`Проба ключа: ПДн расшифровываются (контрольное ФИО, длина ${arr[0].len}).`);
+  // Печатаем ДЛИНУ, а не сам номер: длина доказывает, что ключ подошёл, и не является ПДн.
+  console.info(`Проба ключа: ПДн расшифровываются (контрольный телефон, длина ${arr[0].len}).`);
 }
 
 async function main(): Promise<void> {

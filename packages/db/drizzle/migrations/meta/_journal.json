@@ -505,6 +505,13 @@
       "when": 1778600000000,
       "tag": "0080_ticket_engineers",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1778700000000,
+      "tag": "0081_drop_legacy_encrypted_columns",
+      "breakpoints": true
     }
   ]
 }

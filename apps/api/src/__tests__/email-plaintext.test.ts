@@ -79,15 +79,19 @@ describe('переписка хранится открыто', () => {
     // Читаем колонку НАПРЯМУЮ: при шифровании сравнение со строкой не сошлось бы.
     const rows = (await withTenantTx(getDb(), erfolgId, (tx) =>
       tx.execute(sql`
-        SELECT subject, subject_encrypted IS NULL AS legacy_empty
+        SELECT subject,
+               -- колонка удалена уборкой 0081; если она вернётся, тест это заметит
+               (SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = 'email_messages'
+                   AND column_name LIKE '%_encrypted') AS legacy_columns
           FROM email_messages WHERE subject = ${subject}
       `),
-    )) as unknown as Array<{ subject: string; legacy_empty: boolean }>;
+    )) as unknown as Array<{ subject: string; legacy_columns: string }>;
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.subject).toBe(subject);
-    // Старая шифрованная колонка больше не заполняется.
-    expect(rows[0]?.legacy_empty).toBe(true);
+    // Шифрованных колонок у переписки больше нет вовсе.
+    expect(Number(rows[0]?.legacy_columns)).toBe(0);
   });
 });
 
