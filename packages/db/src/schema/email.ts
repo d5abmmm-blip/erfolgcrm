@@ -76,16 +76,8 @@ export const emailMessages = pgTable(
     bodyText: text('body_text'),
     bodyHtml: text('body_html'),
 
-    /**
-     * @deprecated Шифрованные колонки-предшественники. Данные перенесены скриптом
-     * `decrypt-pii`, код их больше не читает и не пишет. Оставлены до миграции-уборки,
-     * чтобы откат стоил ноль. НЕ использовать в новом коде.
-     */
-    toAddrEnc: encryptedText('to_addr_encrypted'),
-    fromAddrEnc: encryptedText('from_addr_encrypted'),
-    subjectEnc: encryptedText('subject_encrypted'),
-    bodyTextEnc: encryptedText('body_text_encrypted'),
-    bodyHtmlEnc: encryptedText('body_html_encrypted'),
+    /* Шифрованные колонки-предшественники (0079) удалены уборкой 0081 —
+       данные давно живут в открытых полях выше. */
 
     messageId: varchar('message_id', { length: 512 }),
     /** Привязка к заявке/клиенту (опционально). */
@@ -119,9 +111,6 @@ export const emailMessages = pgTable(
     ccAddr: text('cc_addr'),
     /** Скрытая копия (BCC). Открыто. */
     bccAddr: text('bcc_addr'),
-    /** @deprecated Предшественники ccAddr/bccAddr, ждут миграции-уборки. */
-    ccAddrEnc: encryptedText('cc_addr_encrypted'),
-    bccAddrEnc: encryptedText('bcc_addr_encrypted'),
     /** Время отложенной отправки (status='scheduled'); NULL у обычных писем. */
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
 

@@ -79,13 +79,15 @@ export const clients = pgTable(
     individualAddress: text('individual_address'),
 
     /**
-     * @deprecated Шифрованные колонки-предшественники. Данные перенесены скриптом
-     * `decrypt-pii`, код их больше не читает и не пишет. Оставлены до отдельной
-     * миграции-уборки, чтобы откат стоил ноль. НЕ использовать в новом коде.
+     * @deprecated Последняя шифрованная колонка-предшественник (миграция 0078).
+     * ФИО и адрес удалены уборкой 0081, а телефон остался: на бою нашлись 3 физлица,
+     * у которых зашифрованный номер есть, а открытого нет — для них это единственный
+     * экземпляр данных, и что с ними делать, решает владелец. Код колонку НЕ читает.
+     * Удалять можно, когда вот это вернёт 0:
+     *   SELECT count(*) FROM clients WHERE phone_encrypted IS NOT NULL
+     *                                  AND individual_phone IS NULL;
      */
-    fullNameEncrypted: encryptedText('full_name_encrypted'),
     phoneEncrypted: encryptedText('phone_encrypted'),
-    addressEncrypted: encryptedText('address_encrypted'),
 
     /**
      * Контакт по умолчанию для подстановки в документы. FK на contacts.id, ON DELETE SET NULL.
@@ -123,18 +125,11 @@ export const contacts = pgTable(
 
     /**
      * ПДн контактного лица — обязательны на уровне приложения.
-     * В базе nullable: колонки добавлены миграцией 0078 к уже существующим строкам,
-     * NOT NULL повесить можно будет только миграцией-уборкой, после переноса данных.
+     * В базе nullable: колонки добавлены миграцией 0078 к уже существующим строкам.
+     * Шифрованные предшественники удалены уборкой 0081.
      */
     fullName: varchar('full_name', { length: 200 }),
     phone: varchar('phone', { length: 50 }),
-
-    /**
-     * @deprecated Шифрованные колонки-предшественники, см. clients выше и миграцию 0078.
-     * Ещё NOT NULL — снимается миграцией-уборкой вместе с удалением.
-     */
-    fullNameEncrypted: encryptedText('full_name_encrypted').notNull(),
-    phoneEncrypted: encryptedText('phone_encrypted').notNull(),
 
     /** Рабочий email — plain, не считаем PII в B2B-контексте */
     email: varchar('email', { length: 200 }),

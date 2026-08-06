@@ -206,16 +206,14 @@ describe('leads — конвертация и воронка', () => {
     // Раньше здесь проверялось обратное: что в full_name_encrypted лежат байты, а не
     // текст. Шифрование сняли осознанно — ключ хранился на том же сервере, что и база,
     // поэтому от её кражи не защищал, а его потеря делала картотеку нечитаемой навсегда.
-    // Проверка сохранена в перевёрнутом виде: ФИО должно доезжать до базы как есть,
-    // а старая шифрованная колонка — больше не заполняться.
+    // Сама шифрованная колонка удалена уборкой 0081, поэтому сверяем только открытую.
     const raw = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx
-        .select({ plain: clients.individualFullName, legacy: clients.fullNameEncrypted })
+        .select({ plain: clients.individualFullName })
         .from(clients)
         .where(eq(clients.id, res!.clientId)),
     );
     expect(raw[0]?.plain).toBe('Петров Пётр Петрович');
-    expect(raw[0]?.legacy).toBeNull();
   });
 
   it('физлицо без ФИО не создаётся — инвариант больше не обходится', async () => {

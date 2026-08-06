@@ -6,14 +6,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
-import {
-  clients,
-  contacts,
-  getDb,
-  getTenantEncryptionKey,
-  withTenantTx,
-  withoutTenantTx,
-} from '@erfolg/db';
+import { clients, contacts, getDb, withTenantTx, withoutTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 
 let erfolgId = '';
@@ -141,30 +134,25 @@ describe('CHECK constraint clients_subtype_legal_only', () => {
   });
 });
 
-describe('PII шифрование действительно работает', () => {
-  it('individualFullName храниться как bytea, расшифровывается ключом', async () => {
-    const key = getTenantEncryptionKey({ id: erfolgId, kmsKeyId: null });
+describe('ПДн клиента лежат открыто (шифрование снято в 0078, колонки убраны в 0081)', () => {
+  it('полное ФИО читается из обычной колонки, без ключа и расшифровки', async () => {
     const rows = await withTenantTx(getDb(), erfolgId, async (tx) =>
-      tx.execute<{ raw: Buffer; decrypted: string }>(sql`
-        SELECT full_name_encrypted AS raw,
-               pgp_sym_decrypt(full_name_encrypted::bytea, ${key})::text AS decrypted
+      tx.execute<{ full_name: string }>(sql`
+        SELECT individual_full_name AS full_name
           FROM clients
          WHERE display_name = 'Иванов И.И.'
          LIMIT 1
       `),
     );
-    const row = (rows as unknown as Array<{ raw: Buffer; decrypted: string }>)[0];
+    const row = (rows as unknown as Array<{ full_name: string }>)[0];
     expect(row).toBeDefined();
     if (!row) return;
-    // raw bytea не равен открытому тексту
-    expect(row.raw).not.toBeNull();
-    expect(row.decrypted).toBe('Иванов Иван Иванович');
+    expect(row.full_name).toBe('Иванов Иван Иванович');
   });
 });
 
 describe('CASCADE: contacts удаляются вместе с клиентом', () => {
   it('создание клиента + контакта → удаление клиента → контакт исчез', async () => {
-    const key = getTenantEncryptionKey({ id: demoId, kmsKeyId: null });
     const created = await withTenantTx(getDb(), demoId, async (tx) => {
       const result = await tx.execute<{ id: string }>(sql`
         INSERT INTO clients (tenant_id, type, display_name)
@@ -174,12 +162,9 @@ describe('CASCADE: contacts удаляются вместе с клиентом'
       const cid = (result as unknown as Array<{ id: string }>)[0]!.id;
       const ins = await tx.execute<{ id: string }>(sql`
         INSERT INTO contacts (
-          tenant_id, client_id, full_name_encrypted, phone_encrypted, position
+          tenant_id, client_id, full_name, phone, position
         ) VALUES (
-          ${demoId}, ${cid},
-          pgp_sym_encrypt('Контакт Тестовый'::text, ${key}),
-          pgp_sym_encrypt('+79990000000'::text, ${key}),
-          'Тестовый'
+          ${demoId}, ${cid}, 'Контакт Тестовый', '+79990000000', 'Тестовый'
         ) RETURNING id
       `);
       return { clientId: cid, contactId: (ins as unknown as Array<{ id: string }>)[0]!.id };
