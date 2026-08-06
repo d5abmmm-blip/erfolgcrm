@@ -256,10 +256,21 @@ export async function getClient(
  * Порог в 3 цифры: по одной-двум нашлась бы половина картотеки. Если цифр меньше
  * (обычный текстовый поиск), условие вообще не добавляем — лишний regexp по строке.
  * Индекса тут нет и не нужно: физлиц сотни, это доли миллисекунды.
+ *
+ * Порог вынесен в отдельную функцию НЕ ради красоты: проверять его через
+ * searchClients оказалось нельзя. Там `LIMIT 10` и сортировка по названию, и в
+ * засорённой тестовой базе нужная строка просто не попадает в выдачу — тест
+ * «проходил» и со сломанным порогом (проверено 2026-08-06). Здесь же условие
+ * проверяется прямо, без базы, и от её состояния не зависит.
  */
-function phoneCondition(rawQuery: string): SQL[] {
+export function phoneSearchDigits(rawQuery: string): string | null {
   const digits = rawQuery.replace(/\D/g, '');
-  if (digits.length < 3) return [];
+  return digits.length < 3 ? null : digits;
+}
+
+function phoneCondition(rawQuery: string): SQL[] {
+  const digits = phoneSearchDigits(rawQuery);
+  if (digits === null) return [];
   return [
     sql`regexp_replace(coalesce(${clients.individualPhone}, ''), '\\D', '', 'g') LIKE ${`%${digits}%`}`,
     sql`regexp_replace(coalesce(${clients.phone}, ''), '\\D', '', 'g') LIKE ${`%${digits}%`}`,

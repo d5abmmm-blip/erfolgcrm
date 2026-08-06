@@ -27,6 +27,7 @@ import {
   createContact,
   findIndividualClientIdByPhone,
   getClient,
+  phoneSearchDigits,
   searchClients,
   updateClient,
   updateContact,
@@ -194,15 +195,42 @@ describe('поиск клиента', () => {
 
   it('7б. короткий цифровой запрос не тянет пол-картотеки', async () => {
     const tag = uniq().slice(-7);
-    await makeIndividual({
-      displayName: `${TEST_PREFIX}Короткий-${tag}`,
+    // ⚠️ Имя НАМЕРЕННО без единой цифры. searchClients ищет и по названию тоже,
+    // поэтому если цифры запроса встречаются в имени, клиент находится ПО ИМЕНИ —
+    // и порог по телефону проверять уже нечем. Раньше имя содержало тот же tag,
+    // тест был обречён находить клиента и «проходил» лишь по случайности: в
+    // засорённой локальной базе строка не попадала в LIMIT 10. На чистой базе
+    // (CI) он сразу упал. Отсюда буквы вместо цифр — один в один по позициям.
+    const nameTag = tag.replace(/\d/g, (d) => 'абвгдежзий'[Number(d)] ?? 'я');
+    const id = await makeIndividual({
+      displayName: `${TEST_PREFIX}Короткий-${nameTag}`,
       fullName: 'Короткий К.К.',
       phone: `8(963) ${tag}`,
     });
 
-    // Две цифры — ниже порога, условие по телефону не добавляется вовсе.
+    // Две цифры — ниже порога, условие по телефону не добавляется вовсе,
+    // а зацепиться в этой записи цифрам больше не за что.
     const found = await searchClients(getDb(), erfolgId, tag.slice(0, 2));
-    expect(found.every((c) => !c.displayName.startsWith(`${TEST_PREFIX}Короткий`))).toBe(true);
+    expect(found.map((c) => c.id)).not.toContain(id);
+  });
+
+  /**
+   * Сам порог — отдельно и без базы.
+   *
+   * Проверка выше зависит от `LIMIT 10` в searchClients: если строк, подходящих
+   * под две цифры, больше десяти, нужная не попадёт в выдачу и тест пройдёт даже
+   * со сломанным порогом. Ровно так и случилось при проверке 2026-08-06. Поэтому
+   * условие проверяется ещё и напрямую — этот тест падает от любой правки порога.
+   */
+  it('7в. порог в три цифры — проверка без базы', () => {
+    expect(phoneSearchDigits('1')).toBeNull();
+    expect(phoneSearchDigits('12')).toBeNull();
+    expect(phoneSearchDigits('Иванов')).toBeNull();
+    expect(phoneSearchDigits('8-9')).toBeNull();
+
+    expect(phoneSearchDigits('123')).toBe('123');
+    expect(phoneSearchDigits('8(963) 123-45-67')).toBe('89631234567');
+    expect(phoneSearchDigits('дом 12, кв 3')).toBe('123');
   });
 });
 
