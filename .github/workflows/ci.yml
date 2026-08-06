@@ -67,10 +67,34 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Тесты ходят в erfolg_test под ролью app_runtime и ждут применённых
+      # миграций, RLS и seed-тенантов (apps/api/src/__tests__/setup.ts падает
+      # с «Seed data missing», если их нет). Сервис postgres поднимает пустую
+      # базу, поэтому её нужно подготовить — рецепт из docs/dev-test-db.md.
+      # Раньше этого шага не было вовсе, и шаг Test свалился бы целиком; никто
+      # этого не видел, потому что прогон обрывался ещё на установке pnpm.
+      - name: Конфигурация из примера (ключи и адреса баз для разработки)
+        run: cp .env.example .env
+
+      - name: Подготовка тестовой базы
+        run: |
+          # Функция нужна ДО миграций: журнальная 0027 создаёт RLS-политики,
+          # которые на неё ссылаются, а создаёт её обычно setup-rls — позже.
+          PGPASSWORD=dev_only_password psql -h localhost -U erfolg -d erfolg_test -c \
+            "CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid';"
+          pnpm --filter @erfolg/db migrate
+          pnpm --filter @erfolg/db setup-rls
+          pnpm --filter @erfolg/db seed
+        env:
+          # Миграции, RLS и seed идут под владельцем (erfolg) и ОБЯЗАТЕЛЬНО
+          # против erfolg_test: без этого drizzle возьмёт дефолт с erfolg_dev.
+          # Переменные шага важнее .env — dotenv не перетирает заданное.
+          DATABASE_OWNER_URL: postgresql://erfolg:dev_only_password@localhost:5432/erfolg_test
+
       - name: Test
         run: pnpm test
         env:
-          DATABASE_URL: postgresql://erfolg:dev_only_password@localhost:5432/erfolg_test
+          TEST_DATABASE_URL: postgresql://app_runtime:app_runtime_dev_only@localhost:5432/erfolg_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
