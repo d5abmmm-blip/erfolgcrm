@@ -49,7 +49,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24, а не 22: боевые образы api и web собираются на node:24-alpine
+          # (apps/*/Dockerfile), и сканер штрих-кодов @zxing/library требует
+          # Node >= 24. На 22 установка обрывается ERR_PNPM_UNSUPPORTED_ENGINE.
+          # CI должен проверять тот же Node, на котором код работает на бою.
+          node-version: 24
           cache: 'pnpm'
 
       - run: pnpm install --frozen-lockfile
