@@ -58,8 +58,10 @@ export function SimilarCasesBlock({
     { id: ticketId ?? '' },
     { enabled: !!ticketId, staleTime: 30_000 },
   );
-  const resolvedAssetId =
-    assetId ?? (ticketDetail.data?.assetId ?? null) ?? undefined;
+  // Было `assetId ?? (data?.assetId ?? null) ?? undefined`: промежуточный `?? null`
+  // ничего не делал — его тут же перекрывал `?? undefined`, и значение null сюда
+  // попасть не могло. Скобки прятали это от компилятора; результат не изменился.
+  const resolvedAssetId = assetId ?? ticketDetail.data?.assetId ?? undefined;
 
   // 2. Прошлые тикеты на этот asset.
   const pastTickets = trpc.tickets.list.useQuery(
@@ -99,26 +101,18 @@ export function SimilarCasesBlock({
 
   const articles = similar.data ?? [];
   const isLoading =
-    (resolvedAssetId &&
-      (ownerClientIdQuery.isLoading || ticketsByClient.isLoading)) ||
+    (resolvedAssetId && (ownerClientIdQuery.isLoading || ticketsByClient.isLoading)) ||
     similar.isLoading;
-  const noContent =
-    !isLoading && filteredPast.length === 0 && articles.length === 0;
+  const noContent = !isLoading && filteredPast.length === 0 && articles.length === 0;
 
   return (
-    <section
-      className={
-        'bg-card rounded-lg border p-4 md:p-6 ' + (className ?? '')
-      }
-    >
-      <h2 className="text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
+    <section className={'bg-card rounded-lg border p-4 md:p-6 ' + (className ?? '')}>
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
         <Lightbulb className="h-4 w-4" />
         Похожие случаи
       </h2>
 
-      {isLoading && (
-        <p className="text-muted-foreground mt-3 text-sm">Поиск…</p>
-      )}
+      {isLoading && <p className="text-muted-foreground mt-3 text-sm">Поиск…</p>}
 
       {noContent && (
         <p className="text-muted-foreground mt-3 text-sm">
@@ -175,14 +169,15 @@ export function SimilarCasesBlock({
                     <MatchBadge reason={a.matchReason} />
                   </div>
                   {a.bodyExcerpt && (
-                    <div className="text-muted-foreground mt-0.5 line-clamp-2">
-                      {a.bodyExcerpt}
-                    </div>
+                    <div className="text-muted-foreground mt-0.5 line-clamp-2">{a.bodyExcerpt}</div>
                   )}
                   {(a.tags.length > 0 || a.assetModels.length > 0) && (
                     <div className="text-muted-foreground mt-1 flex flex-wrap gap-1">
                       {a.tags.slice(0, 4).map((t) => (
-                        <span key={t} className="bg-primary/10 text-primary rounded px-1 text-[10px]">
+                        <span
+                          key={t}
+                          className="bg-primary/10 text-primary rounded px-1 text-[10px]"
+                        >
                           #{t}
                         </span>
                       ))}
