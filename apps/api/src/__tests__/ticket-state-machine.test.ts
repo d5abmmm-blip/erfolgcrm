@@ -81,10 +81,11 @@ async function clearTestTickets(): Promise<void> {
   directorId = engineerId;
 }
 
-async function createBaseTicket(): Promise<string> {
+async function createBaseTicket(assignedEngineerId?: string): Promise<string> {
   const { id } = await createTicket(getDb(), erfolgId, null, {
     clientId: primaryClientId,
     symptom: `${TEST_PREFIX}base`,
+    ...(assignedEngineerId ? { assignedEngineerId } : {}),
   });
   return id;
 }
@@ -227,9 +228,61 @@ describe('ticket state machine: реальные защиты (на router/servi
     );
   });
 
-  it('engineer МОЖЕТ ставить diagnostics/in_progress/act_pending', async () => {
+  it('engineer МОЖЕТ ставить diagnostics/in_progress/act_pending — по СВОЕЙ заявке', async () => {
+    const id = await createBaseTicket(engineerId);
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    const r = await caller.tickets.changeStatus({ id, status: 'diagnostics' });
+    expect(r.to).toBe('diagnostics');
+  });
+
+  // Решение владельца 2026-08-07: «смотреть всем, менять — только свои».
+  // Раньше `engineerProcedure` проверял РОЛЬ, и инженер, открыв чужую заявку
+  // через сканер, мог менять ей статус.
+  it('engineer НЕ может менять статус чужой заявки', async () => {
+    const id = await createBaseTicket(); // ни на кого не назначена
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(caller.tickets.changeStatus({ id, status: 'diagnostics' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('engineer НЕ может писать комментарий в чужую заявку', async () => {
     const id = await createBaseTicket();
     const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(caller.tickets.addNote({ ticketId: id, comment: 'чужое' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  // Самое денежное: от строки наряда считается зарплата (процент со строки).
+  it('engineer НЕ может добавить строку в чужой наряд', async () => {
+    const id = await createBaseTicket();
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(
+      caller.workOrders.upsertLine({
+        ticketId: id,
+        line: {
+          lineType: 'work',
+          name: 'Приписанная работа',
+          unit: 'шт',
+          quantity: '1',
+          unitPriceRub: 18000,
+          engineerId,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('смотреть чужую заявку по-прежнему можно — сканер и «что за аппарат»', async () => {
+    const id = await createBaseTicket();
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    const t = await caller.tickets.get({ id });
+    expect(t.id).toBe(id);
+  });
+
+  it('диспетчер не ограничен', async () => {
+    const id = await createBaseTicket();
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
     const r = await caller.tickets.changeStatus({ id, status: 'diagnostics' });
     expect(r.to).toBe('diagnostics');
   });
@@ -337,5 +390,62 @@ describe('ticket state machine: валидация переходов на servi
     const callerDirector = appRouter.createCaller(makeCtx('director'));
     const r = await callerDirector.tickets.changeStatus({ id, status: 'in_progress' });
     expect(r.to).toBe('in_progress');
+  });
+});
+
+/**
+ * Наряд закрытой заявки: три дня свободно, дальше только руководитель.
+ * Решение владельца 2026-08-07. Само правило — чистой функцией в
+ * `work-orders/edit-window.ts`, здесь проверяем, что оно ДЕЙСТВИТЕЛЬНО
+ * стоит на пути запроса, а не лежит рядом неподключённым.
+ */
+describe('правка наряда после закрытия заявки', () => {
+  beforeEach(clearTestTickets);
+
+  /**
+   * Завести наряд, закрыть заявку и отодвинуть дату закрытия на N дней назад.
+   * Наряд создаём ДО закрытия — как в жизни: инженер работал, потом закрыли.
+   */
+  async function closeDaysAgo(id: string, days: number): Promise<void> {
+    await appRouter.createCaller(makeCtx('dispatcher')).workOrders.ensure({ ticketId: id });
+    await changeStatus(getDb(), erfolgId, null, id, 'in_progress');
+    await changeStatus(getDb(), erfolgId, null, id, 'closed');
+    const when = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.update(tickets).set({ closedAt: when }).where(eq(tickets.id, id)),
+    );
+  }
+
+  const line = {
+    lineType: 'work' as const,
+    name: 'Задним числом',
+    unit: 'шт',
+    quantity: '1',
+    unitPriceRub: 25000,
+  };
+
+  it('закрыта вчера — инженер ещё правит', async () => {
+    const id = await createBaseTicket(engineerId);
+    await closeDaysAgo(id, 1);
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    const r = await caller.workOrders.upsertLine({ ticketId: id, line });
+    expect(r.id).toBeTruthy();
+  });
+
+  it('закрыта две недели назад — инженеру нельзя', async () => {
+    const id = await createBaseTicket(engineerId);
+    await closeDaysAgo(id, 14);
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(caller.workOrders.upsertLine({ ticketId: id, line })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('той же заявке диспетчер правку вносит — это и есть «разрешение»', async () => {
+    const id = await createBaseTicket(engineerId);
+    await closeDaysAgo(id, 14);
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    const r = await caller.workOrders.upsertLine({ ticketId: id, line });
+    expect(r.id).toBeTruthy();
   });
 });

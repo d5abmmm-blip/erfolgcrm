@@ -19,6 +19,8 @@ import {
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
+import { ticketIdForWorkOrderLine } from '../work-orders/repository';
+import { assertMayEditWorkOrderOfTicket } from '../tickets/service';
 
 export interface IssueCmdInput {
   workOrderLineId: string;
@@ -27,7 +29,20 @@ export interface IssueCmdInput {
   comment?: string | null;
 }
 
+/** Строка наряда принадлежит заявке, которую этому человеку можно менять. */
+async function assertLineBelongsToOwnTicket(ctx: CmdCtx, workOrderLineId: string): Promise<void> {
+  if (ctx.session.role !== 'engineer') return;
+  const ticketId = await ticketIdForWorkOrderLine(ctx.db, ctx.tenant.id, workOrderLineId);
+  if (!ticketId) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Строка наряда не найдена' });
+  }
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+}
+
 export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Promise<IssueResult> {
+  // Списание/возврат приходит с идентификатором СТРОКИ наряда, а доступ
+  // решается по заявке: инженер трогает склад только в своих нарядах.
+  await assertLineBelongsToOwnTicket(ctx, input.workOrderLineId);
   if (!(await itemExists(ctx.db, ctx.tenant.id, input.itemId))) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -86,6 +101,9 @@ export async function returnFromWorkOrderCmd(
   ctx: CmdCtx,
   input: ReturnCmdInput,
 ): Promise<ReturnResult> {
+  // Списание/возврат приходит с идентификатором СТРОКИ наряда, а доступ
+  // решается по заявке: инженер трогает склад только в своих нарядах.
+  await assertLineBelongsToOwnTicket(ctx, input.workOrderLineId);
   if (!(await itemExists(ctx.db, ctx.tenant.id, input.itemId))) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Товар не найден в этом тенанте' });
   }
