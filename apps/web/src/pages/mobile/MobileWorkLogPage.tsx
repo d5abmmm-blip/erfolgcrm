@@ -78,11 +78,14 @@ export function MobileWorkLogPage() {
         </div>
       )}
 
+      {/* Карточки, а не таблица: на 375 пикселях семь колонок ужимались так,
+          что поле цены становилось 31 пиксель и «12500» в него не влезало. */}
       <WorkOrderEditor
         ticketId={id}
         ticketNumber={ticket.data.ticketNumber}
         canEdit={canEdit}
         canEditVat={canEditVat}
+        layout="card"
       />
     </div>
   );
