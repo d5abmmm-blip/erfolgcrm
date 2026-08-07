@@ -41,6 +41,8 @@ export function MobileScanPage() {
   const [manual, setManual] = useState('');
   const [searching, setSearching] = useState(false);
   const [matches, setMatches] = useState<ScanMatch[] | null>(null);
+  /** Последний код, по которому ничего не нашли — чтобы не искать его по кругу. */
+  const lastMissRef = useRef<string | null>(null);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const utils = trpc.useUtils();
@@ -66,7 +68,12 @@ export function MobileScanPage() {
       } else if (pick.kind === 'many') {
         setMatches(pick.matches);
       } else {
-        setError(`Не нашли заявку по коду «${text}»`);
+        setError(`Не нашли заявку по коду «${text}». Наведите на другой код.`);
+        // Раньше камера тут гасла, и инженер у аппарата жал «Включить камеру»
+        // заново на каждый чужой штрих-код. Возвращаем её сами, а этот код
+        // запоминаем — иначе он попадёт в кадр снова и закружит поиск.
+        lastMissRef.current = text;
+        void startCamera();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка поиска');
@@ -93,12 +100,21 @@ export function MobileScanPage() {
       ]);
       const reader = new BrowserMultiFormatReader(hints);
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        // Раньше просто выходили — экран оставался «сканирующим» без камеры,
+        // и кнопка «Включить» больше не показывалась.
+        setScanning(false);
+        setError('Не удалось открыть окно камеры — попробуйте ещё раз');
+        return;
+      }
       const controls = await reader.decodeFromVideoDevice(
         undefined, // useDefaultCamera
         video,
         (result, _err, ctrl) => {
           if (result) {
+            // Тот же код, который только что не нашли, пропускаем молча:
+            // он никуда не делся из кадра, а искать его снова бессмысленно.
+            if (result.getText() === lastMissRef.current) return;
             ctrl.stop();
             controlsRef.current = null;
             trackRef.current = null;
@@ -158,6 +174,7 @@ export function MobileScanPage() {
     e.preventDefault();
     const trimmed = manual.trim();
     if (!trimmed) return;
+    lastMissRef.current = null; // ручной ввод — намерение явное, ищем всегда
     void handleHit(trimmed);
   };
 

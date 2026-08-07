@@ -5,6 +5,7 @@ import { useOutbox } from '../lib/offline/useOutbox';
 import { useAppViewportLock } from '../lib/use-app-viewport-lock';
 import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
+import { mobileHeaderTitle } from '../lib/nav';
 
 interface SessionInfo {
   user: {
@@ -79,9 +80,10 @@ export function MobileShell({ children, session }: Props) {
     (n) => !n.module || !session.tenant.disabledModules.includes(n.module),
   );
 
-  const headerTitle =
-    NAV.find((n) => n.match(location))?.label ??
-    (location.startsWith('/m/tickets') ? 'Заявка' : 'ErfolgCRM');
+  // Заголовок считается отдельно (см. mobileHeaderTitle): подсветка «Очереди»
+  // внизу на карточке заявки правильная — это её раздел, — а вот заголовок
+  // «Очередь» над открытой заявкой сбивал с толку.
+  const headerTitle = mobileHeaderTitle(location);
 
   return (
     <div className="bg-background flex h-full min-h-[100dvh] flex-col overflow-x-hidden">

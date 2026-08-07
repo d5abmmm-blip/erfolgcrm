@@ -239,6 +239,9 @@ export function MobileTicketPage() {
       await Promise.all([
         utils.tickets.get.invalidate({ id: t.id }),
         utils.tickets.list.invalidate(),
+        // История заявки живёт отдельным запросом: без этой строки инженер
+        // менял статус, а лента ниже оставалась вчерашней.
+        utils.tickets.events.invalidate({ ticketId: t.id }),
       ]);
       showToast('ok', `Статус изменён: ${label}`);
     } else if (result.status === 'queued') {
@@ -272,14 +275,9 @@ export function MobileTicketPage() {
     }
   };
 
-  const isEngineer = me.data?.user.role === 'engineer';
-  const visibleActions = ACTIONS.filter((a) => a.from.includes(t.status));
-  // Инженер ограничен в diagnostics/in_progress/act_pending — отфильтруем заранее (роутер всё равно проверит)
-  const allowedActions = isEngineer
-    ? visibleActions.filter((a) =>
-        (['diagnostics', 'in_progress', 'act_pending'] as TicketStatus[]).includes(a.target),
-      )
-    : visibleActions;
+  // Фильтр «инженеру только diagnostics/in_progress/act_pending» убран как
+  // мёртвый: в ACTIONS других целей и нет, он ничего не отсеивал.
+  const allowedActions = ACTIONS.filter((a) => a.from.includes(t.status));
 
   return (
     <div className="space-y-3 p-3">
@@ -376,35 +374,43 @@ export function MobileTicketPage() {
             type="button"
             onClick={() =>
               void (async () => {
+                // Раньше здесь не было try/catch, в отличие от печати актов:
+                // при сбое инженер получал пустое открытое окно и ни слова.
                 const win = openPrintWindow();
-                const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                  import('../../lib/pdf'),
-                  import('../../lib/pdf/branding'),
-                ]);
-                await printAssetLabel(
-                  {
-                    asset: {
-                      model: t.assetModel ?? '—',
-                      manufacturer: null,
-                      serialNumber: t.assetSerialNumber ?? null,
-                      inventoryNumber: t.assetInventoryNumber ?? null,
-                      riskClass: null,
+                try {
+                  const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
+                    import('../../lib/pdf'),
+                    import('../../lib/pdf/branding'),
+                  ]);
+                  await printAssetLabel(
+                    {
+                      asset: {
+                        model: t.assetModel ?? '—',
+                        manufacturer: null,
+                        serialNumber: t.assetSerialNumber ?? null,
+                        inventoryNumber: t.assetInventoryNumber ?? null,
+                        riskClass: null,
+                      },
+                      ticket: t.barcode
+                        ? {
+                            ticketNumber: t.ticketNumber,
+                            receivedAt:
+                              typeof t.receivedAt === 'string'
+                                ? t.receivedAt
+                                : t.receivedAt.toISOString(),
+                            barcode: t.barcode,
+                          }
+                        : null,
+                      fallbackBarcode: t.assetId ?? t.id,
+                      tenantDisplayName: ERFOLG_FALLBACK.displayName,
                     },
-                    ticket: t.barcode
-                      ? {
-                          ticketNumber: t.ticketNumber,
-                          receivedAt:
-                            typeof t.receivedAt === 'string'
-                              ? t.receivedAt
-                              : t.receivedAt.toISOString(),
-                          barcode: t.barcode,
-                        }
-                      : null,
-                    fallbackBarcode: t.assetId ?? t.id,
-                    tenantDisplayName: ERFOLG_FALLBACK.displayName,
-                  },
-                  win,
-                );
+                    win,
+                  );
+                } catch (err) {
+                  win?.close();
+                  console.error('[print label]', err);
+                  showToast('error', 'Не удалось сформировать ярлык');
+                }
               })()
             }
             className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"

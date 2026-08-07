@@ -23,7 +23,7 @@ import {
   TICKET_STATUS_META,
 } from '../../lib/dictionaries/tickets';
 import { assetIdentifierLine } from '../../lib/asset-identifiers';
-import { fmtDeadline } from '../../lib/deadline';
+import { fmtDeadline, isTicketOverdue } from '../../lib/deadline';
 import { addDays, fmtTime, inDayRange, startOfDay } from '../../lib/dates';
 import { filterQueue } from '../../lib/queue-filter';
 import { showToast } from '../../lib/toast';
@@ -32,10 +32,9 @@ import { SegmentedTabs } from '../../components/SegmentedTabs';
 import { QueryError } from '../../components/QueryError';
 import { PushToggle } from '../../components/PushToggle';
 import {
-  newAssignmentsCount,
+  newAssignmentIds,
   nextPageSize,
-  readSeen,
-  rebasedSeen,
+  readSeenIds,
   seenStorageKey,
   shownOfTotal,
 } from '../../lib/queue-badge';
@@ -216,38 +215,35 @@ export function MobileQueuePage({ engineerId }: Props) {
   // зависела бы от выбранной вкладки и от того, сколько страниц подгрузили:
   // отметив просмотренным архив на 480 заявок, инженер больше никогда не
   // увидел бы её на «Активных».
-  const activeCount = myTickets.data?.length ?? null;
-  const [seenCount, setSeenCount] = useState<number | null>(() =>
-    readSeen(localStorage.getItem(seenStorageKey(engineerId))),
+  const activeIds = useMemo(
+    () => (myTickets.data ? myTickets.data.map((c) => c.id) : null),
+    [myTickets.data],
   );
-  const newCount = useMemo(
-    () => (activeCount === null ? 0 : newAssignmentsCount(activeCount, seenCount)),
-    [activeCount, seenCount],
+  const [seenIds, setSeenIds] = useState<string[] | null>(() =>
+    readSeenIds(localStorage.getItem(seenStorageKey(engineerId))),
   );
+  const newIds = useMemo(
+    () => (activeIds === null ? [] : newAssignmentIds(activeIds, seenIds)),
+    [activeIds, seenIds],
+  );
+  const newCount = newIds.length;
 
+  const rememberSeen = (ids: string[]) => {
+    setSeenIds(ids);
+    localStorage.setItem(seenStorageKey(engineerId), JSON.stringify(ids));
+  };
   const markSeen = () => {
-    if (activeCount === null) return;
-    setSeenCount(activeCount);
-    localStorage.setItem(seenStorageKey(engineerId), String(activeCount));
+    if (activeIds !== null) rememberSeen(activeIds);
   };
 
   useEffect(() => {
-    if (activeCount === null) return;
-    // Первый заход: запоминаем текущее число молча, чтобы не показывать
+    if (activeIds === null) return;
+    // Первый заход: запоминаем текущий состав молча, чтобы не показывать
     // «назначено новых: 12» человеку, который просто открыл приложение.
-    if (seenCount === null) {
-      setSeenCount(activeCount);
-      localStorage.setItem(seenStorageKey(engineerId), String(activeCount));
-      return;
-    }
-    // Заявки закрылись — опускаем отметку следом, иначе устаревший порог
-    // «съест» следующие назначения и плашка снова замолчит.
-    const rebased = rebasedSeen(activeCount, seenCount);
-    if (rebased !== null) {
-      setSeenCount(rebased);
-      localStorage.setItem(seenStorageKey(engineerId), String(rebased));
-    }
-  }, [seenCount, activeCount, engineerId]);
+    if (seenIds === null) rememberSeen(activeIds);
+    // Закрытые заявки отдельной обработки не требуют: разница множеств сама
+    // перестаёт их учитывать. Раньше на числах приходилось «опускать порог».
+  }, [seenIds, activeIds, engineerId]);
 
   return (
     <div className="flex flex-col">
@@ -463,8 +459,9 @@ export function MobileQueuePage({ engineerId }: Props) {
 
       <ul className="space-y-2 p-3">
         {visibleItems.map((t) => {
-          const overdue =
-            t.deadlineAt && new Date(t.deadlineAt).getTime() < Date.now() && t.status !== 'closed';
+          // Отменённые и закрытые не подсвечиваем: на вкладке «Все» отменённая
+          // заявка светилась «просрочено», хотя делать по ней нечего.
+          const overdue = isTicketOverdue(t.status, t.deadlineAt);
           const reason = reasonById.get(t.id);
           // Серийный и/или инвентарный — у «инвентарных» заказчиков второй единственный.
           const assetIds = assetIdentifierLine({
