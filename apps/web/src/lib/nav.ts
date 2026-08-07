@@ -173,3 +173,25 @@ export function isNavItemVisible(item: NavItem, role: Role, disabledModules: str
     (!item.module || !disabledModules.includes(item.module))
   );
 }
+
+/**
+ * Заголовок в шапке мобильного кабинета инженера.
+ *
+ * Раньше он брался из той же таблицы, что и нижняя навигация, и на карточке
+ * заявки показывал «Очередь»: первая же запись матчит `/m/tickets`, а ветка
+ * с «Заявка» была недостижима. Внизу подсветка «Очереди» на карточке заявки
+ * ПРАВИЛЬНАЯ — это её раздел; неправильным был только заголовок, поэтому
+ * считаем его отдельно.
+ */
+export function mobileHeaderTitle(location: string): string {
+  if (location.startsWith('/m/tickets')) {
+    return location.endsWith('/work-log') ? 'Журнал работ' : 'Заявка';
+  }
+  if (location.startsWith('/m/queue')) return 'Очередь';
+  if (location.startsWith('/m/tasks')) return 'Задачи';
+  if (location.startsWith('/m/scan')) return 'Сканер';
+  if (location.startsWith('/m/inventory')) return 'Склад';
+  if (location.startsWith('/m/profile')) return 'Профиль';
+  if (location.startsWith('/m/earnings')) return 'Мой заработок';
+  return 'ErfolgCRM';
+}

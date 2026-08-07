@@ -16,6 +16,8 @@ import { formatRubWhole } from '../../lib/money';
 import { useOutbox } from '../../lib/offline/useOutbox';
 import { markEngineerWantsDesktop } from '../../lib/engineer-redirect';
 import { TelegramLinkSection } from '../../components/TelegramLinkSection';
+import { OutboxRejectedList } from '../../components/OutboxRejectedList';
+import { QueryError } from '../../components/QueryError';
 
 const ROLE_LABEL: Record<'director' | 'dispatcher' | 'engineer', string> = {
   director: 'Директор',
@@ -48,7 +50,24 @@ export function MobileProfilePage() {
   // Прячем карточку, если директор отключил показ (сервер вернул enabled: false).
   const showEarnings = canQueryEarnings && earningsQ.data?.enabled !== false;
 
-  if (!me.data) return null;
+  if (!me.data) {
+    // Раньше здесь был `return null` — пустой белый экран без единого слова.
+    // В самом приложении сюда почти не попасть (оболочка /m/* рисуется только
+    // при живой сессии), но белый экран — худшее, что можно показать человеку.
+    return (
+      <div className="m-3 space-y-2">
+        <QueryError
+          error={me.error}
+          paused={me.fetchStatus === 'paused'}
+          what="данные сотрудника"
+          onRetry={() => void me.refetch()}
+        />
+        {!me.error && me.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Загрузка…</div>
+        )}
+      </div>
+    );
+  }
   const { user, tenant } = me.data;
 
   return (
@@ -114,6 +133,10 @@ export function MobileProfilePage() {
         </div>
         <TelegramLinkSection />
       </div>
+
+      {/* Отклонённое сервером больше не пропадает — вот оно, с причиной
+          и кнопками. Блок сам прячется, когда всё отправлено. */}
+      <OutboxRejectedList onRetryAll={() => void outbox.sync()} />
 
       <div className="bg-card space-y-2 rounded-lg border p-4">
         <div className="text-muted-foreground text-[11px] font-medium uppercase">Синхронизация</div>

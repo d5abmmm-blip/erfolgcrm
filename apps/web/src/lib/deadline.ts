@@ -17,3 +17,21 @@ export function fmtDeadline(d: Date | string | null, now: number = Date.now()): 
   if (diffH < 24) return `осталось ${diffH} ч`;
   return `осталось ${Math.round(diffH / 24)} дн`;
 }
+
+/**
+ * Просрочена ли заявка — для красной подписи в списке.
+ *
+ * Отменённые и закрытые не считаем: на вкладке «Все» отменённая заявка
+ * светилась «просрочено», хотя по ней уже ничего не сделать и делать не надо.
+ * Раньше исключался только `closed`.
+ */
+export function isTicketOverdue(
+  status: string,
+  deadlineAt: Date | string | null,
+  now: number = Date.now(),
+): boolean {
+  if (!deadlineAt) return false;
+  if (status === 'closed' || status === 'cancelled') return false;
+  const date = typeof deadlineAt === 'string' ? new Date(deadlineAt) : deadlineAt;
+  return date.getTime() < now;
+}

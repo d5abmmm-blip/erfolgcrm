@@ -24,15 +24,39 @@ export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
   const sent = r.succeeded + (photos?.succeeded ?? 0);
   const stuck = r.failedSoft + (photos?.failedSoft ?? 0);
   const photosRejected = photos?.failedHard ?? 0;
-  if (sent === 0 && stuck === 0 && r.failedHard === 0 && photosRejected === 0) return;
+  if (
+    sent === 0 &&
+    stuck === 0 &&
+    r.failedHard === 0 &&
+    photosRejected === 0 &&
+    r.skippedOther === 0 &&
+    !r.needsLogin
+  ) {
+    return;
+  }
 
-  // Отклонённое сервером повторить нельзя — такие записи удалены. Это самое
-  // важное в отчёте: работа инженера пропала, и он должен об этом узнать.
+  // Сессия кончилась, пока человек работал без связи. Раньше это считалось
+  // отказом по существу и стирало ВСЮ накопленную за смену работу молча.
+  if (r.needsLogin) {
+    showToast(
+      'error',
+      'Вход в систему закончился — войдите заново. Накопленное сохранено и уйдёт само.',
+    );
+  }
+  // Отклонённое сервером теперь не пропадает: оно лежит в «Профиль → Не
+  // отправлено», где видно, что именно и почему, и можно повторить.
   if (r.failedHard > 0) {
     showToast(
       'error',
       `Сервер не принял ${r.failedHard} ${plural(r.failedHard, 'изменение', 'изменения', 'изменений')}` +
-        ' — их придётся внести заново',
+        ' — они сохранены, откройте «Профиль → Не отправлено»',
+    );
+  }
+  if (r.skippedOther > 0) {
+    showToast(
+      'queued',
+      `${r.skippedOther} ${plural(r.skippedOther, 'изменение', 'изменения', 'изменений')} другого сотрудника` +
+        ' — уйдут, когда он войдёт на этом телефоне',
     );
   }
   // Фото при отказе НЕ пропадает: оно остаётся в карточке заявки с причиной
@@ -46,7 +70,9 @@ export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
   if (sent > 0) {
     showToast('ok', `Отправлено ${sent} ${plural(sent, 'изменение', 'изменения', 'изменений')}`);
   }
-  if (stuck > 0) {
+  // При протухшей сессии про «связи всё ещё нет» молчим — причина другая,
+  // и она уже названа выше.
+  if (stuck > 0 && !r.needsLogin) {
     showToast('queued', `Связи всё ещё нет — ${stuck} в очереди, попробуем позже`);
   }
 }

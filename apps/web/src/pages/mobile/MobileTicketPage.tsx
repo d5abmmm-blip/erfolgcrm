@@ -15,6 +15,7 @@ import {
   StickyNote,
   Tag,
   Printer,
+  Info,
   FileWarning,
   FileCheck,
 } from 'lucide-react';
@@ -79,9 +80,10 @@ export function MobileTicketPage() {
   const changeStatusM = trpc.tickets.changeStatus.useMutation();
   const addNoteM = trpc.tickets.addNote.useMutation();
 
-  // Печать актов и реквизиты клиента — по «своим» заявкам инженера: он
-  // ответственный ИЛИ помощник, как на сервере в assertEngineerOwnsTicket.
-  // (Раньше проверялся только ответственный — помощник не видел кнопок актов.)
+  // «Своя» заявка = ответственный ИЛИ помощник, как на сервере. От этого
+  // зависит и печать актов с реквизитами клиента, и — с 2026-08-07 — сами
+  // правки: сервер их теперь не принимает по чужим заявкам, и экран не должен
+  // предлагать кнопки, которые всё равно откажут.
   const canPrintActs = engineerOwnsTicket(
     me.data ? { id: me.data.user.id, role: me.data.user.role } : undefined,
     ticket.data ?? undefined,
@@ -231,12 +233,17 @@ export function MobileTicketPage() {
       { id: t.id, status: target },
       (p) => changeStatusM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      t.ticketNumber,
     );
     setBusy(null);
     if (result.status === 'ok') {
       await Promise.all([
         utils.tickets.get.invalidate({ id: t.id }),
         utils.tickets.list.invalidate(),
+        // История заявки живёт отдельным запросом: без этой строки инженер
+        // менял статус, а лента ниже оставалась вчерашней.
+        utils.tickets.events.invalidate({ ticketId: t.id }),
       ]);
       showToast('ok', `Статус изменён: ${label}`);
     } else if (result.status === 'queued') {
@@ -254,6 +261,8 @@ export function MobileTicketPage() {
       { ticketId: t.id, comment: comment.trim() },
       (p) => addNoteM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      t.ticketNumber,
     );
     setBusy(null);
     if (result.status === 'ok') {
@@ -268,14 +277,11 @@ export function MobileTicketPage() {
     }
   };
 
+  // Фильтр «инженеру только diagnostics/in_progress/act_pending» убран как
+  // мёртвый: в ACTIONS других целей и нет, он ничего не отсеивал.
   const isEngineer = me.data?.user.role === 'engineer';
-  const visibleActions = ACTIONS.filter((a) => a.from.includes(t.status));
-  // Инженер ограничен в diagnostics/in_progress/act_pending — отфильтруем заранее (роутер всё равно проверит)
-  const allowedActions = isEngineer
-    ? visibleActions.filter((a) =>
-        (['diagnostics', 'in_progress', 'act_pending'] as TicketStatus[]).includes(a.target),
-      )
-    : visibleActions;
+  const canEdit = !isEngineer || canPrintActs;
+  const allowedActions = canEdit ? ACTIONS.filter((a) => a.from.includes(t.status)) : [];
 
   return (
     <div className="space-y-3 p-3">
@@ -285,6 +291,22 @@ export function MobileTicketPage() {
       >
         <ChevronLeft className="h-4 w-4" />К очереди
       </Link>
+
+      {/* Чужая заявка: смотреть можно (приехал на объект, отсканировал аппарат —
+          надо понимать, что это), менять нельзя. Сервер откажет в любом случае,
+          но человек должен узнать причину до нажатия, а не после. */}
+      {!canEdit && (
+        <div className="bg-warning/15 text-warning border-warning/40 flex items-start gap-2 rounded-lg border p-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-medium">Это не ваша заявка</div>
+            <div className="opacity-90">
+              Смотреть можно, менять нельзя. Если работу передали вам — попросите диспетчера
+              назначить заявку.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-card space-y-3 rounded-lg border p-4">
         <div className="flex items-start justify-between gap-2">
@@ -372,35 +394,43 @@ export function MobileTicketPage() {
             type="button"
             onClick={() =>
               void (async () => {
+                // Раньше здесь не было try/catch, в отличие от печати актов:
+                // при сбое инженер получал пустое открытое окно и ни слова.
                 const win = openPrintWindow();
-                const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                  import('../../lib/pdf'),
-                  import('../../lib/pdf/branding'),
-                ]);
-                await printAssetLabel(
-                  {
-                    asset: {
-                      model: t.assetModel ?? '—',
-                      manufacturer: null,
-                      serialNumber: t.assetSerialNumber ?? null,
-                      inventoryNumber: t.assetInventoryNumber ?? null,
-                      riskClass: null,
+                try {
+                  const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
+                    import('../../lib/pdf'),
+                    import('../../lib/pdf/branding'),
+                  ]);
+                  await printAssetLabel(
+                    {
+                      asset: {
+                        model: t.assetModel ?? '—',
+                        manufacturer: null,
+                        serialNumber: t.assetSerialNumber ?? null,
+                        inventoryNumber: t.assetInventoryNumber ?? null,
+                        riskClass: null,
+                      },
+                      ticket: t.barcode
+                        ? {
+                            ticketNumber: t.ticketNumber,
+                            receivedAt:
+                              typeof t.receivedAt === 'string'
+                                ? t.receivedAt
+                                : t.receivedAt.toISOString(),
+                            barcode: t.barcode,
+                          }
+                        : null,
+                      fallbackBarcode: t.assetId ?? t.id,
+                      tenantDisplayName: ERFOLG_FALLBACK.displayName,
                     },
-                    ticket: t.barcode
-                      ? {
-                          ticketNumber: t.ticketNumber,
-                          receivedAt:
-                            typeof t.receivedAt === 'string'
-                              ? t.receivedAt
-                              : t.receivedAt.toISOString(),
-                          barcode: t.barcode,
-                        }
-                      : null,
-                    fallbackBarcode: t.assetId ?? t.id,
-                    tenantDisplayName: ERFOLG_FALLBACK.displayName,
-                  },
-                  win,
-                );
+                    win,
+                  );
+                } catch (err) {
+                  win?.close();
+                  console.error('[print label]', err);
+                  showToast('error', 'Не удалось сформировать ярлык');
+                }
               })()
             }
             className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
@@ -503,31 +533,33 @@ export function MobileTicketPage() {
         {wo.data ? `· ${(Number(wo.data.totalAmountKopecks) / 100).toLocaleString('ru-RU')} ₽` : ''}
       </Link>
 
-      <div className="bg-card space-y-2 rounded-lg border p-3">
-        <label className="text-muted-foreground text-[11px] font-medium uppercase">
-          Комментарий
-        </label>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Например: «приехал на объект, ожидаю клиента»"
-          rows={3}
-          className="border-input bg-background w-full resize-none rounded-md border px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={() => void onSendNote()}
-          disabled={!comment.trim() || busy === 'note'}
-          className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
-        >
-          {busy === 'note' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <StickyNote className="h-4 w-4" />
-          )}
-          Сохранить комментарий
-        </button>
-      </div>
+      {canEdit && (
+        <div className="bg-card space-y-2 rounded-lg border p-3">
+          <label className="text-muted-foreground text-[11px] font-medium uppercase">
+            Комментарий
+          </label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Например: «приехал на объект, ожидаю клиента»"
+            rows={3}
+            className="border-input bg-background w-full resize-none rounded-md border px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void onSendNote()}
+            disabled={!comment.trim() || busy === 'note'}
+            className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium disabled:opacity-50"
+          >
+            {busy === 'note' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <StickyNote className="h-4 w-4" />
+            )}
+            Сохранить комментарий
+          </button>
+        </div>
+      )}
 
       {(events.data ?? []).length > 0 && (
         <div className="bg-card space-y-2 rounded-lg border p-3">
@@ -566,7 +598,7 @@ export function MobileTicketPage() {
           kind="ticket_photo"
           referenceType="ticket"
           referenceId={t.id}
-          canUpload={true}
+          canUpload={canEdit}
           showCamera={true}
           hint="Фото техники, состояния, повреждений"
         />

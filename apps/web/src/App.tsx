@@ -85,6 +85,7 @@ import { PublicTrackPage } from './pages/PublicTrackPage';
 import { ClientCabinetUsersPage } from './pages/ClientCabinetUsersPage';
 import { ClientShell } from './components/ClientShell';
 import { trpc } from './lib/trpc';
+import { setCurrentUserId } from './lib/offline/current-user';
 import { isPathDisabled } from './lib/modules';
 import { useIsMobile } from './lib/use-is-mobile';
 import {
@@ -135,6 +136,13 @@ function StaffApp() {
       /* ignore */
     }
   };
+
+  // Очередь неотправленных правок должна знать, кто сейчас за телефоном:
+  // один аппарат в бригаде переходит из рук в руки, и правки одного инженера
+  // не должны уйти от имени другого.
+  useEffect(() => {
+    setCurrentUserId(me.data?.user.id ?? null);
+  }, [me.data?.user.id]);
 
   // Автопереход инженера с корня в /m/queue уступает явному намерению: кнопка
   // «Открыть полную версию» в мобильном профиле ставит флаг, иначе редирект

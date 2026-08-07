@@ -86,6 +86,9 @@ async function makeTicketWithOrder(): Promise<{ ticketId: string; workOrderId: s
   const { id: ticketId } = await createTicket(getDb(), erfolgId, null, {
     clientId: primaryClientId,
     symptom: `${TEST_PREFIX}не включается`,
+    // Заявка своя: инженер правит наряд только по своим (решение владельца
+    // 2026-08-07, «смотреть всем, менять — только свои»).
+    assignedEngineerId: engineerId,
   });
   const wo = await getOrCreateWorkOrder(getDb(), erfolgId, ticketId);
   return { ticketId, workOrderId: wo.id };

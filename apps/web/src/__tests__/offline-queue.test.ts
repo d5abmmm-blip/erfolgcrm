@@ -183,7 +183,7 @@ describe('syncOutbox', () => {
     await enqueue('tickets.addNote', { ticketId: '1', comment: 'hi' }, 'erfolg');
     const runner = vi.fn().mockResolvedValue({ id: 'note-1' });
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 1, failedSoft: 0, failedHard: 0 });
+    expect(r).toMatchObject({ succeeded: 1, failedSoft: 0, failedHard: 0 });
     expect(await count()).toBe(0);
     expect(runner).toHaveBeenCalledOnce();
   });
@@ -192,14 +192,16 @@ describe('syncOutbox', () => {
     await enqueue('tickets.addNote', { ticketId: '1', comment: 'hi' }, 'erfolg');
     const runner = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 0, failedSoft: 1, failedHard: 0 });
+    expect(r).toMatchObject({ succeeded: 0, failedSoft: 1, failedHard: 0 });
     const items = await listPending();
     expect(items).toHaveLength(1);
     expect(items[0]!.attempts).toBe(1);
     expect(items[0]!.lastError).toContain('Failed to fetch');
   });
 
-  it('removes item on hard (business) error', async () => {
+  // Раньше запись здесь УДАЛЯЛАСЬ — работа инженера пропадала навсегда,
+  // а он видел только число в тосте. Теперь остаётся с пометкой «не принято».
+  it('keeps item, flagged, on hard (business) error', async () => {
     await enqueue('tickets.addNote', { ticketId: '1', comment: 'hi' }, 'erfolg');
     const trpcErr = new TRPCClientError<AppRouter>('Forbidden', {
       result: {
@@ -212,8 +214,9 @@ describe('syncOutbox', () => {
     } as never);
     const runner = vi.fn().mockRejectedValue(trpcErr);
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 0, failedSoft: 0, failedHard: 1 });
-    expect(await count()).toBe(0);
+    expect(r).toMatchObject({ succeeded: 0, failedSoft: 0, failedHard: 1 });
+    expect(await count()).toBe(1);
+    expect((await listPending())[0]!.failedHard).toBe(true);
   });
 
   // Этап 5: NOT_ENOUGH_STOCK при синке inventoryMovements.issueToWorkOrder —
@@ -239,8 +242,9 @@ describe('syncOutbox', () => {
     } as never);
     const runner = vi.fn().mockRejectedValue(trpcErr);
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 0, failedSoft: 0, failedHard: 1 });
-    expect(await count()).toBe(0);
+    expect(r).toMatchObject({ succeeded: 0, failedSoft: 0, failedHard: 1 });
+    // Списание не прошло, но что именно списывали — видно, вносить заново не вслепую.
+    expect(await count()).toBe(1);
   });
 
   it('Stage 5: maintenance.recordPerformed успешно проходит через runner', async () => {
@@ -255,7 +259,7 @@ describe('syncOutbox', () => {
     );
     const runner = vi.fn().mockResolvedValue({ id: 'log-1' });
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 1, failedSoft: 0, failedHard: 0 });
+    expect(r).toMatchObject({ succeeded: 1, failedSoft: 0, failedHard: 0 });
     expect(await count()).toBe(0);
   });
 
@@ -280,7 +284,8 @@ describe('syncOutbox', () => {
       throw e;
     });
     const r = await syncOutbox(runner);
-    expect(r).toEqual({ succeeded: 1, failedSoft: 1, failedHard: 1 });
-    expect(await count()).toBe(1);
+    expect(r).toMatchObject({ succeeded: 1, failedSoft: 1, failedHard: 1 });
+    // Ушла одна, две остались: сетевая — сама повторится, отклонённая — ждёт человека.
+    expect(await count()).toBe(2);
   });
 });

@@ -15,6 +15,7 @@
  * Данные хранятся в IndexedDB (через idb). Имя БД — erfolg-offline, store — outbox.
  */
 import { openDB, type IDBPDatabase } from 'idb';
+import { getCurrentUserId } from './current-user';
 
 export type MutationKind =
   | 'tickets.changeStatus'
@@ -42,6 +43,23 @@ export interface OutboxItem<P = unknown> {
   /** Заголовок tenant — мутации могут «зависнуть» после смены tenant, тогда воспроизведение пропустится. */
   tenantSubdomain: string | null;
   lastError?: string;
+  /**
+   * Кто это сделал. Один телефон в бригаде переходит из рук в руки: без
+   * автора правки инженера А уходили бы от имени Б, вместе со строками
+   * наряда, от которых считается зарплата.
+   *
+   * null у записей, сделанных до появления этого поля — их отправляем как
+   * раньше, иначе накопленное застряло бы мёртвым грузом после обновления.
+   */
+  userId?: string | null;
+  /**
+   * Сервер отказал по существу. Запись НЕ удаляется — это работа человека,
+   * и восстановить её иначе нельзя. Сама больше не повторяется: ждёт, пока
+   * человек нажмёт «Повторить» или «Убрать».
+   */
+  failedHard?: boolean;
+  /** Что человек узнаёт глазами: номер заявки, название задачи. */
+  label?: string;
   /**
    * Ключ склейки. Если задан, новая запись ВЫТЕСНЯЕТ прежнюю с тем же ключом.
    *
@@ -83,6 +101,7 @@ export async function enqueue<P>(
   payload: P,
   tenantSubdomain: string | null,
   dedupeKey?: string,
+  label?: string,
 ): Promise<OutboxItem<P>> {
   const db = await getDb();
   let createdAt = Date.now();
@@ -104,11 +123,26 @@ export async function enqueue<P>(
     createdAt,
     attempts: 0,
     tenantSubdomain,
+    userId: getCurrentUserId(),
     ...(dedupeKey ? { dedupeKey } : {}),
+    ...(label ? { label } : {}),
   };
   await db.put(STORE, item);
   notify();
   return item;
+}
+
+/**
+ * Снять пометку «сервер не принял» — по кнопке человека. Запись снова
+ * участвует в отправке.
+ */
+export async function retryOutboxItem(id: string): Promise<void> {
+  const db = await getDb();
+  const item = (await db.get(STORE, id)) as OutboxItem | undefined;
+  if (!item) return;
+  const { failedHard: _cleared, lastError: _alsoCleared, ...rest } = item;
+  await db.put(STORE, { ...rest, attempts: 0 });
+  notify();
 }
 
 export async function listPending(): Promise<OutboxItem[]> {
