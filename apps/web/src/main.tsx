@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { AppToaster } from './components/AppToaster';
+import { sweepDrafts } from './lib/field-draft';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OutboxAutoSync } from './components/OutboxAutoSync';
 import { humanizeError } from './lib/error-message';
@@ -53,6 +54,10 @@ async function restoreOfflineCache(): Promise<void> {
   const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1_000));
   await Promise.race([restorePersistedQueries(queryClient).then(() => undefined), timeout]);
 }
+
+// Протухшие черновики полей убираем на старте: иначе память телефона копила бы
+// записи по каждой заявке, которую инженер когда-либо открывал.
+sweepDrafts();
 
 void restoreOfflineCache().finally(() => {
   startPersistingQueries(queryClient);

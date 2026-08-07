@@ -33,6 +33,7 @@ import { showToast } from '../lib/toast';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useFlushOnLeave } from '../lib/use-flush-on-leave';
 import { useSaveMark } from '../lib/use-save-mark';
+import { forgetDraft, readDraft, rememberDraft } from '../lib/field-draft';
 import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
@@ -319,11 +320,16 @@ function WorkOrderHeader({
     return vatChain.current;
   };
 
+  /**
+   * Возвращает исход: по нему поле решает судьбу черновика в памяти телефона.
+   * Принял сервер или очередь — страховка больше не нужна; отказ — оставляем,
+   * иначе набранное некому будет вернуть.
+   */
   const saveHeader = async (
     field: 'diagnosis' | 'repairDescription' | 'recommendation',
     next: string | null,
     mark?: HeaderMark,
-  ) => {
+  ): Promise<'ok' | 'queued' | 'error'> => {
     mark?.markSaving();
     const res = await executeOrQueue(
       'workOrders.updateHeader',
@@ -342,6 +348,7 @@ function WorkOrderHeader({
     } else {
       showToast('error', humanizeError(res.error));
     }
+    return res.status;
   };
 
   return (
@@ -349,21 +356,25 @@ function WorkOrderHeader({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Field
           label="Диагноз"
+          scope={ticketId}
+          name="diagnosis"
           initial={diagnosis}
           disabled={!canEdit}
-          onSave={(next, mark) => void saveHeader('diagnosis', next, mark)}
+          onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
         />
         <RepairDescriptionField
           ticketId={ticketId}
           initial={repairDescription}
           canEdit={canEdit}
-          onSave={(value) => void saveHeader('repairDescription', value)}
+          onSave={(value) => saveHeader('repairDescription', value)}
         />
         <Field
           label="Рекомендации"
+          scope={ticketId}
+          name="recommendation"
           initial={recommendation}
           disabled={!canEdit}
-          onSave={(next, mark) => void saveHeader('recommendation', next, mark)}
+          onSave={(next, mark) => saveHeader('recommendation', next, mark)}
         />
       </div>
       <div className="flex items-center gap-2">
@@ -405,13 +416,19 @@ function RepairDescriptionField({
   ticketId: string;
   initial: string | null;
   canEdit: boolean;
-  onSave: (value: string | null) => void;
+  onSave: (value: string | null) => Promise<'ok' | 'queued' | 'error'>;
 }) {
-  const [value, setValue] = useState(initial ?? '');
-  const [note, setNote] = useState<string | null>(null);
+  // Черновик в памяти телефона поднимаем ДО первой отрисовки: иначе поле
+  // моргнёт пустым и человек решит, что работа пропала.
+  const [restored] = useState(() => readDraft(ticketId, 'repairDescription'));
+  const [value, setValue] = useState(restored ?? initial ?? '');
+  const [note, setNote] = useState<string | null>(
+    restored != null ? 'Текст восстановлен из памяти телефона — проверьте и сохраните' : null,
+  );
   const draft = trpc.workOrders.draftRepairDescription.useMutation({
     onSuccess: (res) => {
       setValue(res.text);
+      rememberDraft(ticketId, 'repairDescription', res.text);
       setNote(
         res.aiUsed
           ? 'Черновик сгенерирован ИИ — проверьте перед сохранением'
@@ -435,7 +452,11 @@ function RepairDescriptionField({
     const next = current.current.trim() || null;
     if (next === sent.current) return;
     sent.current = next;
-    onSave(next);
+    void onSave(next).then((status) => {
+      // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
+      // оставляем: вернуть набранное будет больше неоткуда.
+      if (status !== 'error') forgetDraft(ticketId, 'repairDescription');
+    });
   };
   /**
    * Отдельная беда ИИ-черновика: кнопка вписывает текст в поле, но курсор в
@@ -464,7 +485,12 @@ function RepairDescriptionField({
         value={value}
         disabled={!canEdit}
         rows={3}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setValue(e.target.value);
+          // Синхронно, на каждую букву: если систему прибьют — это всё, что
+          // останется от набранного (см. lib/field-draft).
+          rememberDraft(ticketId, 'repairDescription', e.target.value);
+        }}
         onBlur={save}
         className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
@@ -486,20 +512,35 @@ function RepairDescriptionField({
  * Пишет в ДВУХ случаях — курсор ушёл из поля и экран ушёл целиком. Второй
  * добавлен потому, что «назад» и сворачивание приложения курсор из поля не
  * выводят, и набранное пропадало вместе с полем.
+ *
+ * Плюс третья, самая грубая страховка: черновик в памяти телефона на каждую
+ * букву (см. lib/field-draft). Она нужна там, где не спасает ничто другое —
+ * систему выбило приложение, и обе записи умерли вместе со страницей.
  */
 function Field({
   label,
+  scope,
+  name,
   initial,
   disabled,
   onSave,
 }: {
   label: string;
+  /** К чему привязан черновик — заявка. */
+  scope: string;
+  /** Какое это поле наряда. */
+  name: 'diagnosis' | 'recommendation';
   initial: string | null;
   disabled?: boolean;
-  onSave: (next: string | null, mark: HeaderMark) => void;
+  onSave: (next: string | null, mark: HeaderMark) => Promise<'ok' | 'queued' | 'error'>;
 }) {
   const mark = useSaveMark();
   const box = useRef<HTMLTextAreaElement>(null);
+  /**
+   * Черновик читаем ОДИН раз, до первой отрисовки: поле неуправляемое, и
+   * подставить в него текст позже — значит на мгновение показать пустоту.
+   */
+  const [restored] = useState(() => readDraft(scope, name));
   /**
    * Последний набранный текст.
    *
@@ -525,7 +566,11 @@ function Field({
     const next = raw.trim() || null;
     if (next === sent.current) return;
     sent.current = next;
-    onSave(next, mark);
+    void onSave(next, mark).then((status) => {
+      // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
+      // оставляем: вернуть набранное будет больше неоткуда.
+      if (status !== 'error') forgetDraft(scope, name);
+    });
   };
   useFlushOnLeave(save);
 
@@ -534,16 +579,24 @@ function Field({
       <div className="text-muted-foreground mb-1 text-[11px] uppercase">{label}</div>
       <textarea
         ref={box}
-        defaultValue={initial ?? ''}
+        defaultValue={restored ?? initial ?? ''}
         disabled={disabled}
         rows={3}
         onChange={(e) => {
           typed.current = e.target.value;
+          // Синхронно, на каждую букву: если систему прибьют — это всё, что
+          // останется от набранного (см. lib/field-draft).
+          rememberDraft(scope, name, e.target.value);
         }}
         onBlur={save}
         className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
       <SaveMark state={mark.state} />
+      {restored != null && (
+        <div className="text-warning mt-1 text-[11px]" role="status">
+          Текст восстановлен из памяти телефона — проверьте и сохраните
+        </div>
+      )}
     </div>
   );
 }
