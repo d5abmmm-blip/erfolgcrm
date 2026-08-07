@@ -9,7 +9,17 @@
  *     повторные сохранения не отправляются, иначе он вставил бы дубли.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CloudOff, Plus, Trash2, Wrench, Package, Coins, Boxes, Sparkles } from 'lucide-react';
+import {
+  Check,
+  CloudOff,
+  Plus,
+  Trash2,
+  Wrench,
+  Package,
+  Coins,
+  Boxes,
+  Sparkles,
+} from 'lucide-react';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
@@ -17,8 +27,15 @@ import { executeOrQueue } from '../lib/offline/executor';
 import { listPending, removeByDedupeKey, subscribe as subscribeOutbox } from '../lib/offline/queue';
 import { humanizeError, SILENT_ERROR } from '../lib/error-message';
 import { showToast } from '../lib/toast';
+import { useOutbox } from '../lib/offline/useOutbox';
+import { useSaveMark } from '../lib/use-save-mark';
+import type { SaveMarkState } from '../lib/save-state';
+import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
 import { ReturnToInventory } from './ReturnToInventory';
+
+/** Отметка «записываю…/записано/ждёт связи» одного поля. */
+type HeaderMark = ReturnType<typeof useSaveMark>;
 
 interface Props {
   ticketId: string;
@@ -159,6 +176,58 @@ export function WorkOrderEditor({ ticketId, ticketNumber, canEdit, canEditVat }:
         total={wo.data.totalAmountKopecks}
         vatRate={wo.data.vatRate}
       />
+
+      {canEdit && <DoneButton />}
+    </div>
+  );
+}
+
+/**
+ * Кнопка «Готово», которой инженеру не хватало.
+ *
+ * ВАЖНО, ЧТО ОНА ДЕЛАЕТ: снимает курсор с поля — и срабатывает та же самая
+ * запись по уходу курсора, что и всегда. Она НЕ отправляет ничего сама.
+ *
+ * Кнопка, которая сама зовёт сохранение, завела бы ВТОРОЙ путь записи рядом
+ * с существующим. А на правиле «одна строка = одна запись» держится защита
+ * наряда от дублей (см. шапку файла): пока сервер не вернул номер новой
+ * строки, повторная отправка вставила бы вторую такую же — то есть задвоила
+ * бы и счёт клиенту, и сделку в зарплате.
+ *
+ * Здесь же — общее слово о том, что происходит с накопленным.
+ */
+function DoneButton() {
+  const outbox = useOutbox();
+  const waiting = outbox.pending > 0;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 text-xs',
+          waiting ? 'text-warning' : 'text-muted-foreground',
+        )}
+        role="status"
+      >
+        {waiting ? (
+          <>
+            <CloudOff className="h-3.5 w-3.5" />
+            Ждёт связи: {outbox.pending} — уйдёт само
+          </>
+        ) : (
+          <>
+            <Check className="h-3.5 w-3.5" />
+            Всё записано
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        // Курсор уходит из поля — и запись идёт обычным путём.
+        onClick={() => (document.activeElement as HTMLElement | null)?.blur()}
+        className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 rounded-lg px-6 text-sm font-semibold transition"
+      >
+        Готово
+      </button>
     </div>
   );
 }
@@ -193,7 +262,9 @@ function WorkOrderHeader({
   const saveHeader = async (
     field: 'diagnosis' | 'repairDescription' | 'recommendation',
     next: string | null,
+    mark?: HeaderMark,
   ) => {
+    mark?.markSaving();
     const res = await executeOrQueue(
       'workOrders.updateHeader',
       { ticketId, patch: { [field]: next } },
@@ -203,6 +274,7 @@ function WorkOrderHeader({
       `wo-header:${ticketId}:${field}`,
       ticketNumber,
     );
+    mark?.markResult(res.status);
     if (res.status === 'ok') {
       await utils.workOrders.getByTicket.invalidate({ ticketId });
     } else if (res.status === 'queued') {
@@ -213,11 +285,15 @@ function WorkOrderHeader({
   };
 
   const blurSave =
-    (field: 'diagnosis' | 'repairDescription' | 'recommendation', initial: string | null) =>
+    (
+      field: 'diagnosis' | 'repairDescription' | 'recommendation',
+      initial: string | null,
+      mark: HeaderMark,
+    ) =>
     (e: React.FocusEvent<HTMLTextAreaElement>) => {
       const next = e.target.value.trim() || null;
       if (next === (initial ?? null)) return;
-      void saveHeader(field, next);
+      void saveHeader(field, next, mark);
     };
 
   return (
@@ -227,7 +303,7 @@ function WorkOrderHeader({
           label="Диагноз"
           defaultValue={diagnosis ?? ''}
           disabled={!canEdit}
-          onBlur={blurSave('diagnosis', diagnosis)}
+          makeBlur={(mark) => blurSave('diagnosis', diagnosis, mark)}
         />
         <RepairDescriptionField
           ticketId={ticketId}
@@ -239,7 +315,7 @@ function WorkOrderHeader({
           label="Рекомендации"
           defaultValue={recommendation ?? ''}
           disabled={!canEdit}
-          onBlur={blurSave('recommendation', recommendation)}
+          makeBlur={(mark) => blurSave('recommendation', recommendation, mark)}
         />
       </div>
       <div className="flex items-center gap-2">
@@ -335,17 +411,22 @@ function RepairDescriptionField({
   );
 }
 
+/**
+ * Поле шапки наряда. Само держит свою отметку состояния: раньше при удачном
+ * сохранении оно не показывало ничего, и человек не знал, записалось ли.
+ */
 function Field({
   label,
   defaultValue,
   disabled,
-  onBlur,
+  makeBlur,
 }: {
   label: string;
   defaultValue: string;
   disabled?: boolean;
-  onBlur: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  makeBlur: (mark: HeaderMark) => (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 }) {
+  const mark = useSaveMark();
   return (
     <div>
       <div className="text-muted-foreground mb-1 text-[11px] uppercase">{label}</div>
@@ -353,9 +434,10 @@ function Field({
         defaultValue={defaultValue}
         disabled={disabled}
         rows={3}
-        onBlur={onBlur}
+        onBlur={makeBlur(mark)}
         className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
+      <SaveMark state={mark.state} />
     </div>
   );
 }
@@ -706,7 +788,9 @@ function ExistingRow({
   const tenantSubdomain = getTenantSubdomain();
   // Ошибку и «легло в очередь» показываем сами — глобальный тост молчит (main.tsx).
   const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
-  const [queued, setQueued] = useState(false);
+  // Отметка «записываю… / записано / ждёт связи» — раньше при удаче строка
+  // не показывала ничего, и человек не знал, ушла ли правка.
+  const mark = useSaveMark();
   // Используем locally controlled значения, чтобы onBlur мог сравнить с исходным
   const initialPriceRub = useMemo(
     () => kopecksToRubInput(line.unitPriceKopecks),
@@ -719,6 +803,7 @@ function ExistingRow({
     engineerId: string | null,
   ) => {
     const priceRub = Math.max(0, Math.round(Number(extras.unitPriceRub) || 0));
+    mark.markSaving();
     void (async () => {
       const res = await executeOrQueue(
         'workOrders.upsertLine',
@@ -739,11 +824,10 @@ function ExistingRow({
         lineDedupeKey(ticketId, line.id),
         ticketNumber,
       );
+      mark.markResult(res.status);
       if (res.status === 'ok') {
-        setQueued(false);
         await utils.workOrders.getByTicket.invalidate({ ticketId });
       } else if (res.status === 'queued') {
-        setQueued(true);
         showToast('queued', QUEUED_TEXT);
       } else {
         showToast('error', humanizeError(res.error));
@@ -780,7 +864,7 @@ function ExistingRow({
       canEdit={canEdit}
       onFieldBlur={handleBlur}
       onDelete={onDelete}
-      isQueued={queued}
+      saveState={mark.state}
       engineer={
         lineType === 'work'
           ? {
@@ -838,7 +922,7 @@ function DraftRow({
       onFieldBlur={() => onSave()}
       onDelete={onCancel}
       isDraft
-      isQueued={draft.queued}
+      saveState={draft.queued ? 'queued' : 'idle'}
       engineer={
         draft.lineType === 'work'
           ? {
@@ -861,7 +945,7 @@ function RowInputs({
   onFieldBlur,
   onDelete,
   isDraft,
-  isQueued,
+  saveState = 'idle',
   engineer,
 }: {
   initial: { name: string; unit: string; quantity: string; unitPriceRub: string };
@@ -877,7 +961,8 @@ function RowInputs({
   onDelete: () => void;
   isDraft?: boolean;
   /** Строка лежит в оффлайн-очереди — покажем это прямо в таблице. */
-  isQueued?: boolean;
+  /** «записываю… / записано / ждёт связи» — одно слово на весь наряд. */
+  saveState?: SaveMarkState;
   /**
    * Колонка «Кто делал» — только у работ. Если не передана, колонки нет вовсе:
    * у запчастей и расходов инженер на зарплату не влияет.
@@ -900,7 +985,7 @@ function RowInputs({
   };
 
   return (
-    <tr className={cn(isDraft && 'bg-primary/5', isQueued && 'bg-warning/10')}>
+    <tr className={cn(isDraft && 'bg-primary/5', saveState === 'queued' && 'bg-warning/10')}>
       <td className="px-3 py-1.5">
         <input
           type="text"
@@ -911,12 +996,7 @@ function RowInputs({
           className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2"
           placeholder="Что выполнено"
         />
-        {isQueued && (
-          <span className="text-warning mt-1 inline-flex items-center gap-1 text-[11px] font-medium">
-            <CloudOff className="h-3 w-3" />
-            ждёт связи — отправится само
-          </span>
-        )}
+        <SaveMark state={saveState} />
       </td>
       {engineer && (
         <td className="px-3 py-1.5">
