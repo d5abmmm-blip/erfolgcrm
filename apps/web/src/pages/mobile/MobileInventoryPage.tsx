@@ -43,7 +43,10 @@ export function MobileInventoryPage() {
 
       {list.isLoading ? (
         <div className="text-muted-foreground py-8 text-center text-sm">Загрузка…</div>
-      ) : list.error ? (
+      ) : /* Без связи react-query не роняет запрос, а ставит его на паузу:
+             `error` пуст, и раньше экран писал «Ничего не найдено» — то есть
+             врал, что склад пуст. Смотрим и на паузу тоже. */
+      list.error || (list.fetchStatus === 'paused' && !list.data) ? (
         <QueryError
           error={list.error}
           paused={list.fetchStatus === 'paused'}

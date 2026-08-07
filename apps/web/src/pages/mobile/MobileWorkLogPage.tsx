@@ -2,6 +2,7 @@ import { Link, useRoute } from 'wouter';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { WorkOrderEditor } from '../../components/WorkOrderEditor';
+import { QueryError } from '../../components/QueryError';
 
 /**
  * /m/tickets/:id/work-log — журнал работ для инженера.
@@ -26,11 +27,21 @@ export function MobileWorkLogPage() {
     );
   }
   if (ticket.error || !ticket.data) {
+    // Без связи react-query не роняет запрос, а ставит его на паузу: `error`
+    // пуст, и раньше экран писал «Заявка не найдена» — то есть врал, что
+    // заявки нет. Плюс сырой `error.message` мог быть техническим (SQL, JSON
+    // от проверки полей) — теперь текст всегда человеческий.
     return (
-      <div className="m-3">
-        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-md border p-3 text-sm">
-          {ticket.error?.message ?? 'Заявка не найдена'}
-        </div>
+      <div className="m-3 space-y-2">
+        <QueryError
+          error={ticket.error}
+          paused={ticket.fetchStatus === 'paused'}
+          what="заявку"
+          onRetry={() => void ticket.refetch()}
+        />
+        {!ticket.error && ticket.fetchStatus !== 'paused' && (
+          <div className="text-muted-foreground text-sm">Заявка не найдена</div>
+        )}
       </div>
     );
   }
