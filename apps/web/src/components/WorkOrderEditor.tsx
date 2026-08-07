@@ -11,7 +11,7 @@
  *  4. Одна строка = одна запись: пока сервер не вернул номер новой строки,
  *     повторные сохранения не отправляются, иначе он вставил бы дубли.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CloudOff,
@@ -38,9 +38,21 @@ import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
 import { ReturnToInventory } from './ReturnToInventory';
+import { ConfirmDialog } from './ui';
 
 /** Отметка «записываю…/записано/ждёт связи» одного поля. */
 type HeaderMark = ReturnType<typeof useSaveMark>;
+
+/**
+ * Как рисовать строки наряда.
+ *
+ * `table` — десктоп, как было. `card` — телефон: на 375 пикселях таблица из
+ * семи колонок ужимается так, что поле цены становится 31 пиксель шириной и
+ * «12500» в него не влезает (измерено). Раскладку задаёт экран, который
+ * открывает редактор, а НЕ медиазапрос внутри: иначе планшет в альбомной
+ * ориентации переключался бы сам, посреди ввода.
+ */
+export type WorkOrderLayout = 'table' | 'card';
 
 interface Props {
   ticketId: string;
@@ -49,6 +61,8 @@ interface Props {
   canEdit: boolean;
   /** Если true — даём редактировать ставку НДС (директор/диспетчер). */
   canEditVat: boolean;
+  /** По умолчанию таблица — десктопное поведение не меняется. */
+  layout?: WorkOrderLayout;
 }
 
 interface LineDraft {
@@ -107,7 +121,13 @@ const VAT_OPTS: Array<{ v: VatRate; label: string }> = [
   { v: 'without_vat', label: 'без НДС' },
 ];
 
-export function WorkOrderEditor({ ticketId, ticketNumber, canEdit, canEditVat }: Props) {
+export function WorkOrderEditor({
+  ticketId,
+  ticketNumber,
+  canEdit,
+  canEditVat,
+  layout = 'table',
+}: Props) {
   const utils = trpc.useUtils();
   const wo = trpc.workOrders.getByTicket.useQuery({ ticketId });
 
@@ -158,6 +178,7 @@ export function WorkOrderEditor({ ticketId, ticketNumber, canEdit, canEditVat }:
         vatRate={wo.data.vatRate}
         canEdit={canEdit}
         canEditVat={canEditVat}
+        layout={layout}
       />
 
       {LINE_GROUPS.map((g) => (
@@ -171,6 +192,7 @@ export function WorkOrderEditor({ ticketId, ticketNumber, canEdit, canEditVat }:
           totalKopecks={wo.data![g.totalKey]}
           lines={wo.data!.lines.filter((l) => l.lineType === g.type)}
           canEdit={canEdit}
+          layout={layout}
         />
       ))}
 
@@ -246,6 +268,7 @@ function WorkOrderHeader({
   vatRate,
   canEdit,
   canEditVat,
+  layout,
 }: {
   ticketId: string;
   ticketNumber?: string;
@@ -255,6 +278,7 @@ function WorkOrderHeader({
   vatRate: VatRate;
   canEdit: boolean;
   canEditVat: boolean;
+  layout: WorkOrderLayout;
 }) {
   const utils = trpc.useUtils();
   const tenantSubdomain = getTenantSubdomain();
@@ -366,6 +390,7 @@ function WorkOrderHeader({
           ticketId={ticketId}
           initial={repairDescription}
           canEdit={canEdit}
+          layout={layout}
           onSave={(value) => saveHeader('repairDescription', value)}
         />
         <Field
@@ -377,14 +402,17 @@ function WorkOrderHeader({
           onSave={(next, mark) => saveHeader('recommendation', next, mark)}
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
         <select
           disabled={!canEditVat}
           // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
           value={chosenVat ?? vatRate}
           onChange={(e) => void saveVat(e.target.value as VatRate)}
-          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
+          className={cn(
+            'bg-background focus:ring-primary/40 rounded-md border outline-none focus:ring-2 disabled:opacity-50',
+            layout === 'card' ? 'h-11 px-3 text-base' : 'px-2 py-1 text-xs',
+          )}
         >
           {VAT_OPTS.map((o) => (
             <option key={o.v} value={o.v}>
@@ -411,11 +439,13 @@ function RepairDescriptionField({
   ticketId,
   initial,
   canEdit,
+  layout,
   onSave,
 }: {
   ticketId: string;
   initial: string | null;
   canEdit: boolean;
+  layout: WorkOrderLayout;
   onSave: (value: string | null) => Promise<'ok' | 'queued' | 'error'>;
 }) {
   // Черновик в памяти телефона поднимаем ДО первой отрисовки: иначе поле
@@ -474,9 +504,13 @@ function RepairDescriptionField({
             type="button"
             disabled={draft.isPending}
             onClick={() => draft.mutate({ ticketId })}
-            className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium disabled:opacity-50"
+            className={cn(
+              'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded font-medium disabled:opacity-50',
+              // На телефоне кнопка была 21 пиксель высотой — пальцем не попасть.
+              layout === 'card' ? 'h-11 px-3 text-sm' : 'px-1.5 py-0.5 text-[11px]',
+            )}
           >
-            <Sparkles className="h-3 w-3" />
+            <Sparkles className={layout === 'card' ? 'h-4 w-4' : 'h-3 w-3'} />
             {draft.isPending ? 'ИИ пишет…' : 'ИИ-черновик'}
           </button>
         )}
@@ -610,6 +644,7 @@ function LineTable({
   totalKopecks,
   lines,
   canEdit,
+  layout,
 }: {
   ticketId: string;
   ticketNumber?: string;
@@ -617,6 +652,7 @@ function LineTable({
   title: string;
   icon: typeof Wrench;
   totalKopecks: string;
+  layout: WorkOrderLayout;
   lines: Array<{
     id: string;
     name: string;
@@ -816,67 +852,101 @@ function LineTable({
           итого {kopecksToRub(totalKopecks)} ₽
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground text-[11px] uppercase tracking-wide">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Наименование</th>
-              {lineType === 'work' && (
-                <th className="w-48 px-3 py-2 text-left font-medium">Кто делал</th>
+      {/* Строки одни и те же, разная только обёртка: на телефоне — карточки
+          во всю ширину, на десктопе — таблица. Сама запись (уход курсора, уход
+          с экрана, очередь) живёт в RowInputs и от раскладки не зависит. */}
+      {(() => {
+        const rows = [
+          ...lines.map((l) => (
+            <ExistingRow
+              key={l.id}
+              line={l}
+              ticketId={ticketId}
+              ticketNumber={ticketNumber}
+              lineType={lineType}
+              canEdit={canEdit}
+              engineerOptions={engineerOptions}
+              layout={layout}
+              onDelete={() => void deleteLine(l.id)}
+            />
+          )),
+          ...drafts.map((d) => (
+            <DraftRow
+              key={d.uid}
+              draft={d}
+              engineerOptions={engineerOptions}
+              layout={layout}
+              onChange={(patch) =>
+                patchDrafts((prev) => prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)))
+              }
+              onSave={() => void saveLine(d.uid)}
+              onCancel={() => cancelDraft(d.uid)}
+            />
+          )),
+        ];
+        const isEmpty = lines.length === 0 && drafts.length === 0;
+
+        if (layout === 'card') {
+          return (
+            <div className="space-y-2 p-2">
+              {isEmpty && (
+                <div className="text-muted-foreground p-2 text-center text-xs">пусто</div>
               )}
-              <th className="w-20 px-3 py-2 text-left font-medium">Ед.</th>
-              <th className="w-24 px-3 py-2 text-right font-medium">Кол-во</th>
-              <th className="w-32 px-3 py-2 text-right font-medium">Цена ₽</th>
-              <th className="w-32 px-3 py-2 text-right font-medium">Сумма ₽</th>
-              <th className="w-10 px-2 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {lines.length === 0 && drafts.length === 0 && (
-              <tr>
-                <td
-                  colSpan={lineType === 'work' ? 7 : 6}
-                  className="text-muted-foreground p-3 text-center text-xs"
-                >
-                  пусто
-                </td>
-              </tr>
-            )}
-            {lines.map((l) => (
-              <ExistingRow
-                key={l.id}
-                line={l}
-                ticketId={ticketId}
-                ticketNumber={ticketNumber}
-                lineType={lineType}
-                canEdit={canEdit}
-                engineerOptions={engineerOptions}
-                onDelete={() => void deleteLine(l.id)}
-              />
-            ))}
-            {drafts.map((d) => (
-              <DraftRow
-                key={d.uid}
-                draft={d}
-                engineerOptions={engineerOptions}
-                onChange={(patch) =>
-                  patchDrafts((prev) => prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)))
-                }
-                onSave={() => void saveLine(d.uid)}
-                onCancel={() => cancelDraft(d.uid)}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+              {rows}
+            </div>
+          );
+        }
+        return (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-muted-foreground text-[11px] uppercase tracking-wide">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Наименование</th>
+                  {lineType === 'work' && (
+                    <th className="w-48 px-3 py-2 text-left font-medium">Кто делал</th>
+                  )}
+                  <th className="w-20 px-3 py-2 text-left font-medium">Ед.</th>
+                  <th className="w-24 px-3 py-2 text-right font-medium">Кол-во</th>
+                  <th className="w-32 px-3 py-2 text-right font-medium">Цена ₽</th>
+                  <th className="w-32 px-3 py-2 text-right font-medium">Сумма ₽</th>
+                  <th className="w-10 px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {isEmpty && (
+                  <tr>
+                    <td
+                      colSpan={lineType === 'work' ? 7 : 6}
+                      className="text-muted-foreground p-3 text-center text-xs"
+                    >
+                      пусто
+                    </td>
+                  </tr>
+                )}
+                {rows}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
       {canEdit && (
-        <div className="flex items-center gap-1 border-t p-2">
+        // На телефоне это кнопки для пальца: «Добавить строку» жмут на каждую
+        // строку наряда, а была она 24 пикселя высотой.
+        <div
+          className={cn(
+            'flex items-center border-t',
+            layout === 'card' ? 'flex-wrap gap-2 p-2' : 'gap-1 p-2',
+          )}
+        >
           <button
             type="button"
             onClick={addRow}
-            className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+            className={cn(
+              'text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md',
+              layout === 'card' ? 'h-11 border px-3 text-sm' : 'px-2 py-1 text-xs',
+            )}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className={layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
             Добавить строку
           </button>
           {lineType === 'part' && (
@@ -884,18 +954,28 @@ function LineTable({
               <button
                 type="button"
                 onClick={() => setIssuingFromInventory(true)}
-                className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+                className={cn(
+                  'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-md',
+                  layout === 'card'
+                    ? 'border-primary/40 h-11 border px-3 text-sm'
+                    : 'px-2 py-1 text-xs',
+                )}
               >
-                <Boxes className="h-3.5 w-3.5" />
+                <Boxes className={layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
                 Списать со склада
               </button>
               {lines.some((l) => l.inventoryItemId) && (
                 <button
                   type="button"
                   onClick={() => setReturningToInventory(true)}
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+                  className={cn(
+                    'text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md',
+                    layout === 'card' ? 'h-11 border px-3 text-sm' : 'px-2 py-1 text-xs',
+                  )}
                 >
-                  <Boxes className="h-3.5 w-3.5 rotate-180" />
+                  <Boxes
+                    className={cn('rotate-180', layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5')}
+                  />
                   Вернуть на склад
                 </button>
               )}
@@ -935,6 +1015,7 @@ function ExistingRow({
   lineType,
   canEdit,
   engineerOptions,
+  layout,
   onDelete,
 }: {
   line: {
@@ -951,6 +1032,7 @@ function ExistingRow({
   lineType: WorkOrderLineType;
   canEdit: boolean;
   engineerOptions: Array<{ id: string; fullName: string }>;
+  layout: WorkOrderLayout;
   onDelete: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -1052,6 +1134,7 @@ function ExistingRow({
       }}
       amountKopecks={line.amountKopecks}
       canEdit={canEdit}
+      layout={layout}
       onFieldBlur={handleBlur}
       onLeave={handleLeave}
       onDelete={onDelete}
@@ -1083,12 +1166,14 @@ function ExistingRow({
 function DraftRow({
   draft,
   engineerOptions,
+  layout,
   onChange,
   onSave,
   onCancel,
 }: {
   draft: LineDraft;
   engineerOptions: Array<{ id: string; fullName: string }>;
+  layout: WorkOrderLayout;
   onChange: (patch: Partial<LineDraft>) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -1109,6 +1194,7 @@ function DraftRow({
       controlled
       amountKopecks={amountKop}
       canEdit
+      layout={layout}
       onChange={onChange}
       onFieldBlur={() => onSave()}
       // Новая строка, которую начали набирать и ушли с экрана. Повтор того же
@@ -1134,6 +1220,7 @@ function RowInputs({
   initial,
   amountKopecks,
   canEdit,
+  layout,
   controlled,
   onChange,
   onFieldBlur,
@@ -1146,6 +1233,7 @@ function RowInputs({
   initial: { name: string; unit: string; quantity: string; unitPriceRub: string };
   amountKopecks: string;
   canEdit: boolean;
+  layout: WorkOrderLayout;
   controlled?: boolean;
   onChange?: (patch: Partial<LineDraft>) => void;
   onFieldBlur: (
@@ -1245,6 +1333,80 @@ function RowInputs({
     onFieldBlur(field, value, vals);
   };
 
+  /**
+   * Удаление строки спрашивает.
+   *
+   * Кнопка удаления на телефоне была 14 × 14 пикселей вплотную к полю цены,
+   * и нажатие сносило строку сразу — без вопроса и без возврата. Строка
+   * наряда это и счёт клиенту, и сделка в зарплате.
+   *
+   * Пустой черновик не спрашиваем: терять там нечего, а лишний вопрос на
+   * «добавил строку и передумал» только мешает работать.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const nothingToLose = isDraft && !vals.name.trim() && saveState !== 'queued';
+  const askDelete = () => (nothingToLose ? onDelete() : setConfirmingDelete(true));
+
+  const deleteButton = (className: string, iconClass: string) =>
+    canEdit && (
+      <button
+        type="button"
+        onClick={askDelete}
+        className={className}
+        aria-label={isDraft ? 'Удалить черновик' : 'Удалить строку'}
+        title={isDraft ? 'Удалить черновик' : 'Удалить строку'}
+      >
+        <Trash2 className={iconClass} />
+      </button>
+    );
+
+  const confirmDialog = (
+    <ConfirmDialog
+      open={confirmingDelete}
+      title={isDraft ? 'Удалить строку наряда?' : 'Удалить строку наряда?'}
+      description={
+        isDraft
+          ? `Строка «${vals.name.trim() || 'без названия'}» ещё не на сервере — набранное будет потеряно.`
+          : `Строка «${vals.name.trim() || 'без названия'}» на ${kopecksToRub(amountKopecks)} ₽ уйдёт из наряда. Это изменит и счёт клиенту, и начисление в зарплате.`
+      }
+      variant="danger"
+      confirmText="Удалить"
+      onConfirm={() => {
+        setConfirmingDelete(false);
+        onDelete();
+      }}
+      onCancel={() => setConfirmingDelete(false)}
+    />
+  );
+
+  const numberHint = (field: 'quantity' | 'unitPriceRub', align: string) =>
+    emptyField === field && (
+      <div className={cn('text-destructive mt-0.5 text-[11px]', align)} role="status">
+        {field === 'quantity'
+          ? 'Количество не может быть пустым — вернули прежнее'
+          : 'Цена не может быть пустой — вернули прежнюю'}
+      </div>
+    );
+
+  if (layout === 'card') {
+    return (
+      <CardRow
+        vals={vals}
+        canEdit={canEdit}
+        isDraft={isDraft}
+        saveState={saveState}
+        amountKopecks={amountKopecks}
+        engineer={engineer}
+        update={update}
+        onFieldBlur={onFieldBlur}
+        numberBlur={numberBlur}
+        numberHint={numberHint}
+        deleteButton={deleteButton}
+        confirmDialog={confirmDialog}
+      />
+    );
+  }
+
   return (
     <tr className={cn(isDraft && 'bg-primary/5', saveState === 'queued' && 'bg-warning/10')}>
       <td className="px-3 py-1.5">
@@ -1297,11 +1459,7 @@ function RowInputs({
           onBlur={(e) => numberBlur('quantity', e.target.value)}
           className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
-        {emptyField === 'quantity' && (
-          <div className="text-destructive mt-0.5 text-right text-[11px]" role="status">
-            Количество не может быть пустым — вернули прежнее
-          </div>
-        )}
+        {numberHint('quantity', 'text-right')}
       </td>
       <td className="px-3 py-1.5">
         <input
@@ -1314,27 +1472,185 @@ function RowInputs({
           onBlur={(e) => numberBlur('unitPriceRub', e.target.value)}
           className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
-        {emptyField === 'unitPriceRub' && (
-          <div className="text-destructive mt-0.5 text-right text-[11px]" role="status">
-            Цена не может быть пустой — вернули прежнюю
-          </div>
-        )}
+        {numberHint('unitPriceRub', 'text-right')}
       </td>
       <td className="px-3 py-1.5 text-right tabular-nums">{kopecksToRub(amountKopecks)}</td>
       <td className="px-2 py-1.5 text-center">
-        {canEdit && (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-muted-foreground hover:text-destructive"
-            aria-label={isDraft ? 'Удалить черновик' : 'Удалить строку'}
-            title={isDraft ? 'Удалить черновик' : 'Удалить строку'}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {deleteButton('text-muted-foreground hover:text-destructive', 'h-3.5 w-3.5')}
+        {confirmDialog}
       </td>
     </tr>
+  );
+}
+
+/** Значения строки — общий тип для обеих раскладок. */
+type RowVals = { name: string; unit: string; quantity: string; unitPriceRub: string };
+
+/**
+ * Строка наряда на телефоне.
+ *
+ * Только разметка: вся запись (уход курсора, уход с экрана, очередь, «пустое
+ * не ноль») осталась в RowInputs и общая для обеих раскладок. Здесь важны три
+ * вещи, которых не было в сплющенной таблице: поля во всю ширину, у каждого
+ * своя подпись (заголовка колонки в карточке нет) и палец попадает — высота
+ * полей и кнопок 44 пикселя.
+ */
+function CardRow({
+  vals,
+  canEdit,
+  isDraft,
+  saveState,
+  amountKopecks,
+  engineer,
+  update,
+  onFieldBlur,
+  numberBlur,
+  numberHint,
+  deleteButton,
+  confirmDialog,
+}: {
+  vals: RowVals;
+  canEdit: boolean;
+  isDraft?: boolean;
+  saveState: SaveMarkState;
+  amountKopecks: string;
+  engineer?: {
+    value: string | null;
+    options: Array<{ id: string; fullName: string }>;
+    onChange: (id: string | null) => void;
+  };
+  update: (patch: Partial<RowVals>) => void;
+  onFieldBlur: (
+    field: 'name' | 'unit' | 'quantity' | 'unitPriceRub',
+    value: string,
+    extras: RowVals,
+  ) => void;
+  numberBlur: (field: 'quantity' | 'unitPriceRub', value: string) => void;
+  numberHint: (field: 'quantity' | 'unitPriceRub', align: string) => React.ReactNode;
+  deleteButton: (className: string, iconClass: string) => React.ReactNode;
+  confirmDialog: React.ReactNode;
+}) {
+  // Подписи привязываем к полям по id: поле шириной в пол-экрана без названия
+  // остаётся такой же загадкой, как поле шириной 31 пиксель.
+  const uid = useId();
+  const field =
+    'bg-background focus:ring-primary/40 h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2 disabled:opacity-60';
+  const caption = 'text-muted-foreground mb-1 block text-[11px] uppercase';
+
+  return (
+    <div
+      className={cn(
+        'bg-card space-y-2 rounded-lg border p-3',
+        isDraft && 'border-primary/40 bg-primary/5',
+        saveState === 'queued' && 'border-warning/50 bg-warning/10',
+      )}
+    >
+      <div>
+        <label className={caption} htmlFor={`${uid}-name`}>
+          Наименование
+        </label>
+        <input
+          id={`${uid}-name`}
+          type="text"
+          value={vals.name}
+          disabled={!canEdit}
+          onChange={(e) => update({ name: e.target.value })}
+          onBlur={(e) => onFieldBlur('name', e.target.value, vals)}
+          className={field}
+          placeholder="Что выполнено"
+        />
+        <SaveMark state={saveState} />
+      </div>
+
+      {engineer && (
+        <div>
+          <label className={caption} htmlFor={`${uid}-engineer`}>
+            Кто делал
+          </label>
+          <select
+            id={`${uid}-engineer`}
+            value={engineer.value ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => engineer.onChange(e.target.value || null)}
+            className={field}
+          >
+            <option value="">— инженер наряда —</option>
+            {engineer.options.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Кол-во · ед. · цена читаются как «1 шт × 12 500» — тем же порядком,
+          каким инженер их и произносит. */}
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className={caption} htmlFor={`${uid}-qty`}>
+            Кол-во
+          </label>
+          <input
+            id={`${uid}-qty`}
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            value={vals.quantity}
+            disabled={!canEdit}
+            onChange={(e) => update({ quantity: e.target.value })}
+            onBlur={(e) => numberBlur('quantity', e.target.value)}
+            className={cn(field, 'text-right tabular-nums')}
+          />
+        </div>
+        <div>
+          <label className={caption} htmlFor={`${uid}-unit`}>
+            Ед.
+          </label>
+          <input
+            id={`${uid}-unit`}
+            type="text"
+            value={vals.unit}
+            disabled={!canEdit}
+            onChange={(e) => update({ unit: e.target.value })}
+            onBlur={(e) => onFieldBlur('unit', e.target.value, vals)}
+            className={field}
+          />
+        </div>
+        <div>
+          <label className={caption} htmlFor={`${uid}-price`}>
+            Цена ₽
+          </label>
+          <input
+            id={`${uid}-price`}
+            type="number"
+            inputMode="numeric"
+            step="1"
+            min="0"
+            value={vals.unitPriceRub}
+            disabled={!canEdit}
+            onChange={(e) => update({ unitPriceRub: e.target.value })}
+            onBlur={(e) => numberBlur('unitPriceRub', e.target.value)}
+            className={cn(field, 'text-right tabular-nums')}
+          />
+        </div>
+      </div>
+      {numberHint('quantity', '')}
+      {numberHint('unitPriceRub', '')}
+
+      <div className="flex items-center justify-between border-t pt-2">
+        <div className="text-sm">
+          <span className="text-muted-foreground">Сумма </span>
+          <span className="font-semibold tabular-nums">{kopecksToRub(amountKopecks)} ₽</span>
+        </div>
+        {deleteButton(
+          'text-muted-foreground hover:text-destructive hover:bg-destructive/10 grid h-11 w-11 place-items-center rounded-md',
+          'h-5 w-5',
+        )}
+      </div>
+      {confirmDialog}
+    </div>
   );
 }
 
