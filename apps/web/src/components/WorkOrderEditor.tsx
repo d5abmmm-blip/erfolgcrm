@@ -2,10 +2,13 @@
  * Редактор наряда. Открывается и на десктопе (карточка заявки), и на телефоне
  * инженера (`/m/tickets/:id/work-log`) — другой формы наряда в приложении нет.
  *
- * Три свойства, на которых держится сохранность работы инженера в поле:
+ * Четыре свойства, на которых держится сохранность работы инженера в поле:
  *  1. Кнопки «Сохранить» нет — пишем по уходу курсора из поля.
- *  2. Пропала связь → правка ложится в оффлайн-очередь и уходит сама (см. lib/offline).
- *  3. Одна строка = одна запись: пока сервер не вернул номер новой строки,
+ *  2. Уход С ЭКРАНА («назад», сворачивание, выгрузка PWA) — тоже момент записи:
+ *     курсор при этом из поля не выходит, и раньше набранное просто исчезало
+ *     (см. lib/use-flush-on-leave).
+ *  3. Пропала связь → правка ложится в оффлайн-очередь и уходит сама (см. lib/offline).
+ *  4. Одна строка = одна запись: пока сервер не вернул номер новой строки,
  *     повторные сохранения не отправляются, иначе он вставил бы дубли.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -28,6 +31,7 @@ import { listPending, removeByDedupeKey, subscribe as subscribeOutbox } from '..
 import { humanizeError, SILENT_ERROR } from '../lib/error-message';
 import { showToast } from '../lib/toast';
 import { useOutbox } from '../lib/offline/useOutbox';
+import { useFlushOnLeave } from '../lib/use-flush-on-leave';
 import { useSaveMark } from '../lib/use-save-mark';
 import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
@@ -284,26 +288,14 @@ function WorkOrderHeader({
     }
   };
 
-  const blurSave =
-    (
-      field: 'diagnosis' | 'repairDescription' | 'recommendation',
-      initial: string | null,
-      mark: HeaderMark,
-    ) =>
-    (e: React.FocusEvent<HTMLTextAreaElement>) => {
-      const next = e.target.value.trim() || null;
-      if (next === (initial ?? null)) return;
-      void saveHeader(field, next, mark);
-    };
-
   return (
     <div className="bg-card space-y-3 rounded-lg border p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Field
           label="Диагноз"
-          defaultValue={diagnosis ?? ''}
+          initial={diagnosis}
           disabled={!canEdit}
-          makeBlur={(mark) => blurSave('diagnosis', diagnosis, mark)}
+          onSave={(next, mark) => void saveHeader('diagnosis', next, mark)}
         />
         <RepairDescriptionField
           ticketId={ticketId}
@@ -313,9 +305,9 @@ function WorkOrderHeader({
         />
         <Field
           label="Рекомендации"
-          defaultValue={recommendation ?? ''}
+          initial={recommendation}
           disabled={!canEdit}
-          makeBlur={(mark) => blurSave('recommendation', recommendation, mark)}
+          onSave={(next, mark) => void saveHeader('recommendation', next, mark)}
         />
       </div>
       <div className="flex items-center gap-2">
@@ -370,11 +362,29 @@ function RepairDescriptionField({
     },
   });
 
+  /** Что уже ушло на сервер — см. такой же ref в `Field`. */
+  const sent = useRef<string | null>(initial ?? null);
+  useEffect(() => {
+    sent.current = initial ?? null;
+  }, [initial]);
+  // Текст читаем из ref: уход с экрана случается вне отрисовки, и замыкание
+  // на состояние отдало бы значение на момент подписки.
+  const current = useRef(value);
+  current.current = value;
+
   const save = () => {
-    const next = value.trim() || null;
-    if (next === (initial ?? null)) return;
+    if (!canEdit) return;
+    const next = current.current.trim() || null;
+    if (next === sent.current) return;
+    sent.current = next;
     onSave(next);
   };
+  /**
+   * Отдельная беда ИИ-черновика: кнопка вписывает текст в поле, но курсор в
+   * поле не встаёт — уходить оттуда нечему. Без записи по уходу с экрана
+   * сгенерированный текст пропадал целиком.
+   */
+  useFlushOnLeave(save);
 
   return (
     <div>
@@ -414,27 +424,65 @@ function RepairDescriptionField({
 /**
  * Поле шапки наряда. Само держит свою отметку состояния: раньше при удачном
  * сохранении оно не показывало ничего, и человек не знал, записалось ли.
+ *
+ * Пишет в ДВУХ случаях — курсор ушёл из поля и экран ушёл целиком. Второй
+ * добавлен потому, что «назад» и сворачивание приложения курсор из поля не
+ * выводят, и набранное пропадало вместе с полем.
  */
 function Field({
   label,
-  defaultValue,
+  initial,
   disabled,
-  makeBlur,
+  onSave,
 }: {
   label: string;
-  defaultValue: string;
+  initial: string | null;
   disabled?: boolean;
-  makeBlur: (mark: HeaderMark) => (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onSave: (next: string | null, mark: HeaderMark) => void;
 }) {
   const mark = useSaveMark();
+  const box = useRef<HTMLTextAreaElement>(null);
+  /**
+   * Последний набранный текст.
+   *
+   * ⚠️ Ради него всё и написано: на размонтировании React обнуляет ссылку на
+   * узел РАНЬШЕ, чем зовёт уборку эффекта, — читать текст из поля в этот
+   * момент уже поздно, приходит null. Поле при этом остаётся неуправляемым:
+   * так набранное переживает перечитывание наряда с сервера.
+   */
+  const typed = useRef<string | null>(null);
+  /**
+   * Что уже ушло на сервер. Сравнивать с приходящим `initial` нельзя: после
+   * записи он какое-то время остаётся прежним (пока не перечитается наряд),
+   * и уход с экрана отправил бы тот же текст второй раз.
+   */
+  const sent = useRef<string | null>(initial ?? null);
+  useEffect(() => {
+    sent.current = initial ?? null;
+  }, [initial]);
+
+  const save = () => {
+    if (disabled) return;
+    const raw = box.current?.value ?? typed.current ?? initial ?? '';
+    const next = raw.trim() || null;
+    if (next === sent.current) return;
+    sent.current = next;
+    onSave(next, mark);
+  };
+  useFlushOnLeave(save);
+
   return (
     <div>
       <div className="text-muted-foreground mb-1 text-[11px] uppercase">{label}</div>
       <textarea
-        defaultValue={defaultValue}
+        ref={box}
+        defaultValue={initial ?? ''}
         disabled={disabled}
         rows={3}
-        onBlur={makeBlur(mark)}
+        onChange={(e) => {
+          typed.current = e.target.value;
+        }}
+        onBlur={save}
         className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2 disabled:opacity-60"
       />
       <SaveMark state={mark.state} />
@@ -509,6 +557,8 @@ function LineTable({
   const inFlight = useRef<Set<string>>(new Set());
   /** Строки, которые правили, пока шёл их же запрос — досохраним после ответа. */
   const resaveNeeded = useRef<Set<string>>(new Set());
+  /** Что уже ушло по каждой строке — чтобы уход с экрана не слал то же самое. */
+  const lastSent = useRef<Map<string, string>>(new Map());
 
   const [issuingFromInventory, setIssuingFromInventory] = useState(false);
   const [returningToInventory, setReturningToInventory] = useState(false);
@@ -559,6 +609,27 @@ function LineTable({
     const line = draftsRef.current.find((d) => d.uid === uid);
     if (!line || !line.name.trim()) return; // пустые не сохраняем
 
+    const payload = {
+      ticketId,
+      line: {
+        id: line.id ?? undefined,
+        lineType,
+        name: line.name.trim(),
+        unit: line.unit.trim() || 'шт',
+        quantity: line.quantity.trim() || '0',
+        unitPriceRub: Math.max(0, Math.round(Number(line.unitPriceRub) || 0)),
+        // Только для работ. У запчастей и расходов инженер на зарплату не влияет
+        // (payroll считает по строкам line_type='work'), а слать его вслепую нельзя:
+        // сервер отличает «поле не прислали» от «сбросить в пусто».
+        ...(lineType === 'work' ? { engineerId: line.engineerId } : {}),
+      },
+    };
+    // Уход с экрана зовёт запись у КАЖДОЙ строки, в том числе у той, что
+    // только что сохранилась по уходу курсора. Отправлять то же самое второй
+    // раз незачем; условие на id — чтобы новая строка всегда доехала.
+    const stamp = JSON.stringify(payload);
+    if (line.id && lastSent.current.get(uid) === stamp) return;
+
     // Пока сервер не вернул номер новой строки, второй запрос слать нельзя —
     // он вставил бы ещё одну строку. Запомним и досохраним после ответа.
     if (inFlight.current.has(uid)) {
@@ -569,27 +640,14 @@ function LineTable({
 
     const res = await executeOrQueue(
       'workOrders.upsertLine',
-      {
-        ticketId,
-        line: {
-          id: line.id ?? undefined,
-          lineType,
-          name: line.name.trim(),
-          unit: line.unit.trim() || 'шт',
-          quantity: line.quantity.trim() || '0',
-          unitPriceRub: Math.max(0, Math.round(Number(line.unitPriceRub) || 0)),
-          // Только для работ. У запчастей и расходов инженер на зарплату не влияет
-          // (payroll считает по строкам line_type='work'), а слать его вслепую нельзя:
-          // сервер отличает «поле не прислали» от «сбросить в пусто».
-          ...(lineType === 'work' ? { engineerId: line.engineerId } : {}),
-        },
-      },
+      payload,
       (p) => upsert.mutateAsync(p),
       tenantSubdomain,
       lineDedupeKey(ticketId, line.id ?? uid),
       ticketNumber,
     );
     inFlight.current.delete(uid);
+    if (res.status !== 'error') lastSent.current.set(uid, stamp);
 
     if (res.status === 'ok') {
       // Подставим номер, чтобы дальнейшие правки шли как изменение, а не вставка.
@@ -851,6 +909,27 @@ function ExistingRow({
     sendLine(extras, line.engineerId);
   };
 
+  /**
+   * Ушли с экрана, не выходя из поля. Сверяем со строкой, какой её знает
+   * сервер: после удачной записи она перечитывается, поэтому повторной
+   * отправки того же самого не будет.
+   */
+  const handleLeave = (vals: {
+    name: string;
+    unit: string;
+    quantity: string;
+    unitPriceRub: string;
+  }) => {
+    if (!canEdit || !vals.name.trim()) return;
+    const changed =
+      vals.name !== line.name ||
+      vals.unit !== line.unit ||
+      vals.quantity !== line.quantity ||
+      Number(vals.unitPriceRub) !== Number(initialPriceRub);
+    if (!changed) return;
+    sendLine(vals, line.engineerId);
+  };
+
   return (
     <RowInputs
       key={line.id}
@@ -863,6 +942,7 @@ function ExistingRow({
       amountKopecks={line.amountKopecks}
       canEdit={canEdit}
       onFieldBlur={handleBlur}
+      onLeave={handleLeave}
       onDelete={onDelete}
       saveState={mark.state}
       engineer={
@@ -920,6 +1000,9 @@ function DraftRow({
       canEdit
       onChange={onChange}
       onFieldBlur={() => onSave()}
+      // Новая строка, которую начали набирать и ушли с экрана. Повтор того же
+      // самого отсекается в saveLine — иначе строка задвоилась бы, а с ней деньги.
+      onLeave={() => onSave()}
       onDelete={onCancel}
       isDraft
       saveState={draft.queued ? 'queued' : 'idle'}
@@ -943,6 +1026,7 @@ function RowInputs({
   controlled,
   onChange,
   onFieldBlur,
+  onLeave,
   onDelete,
   isDraft,
   saveState = 'idle',
@@ -958,6 +1042,11 @@ function RowInputs({
     value: string,
     extras: { name: string; unit: string; quantity: string; unitPriceRub: string },
   ) => void;
+  /**
+   * Экран уходит, а курсор так и не покинул поле. Значения строки живут
+   * здесь, поэтому отдаём их наверх — там знают, изменилось ли что-то.
+   */
+  onLeave?: (vals: { name: string; unit: string; quantity: string; unitPriceRub: string }) => void;
   onDelete: () => void;
   isDraft?: boolean;
   /** Строка лежит в оффлайн-очереди — покажем это прямо в таблице. */
@@ -978,6 +1067,11 @@ function RowInputs({
   useEffect(() => {
     if (!controlled) setVals(initial);
   }, [initial.name, initial.unit, initial.quantity, initial.unitPriceRub]);
+
+  // Свежие значения для записи по уходу с экрана: она случается вне отрисовки.
+  const current = useRef(vals);
+  current.current = vals;
+  useFlushOnLeave(() => onLeave?.(current.current));
 
   const update = (patch: Partial<typeof vals>) => {
     setVals((prev) => ({ ...prev, ...patch }));
