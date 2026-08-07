@@ -231,6 +231,8 @@ export function MobileTicketPage() {
       { id: t.id, status: target },
       (p) => changeStatusM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      t.ticketNumber,
     );
     setBusy(null);
     if (result.status === 'ok') {
@@ -254,6 +256,8 @@ export function MobileTicketPage() {
       { ticketId: t.id, comment: comment.trim() },
       (p) => addNoteM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      t.ticketNumber,
     );
     setBusy(null);
     if (result.status === 'ok') {

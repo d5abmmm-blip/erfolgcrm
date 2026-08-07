@@ -667,6 +667,7 @@ export function TicketCardPage() {
                   <h3 className="mb-2 text-sm font-semibold">Наряд</h3>
                   <WorkOrderEditor
                     ticketId={t.id}
+                    ticketNumber={t.ticketNumber}
                     canEdit={canEditWorkOrder}
                     canEditVat={isStaff}
                   />

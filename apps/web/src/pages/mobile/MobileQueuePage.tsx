@@ -108,13 +108,15 @@ export function MobileQueuePage({ engineerId }: Props) {
   // карточку после ответа прячем локально — иначе кнопка выглядит «неработающей».
   const [reactedIds, setReactedIds] = useState<Set<string>>(() => new Set());
 
-  const onReact = async (ticketId: string, action: ReactAction) => {
+  const onReact = async (ticketId: string, action: ReactAction, ticketNumber?: string) => {
     setBusyTicket(ticketId);
     const result = await executeOrQueue(
       'tickets.engineerReact',
       { ticketId, action },
       (p) => reactM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      ticketNumber,
     );
     setBusyTicket(null);
     if (result.status === 'ok') {
@@ -390,7 +392,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                   <button
                     type="button"
                     disabled={busyTicket === c.id}
-                    onClick={() => void onReact(c.id, 'inwork')}
+                    onClick={() => void onReact(c.id, 'inwork', c.ticketNumber)}
                     className="bg-card hover:bg-muted/50 h-11 w-full rounded-lg border text-sm font-semibold transition disabled:opacity-50"
                   >
                     Ещё в работе
@@ -398,7 +400,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                   <button
                     type="button"
                     disabled={busyTicket === c.id}
-                    onClick={() => void onReact(c.id, 'ready')}
+                    onClick={() => void onReact(c.id, 'ready', c.ticketNumber)}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 w-full rounded-lg text-sm font-semibold transition disabled:opacity-50"
                   >
                     Готово к выдаче
@@ -406,7 +408,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                   <button
                     type="button"
                     disabled={busyTicket === c.id}
-                    onClick={() => void onReact(c.id, 'part')}
+                    onClick={() => void onReact(c.id, 'part', c.ticketNumber)}
                     className="bg-accent text-accent-foreground hover:bg-accent/90 h-11 w-full rounded-lg text-sm font-semibold transition disabled:opacity-50"
                   >
                     Жду запчасть

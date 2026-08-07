@@ -55,7 +55,7 @@ export function MobileTasksPage() {
       return n;
     });
 
-  const onToggle = async (id: string, next: boolean) => {
+  const onToggle = async (id: string, next: boolean, title?: string) => {
     setBusy(id);
     setOverride((o) => ({ ...o, [id]: next })); // сразу меняем галочку
     const result = await executeOrQueue(
@@ -63,6 +63,8 @@ export function MobileTasksPage() {
       { id, isDone: next },
       (p) => setDoneM.mutateAsync(p),
       tenantSubdomain,
+      undefined,
+      title,
     );
     setBusy(null);
     if (result.status === 'ok') {
@@ -130,7 +132,7 @@ export function MobileTasksPage() {
             <li key={t.id} className="bg-card flex items-start gap-3 rounded-lg border p-3">
               <button
                 type="button"
-                onClick={() => void onToggle(t.id, !done)}
+                onClick={() => void onToggle(t.id, !done, t.title)}
                 disabled={busy === t.id}
                 className="mt-0.5 shrink-0 disabled:opacity-50"
                 aria-label={done ? 'Снять отметку' : 'Отметить сделанной'}

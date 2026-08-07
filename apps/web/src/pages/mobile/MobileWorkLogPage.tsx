@@ -47,7 +47,12 @@ export function MobileWorkLogPage() {
         <ChevronLeft className="h-4 w-4" />К заявке {ticket.data.ticketNumber}
       </Link>
 
-      <WorkOrderEditor ticketId={id} canEdit={canEdit} canEditVat={canEditVat} />
+      <WorkOrderEditor
+        ticketId={id}
+        ticketNumber={ticket.data.ticketNumber}
+        canEdit={canEdit}
+        canEditVat={canEditVat}
+      />
     </div>
   );
 }

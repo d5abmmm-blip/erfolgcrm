@@ -14,15 +14,38 @@ import { showToast } from '../toast';
 
 /** Человеческий отчёт по итогам отправки очереди. */
 export function reportSync(r: SyncResult): void {
-  if (r.succeeded === 0 && r.failedSoft === 0 && r.failedHard === 0) return;
+  if (
+    r.succeeded === 0 &&
+    r.failedSoft === 0 &&
+    r.failedHard === 0 &&
+    r.skippedOther === 0 &&
+    !r.needsLogin
+  ) {
+    return;
+  }
 
-  // Отклонённое сервером повторить нельзя — такие записи удалены. Это самое
-  // важное в отчёте: работа инженера пропала, и он должен об этом узнать.
+  // Сессия кончилась, пока человек работал без связи. Раньше это считалось
+  // отказом по существу и стирало ВСЮ накопленную за смену работу молча.
+  if (r.needsLogin) {
+    showToast(
+      'error',
+      'Вход в систему закончился — войдите заново. Накопленное сохранено и уйдёт само.',
+    );
+  }
+  // Отклонённое сервером теперь не пропадает: оно лежит в «Профиль → Не
+  // отправлено», где видно, что именно и почему, и можно повторить.
   if (r.failedHard > 0) {
     showToast(
       'error',
       `Сервер не принял ${r.failedHard} ${plural(r.failedHard, 'изменение', 'изменения', 'изменений')}` +
-        ' — их придётся внести заново',
+        ' — они сохранены, откройте «Профиль → Не отправлено»',
+    );
+  }
+  if (r.skippedOther > 0) {
+    showToast(
+      'queued',
+      `${r.skippedOther} ${plural(r.skippedOther, 'изменение', 'изменения', 'изменений')} другого сотрудника` +
+        ' — уйдут, когда он войдёт на этом телефоне',
     );
   }
   if (r.succeeded > 0) {
@@ -31,7 +54,7 @@ export function reportSync(r: SyncResult): void {
       `Отправлено ${r.succeeded} ${plural(r.succeeded, 'изменение', 'изменения', 'изменений')}`,
     );
   }
-  if (r.failedSoft > 0) {
+  if (r.failedSoft > 0 && !r.needsLogin) {
     showToast('queued', `Связи всё ещё нет — ${r.failedSoft} в очереди, попробуем позже`);
   }
 }
