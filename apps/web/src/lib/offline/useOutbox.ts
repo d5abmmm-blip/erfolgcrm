@@ -3,28 +3,18 @@
  * Возвращает {pending, isOnline, sync} и автоматически запускает sync при
  * переходе offline → online.
  *
- * Очередей две — правки и фото — но для человека это одна: «сколько всего ещё
- * не ушло». Поэтому бейдж в шапке и кнопка «Синхронизировать» считают и то и
- * другое. Иначе инженер видел бы «онлайн, очередь пуста», пока в памяти
- * телефона лежат неотправленные снимки.
- *
  * Итог синхронизации показывается сам — через общий тост. Раньше результат
  * молча выбрасывался, и записи, отклонённые сервером, исчезали бесследно.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { count, listPending, subscribe } from './queue';
-import { countPendingPhotos, subscribePhotos } from './photo-queue';
 import { syncOutbox, type SyncResult } from './executor';
-import { sendPendingPhotos, type PhotoSyncResult } from './photo-sender';
-import { runOutboxItem, uploadPendingPhoto } from './runner';
+import { runOutboxItem } from './runner';
 import { showToast } from '../toast';
 
 /** Человеческий отчёт по итогам отправки очереди. */
-export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
-  const sent = r.succeeded + (photos?.succeeded ?? 0);
-  const stuck = r.failedSoft + (photos?.failedSoft ?? 0);
-  const photosRejected = photos?.failedHard ?? 0;
-  if (sent === 0 && stuck === 0 && r.failedHard === 0 && photosRejected === 0) return;
+export function reportSync(r: SyncResult): void {
+  if (r.succeeded === 0 && r.failedSoft === 0 && r.failedHard === 0) return;
 
   // Отклонённое сервером повторить нельзя — такие записи удалены. Это самое
   // важное в отчёте: работа инженера пропала, и он должен об этом узнать.
@@ -35,19 +25,14 @@ export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
         ' — их придётся внести заново',
     );
   }
-  // Фото при отказе НЕ пропадает: оно остаётся в карточке заявки с причиной
-  // и кнопками «повторить» / «убрать».
-  if (photosRejected > 0) {
+  if (r.succeeded > 0) {
     showToast(
-      'error',
-      `Не принято фото: ${photosRejected} — они остались в заявке, откройте её и посмотрите причину`,
+      'ok',
+      `Отправлено ${r.succeeded} ${plural(r.succeeded, 'изменение', 'изменения', 'изменений')}`,
     );
   }
-  if (sent > 0) {
-    showToast('ok', `Отправлено ${sent} ${plural(sent, 'изменение', 'изменения', 'изменений')}`);
-  }
-  if (stuck > 0) {
-    showToast('queued', `Связи всё ещё нет — ${stuck} в очереди, попробуем позже`);
+  if (r.failedSoft > 0) {
+    showToast('queued', `Связи всё ещё нет — ${r.failedSoft} в очереди, попробуем позже`);
   }
 }
 
@@ -73,8 +58,7 @@ export function useOutbox() {
   });
 
   const refreshCount = useCallback(async () => {
-    const [mutations, photos] = await Promise.all([count(), countPendingPhotos()]);
-    const n = mutations + photos;
+    const n = await count();
     setState((s) => (s.pending === n ? s : { ...s, pending: n }));
   }, []);
 
@@ -83,13 +67,7 @@ export function useOutbox() {
     const unsub = subscribe(() => {
       void refreshCount();
     });
-    const unsubPhotos = subscribePhotos(() => {
-      void refreshCount();
-    });
-    return () => {
-      unsub();
-      unsubPhotos();
-    };
+    return unsub;
   }, [refreshCount]);
 
   useEffect(() => {
@@ -106,12 +84,9 @@ export function useOutbox() {
   const sync = useCallback(async (): Promise<SyncResult> => {
     setState((s) => ({ ...s, isSyncing: true }));
     try {
-      // Сначала правки, потом фото: правка может создать строку наряда,
-      // к которой фото и относится, обратной зависимости нет.
       const r = await syncOutbox(runOutboxItem);
-      const photos = await sendPendingPhotos(uploadPendingPhoto);
       await refreshCount();
-      reportSync(r, photos);
+      reportSync(r);
       return r;
     } finally {
       setState((s) => ({ ...s, isSyncing: false }));
@@ -122,8 +97,8 @@ export function useOutbox() {
   useEffect(() => {
     if (!state.isOnline) return;
     void (async () => {
-      const [items, photos] = await Promise.all([listPending(), countPendingPhotos()]);
-      if ((items.length > 0 || photos > 0) && !state.isSyncing) {
+      const items = await listPending();
+      if (items.length > 0 && !state.isSyncing) {
         await sync();
       }
     })();
