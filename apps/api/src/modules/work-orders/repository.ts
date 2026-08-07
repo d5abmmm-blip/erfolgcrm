@@ -652,3 +652,25 @@ export async function workOrderIdForTicket(
     return rows[0]?.id ?? null;
   });
 }
+
+/**
+ * Заявка, к наряду которой относится строка.
+ *
+ * Нужна проверке «своя ли заявка»: списание со склада приходит с
+ * идентификатором СТРОКИ наряда, а решение о доступе принимается по заявке.
+ */
+export async function ticketIdForWorkOrderLine(
+  db: Db,
+  tenantId: string,
+  lineId: string,
+): Promise<string | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ ticketId: workOrders.ticketId })
+      .from(workOrderLines)
+      .innerJoin(workOrders, eq(workOrderLines.workOrderId, workOrders.id))
+      .where(eq(workOrderLines.id, lineId))
+      .limit(1);
+    return rows[0]?.ticketId ?? null;
+  });
+}
