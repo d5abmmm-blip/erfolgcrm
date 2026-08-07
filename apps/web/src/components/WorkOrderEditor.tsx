@@ -259,9 +259,65 @@ function WorkOrderHeader({
   const tenantSubdomain = getTenantSubdomain();
   // Ошибку/очередь показываем сами — глобальный тост здесь молчит (см. main.tsx).
   const updateHeader = trpc.workOrders.updateHeader.useMutation({ meta: SILENT_ERROR });
-  const setVat = trpc.workOrders.setVatRate.useMutation({
-    onSuccess: () => utils.workOrders.getByTicket.invalidate({ ticketId }),
-  });
+  // Ошибку/очередь показываем сами — глобальный тост здесь молчит (см. main.tsx).
+  const setVat = trpc.workOrders.setVatRate.useMutation({ meta: SILENT_ERROR });
+
+  /**
+   * Ставка НДС идёт тем же путём, что и остальные правки наряда: нет связи —
+   * ложится в очередь и уходит сама. Раньше это была единственная правка мимо
+   * очереди: без связи она просто не проходила, поле отскакивало назад, и
+   * человек должен был вернуться и повторить.
+   */
+  /**
+   * Ставка, которую человек выбрал, но сервер ещё не подтвердил.
+   *
+   * Найдено живой проверкой: правка ложилась в очередь, а поле возвращалось к
+   * прежней ставке — оно управляется данными с сервера, а сервера сейчас нет.
+   * Диспетчер выбирал 5 %, видел снова 20 % и решал, что не сохранилось.
+   */
+  const [chosenVat, setChosenVat] = useState<VatRate | null>(null);
+  const vatMark = useSaveMark();
+
+  const sendVat = async (vatRate: VatRate) => {
+    setChosenVat(vatRate);
+    vatMark.markSaving();
+    const res = await executeOrQueue(
+      'workOrders.setVatRate',
+      { ticketId, vatRate },
+      (p) => setVat.mutateAsync(p),
+      tenantSubdomain,
+      // Ставка у наряда одна: передумал трижды — уедет последний выбор.
+      `wo-vat:${ticketId}`,
+      ticketNumber,
+    );
+    vatMark.markResult(res.status);
+    if (res.status === 'ok') {
+      // Сервер принял — дальше поле снова живёт данными наряда.
+      setChosenVat(null);
+      await utils.workOrders.getByTicket.invalidate({ ticketId });
+    } else if (res.status === 'queued') {
+      // Ждёт связи: показываем ВЫБРАННОЕ, иначе человек не поверит, что записалось.
+      showToast('queued', QUEUED_TEXT);
+    } else {
+      // Отказ по существу — честно возвращаем то, что на сервере.
+      setChosenVat(null);
+      showToast('error', humanizeError(res.error));
+    }
+  };
+
+  /**
+   * Переключения ставки идут строго одно за другим.
+   *
+   * Без этого три быстрых щелчка уезжают одновременно, и склейка по ключу не
+   * успевает сработать: каждый читает очередь до того, как в неё записал
+   * предыдущий, — три записи вместо одной, и на сервер поедут промежуточные
+   * ставки. Ставка у наряда одна, уехать должен последний выбор.
+   */
+  const vatChain = useRef<Promise<void>>(Promise.resolve());
+  const saveVat = (vatRate: VatRate): Promise<void> => {
+    vatChain.current = vatChain.current.then(() => sendVat(vatRate));
+    return vatChain.current;
+  };
 
   const saveHeader = async (
     field: 'diagnosis' | 'repairDescription' | 'recommendation',
@@ -314,8 +370,9 @@ function WorkOrderHeader({
         <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
         <select
           disabled={!canEditVat}
-          value={vatRate}
-          onChange={(e) => setVat.mutate({ ticketId, vatRate: e.target.value as VatRate })}
+          // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
+          value={chosenVat ?? vatRate}
+          onChange={(e) => void saveVat(e.target.value as VatRate)}
           className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
         >
           {VAT_OPTS.map((o) => (
@@ -324,6 +381,7 @@ function WorkOrderHeader({
             </option>
           ))}
         </select>
+        <SaveMark state={vatMark.state} />
         {!canEditVat && (
           <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
         )}

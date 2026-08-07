@@ -50,6 +50,8 @@ export async function runOutboxItem(item: OutboxItem): Promise<unknown> {
       return client.workOrders.deleteLine.mutate(p as never);
     case 'workOrders.updateHeader':
       return client.workOrders.updateHeader.mutate(p as never);
+    case 'workOrders.setVatRate':
+      return client.workOrders.setVatRate.mutate(p as never);
     case 'inventoryMovements.issueToWorkOrder':
       return client.inventoryMovements.issueToWorkOrder.mutate(p as never);
     case 'maintenance.recordPerformed':

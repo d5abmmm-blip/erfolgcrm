@@ -30,6 +30,7 @@ const KIND_TITLE: Record<MutationKind, string> = {
   'workOrders.upsertLine': 'Строка в наряд',
   'workOrders.deleteLine': 'Удаление строки наряда',
   'workOrders.updateHeader': 'Заполнение наряда',
+  'workOrders.setVatRate': 'Ставка НДС в наряде',
   'inventoryMovements.issueToWorkOrder': 'Списание со склада',
   'maintenance.recordPerformed': 'Отметка о выполненном ТО',
   'tasks.setDone': 'Отметка по задаче',
@@ -67,6 +68,10 @@ function detailOf(kind: MutationKind, payload: Record<string, unknown>): string 
     case 'workOrders.updateHeader': {
       const patch = (payload.patch ?? {}) as Record<string, unknown>;
       return Object.values(patch).map(str).filter(Boolean).join(' · ');
+    }
+    case 'workOrders.setVatRate': {
+      const rate = str(payload.vatRate);
+      return rate === 'without_vat' ? 'без НДС' : rate ? `${rate}%` : '';
     }
     case 'maintenance.recordPerformed':
       return str(payload.summary);
