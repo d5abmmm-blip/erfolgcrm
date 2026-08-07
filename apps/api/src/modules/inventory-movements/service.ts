@@ -20,7 +20,7 @@ import {
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import { ticketIdForWorkOrderLine } from '../work-orders/repository';
-import { assertEngineerMayEditTicketId } from '../tickets/service';
+import { assertMayEditWorkOrderOfTicket } from '../tickets/service';
 
 export interface IssueCmdInput {
   workOrderLineId: string;
@@ -36,7 +36,7 @@ async function assertLineBelongsToOwnTicket(ctx: CmdCtx, workOrderLineId: string
   if (!ticketId) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Строка наряда не найдена' });
   }
-  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
 }
 
 export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Promise<IssueResult> {

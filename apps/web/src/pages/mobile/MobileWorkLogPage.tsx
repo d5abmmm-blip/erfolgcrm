@@ -4,6 +4,7 @@ import { trpc } from '../../lib/trpc';
 import { WorkOrderEditor } from '../../components/WorkOrderEditor';
 import { QueryError } from '../../components/QueryError';
 import { engineerOwnsTicket } from '../../lib/engineer-ticket-access';
+import { closedWorkOrderNotice, mayEditWorkOrder } from '../../lib/work-order-window';
 
 /**
  * /m/tickets/:id/work-log — журнал работ для инженера.
@@ -54,7 +55,12 @@ export function MobileWorkLogPage() {
     me.data ? { id: me.data.user.id, role: me.data.user.role } : undefined,
     ticket.data,
   );
-  const canEdit = (role === 'engineer' && isMine) || role === 'dispatcher' || role === 'director';
+  // Плюс окно правки: наряд закрытой заявки инженер правит три дня, дальше
+  // это делает руководитель (решение владельца 2026-08-07).
+  const inEditWindow = mayEditWorkOrder(role, ticket.data);
+  const closedNotice = role === 'engineer' ? closedWorkOrderNotice(ticket.data) : null;
+  const canEdit =
+    (role === 'engineer' && isMine && inEditWindow) || role === 'dispatcher' || role === 'director';
   const canEditVat = role === 'dispatcher' || role === 'director';
 
   return (
@@ -68,7 +74,7 @@ export function MobileWorkLogPage() {
 
       {!canEdit && role === 'engineer' && (
         <div className="bg-warning/15 text-warning border-warning/40 rounded-lg border p-3 text-sm">
-          Это не ваша заявка — наряд можно смотреть, но не менять.
+          {closedNotice ?? 'Это не ваша заявка — наряд можно смотреть, но не менять.'}
         </div>
       )}
 
