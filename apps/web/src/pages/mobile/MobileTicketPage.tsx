@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
+import { QUEUED_MUTATION } from '../../lib/query-defaults';
 import { openPrintWindow } from '../../lib/open-print-window';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
@@ -77,8 +78,8 @@ export function MobileTicketPage() {
   const wo = trpc.workOrders.getByTicket.useQuery({ ticketId: id }, { enabled: !!id });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
-  const changeStatusM = trpc.tickets.changeStatus.useMutation();
-  const addNoteM = trpc.tickets.addNote.useMutation();
+  const changeStatusM = trpc.tickets.changeStatus.useMutation(QUEUED_MUTATION);
+  const addNoteM = trpc.tickets.addNote.useMutation(QUEUED_MUTATION);
 
   // «Своя» заявка = ответственный ИЛИ помощник, как на сервере. От этого
   // зависит и печать актов с реквизитами клиента, и — с 2026-08-07 — сами

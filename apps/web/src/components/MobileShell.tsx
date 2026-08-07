@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ClipboardList, ListChecks, Package, ScanLine, User, CloudOff, Cloud } from 'lucide-react';
 import { useOutbox } from '../lib/offline/useOutbox';
@@ -74,12 +74,10 @@ export function MobileShell({ children, session }: Props) {
     .join('')
     .toUpperCase();
 
-  // Trigger один автосинк при первом монтировании, если вышли онлайн
-  useEffect(() => {
-    if (outbox.isOnline && outbox.pending > 0 && !outbox.isSyncing) {
-      void outbox.sync();
-    }
-  }, []);
+  // Автосинк при первом монтировании отсюда убран как мёртвый: на первом
+  // рендере счётчик очереди всегда 0 (он читается из IndexedDB асинхронно),
+  // поэтому условие не срабатывало НИКОГДА, а комментарий обещал обратное.
+  // Отправкой при возврате связи занимается сам useOutbox.
 
   const visibleNav = NAV.filter(
     (n) => !n.module || !session.tenant.disabledModules.includes(n.module),

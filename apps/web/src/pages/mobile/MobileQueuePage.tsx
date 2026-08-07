@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
+import { QUEUED_MUTATION } from '../../lib/query-defaults';
 import { cn, getMondayOfThisWeek } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
 import {
@@ -101,7 +102,7 @@ export function MobileQueuePage({ engineerId }: Props) {
     },
   );
 
-  const reactM = trpc.tickets.engineerReact.useMutation();
+  const reactM = trpc.tickets.engineerReact.useMutation(QUEUED_MUTATION);
   const [busyTicket, setBusyTicket] = useState<string | null>(null);
   // «Ещё в работе» не сбрасывает дни простоя на доске (так задумано), поэтому
   // карточку после ответа прячем локально — иначе кнопка выглядит «неработающей».

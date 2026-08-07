@@ -142,12 +142,21 @@ export function MobileProfilePage() {
         <div className="text-muted-foreground text-[11px] font-medium uppercase">Синхронизация</div>
         <div className="flex items-center justify-between">
           <div className="text-sm">
-            {outbox.isOnline ? 'Онлайн' : 'Нет связи'} · в очереди {outbox.pending}
+            {outbox.isOnline ? 'Онлайн' : 'Нет связи'} · ждут отправки {outbox.sendable}
+            {/* Застрявшее показываем отдельно: раньше оно попадало в общий
+                счётчик, кнопка оставалась активной, а нажатие молча ничего
+                не делало — отправить эти записи нельзя ни сейчас, ни потом. */}
+            {outbox.pending > outbox.sendable && (
+              <span className="text-muted-foreground">
+                {' '}
+                · ждут вас {outbox.pending - outbox.sendable}
+              </span>
+            )}
           </div>
           <button
             type="button"
             onClick={() => void outbox.sync()}
-            disabled={!outbox.isOnline || outbox.pending === 0 || outbox.isSyncing}
+            disabled={!outbox.isOnline || outbox.sendable === 0 || outbox.isSyncing}
             className="bg-primary text-primary-foreground inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium disabled:opacity-50"
           >
             {outbox.isSyncing ? 'Синк…' : 'Синхронизировать'}

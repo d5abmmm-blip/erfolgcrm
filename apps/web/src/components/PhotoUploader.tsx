@@ -15,6 +15,7 @@ import { trpc, getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { humanUploadError } from '../lib/photo-upload-error';
 import { isNetworkError } from '../lib/offline/executor';
+import { QUEUED_MUTATION } from '../lib/query-defaults';
 import {
   PhotoQueueFullError,
   enqueuePhoto,
@@ -108,8 +109,10 @@ export function PhotoUploader({
   }, [previews]);
 
   const list = trpc.attachments.listByReference.useQuery({ referenceType, referenceId });
-  const createUrl = trpc.attachments.createUploadUrl.useMutation();
-  const confirm = trpc.attachments.confirmUpload.useMutation();
+  // Обе идут через очередь фото и сами объясняют исход («Ждут отправки»),
+  // поэтому общий перехватчик ошибок здесь только мешает.
+  const createUrl = trpc.attachments.createUploadUrl.useMutation(QUEUED_MUTATION);
+  const confirm = trpc.attachments.confirmUpload.useMutation(QUEUED_MUTATION);
   const remove = trpc.attachments.delete.useMutation({
     onSuccess: () => {
       setDeleteTarget(null);
