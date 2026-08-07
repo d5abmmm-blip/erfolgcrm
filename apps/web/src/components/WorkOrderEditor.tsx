@@ -22,6 +22,8 @@ import { ReturnToInventory } from './ReturnToInventory';
 
 interface Props {
   ticketId: string;
+  /** Номер заявки — подпись к записи в очереди, чтобы человек узнал её глазами. */
+  ticketNumber?: string;
   canEdit: boolean;
   /** Если true — даём редактировать ставку НДС (директор/диспетчер). */
   canEditVat: boolean;
@@ -83,7 +85,7 @@ const VAT_OPTS: Array<{ v: VatRate; label: string }> = [
   { v: 'without_vat', label: 'без НДС' },
 ];
 
-export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
+export function WorkOrderEditor({ ticketId, ticketNumber, canEdit, canEditVat }: Props) {
   const utils = trpc.useUtils();
   const wo = trpc.workOrders.getByTicket.useQuery({ ticketId });
 
@@ -127,6 +129,7 @@ export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
       <WorkOrderHeader
         key={ticketId}
         ticketId={ticketId}
+        ticketNumber={ticketNumber}
         diagnosis={wo.data.diagnosis}
         repairDescription={wo.data.repairDescription}
         recommendation={wo.data.recommendation}
@@ -139,6 +142,7 @@ export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
         <LineTable
           key={g.type}
           ticketId={ticketId}
+          ticketNumber={ticketNumber}
           lineType={g.type}
           title={g.title}
           icon={g.icon}
@@ -161,6 +165,7 @@ export function WorkOrderEditor({ ticketId, canEdit, canEditVat }: Props) {
 
 function WorkOrderHeader({
   ticketId,
+  ticketNumber,
   diagnosis,
   repairDescription,
   recommendation,
@@ -169,6 +174,7 @@ function WorkOrderHeader({
   canEditVat,
 }: {
   ticketId: string;
+  ticketNumber?: string;
   diagnosis: string | null;
   repairDescription: string | null;
   recommendation: string | null;
@@ -195,6 +201,7 @@ function WorkOrderHeader({
       tenantSubdomain,
       // Правки одного поля склеиваются: в очереди лежит последнее состояние.
       `wo-header:${ticketId}:${field}`,
+      ticketNumber,
     );
     if (res.status === 'ok') {
       await utils.workOrders.getByTicket.invalidate({ ticketId });
@@ -355,6 +362,7 @@ function Field({
 
 function LineTable({
   ticketId,
+  ticketNumber,
   lineType,
   title,
   icon: Icon,
@@ -363,6 +371,7 @@ function LineTable({
   canEdit,
 }: {
   ticketId: string;
+  ticketNumber?: string;
   lineType: WorkOrderLineType;
   title: string;
   icon: typeof Wrench;
@@ -496,6 +505,7 @@ function LineTable({
       (p) => upsert.mutateAsync(p),
       tenantSubdomain,
       lineDedupeKey(ticketId, line.id ?? uid),
+      ticketNumber,
     );
     inFlight.current.delete(uid);
 
@@ -533,6 +543,7 @@ function LineTable({
       (p) => remove.mutateAsync(p),
       tenantSubdomain,
       `wo-line-del:${ticketId}:${lineId}`,
+      ticketNumber,
     );
     if (res.status === 'ok') {
       await utils.workOrders.getByTicket.invalidate({ ticketId });
@@ -585,6 +596,7 @@ function LineTable({
                 key={l.id}
                 line={l}
                 ticketId={ticketId}
+                ticketNumber={ticketNumber}
                 lineType={lineType}
                 canEdit={canEdit}
                 engineerOptions={engineerOptions}
@@ -668,6 +680,7 @@ function LineTable({
 function ExistingRow({
   line,
   ticketId,
+  ticketNumber,
   lineType,
   canEdit,
   engineerOptions,
@@ -683,6 +696,7 @@ function ExistingRow({
     engineerId: string | null;
   };
   ticketId: string;
+  ticketNumber?: string;
   lineType: WorkOrderLineType;
   canEdit: boolean;
   engineerOptions: Array<{ id: string; fullName: string }>;
@@ -723,6 +737,7 @@ function ExistingRow({
         (p) => upsert.mutateAsync(p),
         tenantSubdomain,
         lineDedupeKey(ticketId, line.id),
+        ticketNumber,
       );
       if (res.status === 'ok') {
         setQueued(false);

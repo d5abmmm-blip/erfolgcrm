@@ -14,6 +14,7 @@ import { formatRubWhole } from '../../lib/money';
 import { useOutbox } from '../../lib/offline/useOutbox';
 import { markEngineerWantsDesktop } from '../../lib/engineer-redirect';
 import { TelegramLinkSection } from '../../components/TelegramLinkSection';
+import { OutboxRejectedList } from '../../components/OutboxRejectedList';
 
 const ROLE_LABEL: Record<'director' | 'dispatcher' | 'engineer', string> = {
   director: 'Директор',
@@ -106,6 +107,10 @@ export function MobileProfilePage() {
         </div>
         <TelegramLinkSection />
       </div>
+
+      {/* Отклонённое сервером больше не пропадает — вот оно, с причиной
+          и кнопками. Блок сам прячется, когда всё отправлено. */}
+      <OutboxRejectedList onRetryAll={() => void outbox.sync()} />
 
       <div className="bg-card space-y-2 rounded-lg border p-4">
         <div className="text-muted-foreground text-[11px] font-medium uppercase">Синхронизация</div>

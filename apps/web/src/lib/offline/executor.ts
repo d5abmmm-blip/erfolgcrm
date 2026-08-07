@@ -11,6 +11,7 @@
  */
 import { TRPCClientError } from '@trpc/client';
 import { enqueue, listPending, remove, update, type MutationKind, type OutboxItem } from './queue';
+import { getCurrentUserId } from './current-user';
 
 export type ExecResult<T> =
   | { status: 'ok'; data: T }
@@ -41,13 +42,15 @@ export async function executeOrQueue<P, T>(
   tenantSubdomain: string | null,
   /** Склейка повторов одной сущности — см. OutboxItem.dedupeKey. */
   dedupeKey?: string,
+  /** Номер заявки или название задачи — чтобы человек узнал запись глазами. */
+  label?: string,
 ): Promise<ExecResult<T>> {
   try {
     const data = await fn(payload);
     return { status: 'ok', data };
   } catch (err) {
     if (isNetworkError(err)) {
-      const item = await enqueue<P>(kind, payload, tenantSubdomain, dedupeKey);
+      const item = await enqueue<P>(kind, payload, tenantSubdomain, dedupeKey, label);
       return { status: 'queued', item };
     }
     return { status: 'error', error: err instanceof Error ? err : new Error(String(err)) };
@@ -55,21 +58,52 @@ export async function executeOrQueue<P, T>(
 }
 
 /**
+ * Сессия кончилась, пока человек работал без связи.
+ *
+ * Это НЕ отказ по существу: правка верная, просто её сейчас некому принять.
+ * Раньше очередь считала такой ответ обычной бизнес-ошибкой и стирала ВСЮ
+ * накопленную за смену работу — молча, одним числом в тосте.
+ */
+function isSessionExpired(err: unknown): boolean {
+  if (!(err instanceof TRPCClientError)) return false;
+  const code = (err.data as { code?: string } | null | undefined)?.code;
+  return code === 'UNAUTHORIZED';
+}
+
+/**
  * Воспроизведение: вытягивает все pending записи и пробует выполнить через
  * runner (tRPC vanilla client передаётся снаружи, чтобы не тащить React-зависимость).
  *
  * Семантика повторов:
- *  - сетевая ошибка → запись остаётся, attempts++
- *  - бизнес-ошибка (4xx/5xx с TRPC code) → запись удаляется (нечего повторять)
- *  - успех → запись удаляется
+ *  - успех                → запись удаляется;
+ *  - нет связи            → остаётся, attempts++, повторим сами;
+ *  - сессия кончилась     → остаётся ЧИСТОЙ, просим войти заново;
+ *  - отказ по существу    → ОСТАЁТСЯ с пометкой «не принято» и причиной,
+ *                           но сама больше не повторяется;
+ *  - запись чужая         → не трогаем вовсе, ждёт своего человека.
  *
- * Возвращает агрегат для UI badge.
+ * Ключевое отличие от прежнего поведения: ничего не удаляется молча. Раньше
+ * отказ стирал работу инженера навсегда, а он видел только число в тосте.
  */
 export interface SyncResult {
   succeeded: number;
-  failedSoft: number; // network — оставлены в очереди
-  failedHard: number; // business error — удалены
+  /** Нет связи — остались в очереди, повторим сами. */
+  failedSoft: number;
+  /** Отказ по существу — остались с пометкой, ждут человека. */
+  failedHard: number;
+  /** Записи другого сотрудника — пропущены. */
+  skippedOther: number;
+  /** Сервер ответил «вы не авторизованы» — нужен повторный вход. */
+  needsLogin: boolean;
 }
+
+const EMPTY_RESULT: SyncResult = {
+  succeeded: 0,
+  failedSoft: 0,
+  failedHard: 0,
+  skippedOther: 0,
+  needsLogin: false,
+};
 
 /**
  * Отправка идёт ровно одна за раз. Слушателей очереди несколько (оболочка
@@ -81,7 +115,7 @@ let syncInProgress = false;
 export async function syncOutbox(
   runner: (item: OutboxItem) => Promise<unknown>,
 ): Promise<SyncResult> {
-  if (syncInProgress) return { succeeded: 0, failedSoft: 0, failedHard: 0 };
+  if (syncInProgress) return { ...EMPTY_RESULT };
   syncInProgress = true;
   try {
     return await runSync(runner);
@@ -92,14 +126,22 @@ export async function syncOutbox(
 
 async function runSync(runner: (item: OutboxItem) => Promise<unknown>): Promise<SyncResult> {
   const items = await listPending();
-  let succeeded = 0;
-  let failedSoft = 0;
-  let failedHard = 0;
+  const currentUserId = getCurrentUserId();
+  const result: SyncResult = { ...EMPTY_RESULT };
   for (const item of items) {
+    // Уже отвергнутое сервером не долбим при каждом возврате связи —
+    // ждём, пока человек нажмёт «Повторить».
+    if (item.failedHard) continue;
+    // Чужая работа: инженер А вышел, вошёл Б. Отправить от имени Б нельзя
+    // (это его зарплата), стереть тоже нельзя — пусть дождётся автора.
+    if (item.userId && currentUserId && item.userId !== currentUserId) {
+      result.skippedOther++;
+      continue;
+    }
     try {
       await runner(item);
       await remove(item.id);
-      succeeded++;
+      result.succeeded++;
     } catch (err) {
       if (isNetworkError(err)) {
         await update({
@@ -107,12 +149,22 @@ async function runSync(runner: (item: OutboxItem) => Promise<unknown>): Promise<
           attempts: item.attempts + 1,
           lastError: err instanceof Error ? err.message : String(err),
         });
-        failedSoft++;
+        result.failedSoft++;
+      } else if (isSessionExpired(err)) {
+        // Правка верная — просто некому принять. Держим её ЧИСТОЙ, чтобы
+        // после входа ушла сама, и просим человека войти.
+        result.needsLogin = true;
+        result.failedSoft++;
       } else {
-        await remove(item.id);
-        failedHard++;
+        await update({
+          ...item,
+          attempts: item.attempts + 1,
+          failedHard: true,
+          lastError: err instanceof Error ? err.message : String(err),
+        });
+        result.failedHard++;
       }
     }
   }
-  return { succeeded, failedSoft, failedHard };
+  return result;
 }
