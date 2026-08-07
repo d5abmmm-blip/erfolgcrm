@@ -13,7 +13,14 @@
  */
 import { isNetworkError } from './executor';
 import { humanUploadError } from '../photo-upload-error';
-import { listPendingPhotos, removePhoto, updatePhoto, type PendingPhoto } from './photo-queue';
+import {
+  isPhotoSendable,
+  listPendingPhotos,
+  removePhoto,
+  updatePhoto,
+  type PendingPhoto,
+} from './photo-queue';
+import { getCurrentUserId } from './current-user';
 
 export interface PhotoSyncResult {
   succeeded: number;
@@ -21,6 +28,8 @@ export interface PhotoSyncResult {
   failedSoft: number;
   /** Не приняты по существу — остались, но ждут человека. */
   failedHard: number;
+  /** Снимки другого сотрудника — пропущены, ждут своего автора. */
+  skippedOther: number;
 }
 
 export type PhotoUploader = (item: PendingPhoto) => Promise<void>;
@@ -29,7 +38,7 @@ export type PhotoUploader = (item: PendingPhoto) => Promise<void>;
 let sendInProgress = false;
 
 export async function sendPendingPhotos(upload: PhotoUploader): Promise<PhotoSyncResult> {
-  if (sendInProgress) return { succeeded: 0, failedSoft: 0, failedHard: 0 };
+  if (sendInProgress) return { succeeded: 0, failedSoft: 0, failedHard: 0, skippedOther: 0 };
   sendInProgress = true;
   try {
     return await runSend(upload);
@@ -40,12 +49,19 @@ export async function sendPendingPhotos(upload: PhotoUploader): Promise<PhotoSyn
 
 async function runSend(upload: PhotoUploader): Promise<PhotoSyncResult> {
   const items = await listPendingPhotos();
+  const currentUserId = getCurrentUserId();
   let succeeded = 0;
   let failedSoft = 0;
   let failedHard = 0;
+  let skippedOther = 0;
   for (const item of items) {
     // Уже отвергнутое сервером не долбим при каждом возврате связи.
     if (item.failedHard) continue;
+    // Чужой снимок: уйдёт под чужой сессией и запишется на другого человека.
+    if (!isPhotoSendable(item, currentUserId)) {
+      skippedOther++;
+      continue;
+    }
     try {
       await upload(item);
       await removePhoto(item.id);
@@ -62,5 +78,5 @@ async function runSend(upload: PhotoUploader): Promise<PhotoSyncResult> {
       else failedHard++;
     }
   }
-  return { succeeded, failedSoft, failedHard };
+  return { succeeded, failedSoft, failedHard, skippedOther };
 }

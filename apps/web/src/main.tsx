@@ -6,6 +6,7 @@ import { AppToaster } from './components/AppToaster';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OutboxAutoSync } from './components/OutboxAutoSync';
 import { humanizeError } from './lib/error-message';
+import { MUTATION_DEFAULTS, QUERY_DEFAULTS } from './lib/query-defaults';
 import { restorePersistedQueries, startPersistingQueries } from './lib/offline/query-persist';
 import { ThemeProvider } from './lib/theme';
 import { showToast } from './lib/toast';
@@ -16,12 +17,12 @@ import '@fontsource-variable/golos-text';
 import './styles/globals.css';
 
 const queryClient = new QueryClient({
+  // Значения вынесены в lib/query-defaults.ts, чтобы тест мог поднять клиент
+  // ТАКИМ ЖЕ. Раньше тесты собирали свой — и годами проверяли не то
+  // приложение, которое стоит у инженера (см. networkMode у мутаций).
   defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
+    queries: QUERY_DEFAULTS,
+    mutations: MUTATION_DEFAULTS,
   },
   // Подстраховка на всё приложение: если сохранение не удалось и экран сам ничего
   // не показал — сотрудник увидит сообщение, а не решит, что данные записались.

@@ -12,8 +12,9 @@
  * молча выбрасывался, и записи, отклонённые сервером, исчезали бесследно.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { count, listPending, subscribe } from './queue';
-import { countPendingPhotos, subscribePhotos } from './photo-queue';
+import { useQueryClient } from '@tanstack/react-query';
+import { count, countSendable, subscribe } from './queue';
+import { countPendingPhotos, countSendablePhotos, subscribePhotos } from './photo-queue';
 import { syncOutbox, type SyncResult } from './executor';
 import { sendPendingPhotos, type PhotoSyncResult } from './photo-sender';
 import { runOutboxItem, uploadPendingPhoto } from './runner';
@@ -86,22 +87,42 @@ function plural(n: number, one: string, few: string, many: string): string {
 }
 
 export interface OutboxState {
+  /** Сколько всего лежит в очередях — это число видит человек. */
   pending: number;
+  /**
+   * Сколько из них реально уйдёт при следующей отправке.
+   *
+   * Отличается от `pending` застрявшим: отклонённое сервером ждёт человека,
+   * чужое — своего автора. Раньше этой величины не было, и приложение
+   * бесконечно запускало отправку, которая ничего не отправляла: очередь
+   * никогда не пустела, а каждый круг перезапускал сам себя.
+   */
+  sendable: number;
   isOnline: boolean;
   isSyncing: boolean;
 }
 
 export function useOutbox() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<OutboxState>({
     pending: 0,
+    sendable: 0,
     isOnline: typeof navigator === 'undefined' ? true : navigator.onLine,
     isSyncing: false,
   });
 
   const refreshCount = useCallback(async () => {
-    const [mutations, photos] = await Promise.all([count(), countPendingPhotos()]);
+    const [mutations, photos, sendableMutations, sendablePhotos] = await Promise.all([
+      count(),
+      countPendingPhotos(),
+      countSendable(),
+      countSendablePhotos(),
+    ]);
     const n = mutations + photos;
-    setState((s) => (s.pending === n ? s : { ...s, pending: n }));
+    const s2 = sendableMutations + sendablePhotos;
+    setState((s) =>
+      s.pending === n && s.sendable === s2 ? s : { ...s, pending: n, sendable: s2 },
+    );
   }, []);
 
   useEffect(() => {
@@ -137,23 +158,28 @@ export function useOutbox() {
       const r = await syncOutbox(runOutboxItem);
       const photos = await sendPendingPhotos(uploadPendingPhoto);
       await refreshCount();
+      // Что-то реально ушло — перечитываем экраны. Без этого инженер видит
+      // «Отправлено 1», а его комментарий в истории не появляется: данные на
+      // сервере уже новые, а на экране лежат старые. Так недолго и написать
+      // ту же работу второй раз.
+      if (r.succeeded > 0 || photos.succeeded > 0) {
+        await queryClient.invalidateQueries();
+      }
       reportSync(r, photos);
       return r;
     } finally {
       setState((s) => ({ ...s, isSyncing: false }));
     }
-  }, [refreshCount]);
+  }, [refreshCount, queryClient]);
 
-  // Авто-синк при возврате онлайн, если что-то накопилось
+  // Авто-синк при возврате онлайн, если накопилось то, что реально уйдёт.
+  // Считаем именно `sendable`: по `pending` этот эффект крутился вечно —
+  // застрявшая запись не убывала, условие оставалось истинным, а смена
+  // isSyncing туда-обратно перезапускала эффект на новый круг.
   useEffect(() => {
-    if (!state.isOnline) return;
-    void (async () => {
-      const [items, photos] = await Promise.all([listPending(), countPendingPhotos()]);
-      if ((items.length > 0 || photos > 0) && !state.isSyncing) {
-        await sync();
-      }
-    })();
-  }, [state.isOnline, state.isSyncing, sync]);
+    if (!state.isOnline || state.isSyncing || state.sendable === 0) return;
+    void sync();
+  }, [state.isOnline, state.isSyncing, state.sendable, sync]);
 
   return { ...state, sync };
 }

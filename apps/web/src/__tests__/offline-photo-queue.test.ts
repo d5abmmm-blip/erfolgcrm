@@ -108,7 +108,7 @@ describe('отправка накопленных фото', () => {
 
     const r = await sendPendingPhotos(upload);
 
-    expect(r).toEqual({ succeeded: 1, failedSoft: 0, failedHard: 0 });
+    expect(r).toMatchObject({ succeeded: 1, failedSoft: 0, failedHard: 0 });
     expect(await countPendingPhotos()).toBe(0);
     expect(upload).toHaveBeenCalledOnce();
   });
@@ -119,7 +119,7 @@ describe('отправка накопленных фото', () => {
 
     const r = await sendPendingPhotos(upload);
 
-    expect(r).toEqual({ succeeded: 0, failedSoft: 1, failedHard: 0 });
+    expect(r).toMatchObject({ succeeded: 0, failedSoft: 1, failedHard: 0 });
     const [item] = await listPendingPhotos();
     expect(item!.attempts).toBe(1);
     expect(item!.failedHard).toBeFalsy();
@@ -136,7 +136,7 @@ describe('отправка накопленных фото', () => {
     const upload = vi.fn().mockRejectedValue(new Error('storage PUT 403'));
 
     const first = await sendPendingPhotos(upload);
-    expect(first).toEqual({ succeeded: 0, failedSoft: 0, failedHard: 1 });
+    expect(first).toMatchObject({ succeeded: 0, failedSoft: 0, failedHard: 1 });
 
     const [item] = await listPendingPhotos();
     expect(item!.failedHard).toBe(true);
@@ -144,7 +144,7 @@ describe('отправка накопленных фото', () => {
 
     // Второй заход трогать его уже не должен.
     const second = await sendPendingPhotos(upload);
-    expect(second).toEqual({ succeeded: 0, failedSoft: 0, failedHard: 0 });
+    expect(second).toMatchObject({ succeeded: 0, failedSoft: 0, failedHard: 0 });
     expect(upload).toHaveBeenCalledOnce();
     expect(await countPendingPhotos()).toBe(1);
   });
@@ -186,7 +186,7 @@ describe('отправка накопленных фото', () => {
 
     const r = await sendPendingPhotos(upload);
 
-    expect(r).toEqual({ succeeded: 1, failedSoft: 1, failedHard: 1 });
+    expect(r).toMatchObject({ succeeded: 1, failedSoft: 1, failedHard: 1 });
     expect(await countPendingPhotos()).toBe(2);
   });
 });

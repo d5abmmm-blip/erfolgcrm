@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { CalendarClock, CheckCircle2, Circle, ClipboardList, Loader2 } from 'lucide-react';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
+import { QUEUED_MUTATION } from '../../lib/query-defaults';
 import { cn } from '../../lib/utils';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { fmtDue } from '../../lib/dates';
@@ -41,7 +42,7 @@ export function MobileTasksPage() {
   );
   const tasks = (list.data ?? []) as Task[];
 
-  const setDoneM = trpc.tasks.setDone.useMutation();
+  const setDoneM = trpc.tasks.setDone.useMutation(QUEUED_MUTATION);
   const [busy, setBusy] = useState<string | null>(null);
   // Оптимистичная отметка: id → желаемое isDone. Нужна для мгновенной реакции и
   // особенно для офлайна (invalidate без сети не перечитает данные — галочка

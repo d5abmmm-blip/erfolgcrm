@@ -193,6 +193,26 @@ export async function count(): Promise<number> {
   return db.count(STORE);
 }
 
+/**
+ * Сколько записей реально уйдёт при следующей отправке.
+ *
+ * Отличается от `count()` тем, что не считает застрявшее: отклонённое
+ * сервером (ждёт человека) и чужое (ждёт своего автора). Раньше такие
+ * записи считались наравне с живыми, и приложение бесконечно запускало
+ * отправку, которая ничего не отправляла, — телефон молотил впустую.
+ */
+export async function countSendable(): Promise<number> {
+  const currentUserId = getCurrentUserId();
+  const all = await listPending();
+  return all.filter((i) => isSendable(i, currentUserId)).length;
+}
+
+/** Запись можно отправить прямо сейчас: не отклонена сервером и не чужая. */
+export function isSendable(item: OutboxItem, currentUserId: string | null): boolean {
+  if (item.failedHard) return false;
+  return !(item.userId && currentUserId && item.userId !== currentUserId);
+}
+
 // --- live subscription -----------------------------------------------------
 // Простая шина: подписчики получают пуш при любых изменениях очереди,
 // чтобы UI badge перерисовывался без поллинга.

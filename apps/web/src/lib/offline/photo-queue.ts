@@ -16,6 +16,7 @@
  * на iOS. Blob собирается обратно при отправке и для превью — `photoBlob()`.
  */
 import { openDB, type IDBPDatabase } from 'idb';
+import { getCurrentUserId } from './current-user';
 
 export type AttachmentKind =
   | 'ticket_photo'
@@ -51,6 +52,16 @@ export interface PendingPhoto {
    * билось бы в стену при каждом возврате связи. Ждёт решения человека.
    */
   failedHard?: boolean;
+  /**
+   * Кто снял. Телефон в бригаде переходит из рук в руки: без автора снимки
+   * инженера А уезжали бы на сервер под сессией Б и записывались как его.
+   * У правок такое поле уже есть — у фото не было, и защита работала
+   * ровно наполовину.
+   *
+   * null у снимков, сделанных до появления поля — отправляем как раньше,
+   * иначе они застрянут навсегда.
+   */
+  userId?: string | null;
   tenantSubdomain: string | null;
 }
 
@@ -135,6 +146,7 @@ export async function enqueuePhoto(input: EnqueuePhotoInput): Promise<PendingPho
     bytes: await input.file.arrayBuffer(),
     createdAt: Date.now(),
     attempts: 0,
+    userId: getCurrentUserId(),
     tenantSubdomain: input.tenantSubdomain,
     ...(input.lastError ? { lastError: input.lastError } : {}),
     ...(input.failedHard ? { failedHard: true } : {}),
@@ -187,6 +199,23 @@ export async function retryPhoto(id: string): Promise<void> {
 export async function countPendingPhotos(): Promise<number> {
   const db = await getDb();
   return db.count(STORE);
+}
+
+/**
+ * Сколько снимков реально уйдёт при следующей отправке: без отклонённых
+ * сервером и без чужих. Именно это число имеет смысл показывать человеку
+ * и по нему решать, запускать ли отправку вообще.
+ */
+export async function countSendablePhotos(): Promise<number> {
+  const currentUserId = getCurrentUserId();
+  const all = await listPendingPhotos();
+  return all.filter((p) => isPhotoSendable(p, currentUserId)).length;
+}
+
+/** Снимок можно отправить прямо сейчас: не отклонён и не чужой. */
+export function isPhotoSendable(photo: PendingPhoto, currentUserId: string | null): boolean {
+  if (photo.failedHard) return false;
+  return !(photo.userId && currentUserId && photo.userId !== currentUserId);
 }
 
 export async function pendingPhotoBytes(): Promise<number> {
