@@ -74,6 +74,13 @@ export interface TicketListItem {
    * и без этого поля инженеру нечем опознать аппарат на выезде.
    */
   assetInventoryNumber: string | null;
+  /**
+   * Штрих-код заявки — то, что напечатано на наклейке и что читает камера
+   * сканера. В списке он нужен ради ОФЛАЙНА: список сохраняется в память
+   * телефона, и без этого поля инженер без связи не может опознать аппарат
+   * по наклейке — а сканер он открывает ровно там, где связи нет.
+   */
+  barcode: string;
   assignedEngineerId: string | null;
   assignedEngineerName: string | null;
   slaTargetAt: Date | null;
@@ -416,6 +423,9 @@ export async function listTickets(
         assetModel: assets.model,
         assetSerialNumber: assets.serialNumber,
         assetInventoryNumber: assets.inventoryNumber,
+        // Нужен сканеру в офлайне: список лежит в памяти телефона, наклейка
+        // на аппарате несёт именно этот код (см. TicketListItem.barcode).
+        barcode: tickets.barcode,
         assignedEngineerId: tickets.assignedEngineerId,
         assignedEngineerName: users.fullName,
         slaTargetAt: tickets.slaTargetAt,

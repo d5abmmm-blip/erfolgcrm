@@ -12,8 +12,10 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { trpc } from '../../lib/trpc';
 import { pickScanResult, type ScanMatch } from '../../lib/scan-pick';
+import { collectCachedTickets, findLocalScanMatches } from '../../lib/scan-local';
 
 /** Capabilities/constraints фонарика в TS DOM не описаны — сужаем сами. */
 type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean };
@@ -36,7 +38,16 @@ export function MobileScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  /** Беда с камерой: не разрешили, не открылась. */
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Ответ поиска — отдельно от беды с камерой.
+   *
+   * Раньше это было одно поле, и два сообщения затирали друг друга: после
+   * неудачного поиска мы сами включаем камеру, и её сообщение (или её очистка)
+   * съедало ответ «не нашли». Инженер видел что угодно, кроме ответа на свой код.
+   */
+  const [searchNote, setSearchNote] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manual, setManual] = useState('');
   const [searching, setSearching] = useState(false);
@@ -45,7 +56,10 @@ export function MobileScanPage() {
   const lastMissRef = useRef<string | null>(null);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  /** Искали по памяти телефона, а не по базе — это надо сказать словами. */
+  const [localOnly, setLocalOnly] = useState(false);
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     return () => {
@@ -55,20 +69,52 @@ export function MobileScanPage() {
     };
   }, []);
 
+  /** Заявки, сохранённые на диск, — по ним ищем, когда связи нет. */
+  const cachedTickets = () =>
+    collectCachedTickets(
+      queryClient.getQueriesData({ queryKey: [['tickets', 'myList']] }).map(([, data]) => data),
+    );
+
   const handleHit = async (text: string) => {
     if (searching) return;
     setSearching(true);
-    setError(null);
+    setSearchNote(null);
     setMatches(null);
+    setLocalOnly(false);
     try {
-      const found = await utils.tickets.search.fetch({ q: text });
-      const pick = pickScanResult(found);
+      /**
+       * Без связи в сеть НЕ ХОДИМ ВООБЩЕ.
+       *
+       * Не «попробуем и поймаем ошибку»: у запросов режим `online`, и при
+       * настоящем офлайне react-query ставит запрос на паузу — обещание не
+       * завершается никогда, ни `catch`, ни `finally` не сработают, и экран
+       * остаётся с вечным «Ищем заявку…». Именно так это и было.
+       */
+      let found: ScanMatch[] | null = null;
+      if (navigator.onLine) {
+        try {
+          found = await utils.tickets.search.fetch({ q: text });
+        } catch {
+          // Связь есть по мнению телефона, но сервер недоступен (подвал,
+          // «палочка» без интернета) — не сдаёмся, ищем по сохранённому.
+          found = null;
+        }
+      }
+      const byMemory = found === null;
+      const result = found ?? findLocalScanMatches(cachedTickets(), text);
+      setLocalOnly(byMemory);
+
+      const pick = pickScanResult(result);
       if (pick.kind === 'one') {
         navigate(`/m/tickets/${pick.id}`);
       } else if (pick.kind === 'many') {
         setMatches(pick.matches);
       } else {
-        setError(`Не нашли заявку по коду «${text}». Наведите на другой код.`);
+        setSearchNote(
+          byMemory
+            ? `Нет связи. Среди ваших заявок в памяти телефона код «${text}» не найден — по чужим заявкам без связи искать нечем.`
+            : `Не нашли заявку по коду «${text}». Наведите на другой код.`,
+        );
         // Раньше камера тут гасла, и инженер у аппарата жал «Включить камеру»
         // заново на каждый чужой штрих-код. Возвращаем её сами, а этот код
         // запоминаем — иначе он попадёт в кадр снова и закружит поиск.
@@ -76,7 +122,7 @@ export function MobileScanPage() {
         void startCamera();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка поиска');
+      setSearchNote(e instanceof Error ? e.message : 'Ошибка поиска');
     } finally {
       setSearching(false);
     }
@@ -242,8 +288,15 @@ export function MobileScanPage() {
 
       {matches && (
         <div className="bg-card overflow-hidden rounded-lg border">
-          <div className="border-b px-3 py-2 text-sm font-semibold">
-            Найдено несколько заявок — выберите
+          <div className="border-b px-3 py-2">
+            <div className="text-sm font-semibold">Найдено несколько заявок — выберите</div>
+            {/* Без связи искали только по своим сохранённым заявкам — человек
+                должен знать, что список мог быть и полнее. */}
+            {localOnly && (
+              <div className="text-warning mt-0.5 text-[11px]">
+                Нет связи — искали среди ваших заявок в памяти телефона
+              </div>
+            )}
           </div>
           <ul className="divide-y">
             {matches.map((m) => (
@@ -287,6 +340,15 @@ export function MobileScanPage() {
           </button>
         </div>
       </form>
+
+      {/* Ответ на код и беда с камерой — два разных сообщения, живут рядом.
+          Раньше это было одно поле, и второе съедало первое. */}
+      {searchNote && (
+        <div className="bg-warning/15 text-warning border-warning/40 flex items-start gap-2 rounded-md border p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{searchNote}</span>
+        </div>
+      )}
 
       {error && (
         <div className="bg-destructive/10 text-destructive border-destructive/30 flex items-start gap-2 rounded-md border p-3 text-sm">
