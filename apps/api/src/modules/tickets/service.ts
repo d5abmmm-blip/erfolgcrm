@@ -54,6 +54,7 @@ import {
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import { clearUnansweredCount, snoozeAsk } from '../../lib/nudge-state';
+import { assertWorkOrderEditable } from '../work-orders/edit-window';
 
 async function ensureRefsExist(
   db: Db,
@@ -931,6 +932,27 @@ export async function assertEngineerMayEditTicketId(
     assignedEngineerId: t.assignedEngineerId,
     helperEngineerIds: t.helperEngineers.map((e) => e.userId),
   });
+}
+
+/**
+ * Полная проверка права ПРАВИТЬ НАРЯД: своя ли заявка И не закрыта ли она
+ * слишком давно. Обе проверки здесь, потому что обе требуют одну и ту же
+ * заявку — читаем её один раз.
+ */
+export async function assertMayEditWorkOrderOfTicket(
+  db: Db,
+  tenantId: string,
+  session: ActorSession,
+  ticketId: string,
+  now: number = Date.now(),
+): Promise<void> {
+  const t = await repoGetTicket(db, tenantId, ticketId);
+  if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  assertEngineerMayEdit(session, {
+    assignedEngineerId: t.assignedEngineerId,
+    helperEngineerIds: t.helperEngineers.map((e) => e.userId),
+  });
+  assertWorkOrderEditable(session.role, { status: t.status, closedAt: t.closedAt }, now);
 }
 
 /**

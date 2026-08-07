@@ -24,7 +24,7 @@ import {
   type WorkOrderLineDto,
 } from './repository';
 import { getTicket } from '../tickets/repository';
-import { assertEngineerMayEditTicketId } from '../tickets/service';
+import { assertMayEditWorkOrderOfTicket } from '../tickets/service';
 import { phraseWithLlm } from '../ai-assistant/proactive';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
@@ -131,7 +131,7 @@ export async function draftRepairDescriptionQuery(
 }
 
 export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise<WorkOrderDto> {
-  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
   const result = await repoGetOrCreate(ctx.db, ctx.tenant.id, ticketId);
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
@@ -171,7 +171,7 @@ export async function upsertLineCmd(
 ): Promise<{ id: string; workOrderId: string }> {
   // Строка наряда — это деньги: от неё считается зарплата (процент со строки).
   // Инженер пишет строки только в наряд СВОЕЙ заявки.
-  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, input.ticketId);
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, input.ticketId);
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, input.ticketId);
   const result = await repoUpsertLine(ctx.db, ctx.tenant.id, workOrderId, input.lineId ?? null, {
     lineType: input.lineType,
@@ -202,7 +202,7 @@ export async function upsertLineCmd(
 }
 
 export async function deleteLineCmd(ctx: CmdCtx, ticketId: string, lineId: string): Promise<void> {
-  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
   await repoDeleteLine(ctx.db, ctx.tenant.id, workOrderId, lineId);
   await writeAudit(ctx.db, ctx.tenant.id, {
@@ -221,7 +221,7 @@ export async function updateHeaderCmd(
   ticketId: string,
   patch: UpdateHeaderInput,
 ): Promise<void> {
-  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
   await repoUpdateHeader(ctx.db, ctx.tenant.id, workOrderId, patch);
   await writeAudit(ctx.db, ctx.tenant.id, {

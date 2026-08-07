@@ -43,6 +43,7 @@ import { PromptDialog } from '../components/ui/PromptDialog';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { WorkOrderEditor, kopecksToRub } from '../components/WorkOrderEditor';
 import { engineerOwnsTicket } from '../lib/engineer-ticket-access';
+import { mayEditWorkOrder } from '../lib/work-order-window';
 import { TicketPayments } from '../components/TicketPayments';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { IntakeChecklistDialog, type ChecklistKind } from '../components/IntakeChecklistDialog';
@@ -115,7 +116,9 @@ export function TicketCardPage() {
   const canEditWorkOrder =
     isStaff ||
     (role === 'engineer' &&
-      engineerOwnsTicket({ id: me.data?.user.id ?? '', role: 'engineer' }, ticket.data));
+      engineerOwnsTicket({ id: me.data?.user.id ?? '', role: 'engineer' }, ticket.data) &&
+      // Наряд закрытой заявки инженер правит три дня — дальше руководитель.
+      mayEditWorkOrder(role, ticket.data));
   // Карточка клиента — только staff (clients.get = staffProcedure).
   const clientFull = trpc.clients.get.useQuery(
     { id: ticket.data?.clientId ?? '' },
