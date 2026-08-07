@@ -352,6 +352,12 @@ export async function changeStatusCmd(
 ): Promise<{ id: string; from: TicketStatus; to: TicketStatus }> {
   const before = await repoGetTicket(ctx.db, ctx.tenant.id, id);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  // Инженер меняет статус только своих заявок: `engineerProcedure` — это
+  // проверка роли, а не принадлежности.
+  assertEngineerMayEdit(ctx.session, {
+    assignedEngineerId: before.assignedEngineerId,
+    helperEngineerIds: before.helperEngineers.map((e) => e.userId),
+  });
 
   // reopen из закрытого/отменённого — только director (RBAC проверяется в роутере),
   // здесь валидируем согласованность переходов
@@ -492,6 +498,8 @@ export async function addTicketNoteCmd(
   ticketId: string,
   comment: string,
 ): Promise<{ id: string }> {
+  // Комментарий инженер пишет только в свою заявку.
+  await assertEngineerMayEditTicketId(ctx.db, ctx.tenant.id, ctx.session, ticketId);
   const result = await repoAddNote(ctx.db, ctx.tenant.id, ctx.session.userId, ticketId, comment);
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
@@ -735,14 +743,11 @@ export async function engineerReactCmd(
 ): Promise<EngineerReactResult> {
   const before = await repoGetTicket(ctx.db, ctx.tenant.id, ticketId);
   if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
-  if (ctx.session.role === 'engineer') {
-    const isMine =
-      before.assignedEngineerId === ctx.session.userId ||
-      before.helperEngineers.some((e) => e.userId === ctx.session.userId);
-    if (!isMine) {
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'Это не ваша заявка' });
-    }
-  }
+  // Была своя копия этой проверки — теперь общее определение «своей заявки».
+  assertEngineerMayEdit(ctx.session, {
+    assignedEngineerId: before.assignedEngineerId,
+    helperEngineerIds: before.helperEngineers.map((e) => e.userId),
+  });
   if (before.status === 'closed' || before.status === 'cancelled') {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Заявка уже закрыта' });
   }
@@ -858,24 +863,74 @@ export async function getTicketQuery(db: Db, tenant: ResolvedTenant, id: string)
 /** Роль+пользователь, достаточные для проверки «своя ли заявка». */
 type ActorSession = { role: 'director' | 'dispatcher' | 'engineer'; userId: string };
 
+/** Заявка глазами проверки доступа: кто отвечает и кто помогает. */
+export interface TicketOwnership {
+  assignedEngineerId: string | null;
+  helperEngineerIds?: string[];
+}
+
+/**
+ * «Своя» заявка инженера = он ответственный ИЛИ помощник.
+ *
+ * Помощник выполнял ремонт наравне с ответственным (см. ticket_engineers,
+ * мигр. 0080) — без этой ветки он видел бы заявку у себя в списке и упирался
+ * в «не ваша заявка». Директор и диспетчер не ограничены.
+ *
+ * Чистая функция: одно определение «своей заявки» и на документы, и на правки.
+ */
+export function engineerMayEditTicket(session: ActorSession, ticket: TicketOwnership): boolean {
+  if (session.role !== 'engineer') return true;
+  if (ticket.assignedEngineerId === session.userId) return true;
+  return (ticket.helperEngineerIds ?? []).includes(session.userId);
+}
+
 /**
  * Инженер работает с документами только СВОИХ заявок (директор/диспетчер — любых).
  * Акт печатает тот, кто выполнял ремонт.
  */
-export function assertEngineerOwnsTicket(
+export function assertEngineerOwnsTicket(session: ActorSession, ticket: TicketOwnership): void {
+  if (engineerMayEditTicket(session, ticket)) return;
+  throw new TRPCError({
+    code: 'FORBIDDEN',
+    message: 'Документы по заявке доступны только назначенному инженеру',
+  });
+}
+
+/**
+ * Инженер МЕНЯЕТ только свои заявки. Смотреть можно любые — приехал на
+ * объект, отсканировал аппарат, надо понять, что это. Менять — нет:
+ * `engineerProcedure` проверяет РОЛЬ, а не принадлежность, и без этой
+ * проверки инженер мог сменить статус чужой заявки, написать в неё
+ * комментарий и добавить строку в чужой наряд с любой ценой и любым
+ * исполнителем — а от строк наряда считается зарплата.
+ *
+ * Решение владельца 2026-08-07: «смотреть всем, менять — только свои».
+ */
+export function assertEngineerMayEdit(session: ActorSession, ticket: TicketOwnership): void {
+  if (engineerMayEditTicket(session, ticket)) return;
+  throw new TRPCError({
+    code: 'FORBIDDEN',
+    message: 'Это не ваша заявка — смотреть можно, менять нельзя. Обратитесь к диспетчеру.',
+  });
+}
+
+/**
+ * То же, но заявку сначала надо прочитать из базы: у команд на входе только
+ * её идентификатор.
+ */
+export async function assertEngineerMayEditTicketId(
+  db: Db,
+  tenantId: string,
   session: ActorSession,
-  ticket: { assignedEngineerId: string | null; helperEngineerIds?: string[] },
-): void {
+  ticketId: string,
+): Promise<void> {
   if (session.role !== 'engineer') return;
-  // Помощник ремонт выполнял наравне с ответственным — значит и акт печатает.
-  // Без этой ветки он видел бы заявку у себя и упирался в «не ваша заявка».
-  const isHelper = (ticket.helperEngineerIds ?? []).includes(session.userId);
-  if (ticket.assignedEngineerId !== session.userId && !isHelper) {
-    throw new TRPCError({
-      code: 'FORBIDDEN',
-      message: 'Документы по заявке доступны только назначенному инженеру',
-    });
-  }
+  const t = await repoGetTicket(db, tenantId, ticketId);
+  if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'Заявка не найдена' });
+  assertEngineerMayEdit(session, {
+    assignedEngineerId: t.assignedEngineerId,
+    helperEngineerIds: t.helperEngineers.map((e) => e.userId),
+  });
 }
 
 /**

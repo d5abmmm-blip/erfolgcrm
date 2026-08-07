@@ -3,6 +3,7 @@ import { ChevronLeft, Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { WorkOrderEditor } from '../../components/WorkOrderEditor';
 import { QueryError } from '../../components/QueryError';
+import { engineerOwnsTicket } from '../../lib/engineer-ticket-access';
 
 /**
  * /m/tickets/:id/work-log — журнал работ для инженера.
@@ -46,7 +47,14 @@ export function MobileWorkLogPage() {
     );
   }
   const role = me.data?.user.role;
-  const canEdit = role === 'engineer' || role === 'dispatcher' || role === 'director';
+  // Инженер правит наряд только по СВОЕЙ заявке (ответственный или помощник) —
+  // сервер с 2026-08-07 чужие правки не принимает, и экран не должен давать
+  // вводить то, что всё равно откажут.
+  const isMine = engineerOwnsTicket(
+    me.data ? { id: me.data.user.id, role: me.data.user.role } : undefined,
+    ticket.data,
+  );
+  const canEdit = (role === 'engineer' && isMine) || role === 'dispatcher' || role === 'director';
   const canEditVat = role === 'dispatcher' || role === 'director';
 
   return (
@@ -57,6 +65,12 @@ export function MobileWorkLogPage() {
       >
         <ChevronLeft className="h-4 w-4" />К заявке {ticket.data.ticketNumber}
       </Link>
+
+      {!canEdit && role === 'engineer' && (
+        <div className="bg-warning/15 text-warning border-warning/40 rounded-lg border p-3 text-sm">
+          Это не ваша заявка — наряд можно смотреть, но не менять.
+        </div>
+      )}
 
       <WorkOrderEditor
         ticketId={id}
