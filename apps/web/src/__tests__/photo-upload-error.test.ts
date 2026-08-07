@@ -7,7 +7,7 @@
  * замыкании обработчика.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { humanUploadError } from '../components/PhotoUploader';
+import { humanUploadError } from '../lib/photo-upload-error';
 
 function setOnline(value: boolean) {
   Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value });
