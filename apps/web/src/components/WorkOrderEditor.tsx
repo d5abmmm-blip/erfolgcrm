@@ -1068,14 +1068,70 @@ function RowInputs({
     if (!controlled) setVals(initial);
   }, [initial.name, initial.unit, initial.quantity, initial.unitPriceRub]);
 
+  /**
+   * ПУСТОЕ ЧИСЛО — НЕ НОЛЬ (решение владельца).
+   *
+   * Инженер стирает количество, чтобы набрать заново, и отвлекается. Раньше
+   * строка уходила с нулём: клиенту выставили меньше, инженеру начислили
+   * меньше (сделка — процент от строки), а в наряде это выглядело как обычная
+   * строка. Теперь пустое поле не сохраняется — возвращаем последнее нормальное
+   * число и говорим словами. Набранный руками «0» остаётся разрешён: бесплатно
+   * по гарантии бывает, и мешать работать нельзя.
+   */
+  const lastGood = useRef({ quantity: initial.quantity, unitPriceRub: initial.unitPriceRub });
+  const [emptyField, setEmptyField] = useState<'quantity' | 'unitPriceRub' | null>(null);
+  useEffect(() => {
+    if (!controlled) {
+      lastGood.current = { quantity: initial.quantity, unitPriceRub: initial.unitPriceRub };
+    }
+  }, [initial.quantity, initial.unitPriceRub]);
+
+  /** Пустое число заменяем последним нормальным — ноль тут появиться не должен. */
+  const withNumbers = (v: typeof vals) => ({
+    ...v,
+    quantity: v.quantity.trim() === '' ? lastGood.current.quantity : v.quantity,
+    unitPriceRub: v.unitPriceRub.trim() === '' ? lastGood.current.unitPriceRub : v.unitPriceRub,
+  });
+
   // Свежие значения для записи по уходу с экрана: она случается вне отрисовки.
   const current = useRef(vals);
   current.current = vals;
-  useFlushOnLeave(() => onLeave?.(current.current));
+  // Ушли с экрана с пустым полем — на сервер уедет прежнее число, а не ноль:
+  // подсказку человек уже не увидит, значит и молча портить строку нельзя.
+  useFlushOnLeave(() => onLeave?.(withNumbers(current.current)));
 
   const update = (patch: Partial<typeof vals>) => {
     setVals((prev) => ({ ...prev, ...patch }));
-    onChange?.(patch);
+
+    // Наверх пустое число НЕ отдаём. Черновик строки — то, что реально уедет
+    // на сервер: если положить туда пустоту, сохранение по СОСЕДНЕМУ полю
+    // (ушёл курсор из названия) записало бы ноль. В самом поле пусто остаётся —
+    // человек ведь набирает число заново.
+    const forParent: Partial<typeof vals> = { ...patch };
+    if (forParent.quantity?.trim() === '') delete forParent.quantity;
+    if (forParent.unitPriceRub?.trim() === '') delete forParent.unitPriceRub;
+    if (Object.keys(forParent).length > 0) onChange?.(forParent);
+
+    if (patch.quantity !== undefined && patch.quantity.trim() !== '') {
+      lastGood.current.quantity = patch.quantity;
+    }
+    if (patch.unitPriceRub !== undefined && patch.unitPriceRub.trim() !== '') {
+      lastGood.current.unitPriceRub = patch.unitPriceRub;
+    }
+    // Человек снова печатает — подсказка своё дело сделала.
+    setEmptyField(null);
+  };
+
+  /** Уход курсора из поля с числом. Пустое — возвращаем, а не сохраняем. */
+  const numberBlur = (field: 'quantity' | 'unitPriceRub', value: string) => {
+    if (value.trim() === '') {
+      const restored = lastGood.current[field];
+      setVals((prev) => ({ ...prev, [field]: restored }));
+      onChange?.({ [field]: restored });
+      setEmptyField(field);
+      return;
+    }
+    onFieldBlur(field, value, vals);
   };
 
   return (
@@ -1127,9 +1183,14 @@ function RowInputs({
           value={vals.quantity}
           disabled={!canEdit}
           onChange={(e) => update({ quantity: e.target.value })}
-          onBlur={(e) => onFieldBlur('quantity', e.target.value, vals)}
+          onBlur={(e) => numberBlur('quantity', e.target.value)}
           className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
+        {emptyField === 'quantity' && (
+          <div className="text-destructive mt-0.5 text-right text-[11px]" role="status">
+            Количество не может быть пустым — вернули прежнее
+          </div>
+        )}
       </td>
       <td className="px-3 py-1.5">
         <input
@@ -1139,9 +1200,14 @@ function RowInputs({
           value={vals.unitPriceRub}
           disabled={!canEdit}
           onChange={(e) => update({ unitPriceRub: e.target.value })}
-          onBlur={(e) => onFieldBlur('unitPriceRub', e.target.value, vals)}
+          onBlur={(e) => numberBlur('unitPriceRub', e.target.value)}
           className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1 text-right text-sm tabular-nums outline-none focus:ring-2"
         />
+        {emptyField === 'unitPriceRub' && (
+          <div className="text-destructive mt-0.5 text-right text-[11px]" role="status">
+            Цена не может быть пустой — вернули прежнюю
+          </div>
+        )}
       </td>
       <td className="px-3 py-1.5 text-right tabular-nums">{kopecksToRub(amountKopecks)}</td>
       <td className="px-2 py-1.5 text-center">
