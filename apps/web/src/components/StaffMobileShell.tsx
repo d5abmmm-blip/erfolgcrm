@@ -12,6 +12,8 @@ import {
   Monitor,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
+import { resetOfflineMemory } from '../lib/offline/session-reset';
 import { cn } from '../lib/utils';
 import { NAV_GROUPS, NAV_ITEMS, ROLE_LABELS, isNavItemVisible, type Role } from '../lib/nav';
 import { GlobalSearchModal } from './GlobalSearchModal';
@@ -53,7 +55,13 @@ const TABS: Tab[] = [
 export function StaffMobileShell({ children, session, onUseFullVersion }: Props) {
   const [location] = useLocation();
   const utils = trpc.useUtils();
-  const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
+  const queryClient = useQueryClient();
+  const logout = trpc.auth.logout.useMutation({
+    onSuccess: async () => {
+      await resetOfflineMemory(queryClient);
+      await utils.auth.me.invalidate();
+    },
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 

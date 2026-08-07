@@ -2,6 +2,8 @@ import { useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ClipboardList, ListChecks, Package, ScanLine, User, CloudOff, Cloud } from 'lucide-react';
 import { useOutbox } from '../lib/offline/useOutbox';
+import { useLastSyncAt } from '../lib/offline/last-sync';
+import { offlineDataAgeLabel } from '../lib/offline/persisted-queries';
 import { useAppViewportLock } from '../lib/use-app-viewport-lock';
 import { cn } from '../lib/utils';
 import type { ModuleKey } from '../lib/modules';
@@ -55,6 +57,9 @@ const NAV: Array<{
 export function MobileShell({ children, session }: Props) {
   const [location] = useLocation();
   const outbox = useOutbox();
+  // Возраст данных в офлайне. Показать вчерашний список как сегодняшний —
+  // хуже, чем не показать ничего, поэтому время видно всегда, пока нет связи.
+  const dataAge = offlineDataAgeLabel(useLastSyncAt());
 
   // Экран ведёт себя как приложение: без зума пальцами и «резинового» отскока.
   // Снимается автоматически при уходе с /m/* (размонтировании оболочки).
@@ -111,6 +116,16 @@ export function MobileShell({ children, session }: Props) {
           onSync={() => void outbox.sync()}
         />
       </header>
+
+      {/* Без связи приложение работает по сохранённой копии. Полоса говорит об
+          этом прямо и называет время: инженер сам решит, можно ли доверять
+          этому списку, или лучше выйти туда, где ловит. */}
+      {!outbox.isOnline && (
+        <div className="bg-warning/15 text-warning border-warning/30 flex items-center gap-2 border-b px-3 py-1.5 text-[11px] font-medium">
+          <CloudOff className="h-3.5 w-3.5 shrink-0" />
+          <span>Нет связи{dataAge ? ` · ${dataAge}` : ' · данные могут быть устаревшими'}</span>
+        </div>
+      )}
 
       {/* overscroll-contain — прокрутка не «перетекает» на документ (нет отскока).
           overflow-x-hidden — только вертикальный скролл, вбок страница статична. */}

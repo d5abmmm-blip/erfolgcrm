@@ -3,6 +3,8 @@ import { Link, useLocation } from 'wouter';
 import { Sun, Moon, Monitor, LogOut, Search } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { trpc } from '../lib/trpc';
+import { useQueryClient } from '@tanstack/react-query';
+import { resetOfflineMemory } from '../lib/offline/session-reset';
 import { cn } from '../lib/utils';
 import { NAV_GROUPS, NAV_ITEMS, ROLE_LABELS, isNavItemVisible } from '../lib/nav';
 import { GlobalSearchModal } from './GlobalSearchModal';
@@ -27,8 +29,12 @@ interface AppShellProps {
 export function AppShell({ children, session }: AppShellProps) {
   const [location] = useLocation();
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const logout = trpc.auth.logout.useMutation({
-    onSuccess: () => utils.auth.me.invalidate(),
+    onSuccess: async () => {
+      await resetOfflineMemory(queryClient);
+      await utils.auth.me.invalidate();
+    },
   });
   const [searchOpen, setSearchOpen] = useState(false);
 
