@@ -10,6 +10,7 @@ import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import superjson from 'superjson';
 import type { AppRouter } from '@erfolg/api';
 import type { OutboxItem } from './queue';
+import { photoBlob, type PendingPhoto } from './photo-queue';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3030';
 
@@ -62,4 +63,29 @@ export async function runOutboxItem(item: OutboxItem): Promise<unknown> {
       throw new Error(`Unknown outbox kind: ${String(exhaust)}`);
     }
   }
+}
+
+/**
+ * Отправка одного накопленного фото — те же три шага, что и с экрана.
+ *
+ * Повторяем ВСЕ три, а не только последний: ссылка на загрузку живёт 15 минут,
+ * и та, что выдали вчера в подвале, сегодня уже недействительна.
+ */
+export async function uploadPendingPhoto(item: PendingPhoto): Promise<void> {
+  const client = makeClient({ tenantSubdomain: item.tenantSubdomain });
+  const presigned = await client.attachments.createUploadUrl.mutate({
+    kind: item.kind,
+    referenceType: item.referenceType,
+    referenceId: item.referenceId,
+    fileName: item.fileName,
+    mimeType: item.mimeType,
+    sizeBytes: item.sizeBytes,
+  });
+  const put = await fetch(presigned.presignedUrl, {
+    method: 'PUT',
+    body: photoBlob(item),
+    headers: { 'content-type': item.mimeType, ...presigned.headers },
+  });
+  if (!put.ok) throw new Error(`storage PUT ${put.status}`);
+  await client.attachments.confirmUpload.mutate({ attachmentId: presigned.attachmentId });
 }

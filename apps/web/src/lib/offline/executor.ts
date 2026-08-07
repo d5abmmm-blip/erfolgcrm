@@ -17,8 +17,12 @@ export type ExecResult<T> =
   | { status: 'queued'; item: OutboxItem }
   | { status: 'error'; error: Error };
 
-/** True если ошибка похожа на сетевой сбой (нет связи / DNS / CORS preflight failure). */
-function isNetworkError(err: unknown): boolean {
+/**
+ * True если ошибка похожа на сетевой сбой (нет связи / DNS / CORS preflight failure).
+ * Экспортируется: очередь фото решает «повторять или ждать человека» по тому же
+ * правилу, и два расходящихся определения «нет связи» рано или поздно разъедутся.
+ */
+export function isNetworkError(err: unknown): boolean {
   if (!navigator.onLine) return true;
   if (err instanceof TypeError) return true; // fetch throws TypeError on network failure
   if (err instanceof TRPCClientError) {

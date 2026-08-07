@@ -9,27 +9,25 @@
  *
  * Размещается в карточке заявки, склада, ассета. На мобильнике добавляет capture="environment".
  */
-import { useRef, useState } from 'react';
-import { AlertTriangle, Camera, Loader2, RefreshCw, Trash2, Upload, X } from 'lucide-react';
-import { trpc } from '../lib/trpc';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Camera, Clock, Loader2, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { trpc, getTenantSubdomain } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { humanUploadError } from '../lib/photo-upload-error';
+import { isNetworkError } from '../lib/offline/executor';
+import {
+  PhotoQueueFullError,
+  enqueuePhoto,
+  listPendingPhotos,
+  photoBlob,
+  removePhoto,
+  retryPhoto,
+  subscribePhotos,
+  type PendingPhoto,
+} from '../lib/offline/photo-queue';
+import { sendPendingPhotos } from '../lib/offline/photo-sender';
+import { uploadPendingPhoto } from '../lib/offline/runner';
 import { ConfirmDialog } from './ui';
-
-/**
- * Человеческий текст вместо «Failed to fetch» и «storage PUT 403».
- * Инженер в поле должен понимать, что делать, а не что сломалось.
- */
-export function humanUploadError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
-  if (!navigator.onLine || raw.includes('Failed to fetch') || raw.includes('NetworkError')) {
-    return 'Нет связи — фото не отправлено';
-  }
-  if (/storage PUT (401|403)/.test(raw))
-    return 'Хранилище отклонило файл — позовите администратора';
-  if (/storage PUT 4\d\d/.test(raw)) return 'Файл не принят хранилищем';
-  if (/storage PUT 5\d\d/.test(raw)) return 'Хранилище недоступно — повторите';
-  return raw || 'Не удалось отправить фото';
-}
 
 type Kind =
   | 'ticket_photo'
@@ -75,17 +73,39 @@ export function PhotoUploader({
   const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   /**
-   * Не отправленные фото вместе с самими файлами.
-   *
-   * ВНИМАНИЕ: это память экрана, а не очередь. Уйдёте со страницы или закроете
-   * приложение — файлы пропадут. Настоящая офлайн-очередь для фото требует
-   * отдельного хранилища (ссылка на загрузку живёт 15 минут, поэтому повтор
-   * назавтра надо начинать с нуля) — это отдельная работа. Здесь задача одна:
-   * чтобы фото не исчезало МОЛЧА и его можно было переотправить сразу.
+   * Не отправленные фото. Лежат в памяти телефона (IndexedDB), а не в
+   * состоянии экрана: раньше файл жил ровно пока открыта страница, и инженер,
+   * снявший повреждение в подвале и нажавший «назад», терял снимок навсегда —
+   * переснять уже нельзя, аппарат собран.
    */
-  const [failed, setFailed] = useState<Array<{ id: string; file: File; reason: string }>>([]);
+  const [queued, setQueued] = useState<PendingPhoto[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const utils = trpc.useUtils();
+  const tenantSubdomain = getTenantSubdomain();
+
+  useEffect(() => {
+    const refresh = () => {
+      void listPendingPhotos({ referenceType, referenceId }).then(setQueued);
+    };
+    refresh();
+    return subscribePhotos(refresh);
+  }, [referenceType, referenceId]);
+
+  // Ссылки на превью живут ровно столько, сколько сама плитка: без отзыва
+  // браузер держит файлы в памяти до перезагрузки страницы.
+  const previews = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of queued) {
+      if (p.mimeType.startsWith('image/')) map.set(p.id, URL.createObjectURL(photoBlob(p)));
+    }
+    return map;
+  }, [queued]);
+  useEffect(() => {
+    return () => {
+      for (const url of previews.values()) URL.revokeObjectURL(url);
+    };
+  }, [previews]);
 
   const list = trpc.attachments.listByReference.useQuery({ referenceType, referenceId });
   const createUrl = trpc.attachments.createUploadUrl.useMutation();
@@ -119,15 +139,12 @@ export function PhotoUploader({
     await confirm.mutateAsync({ attachmentId: presigned.attachmentId });
   };
 
-  const retryFailed = async (id: string) => {
-    const item = failed.find((f) => f.id === id);
-    if (!item) return;
-    setFailed((prev) => prev.filter((f) => f.id !== id));
+  /** Ещё раз отправить конкретное фото из очереди — по кнопке человека. */
+  const retryQueued = async (id: string) => {
     setPending((p) => [...p, id]);
     try {
-      await uploadOne(item.file);
-    } catch (err) {
-      setFailed((prev) => [...prev, { ...item, reason: humanUploadError(err) }]);
+      await retryPhoto(id); // снимаем пометку «не принято»
+      await sendPendingPhotos(uploadPendingPhoto);
     } finally {
       setPending((p) => p.filter((x) => x !== id));
       await utils.attachments.listByReference.invalidate({ referenceType, referenceId });
@@ -139,6 +156,8 @@ export function PhotoUploader({
     setError(null);
     const arr = Array.from(files);
     for (const file of arr) {
+      // Эти две проверки — не повод класть файл в очередь: он не станет
+      // подходящим оттого, что появится связь.
       if (!ALLOWED_MIME.includes(file.type)) {
         setError(`Тип «${file.type || file.name}» не поддерживается`);
         continue;
@@ -152,10 +171,26 @@ export function PhotoUploader({
       try {
         await uploadOne(file);
       } catch (err) {
-        // Раньше файл здесь терялся насовсем: он жил только в замыкании, а на
-        // экране оставалась одна техническая строка вроде «Failed to fetch».
-        // Теперь держим сам File и показываем плитку с кнопкой «Повторить».
-        setFailed((prev) => [...prev, { id: tag, file, reason: humanUploadError(err) }]);
+        // Не ушло — кладём в память телефона, а не теряем. Отказ по существу
+        // (хранилище не приняло) тоже сохраняем: снимок единственный, пусть
+        // человек решает, а не система за него.
+        try {
+          await enqueuePhoto({
+            kind,
+            referenceType,
+            referenceId,
+            file,
+            tenantSubdomain,
+            lastError: humanUploadError(err),
+            ...(isNetworkError(err) ? {} : { failedHard: true }),
+          });
+        } catch (queueErr) {
+          setError(
+            queueErr instanceof PhotoQueueFullError
+              ? queueErr.message
+              : `Фото «${file.name}» сохранить не удалось: ${humanUploadError(err)}`,
+          );
+        }
       } finally {
         setPending((p) => p.filter((x) => x !== tag));
         await utils.attachments.listByReference.invalidate({ referenceType, referenceId });
@@ -228,43 +263,69 @@ export function PhotoUploader({
 
       {error && <div className="text-destructive text-sm">{error}</div>}
 
-      {/* Не отправленные фото. Раньше файл пропадал молча — спиннер снимался,
-          и экран выглядел так, будто фото и не выбирали. */}
-      {failed.length > 0 && (
-        <div className="border-destructive/30 bg-destructive/5 space-y-2 rounded-lg border p-3">
-          <div className="text-destructive flex items-center gap-1.5 text-sm font-medium">
-            <AlertTriangle className="h-4 w-4" />
-            Не отправлено: {failed.length}
+      {/* Ждут отправки. Лежат в памяти телефона: уход с экрана и перезапуск
+          приложения их не трогают, уйдут сами, когда появится связь. */}
+      {queued.length > 0 && (
+        <div className="border-warning/40 bg-warning/10 space-y-2 rounded-lg border p-3">
+          <div className="text-warning flex items-center gap-1.5 text-sm font-medium">
+            <Clock className="h-4 w-4" />
+            Ждут отправки: {queued.length}
           </div>
           <div className="text-muted-foreground text-xs">
-            Файлы держатся только на этом экране. Отправьте сейчас — если уйти со страницы или
-            закрыть приложение, их придётся снимать заново.
+            Фото сохранены в телефоне и уйдут сами, когда появится связь. Приложение можно закрыть.
           </div>
           <ul className="space-y-1.5">
-            {failed.map((f) => (
+            {queued.map((p) => (
               <li
-                key={f.id}
+                key={p.id}
                 className="bg-card flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
               >
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-medium">{f.file.name}</div>
-                  <div className="text-destructive text-[11px]">{f.reason}</div>
+                <div className="flex min-w-0 items-center gap-2">
+                  {previews.get(p.id) ? (
+                    <img
+                      src={previews.get(p.id)}
+                      alt={p.fileName}
+                      className="h-9 w-9 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="bg-muted grid h-9 w-9 shrink-0 place-items-center rounded">
+                      <Upload className="text-muted-foreground h-4 w-4" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium">{p.fileName}</div>
+                    <div
+                      className={cn(
+                        'text-[11px]',
+                        p.failedHard ? 'text-destructive' : 'text-muted-foreground',
+                      )}
+                    >
+                      {p.failedHard ? (
+                        <span className="inline-flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {p.lastError ?? 'Не принято сервером'}
+                        </span>
+                      ) : (
+                        'ждёт отправки'
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    disabled={pending.includes(f.id)}
-                    onClick={() => void retryFailed(f.id)}
+                    disabled={pending.includes(p.id)}
+                    onClick={() => void retryQueued(p.id)}
                     className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50"
                   >
                     <RefreshCw className="h-3 w-3" />
-                    Повторить
+                    Отправить
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFailed((prev) => prev.filter((x) => x.id !== f.id))}
-                    className="text-muted-foreground hover:text-foreground rounded-md p-1"
-                    aria-label="Убрать из списка"
+                    onClick={() => setDropTarget(p.id)}
+                    className="text-muted-foreground hover:text-destructive rounded-md p-1"
+                    aria-label="Убрать фото из очереди"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -319,6 +380,21 @@ export function PhotoUploader({
         loading={remove.isPending}
         onConfirm={() => deleteTarget && remove.mutate({ id: deleteTarget })}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Спрашиваем, потому что убрать из очереди = потерять снимок:
+          на сервер он не попал, а из телефона мы его сотрём. */}
+      <ConfirmDialog
+        open={dropTarget !== null}
+        title="Убрать фото из очереди?"
+        description="Оно не отправлено на сервер и будет потеряно. Если аппарат уже собран, снять заново не получится."
+        variant="danger"
+        confirmText="Убрать"
+        onConfirm={() => {
+          if (dropTarget) void removePhoto(dropTarget);
+          setDropTarget(null);
+        }}
+        onCancel={() => setDropTarget(null)}
       />
     </div>
   );
