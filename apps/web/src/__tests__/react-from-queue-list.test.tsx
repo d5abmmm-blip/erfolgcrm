@@ -104,6 +104,69 @@ function renderQueue(items: ReturnType<typeof ticket>[]) {
   );
 }
 
+/** Заявка «моего дня» — из неё строится блок «Провисло». */
+function stuckTicket(overrides: Record<string, unknown> = {}) {
+  return {
+    ...ticket('s1', 'T-2026-000025', 'in_progress'),
+    assetModel: 'УЗИ DC-40 EXP',
+    effectiveReason: null,
+    light: 'yellow',
+    stuckDays: 3,
+    idleDays: 3,
+    askSnoozed: false,
+    ...overrides,
+  };
+}
+
+/** Заглушка, где «Мой день» НЕ пуст: смотрим именно блок «Провисло». */
+function serverWithMyDay(mine: ReturnType<typeof stuckTicket>[]) {
+  return (url: unknown): Promise<Response> => {
+    if (!navigator.onLine) return Promise.reject(new TypeError('Failed to fetch'));
+    const address = String(url);
+    const answer = (payload: unknown) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ result: { data: { json: payload } } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    if (address.includes('tickets.myTickets')) return answer(mine);
+    if (address.includes('tickets.myList')) return answer({ items: [], total: 0 });
+    if (address.includes('myWeeklySchedule')) return answer([]);
+    // ⚠️ Отвечаем КАК НАСТОЯЩИЙ сервер. Пока здесь был `null`, экран падал на
+    // `result.data.message` необработанным отклонением — и тест был зелёным,
+    // потому что падение случалось вне его. Заглушка, которая врёт, проверяет
+    // не то приложение.
+    if (address.includes('engineerReact')) {
+      return answer({ kind: 'inwork', ticketNumber: 'T-2026-000025', message: 'Принято.' });
+    }
+    return answer(null);
+  };
+}
+
+function renderWithMyDay(mine: ReturnType<typeof stuckTicket>[]) {
+  window.history.pushState({}, '', '/m/queue');
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
+  });
+  const client = trpc.createClient({
+    links: [
+      httpLink({
+        url: 'http://test.invalid/api/v1/trpc',
+        transformer: superjson,
+        fetch: serverWithMyDay(mine),
+      }),
+    ],
+  });
+  return render(
+    <trpc.Provider client={client} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <MobileQueuePage engineerId={ME} />
+      </QueryClientProvider>
+    </trpc.Provider>,
+  );
+}
+
 beforeEach(async () => {
   await clearAll();
   setCurrentUserId(ME);
@@ -171,5 +234,46 @@ describe('ответ из списка переживает отсутствие
       expect(items[0]!.kind).toBe('tickets.engineerReact');
       expect(items[0]!.payload).toMatchObject({ ticketId: 't5', action: 'start' });
     });
+  });
+});
+
+/**
+ * ⚠️ ЖАЛОБА С БОЯ (фото телефона инженера, 2026-08-08): «инженер нажимает, что
+ * аппарат в работе, а плашка всё равно выходит при каждом входе».
+ *
+ * Так и было. Сервер на «Ещё в работе» ставит отметку «молчать 2 дня» и
+ * отвечает человеку «пару дней не беспокою» — бот замолкает. А этот блок
+ * считался БЕЗ отметки: карточка пряталась только в памяти страницы
+ * (`useState`), и любой перезаход возвращал её. Программа обещала одно, а
+ * делала другое — ровно тому человеку, которого просили «поменьше трогать
+ * программу».
+ */
+describe('«Провисло» уважает уже данный ответ', () => {
+  it('ответил «ещё в работе» — при следующем входе не спрашиваем снова', async () => {
+    renderWithMyDay([stuckTicket({ askSnoozed: true })]);
+    await screen.findByText('Активные');
+    // Плашки нет — но убедимся, что дело не в «данные не доехали»: тот же
+    // экран с тем же нарядом БЕЗ отметки её показывает (следующий тест).
+    await waitFor(() => expect(screen.queryByText(/Загрузка|Загружаем/)).toBeNull());
+
+    expect(screen.queryByText(/Провисло/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ещё в работе/ })).toBeNull();
+  });
+
+  it('ответа не было — спрашиваем, иначе заявка потеряется молча', async () => {
+    renderWithMyDay([stuckTicket()]);
+    await screen.findByText(/Провисло/);
+
+    expect(screen.getByText('T-2026-000025')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Ещё в работе/ })).toBeTruthy();
+  });
+
+  it('нажал прямо сейчас — карточка уходит сразу, не дожидаясь перечитывания', async () => {
+    renderWithMyDay([stuckTicket()]);
+    await screen.findByText(/Провисло/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Ещё в работе/ }));
+
+    await waitFor(() => expect(screen.queryByText(/Провисло/)).toBeNull());
   });
 });

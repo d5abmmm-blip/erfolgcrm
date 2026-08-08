@@ -35,6 +35,36 @@ export async function snoozeAsk(tenantId: string, ticketId: string): Promise<voi
   await getRedis().set(ask(tenantId, ticketId), '1', 'EX', NUDGE_ASK_TTL_SEC);
 }
 
+/**
+ * По каким из этих заявок мы сейчас молчим.
+ *
+ * ЗАЧЕМ ЭТО ЧИТАЕТ ЭКРАН, А НЕ ТОЛЬКО ВОРКЕР. Инженер жмёт «Ещё в работе»,
+ * ему отвечают «пару дней не беспокою» — и бот правда замолкает. А блок
+ * «Провисло» в мобильном списке считался без этой отметки и возвращался при
+ * КАЖДОМ входе в приложение (жалоба с боя 2026-08-08, фото телефона). Обещание
+ * и поведение разошлись; теперь у них один источник правды.
+ *
+ * Redis лёг — возвращаем пусто: лучше лишний раз спросить, чем спрятать
+ * заявку, о которой никто не знает, что с ней.
+ */
+export async function askSnoozedTicketIds(
+  tenantId: string,
+  ticketIds: readonly string[],
+): Promise<Set<string>> {
+  if (ticketIds.length === 0) return new Set();
+  try {
+    const values = await getRedis().mget(ticketIds.map((id) => ask(tenantId, id)));
+    const snoozed = new Set<string>();
+    values.forEach((v, i) => {
+      const id = ticketIds[i];
+      if (v !== null && id) snoozed.add(id);
+    });
+    return snoozed;
+  } catch {
+    return new Set();
+  }
+}
+
 export async function incrUnansweredCount(tenantId: string, ticketId: string): Promise<number> {
   const redis = getRedis();
   const key = cnt(tenantId, ticketId);
