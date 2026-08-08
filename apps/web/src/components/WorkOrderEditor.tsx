@@ -33,7 +33,12 @@ import { showToast } from '../lib/toast';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useFlushOnLeave } from '../lib/use-flush-on-leave';
 import { useSaveMark } from '../lib/use-save-mark';
-import { forgetDraft, readDraft, rememberDraft } from '../lib/field-draft';
+import {
+  forgetDraft,
+  forgetDraftIfUnchanged,
+  readDraft,
+  rememberDraft,
+} from '../lib/field-draft';
 import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
@@ -175,6 +180,7 @@ export function WorkOrderEditor({
         diagnosis={wo.data.diagnosis}
         repairDescription={wo.data.repairDescription}
         recommendation={wo.data.recommendation}
+        engineerNotes={wo.data.engineerNotes}
         vatRate={wo.data.vatRate}
         canEdit={canEdit}
         canEditVat={canEditVat}
@@ -202,6 +208,7 @@ export function WorkOrderEditor({
         expenses={wo.data.expensesAmountKopecks}
         total={wo.data.totalAmountKopecks}
         vatRate={wo.data.vatRate}
+        layout={layout}
       />
 
       {canEdit && <DoneButton />}
@@ -265,6 +272,7 @@ function WorkOrderHeader({
   diagnosis,
   repairDescription,
   recommendation,
+  engineerNotes,
   vatRate,
   canEdit,
   canEditVat,
@@ -275,6 +283,7 @@ function WorkOrderHeader({
   diagnosis: string | null;
   repairDescription: string | null;
   recommendation: string | null;
+  engineerNotes: string | null;
   vatRate: VatRate;
   canEdit: boolean;
   canEditVat: boolean;
@@ -348,20 +357,29 @@ function WorkOrderHeader({
    * Возвращает исход: по нему поле решает судьбу черновика в памяти телефона.
    * Принял сервер или очередь — страховка больше не нужна; отказ — оставляем,
    * иначе набранное некому будет вернуть.
+   *
+   * Записать НЕСКОЛЬКО полей шапки одним запросом.
+   *
+   * ⚠️ ОДНО ДЕЙСТВИЕ ЧЕЛОВЕКА — ОДНА ЗАПИСЬ. «Применить» правит и «Диагноз», и
+   * «Описание ремонта»; двумя отдельными запросами вторая могла не дойти, и в
+   * наряде оставался новый диагноз со старым описанием — то есть акт, которого
+   * никто не писал. Плюс в офлайн-очереди это была одна запись вместо двух.
    */
-  const saveHeader = async (
-    field: 'diagnosis' | 'repairDescription' | 'recommendation',
-    next: string | null,
+  const savePatch = async (
+    patch: Partial<
+      Record<'diagnosis' | 'repairDescription' | 'recommendation' | 'engineerNotes', string | null>
+    >,
+    /** Чем склеивать повторы в очереди — по смыслу действия, а не по полю. */
+    dedupe: string,
     mark?: HeaderMark,
   ): Promise<'ok' | 'queued' | 'error'> => {
     mark?.markSaving();
     const res = await executeOrQueue(
       'workOrders.updateHeader',
-      { ticketId, patch: { [field]: next } },
+      { ticketId, patch },
       (p) => updateHeader.mutateAsync(p),
       tenantSubdomain,
-      // Правки одного поля склеиваются: в очереди лежит последнее состояние.
-      `wo-header:${ticketId}:${field}`,
+      dedupe,
       ticketNumber,
     );
     mark?.markResult(res.status);
@@ -375,33 +393,98 @@ function WorkOrderHeader({
     return res.status;
   };
 
+  /** Одно поле — прежний путь, склейка повторов по имени поля. */
+  const saveHeader = (
+    field: 'diagnosis' | 'repairDescription' | 'recommendation' | 'engineerNotes',
+    next: string | null,
+    mark?: HeaderMark,
+  ): Promise<'ok' | 'queued' | 'error'> =>
+    savePatch({ [field]: next }, `wo-header:${ticketId}:${field}`, mark);
+
   return (
     <div className="bg-card space-y-3 rounded-lg border p-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Field
-          label="Диагноз"
-          scope={ticketId}
-          name="diagnosis"
-          initial={diagnosis}
-          disabled={!canEdit}
-          onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
-        />
-        <RepairDescriptionField
-          ticketId={ticketId}
-          initial={repairDescription}
-          canEdit={canEdit}
-          layout={layout}
-          onSave={(value) => saveHeader('repairDescription', value)}
-        />
-        <Field
-          label="Рекомендации"
-          scope={ticketId}
-          name="recommendation"
-          initial={recommendation}
-          disabled={!canEdit}
-          onSave={(next, mark) => saveHeader('recommendation', next, mark)}
-        />
-      </div>
+      {/* На телефоне у инженера ОДНО поле вместо трёх (решение владельца
+          2026-08-08: «инженеры не любят приложение, надо минимизировать их
+          контакт с программой»). На десктопе диспетчер правит поля акта
+          напрямую — там всё как было. */}
+      {layout === 'card' ? (
+        <>
+          <EngineerNotesField
+            ticketId={ticketId}
+            initial={engineerNotes}
+            diagnosis={diagnosis}
+            repairDescription={repairDescription}
+            canEdit={canEdit}
+            onSaveNotes={(value) => saveHeader('engineerNotes', value)}
+            onApply={(composed) => {
+              /**
+               * ПУСТОЕ ПОЛЕ ПРЕДЛОЖЕНИЯ НИЧЕГО НЕ СТИРАЕТ. Разбор не нашёл
+               * поломки (или инженер стёр предложенный диагноз) — это «мне
+               * нечего сказать», а не «сотри то, что написал диспетчер со слов
+               * клиента». Чего нет в patch — того сервер не трогает.
+               */
+              const patch: Record<string, string> = {};
+              if (composed.diagnosis) patch.diagnosis = composed.diagnosis;
+              if (composed.repairDescription)
+                patch.repairDescription = composed.repairDescription;
+              if (Object.keys(patch).length === 0) return Promise.resolve('ok' as const);
+              return savePatch(patch, `wo-act:${ticketId}`);
+            }}
+          />
+          <PhoneRecommendation
+            ticketId={ticketId}
+            initial={recommendation}
+            canEdit={canEdit}
+            onSave={(next, mark) => saveHeader('recommendation', next, mark)}
+          />
+        </>
+      ) : (
+        <div className="space-y-3">
+          {/* Что инженер написал СВОИМИ словами. Только показ: править чужие
+              слова нельзя — при разборе «почему в акте ерунда» это
+              единственное свидетельство того, что человек написал на самом
+              деле. Пусто у всей истории и у всего, что заводят с десктопа. */}
+          {engineerNotes?.trim() && (
+            <div className="bg-muted/30 rounded-lg border p-3">
+              <div className="text-muted-foreground mb-1 text-[11px] uppercase">
+                Инженер написал своими словами
+              </div>
+              <div className="whitespace-pre-wrap text-sm">{engineerNotes}</div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field
+            label="Диагноз"
+            scope={ticketId}
+            name="diagnosis"
+            initial={diagnosis}
+            disabled={!canEdit}
+            onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
+          />
+          <RepairDescriptionField
+            ticketId={ticketId}
+            initial={repairDescription}
+            canEdit={canEdit}
+            layout={layout}
+            onSave={(value) => saveHeader('repairDescription', value)}
+          />
+          <Field
+            label="Рекомендации"
+            scope={ticketId}
+            name="recommendation"
+            initial={recommendation}
+            disabled={!canEdit}
+            onSave={(next, mark) => saveHeader('recommendation', next, mark)}
+          />
+          </div>
+        </div>
+      )}
+      {/* НДС — НЕ ДЕЛО ИНЖЕНЕРА (решение владельца 2026-08-08). Ставку меняют
+          директор и диспетчер; у инженера селектор был заперт и подписан
+          «меняет директор/диспетчер» — то есть занимал место на экране, ничего
+          не давая. А просьба была ровно обратная: контакт с программой
+          сократить. На десктопе всё как было. */}
+      {layout !== 'card' && (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
         <select
@@ -409,10 +492,8 @@ function WorkOrderHeader({
           // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
           value={chosenVat ?? vatRate}
           onChange={(e) => void saveVat(e.target.value as VatRate)}
-          className={cn(
-            'bg-background focus:ring-primary/40 rounded-md border outline-none focus:ring-2 disabled:opacity-50',
-            layout === 'card' ? 'h-11 px-3 text-base' : 'px-2 py-1 text-xs',
-          )}
+          // Только десктоп: на телефоне ставки НДС нет вовсе (см. выше).
+          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
         >
           {VAT_OPTS.map((o) => (
             <option key={o.v} value={o.v}>
@@ -425,6 +506,470 @@ function WorkOrderHeader({
           <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
         )}
       </div>
+      )}
+    </div>
+  );
+}
+
+/** Про офлайн говорим словами, а не пустой кнопкой. */
+const OFFLINE_COMPOSE_TEXT =
+  'Нет связи. Ваш текст записан — оформить получится, когда появится связь.';
+
+/** Ключи черновиков выправленного предложения (см. lib/field-draft). */
+const PROPOSAL_DIAGNOSIS = 'proposalDiagnosis';
+const PROPOSAL_REPAIR = 'proposalRepair';
+
+/**
+ * «Рекомендации» на телефоне — свёрнуты, пока не нужны.
+ *
+ * ⚠️ ПОЧЕМУ ЭТО ПОЛЕ ЗДЕСЬ ВООБЩЕ ЕСТЬ, хотя владелец просил ОДНО поле.
+ * Рекомендация печатается в трёх бланках, и в дефектном акте становится
+ * ЗАКЛЮЧЕНИЕМ («рекомендовано к списанию», см. lib/pdf/defect-act.ts). Эти
+ * бланки инженер печатает прямо с телефона (MobileTicketPage.printAct) —
+ * значит и заполнять их должен уметь оттуда же. Когда три поля свернули в
+ * одно, это уехало вместе с ними: инженер не мог ни вписать рекомендацию,
+ * ни увидеть уже написанную.
+ *
+ * ПОЧЕМУ НЕ ОТДАЁМ ЕЁ «ОФОРМИТЬ». Заключение о списании — юридически значимое
+ * утверждение под подписью клиента, и решает его инженер, а не языковая
+ * модель по косвенным словам. Диагноз и описание ремонта модель пересказывает;
+ * приговор технике — нет.
+ *
+ * Свёрнута, чтобы не спорить с просьбой «минимизировать контакт»: обычному
+ * ремонту она не нужна, а нужна — один тап.
+ */
+function PhoneRecommendation({
+  ticketId,
+  initial,
+  canEdit,
+  onSave,
+}: {
+  ticketId: string;
+  initial: string | null;
+  canEdit: boolean;
+  onSave: (next: string | null, mark: HeaderMark) => Promise<'ok' | 'queued' | 'error'>;
+}) {
+  /**
+   * Разворачиваем сразу, если терять есть что: уже написанная рекомендация
+   * или черновик, переживший выгрузку приложения. Спрятанный за кнопкой
+   * черновик человек не найдёт никогда — он о нём не знает.
+   */
+  const [opened, setOpened] = useState(
+    () => readDraft(ticketId, 'recommendation') != null,
+  );
+  /**
+   * ⚠️ Наличие текста проверяем НА КАЖДОЙ отрисовке, а не один раз при
+   * монтировании. Рекомендацию мог вписать диспетчер, пока инженер был на
+   * объекте: посчитай мы это однажды — пришедший позже текст остался бы за
+   * кнопкой, о которой инженер не знает, что под ней что-то есть.
+   */
+  const open = opened || Boolean(initial?.trim());
+  // Пусто и править нельзя — показывать нечего и предлагать нечего.
+  if (!open && !canEdit) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpened(true)}
+        className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex h-11 items-center gap-1.5 rounded-lg border px-4 text-sm"
+      >
+        <Plus className="h-4 w-4" />
+        Дописать рекомендацию
+      </button>
+    );
+  }
+  return (
+    <div>
+      <Field
+        label="Рекомендации"
+        scope={ticketId}
+        name="recommendation"
+        initial={initial}
+        disabled={!canEdit}
+        onSave={onSave}
+      />
+      <div className="text-muted-foreground mt-1 text-[11px]">
+        Попадёт в акт технического состояния и в дефектный акт.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ОДНО поле инженера: «Что было и что сделал».
+ *
+ * ЗАЧЕМ. Запрос владельца 2026-08-08: «инженеры вообще не любят мобильное
+ * приложение, надо минимизировать их контакт с программой. Они по-своему,
+ * по-колхозному пишут, что сломалось и что сделали, а ИИ грамотно
+ * перефразирует». Три поля на телефоне — три повода не заполнить ни одного.
+ *
+ * ⚠️ ГЛАВНОЕ ПРАВИЛО: «Оформить» НЕ ТРОГАЕТ текст инженера. Это единственный
+ * экземпляр написанного человеком, всё остальное из него выводится. Ровно на
+ * этом обжигалась кнопка «ИИ-черновик» (она рядом, для десктопа): собирала
+ * текст из строк наряда и затирала поле, не читая написанное.
+ *
+ * Предложенное показываем ОТДЕЛЬНО и правкой — человек видит, что уйдёт в акт,
+ * который подпишет клиент, и может исправить слово до «Применить».
+ *
+ * БЕЗ СВЯЗИ В СЕТЬ НЕ ХОДИМ ВОВСЕ. Не из вежливости: у запросов режим
+ * `networkMode: 'online'`, react-query ставит их на паузу, и обещание не
+ * выполняется никогда — так намертво зависал сканер (#112). Мутация ушла бы
+ * (у мутаций `always`) и честно упала, но человеку нужен не текст ошибки,
+ * а понимание, что делать. Набранное при этом уже записано — своим путём,
+ * через очередь.
+ */
+function EngineerNotesField({
+  ticketId,
+  initial,
+  diagnosis,
+  repairDescription,
+  canEdit,
+  onSaveNotes,
+  onApply,
+}: {
+  ticketId: string;
+  initial: string | null;
+  diagnosis: string | null;
+  repairDescription: string | null;
+  canEdit: boolean;
+  onSaveNotes: (value: string | null) => Promise<'ok' | 'queued' | 'error'>;
+  onApply: (composed: {
+    diagnosis: string | null;
+    repairDescription: string | null;
+  }) => Promise<'ok' | 'queued' | 'error'>;
+}) {
+  const outbox = useOutbox();
+  const mark = useSaveMark();
+  const box = useRef<HTMLTextAreaElement>(null);
+  /**
+   * Черновик читаем ОДИН раз, до первой отрисовки — см. такой же в `Field`.
+   * По ЧУЖОЙ заявке черновика быть не должно: отправить его всё равно нельзя,
+   * а показанный он выдаёт себя за текст наряда и вводит в заблуждение.
+   */
+  const [restored] = useState(() => (canEdit ? readDraft(ticketId, 'engineerNotes') : null));
+  const typed = useRef<string | null>(null);
+  const sent = useRef<string | null>(initial ?? null);
+  useEffect(() => {
+    sent.current = initial ?? null;
+  }, [initial]);
+
+  /**
+   * Предложенное моделью (или разбором без неё). Пока не применили — только показ.
+   *
+   * ⚠️ ПОДНИМАЕМ ИЗ ПАМЯТИ ТЕЛЕФОНА, как и всё остальное на этом экране.
+   * Правки предложенного текста — это работа человека, иногда несколько минут;
+   * жили они только в состоянии React, и любой уход с экрана стирал их без
+   * следа и без вопроса.
+   */
+  const [proposal, setProposal] = useState<{
+    diagnosis: string;
+    repairDescription: string;
+    aiUsed: boolean;
+    aiRejected?: boolean;
+  } | null>(() => {
+    if (!canEdit) return null;
+    const d = readDraft(ticketId, PROPOSAL_DIAGNOSIS) ?? '';
+    const r = readDraft(ticketId, PROPOSAL_REPAIR) ?? '';
+    return d || r ? { diagnosis: d, repairDescription: r, aiUsed: false } : null;
+  });
+  const [note, setNote] = useState<string | null>(
+    restored != null ? 'Текст восстановлен из памяти телефона — проверьте' : null,
+  );
+  const [applying, setApplying] = useState(false);
+  /** Вопрос «в наряде уже есть текст, заменить?» — только когда он там есть. */
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
+  /**
+   * Что мы только что применили. Нужно, пока правка ждёт связи: наряд с
+   * сервера ещё старый, и показывать его под словами «Записано в наряд» —
+   * значит противоречить самим себе (тот же приём, что у ставки НДС).
+   */
+  const [applied, setApplied] = useState<{
+    diagnosis: string | null;
+    repairDescription: string | null;
+  } | null>(null);
+
+  /** Запомнить/забыть правки предложения в памяти телефона. */
+  const rememberProposal = (next: { diagnosis: string; repairDescription: string }) => {
+    rememberDraft(ticketId, PROPOSAL_DIAGNOSIS, next.diagnosis);
+    rememberDraft(ticketId, PROPOSAL_REPAIR, next.repairDescription);
+  };
+  const forgetProposal = () => {
+    forgetDraft(ticketId, PROPOSAL_DIAGNOSIS);
+    forgetDraft(ticketId, PROPOSAL_REPAIR);
+  };
+  const changeProposal = (next: {
+    diagnosis: string;
+    repairDescription: string;
+    aiUsed: boolean;
+    aiRejected?: boolean;
+  }) => {
+    setProposal(next);
+    rememberProposal(next);
+  };
+
+  const compose = trpc.workOrders.composeFromNotes.useMutation({ meta: SILENT_ERROR });
+
+  const saveNotes = () => {
+    if (!canEdit) return;
+    const raw = box.current?.value ?? typed.current ?? initial ?? '';
+    const next = raw.trim() || null;
+    if (next === sent.current) return;
+    sent.current = next;
+    mark.markSaving();
+    void onSaveNotes(next).then((status) => {
+      mark.markResult(status);
+      // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
+      // оставляем: вернуть набранное будет больше неоткуда.
+      // Снимаем её ТОЛЬКО с уехавшего текста: человек мог дописать, пока шла
+      // запись, и это дописанное страховать больше некому.
+      if (status !== 'error') forgetDraftIfUnchanged(ticketId, 'engineerNotes', raw);
+    });
+  };
+  useFlushOnLeave(saveNotes);
+
+  const askToCompose = () => {
+    const text = (box.current?.value ?? typed.current ?? '').trim();
+    if (!text) {
+      setNote('Сначала напишите своими словами, что было и что вы сделали.');
+      return;
+    }
+    // Исходник уходит своим путём в любом случае — даже если оформить сейчас
+    // не выйдет. Это и есть обещание «набранное не потеряется».
+    saveNotes();
+    if (!outbox.isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      // ⚠️ ПАНЕЛЬ ПРЕДЛОЖЕНИЯ НЕ ТРОГАЕМ. Здесь стоял `setProposal(null)` — и
+      // случайное нажатие без связи стирало текст, который человек уже правил
+      // руками. Взамен не приходило ничего: оформить-то без связи нельзя.
+      setNote(OFFLINE_COMPOSE_TEXT);
+      return;
+    }
+    setNote(null);
+    compose.mutate(
+      { ticketId, notes: text },
+      {
+        onSuccess: (res) => {
+          if (!res.diagnosis && !res.repairDescription) {
+            setNote('Не получилось разобрать написанное — впишите поля наряда сами.');
+            return;
+          }
+          changeProposal({
+            diagnosis: res.diagnosis ?? '',
+            repairDescription: res.repairDescription ?? '',
+            aiUsed: res.aiUsed,
+            aiRejected: res.aiRejected,
+          });
+        },
+        onError: (err) => setNote(humanizeError(err)),
+      },
+    );
+  };
+
+  const applyProposal = () => {
+    setConfirmingReplace(false);
+    if (!proposal) return;
+    const composed = {
+      diagnosis: proposal.diagnosis.trim() || null,
+      repairDescription: proposal.repairDescription.trim() || null,
+    };
+    setApplying(true);
+    void onApply(composed).then((status) => {
+      setApplying(false);
+      if (status === 'error') {
+        setNote('Не удалось записать в наряд — попробуйте ещё раз.');
+        return;
+      }
+      setProposal(null);
+      forgetProposal();
+      // Пока правка ждёт связи, наряд с сервера остаётся старым. Показываем
+      // ПРИМЕНЁННОЕ, иначе под словами «Записано» висел бы прежний текст.
+      setApplied(composed);
+      setNote(
+        status === 'queued'
+          ? 'Записано в наряд — уйдёт, когда появится связь.'
+          : 'Записано в наряд.',
+      );
+    });
+  };
+
+  // Что реально лежит в наряде: применённое нами, пока сервер не подтвердил.
+  const actDiagnosis = applied ? applied.diagnosis : diagnosis;
+  const actRepair = applied ? applied.repairDescription : repairDescription;
+  const actFilled = Boolean(actDiagnosis?.trim() || actRepair?.trim());
+  /**
+   * Написал, но не оформил. Инженер уверен, что заполнил наряд, — а в акте
+   * пусто, потому что в поля акта его слова попадают только по «Применить».
+   * Молчать об этом нельзя: обнаружится у клиента при подписании.
+   */
+  const notComposed = Boolean(initial?.trim()) && !actFilled && !proposal;
+
+  /**
+   * Спрашиваем ТОЛЬКО когда есть что терять.
+   *
+   * Строку наряда мы спрашиваем перед удалением (#113), а текст, который
+   * подписывает клиент, затирали молча — в том числе написанный диспетчером с
+   * чужих слов. На пустом наряде вопрос был бы лишней помехой: терять нечего,
+   * а «минимизировать контакт с программой» — прямая просьба владельца.
+   */
+  const askApply = () => (replacedText ? setConfirmingReplace(true) : applyProposal());
+
+  /**
+   * Что именно исчезнет. Без этого решать не по чему — «заменить» вслепую.
+   * Перечисляем ТОЛЬКО те поля, которые правда будут переписаны: пустое поле
+   * предложения ничего не стирает (см. onApply).
+   */
+  const replacedText = [
+    proposal?.diagnosis.trim() && actDiagnosis?.trim() ? `Диагноз: ${actDiagnosis.trim()}` : null,
+    proposal?.repairDescription.trim() && actRepair?.trim()
+      ? `Описание ремонта: ${actRepair.trim()}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label
+          htmlFor={`engineer-notes-${ticketId}`}
+          className="text-muted-foreground mb-1 block text-[11px] uppercase"
+        >
+          Что было и что сделал
+        </label>
+        <textarea
+          id={`engineer-notes-${ticketId}`}
+          ref={box}
+          defaultValue={restored ?? initial ?? ''}
+          disabled={!canEdit}
+          rows={5}
+          placeholder="Своими словами. Например: плата сгорела, поменял, всё работает"
+          onChange={(e) => {
+            typed.current = e.target.value;
+            // Синхронно, на каждую букву: если систему прибьют — это всё, что
+            // останется от набранного (см. lib/field-draft).
+            rememberDraft(ticketId, 'engineerNotes', e.target.value);
+          }}
+          onBlur={saveNotes}
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2 disabled:opacity-60"
+        />
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <SaveMark state={mark.state} />
+          {canEdit && (
+            <button
+              type="button"
+              disabled={compose.isPending}
+              onClick={askToCompose}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-11 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              {compose.isPending ? 'Оформляю…' : 'Оформить'}
+            </button>
+          )}
+        </div>
+        {note && (
+          <div className="text-muted-foreground mt-1 text-[11px]" role="status">
+            {note}
+          </div>
+        )}
+        {notComposed && (
+          <div className="text-warning mt-1 text-[11px]" role="status">
+            Написанное ещё не оформлено — в акт оно не попадёт. Нажмите «Оформить».
+          </div>
+        )}
+      </div>
+
+      {proposal && (
+        <div className="border-primary/40 bg-primary/5 space-y-2 rounded-lg border p-3">
+          <div className="text-sm font-semibold">Предложено — проверьте и примените</div>
+          <div className="text-muted-foreground text-[11px]">
+            {proposal.aiUsed
+              ? 'Переписал ИИ. Это уйдёт в акт, который подпишет клиент — читайте.'
+              : proposal.aiRejected
+                ? 'ИИ ответил, но приписал лишнее — взял разбор без него. Это уйдёт в акт — читайте.'
+                : 'ИИ не настроен, разложил по словам без него. Это уйдёт в акт — читайте.'}
+          </div>
+          <div>
+            <label
+              htmlFor={`proposal-diagnosis-${ticketId}`}
+              className="text-muted-foreground mb-1 block text-[11px] uppercase"
+            >
+              Диагноз
+            </label>
+            <textarea
+              id={`proposal-diagnosis-${ticketId}`}
+              value={proposal.diagnosis}
+              rows={2}
+              onChange={(e) => changeProposal({ ...proposal, diagnosis: e.target.value })}
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor={`proposal-repair-${ticketId}`}
+              className="text-muted-foreground mb-1 block text-[11px] uppercase"
+            >
+              Описание ремонта
+            </label>
+            <textarea
+              id={`proposal-repair-${ticketId}`}
+              value={proposal.repairDescription}
+              rows={3}
+              onChange={(e) =>
+                changeProposal({ ...proposal, repairDescription: e.target.value })
+              }
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={applying}
+              onClick={askApply}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 rounded-lg px-5 text-sm font-semibold disabled:opacity-50"
+            >
+              {applying ? 'Записываю…' : 'Применить'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setProposal(null);
+                forgetProposal();
+              }}
+              className="hover:bg-muted/40 h-11 rounded-lg border px-4 text-sm"
+            >
+              Не надо
+            </button>
+          </div>
+          <ConfirmDialog
+            open={confirmingReplace}
+            title="В наряде уже есть текст"
+            description={`Сейчас записано:\n${replacedText}\n\nЭто уйдёт в акт, который подпишет клиент. «Заменить» перепишет его тем, что предложено выше.`}
+            confirmText="Заменить"
+            onConfirm={applyProposal}
+            onCancel={() => setConfirmingReplace(false)}
+          />
+        </div>
+      )}
+
+      {/* Что сейчас лежит в наряде. Прятать нельзя: инженер должен видеть, под
+          чем распишется клиент, — особенно когда правил не он. */}
+      {!proposal && actFilled && (
+        <div className="bg-muted/30 space-y-1 rounded-lg border p-3 text-sm">
+          <div className="text-muted-foreground text-[11px] uppercase">Сейчас в наряде</div>
+          {actDiagnosis?.trim() && (
+            <div>
+              <span className="text-muted-foreground">Диагноз: </span>
+              {actDiagnosis}
+            </div>
+          )}
+          {actRepair?.trim() && (
+            <div>
+              <span className="text-muted-foreground">Описание ремонта: </span>
+              {actRepair}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -455,6 +1000,15 @@ function RepairDescriptionField({
   const [note, setNote] = useState<string | null>(
     restored != null ? 'Текст восстановлен из памяти телефона — проверьте и сохраните' : null,
   );
+  const fieldId = useId();
+  /**
+   * ⚠️ Вопрос перед затиранием. Эта кнопка собирает текст из СТРОК наряда и
+   * вписывает его в поле — набранное человеком она не читает вовсе. Раньше
+   * затирала молча: именно с этой потери и начался весь разбор «инженер пишет
+   * своими словами». Кнопку оставили (диспетчеру она к месту), но терять
+   * чужую работу без вопроса нельзя.
+   */
+  const [confirmingDraft, setConfirmingDraft] = useState(false);
   const draft = trpc.workOrders.draftRepairDescription.useMutation({
     onSuccess: (res) => {
       setValue(res.text);
@@ -479,13 +1033,15 @@ function RepairDescriptionField({
 
   const save = () => {
     if (!canEdit) return;
-    const next = current.current.trim() || null;
+    const raw = current.current;
+    const next = raw.trim() || null;
     if (next === sent.current) return;
     sent.current = next;
     void onSave(next).then((status) => {
       // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
-      // оставляем: вернуть набранное будет больше неоткуда.
-      if (status !== 'error') forgetDraft(ticketId, 'repairDescription');
+      // оставляем: вернуть набранное будет больше неоткуда. Снимаем её ТОЛЬКО
+      // с уехавшего текста — дописанное за время записи страховать некому.
+      if (status !== 'error') forgetDraftIfUnchanged(ticketId, 'repairDescription', raw);
     });
   };
   /**
@@ -498,12 +1054,16 @@ function RepairDescriptionField({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-[11px] uppercase">Описание ремонта</span>
+        <label htmlFor={fieldId} className="text-muted-foreground text-[11px] uppercase">
+          Описание ремонта
+        </label>
         {canEdit && (
           <button
             type="button"
             disabled={draft.isPending}
-            onClick={() => draft.mutate({ ticketId })}
+            onClick={() =>
+              value.trim() ? setConfirmingDraft(true) : draft.mutate({ ticketId })
+            }
             className={cn(
               'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded font-medium disabled:opacity-50',
               // На телефоне кнопка была 21 пиксель высотой — пальцем не попасть.
@@ -516,6 +1076,7 @@ function RepairDescriptionField({
         )}
       </div>
       <textarea
+        id={fieldId}
         value={value}
         disabled={!canEdit}
         rows={3}
@@ -535,6 +1096,17 @@ function RepairDescriptionField({
       ) : (
         note && <div className="text-muted-foreground mt-1 text-[11px]">{note}</div>
       )}
+      <ConfirmDialog
+        open={confirmingDraft}
+        title="В поле уже есть текст"
+        description={`Сейчас записано:\n${value.trim()}\n\nЧерновик собирается из строк наряда и НЕ читает написанное — «Заменить» перепишет этот текст.`}
+        confirmText="Заменить"
+        onConfirm={() => {
+          setConfirmingDraft(false);
+          draft.mutate({ ticketId });
+        }}
+        onCancel={() => setConfirmingDraft(false)}
+      />
     </div>
   );
 }
@@ -570,6 +1142,9 @@ function Field({
 }) {
   const mark = useSaveMark();
   const box = useRef<HTMLTextAreaElement>(null);
+  // Подпись связана с полем по-настоящему: без этого поле не найти по имени —
+  // ни человеку через экранный диктор, ни проверке.
+  const fieldId = useId();
   /**
    * Черновик читаем ОДИН раз, до первой отрисовки: поле неуправляемое, и
    * подставить в него текст позже — значит на мгновение показать пустоту.
@@ -602,16 +1177,20 @@ function Field({
     sent.current = next;
     void onSave(next, mark).then((status) => {
       // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
-      // оставляем: вернуть набранное будет больше неоткуда.
-      if (status !== 'error') forgetDraft(scope, name);
+      // оставляем: вернуть набранное будет больше неоткуда. Снимаем её ТОЛЬКО
+      // с уехавшего текста — дописанное за время записи страховать некому.
+      if (status !== 'error') forgetDraftIfUnchanged(scope, name, raw);
     });
   };
   useFlushOnLeave(save);
 
   return (
     <div>
-      <div className="text-muted-foreground mb-1 text-[11px] uppercase">{label}</div>
+      <label htmlFor={fieldId} className="text-muted-foreground mb-1 block text-[11px] uppercase">
+        {label}
+      </label>
       <textarea
+        id={fieldId}
         ref={box}
         defaultValue={restored ?? initial ?? ''}
         disabled={disabled}
@@ -1654,18 +2233,28 @@ function CardRow({
   );
 }
 
+/**
+ * Итоги наряда.
+ *
+ * ⚠️ У ИНЖЕНЕРА (`card`) НЕТ СТРОКИ «ВСЕГО с НДС». Суммы работ ему нужны —
+ * от них считается его сделка; итог с НДС — это счёт клиенту, чужая забота,
+ * и на телефоне он только занимал место (решение владельца 2026-08-08:
+ * «минимизировать контакт инженеров с программой»).
+ */
 function Totals({
   works,
   parts,
   expenses,
   total,
   vatRate,
+  layout,
 }: {
   works: string;
   parts: string;
   expenses: string;
   total: string;
   vatRate: VatRate;
+  layout: WorkOrderLayout;
 }) {
   return (
     <div className="bg-card rounded-lg border p-4">
@@ -1676,12 +2265,16 @@ function Totals({
         <div className="text-right tabular-nums">{kopecksToRub(parts)} ₽</div>
         <div className="text-muted-foreground">Итого расходы</div>
         <div className="text-right tabular-nums">{kopecksToRub(expenses)} ₽</div>
-        <div className="text-foreground font-semibold">
-          ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
-        </div>
-        <div className="text-right text-base font-semibold tabular-nums">
-          {kopecksToRub(total)} ₽
-        </div>
+        {layout !== 'card' && (
+          <>
+            <div className="text-foreground font-semibold">
+              ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
+            </div>
+            <div className="text-right text-base font-semibold tabular-nums">
+              {kopecksToRub(total)} ₽
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

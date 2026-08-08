@@ -512,6 +512,13 @@
       "when": 1778700000000,
       "tag": "0081_drop_legacy_encrypted_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1778800000000,
+      "tag": "0082_engineer_notes",
+      "breakpoints": true
     }
   ]
 }
