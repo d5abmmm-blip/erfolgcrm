@@ -12,7 +12,8 @@ import { cn } from '../lib/utils';
 import {
   AI_PROVIDERS,
   CUSTOM_PROVIDER_ID,
-  providerByBaseUrl,
+  OTHER_MODEL,
+  resolveProvider,
   type ApiStyle,
 } from '../lib/ai-providers';
 
@@ -94,13 +95,22 @@ export function AiSettingsPage() {
    * Незнакомый адрес — это «Своё подключение», а НЕ «похожий из списка»:
    * иначе открытие страницы молча подменило бы человеку рабочую настройку.
    */
-  const provider = providerByBaseUrl(baseUrl);
+  const provider = resolveProvider(baseUrl, model);
   const providerId = provider?.id ?? CUSTOM_PROVIDER_ID;
+
+  /**
+   * Человек выбрал «Другая модель» — поле превращается во ввод, а провайдер
+   * и его адрес остаются. Провайдеры выпускают модели чаще, чем мы деплоим:
+   * без этого список отнимал бы возможность вместо того, чтобы помогать.
+   */
+  const [freeModelInput, setFreeModelInput] = useState(false);
+  const useModelList = !!provider && provider.models.length > 0 && !freeModelInput;
 
   const pickProvider = (id: string) => {
     const p = AI_PROVIDERS.find((x) => x.id === id);
     if (!p) return;
     setApiStyle(p.apiStyle);
+    setFreeModelInput(false);
     if (id === CUSTOM_PROVIDER_ID) {
       // Своё подключение: поля освобождаем, чтобы человек вписал своё, а не
       // правил чужой адрес поверх.
@@ -111,6 +121,15 @@ export function AiSettingsPage() {
     setBaseUrl(p.baseUrl);
     // Модель прежнего провайдера у нового не работает — подставляем его первую.
     setModel(p.models[0] ?? '');
+  };
+
+  const pickModel = (value: string) => {
+    if (value === OTHER_MODEL) {
+      setFreeModelInput(true);
+      setModel('');
+      return;
+    }
+    setModel(value);
   };
 
   const save = () => {
@@ -262,11 +281,11 @@ export function AiSettingsPage() {
                 {/* У известного провайдера — список его моделей: слаги у разных
                     сервисов разные («glm-4.6» против «z-ai/glm-4.6»), и перепутать
                     их стоило владельцу вечера. У «своего» — обычное поле. */}
-                {provider && provider.models.length > 0 ? (
+                {useModelList ? (
                   <select
                     aria-label="Модель"
                     value={model}
-                    onChange={(e) => setModel(e.target.value)}
+                    onChange={(e) => pickModel(e.target.value)}
                     className={inputCls}
                   >
                     {(provider.models.includes(model)
@@ -279,6 +298,9 @@ export function AiSettingsPage() {
                           {m}
                         </option>
                       ))}
+                    {/* Провайдер выпустил новую модель раньше, чем мы обновили
+                        список — не запираем человека в устаревшем перечне. */}
+                    <option value={OTHER_MODEL}>Другая модель (вписать)</option>
                   </select>
                 ) : (
                   <input

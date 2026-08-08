@@ -39,16 +39,29 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
     label: 'z.ai — GLM (Anthropic-совместимый)',
     apiStyle: 'anthropic',
     baseUrl: 'https://api.z.ai/api/anthropic',
-    models: ['glm-4.6', 'glm-4.5', 'glm-4.5-air'],
-    hint: 'Работает с боевого сервера. GLM-4.6 понимает и текст, и фото документов.',
+    // Порядок = что подставится по умолчанию. Сначала бесплатное и дешёвое:
+    // причесать фразу инженера и ответить в чате — работа лёгкая, флагман за
+    // $4,4 за миллион здесь не нужен. Цены сверены с прайсом z.ai 2026-08-08.
+    models: ['glm-4.7-flash', 'glm-4.7-flashx', 'glm-4.5-air', 'glm-4.7', 'glm-4.6', 'glm-5'],
+    hint: 'Работает с боевого сервера. GLM-4.7-Flash — бесплатная, её и берите для начала; GLM-4.7 (~$0,6 за млн) — если понадобится лучше.',
   },
   {
     id: 'zai-openai',
     label: 'z.ai — GLM (OpenAI-совместимый)',
     apiStyle: 'openai',
     baseUrl: 'https://api.z.ai/api/paas/v4',
-    models: ['glm-4.6', 'glm-4.5', 'glm-4.5-air'],
-    hint: 'Тот же z.ai, но по стилю OpenAI. Работает с боевого сервера.',
+    models: ['glm-4.7-flash', 'glm-4.7-flashx', 'glm-4.5-air', 'glm-4.7', 'glm-4.6', 'glm-5'],
+    hint: 'Тот же z.ai, но по стилю OpenAI. Работает с боевого сервера, GLM-4.7-Flash бесплатна.',
+  },
+  {
+    id: 'zai-vision',
+    label: 'z.ai — GLM Vision (разбор фото)',
+    apiStyle: 'openai',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    // Отдельная строка, потому что текстовые модели фото не понимают: если
+    // помощнику будут слать снимки документов, нужна именно такая.
+    models: ['glm-4.6v-flash', 'glm-4.6v-flashx', 'glm-4.6v', 'glm-ocr'],
+    hint: 'Для фото документов. GLM-4.6V-Flash — бесплатная. Обычные текстовые модели картинки не понимают.',
   },
   {
     id: 'deepseek',
@@ -102,6 +115,16 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
 /** Ручной ввод — у него нет списка моделей и нет подставляемого адреса. */
 export const CUSTOM_PROVIDER_ID = 'custom';
 
+/**
+ * Пункт «вписать модель руками» внутри списка моделей известного провайдера.
+ *
+ * ЗАЧЕМ. Провайдеры выпускают модели чаще, чем мы деплоим: список z.ai устарел
+ * в тот же день, когда появился. Без этого пункта выпадающий список, задуманный
+ * как помощь, ОТНИМАЕТ возможность — вписать новую модель можно было бы только
+ * через «Своё подключение», а оно стирает и адрес провайдера.
+ */
+export const OTHER_MODEL = '__other__';
+
 function normalize(url: string): string {
   return url.trim().replace(/\/+$/, '').toLowerCase();
 }
@@ -116,4 +139,24 @@ export function providerByBaseUrl(baseUrl: string | null | undefined): AiProvide
   if (!baseUrl?.trim()) return undefined;
   const needle = normalize(baseUrl);
   return AI_PROVIDERS.find((p) => p.baseUrl && normalize(p.baseUrl) === needle);
+}
+
+/**
+ * Провайдер по адресу И модели.
+ *
+ * Одного адреса мало: у z.ai текстовые модели и модели для фото живут на ОДНОМ
+ * адресе (`/api/paas/v4`), и поиск только по адресу всегда возвращал бы первый
+ * попавшийся — «Vision» стал бы невыбираемым. Поэтому при совпадении адреса
+ * предпочитаем того, у кого в списке есть текущая модель.
+ */
+export function resolveProvider(
+  baseUrl: string | null | undefined,
+  model: string | null | undefined,
+): AiProvider | undefined {
+  if (!baseUrl?.trim()) return undefined;
+  const needle = normalize(baseUrl);
+  const sameUrl = AI_PROVIDERS.filter((p) => p.baseUrl && normalize(p.baseUrl) === needle);
+  if (sameUrl.length === 0) return undefined;
+  const m = (model ?? '').trim().toLowerCase();
+  return sameUrl.find((p) => p.models.some((x) => x.toLowerCase() === m)) ?? sameUrl[0];
 }
