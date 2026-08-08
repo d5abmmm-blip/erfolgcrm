@@ -5,7 +5,7 @@
  * Протокол: z.ai GLM Coding Plan → anthropic; OpenRouter/OpenAI-совместимые → openai.
  */
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Sparkles, Wifi } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Sparkles, Wifi } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
@@ -73,6 +73,27 @@ export function AiSettingsPage() {
       ),
     onError: (e) => setTestMsg(`Ошибка: ${e.message}`),
   });
+
+  /**
+   * На экране есть правки, которых нет на сервере.
+   *
+   * ЗАЧЕМ ЭТО ВООБЩЕ НУЖНО. Карточки режима подсвечиваются при нажатии и
+   * выглядят применёнными, но на сервер ничего не уходит до «Сохранить».
+   * А «Проверить связь» спрашивает СОХРАНЁННЫЙ конфиг — сервер читает его из
+   * базы. Владелец сорок три минуты переключал режим и жал проверку, получая
+   * «не настроен»: он проверял не то, что видел перед собой, и приложение об
+   * этом молчало.
+   */
+  const savedCfg = cfg.data;
+  const dirty =
+    !!savedCfg &&
+    (enabled !== savedCfg.enabled ||
+      mode !== (savedCfg.mode ?? 'full') ||
+      apiStyle !== savedCfg.apiStyle ||
+      baseUrl !== (savedCfg.baseUrl ?? '') ||
+      model !== (savedCfg.model ?? '') ||
+      customInstructions !== (savedCfg.customInstructions ?? '') ||
+      apiKey.trim() !== '');
 
   const applyPreset = (style: ApiStyle) => {
     setApiStyle(style);
@@ -280,6 +301,15 @@ export function AiSettingsPage() {
             <button
               type="button"
               onClick={() => {
+                // Проверка идёт по тому, что лежит в базе. Пока правки не
+                // сохранены, её ответ относился бы к ДРУГИМ настройкам —
+                // молчать об этом нельзя, на этом и застревают.
+                if (dirty) {
+                  setTestMsg(
+                    'Сначала сохраните: проверка идёт по сохранённым настройкам, а не по тому, что на экране.',
+                  );
+                  return;
+                }
                 setTestMsg(null);
                 testConfig.mutate();
               }}
@@ -297,6 +327,12 @@ export function AiSettingsPage() {
               <span className="text-success inline-flex items-center gap-1 text-sm">
                 <CheckCircle2 className="h-4 w-4" />
                 Сохранено
+              </span>
+            )}
+            {dirty && !saved && (
+              <span className="text-warning inline-flex items-center gap-1 text-sm font-medium">
+                <AlertTriangle className="h-4 w-4" />
+                Изменения не сохранены — нажмите «Сохранить»
               </span>
             )}
             {testMsg && <span className="text-muted-foreground text-sm">{testMsg}</span>}
