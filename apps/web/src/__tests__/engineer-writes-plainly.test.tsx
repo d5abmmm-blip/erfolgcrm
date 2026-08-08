@@ -37,10 +37,12 @@ const WORK_ORDER = {
   orderNumber: 'WO-1',
   ticketId: TICKET,
   vatRate: '20' as const,
-  diagnosis: null,
-  repairDescription: null,
-  recommendation: null,
-  engineerNotes: null,
+  // Типы указаны явно: без них TS выводит литеральный `null`, и наряд с
+  // заполненным диагнозом уже не собрать через orderOverride.
+  diagnosis: null as string | null,
+  repairDescription: null as string | null,
+  recommendation: null as string | null,
+  engineerNotes: null as string | null,
   worksAmountKopecks: '0',
   partsAmountKopecks: '0',
   expensesAmountKopecks: '0',
@@ -68,13 +70,16 @@ const COMPOSED = {
  * Настоящий офлайн честно падает: на этом падении держится вся очередь.
  * Заглушка, отвечающая 200 всегда, проверяла бы не то приложение.
  */
-function serverComposesButCannotSave() {
+function serverComposesButCannotSave(order: typeof WORK_ORDER = WORK_ORDER) {
   return (url: unknown): Promise<Response> => {
     if (!navigator.onLine) return Promise.reject(new TypeError('Failed to fetch'));
     const path = String(url).split('/trpc/')[1]?.split('?')[0] ?? '';
     const body = path.split(',').map((proc) => {
       if (proc.includes('composeFromNotes')) return { result: { data: { json: COMPOSED } } };
-      if (proc.includes('getByTicket')) return { result: { data: { json: WORK_ORDER } } };
+      // ⚠️ Отдаём ТОТ ЖЕ наряд, которым засеян кэш. Пока заглушка возвращала
+      // базовый, перечитывание стирало заполненные поля акта — и экран честно
+      // не спрашивал про замену, потому что заменять было нечего.
+      if (proc.includes('getByTicket')) return { result: { data: { json: order } } };
       return { result: { data: { json: null } } };
     });
     return Promise.resolve(
@@ -89,13 +94,16 @@ function serverComposesButCannotSave() {
 function renderEditor(
   layout: WorkOrderLayout,
   fetchImpl?: (url: unknown) => Promise<Response>,
+  /** Чем отличается наряд в этом тесте — например, уже заполненными полями акта. */
+  orderOverride?: Partial<typeof WORK_ORDER>,
 ) {
+  const order = { ...WORK_ORDER, ...orderOverride };
   const queryClient = new QueryClient({
     defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
   });
   queryClient.setQueryData(
     [['workOrders', 'getByTicket'], { input: { ticketId: TICKET }, type: 'query' }],
-    WORK_ORDER,
+    order,
   );
   const client = trpc.createClient({
     links: [
@@ -223,6 +231,139 @@ describe('«Оформить» — предложение, а не подмен�
       expect(queued).toContain('Вышла из строя плата питания');
       expect(queued).toContain('Плата питания заменена');
     });
+  });
+});
+
+/**
+ * Рекомендация — это НЕ украшение наряда. Она печатается в трёх бланках, и в
+ * дефектном акте становится заключением «рекомендовано к списанию»
+ * (см. lib/pdf/defect-act.ts). Инженер печатает эти бланки прямо с телефона,
+ * значит и заполнять их должен уметь оттуда же.
+ *
+ * Убрав с телефона три поля ради одного, я вместе с ними убрал и это —
+ * инженер не мог ни вписать рекомендацию, ни увидеть уже написанную.
+ */
+describe('рекомендация доступна с телефона', () => {
+  it('свёрнута, пока не нужна, — но открывается и сохраняется', async () => {
+    const view = renderEditor('card');
+    fireEvent.click(await screen.findByRole('button', { name: /рекомендаци/i }));
+
+    const box = await screen.findByLabelText(/Рекомендации/i);
+    fireEvent.change(box, { target: { value: 'Рекомендовано к списанию' } });
+    view.unmount();
+
+    await waitFor(async () => {
+      const queued = await queuedText();
+      expect(queued).toContain('Рекомендовано к списанию');
+      expect(queued).toContain('recommendation');
+    });
+  });
+
+  it('уже написанную видно сразу, разворачивать не надо', async () => {
+    renderEditor('card', undefined, {
+      recommendation: 'До замены датчика эксплуатация не рекомендована.',
+    });
+    await screen.findByDisplayValue('До замены датчика эксплуатация не рекомендована.');
+  });
+
+  it('по чужой заявке рекомендацию видно, но не изменить', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
+    });
+    const order = { ...WORK_ORDER, recommendation: 'Рекомендовано к списанию' };
+    queryClient.setQueryData(
+      [['workOrders', 'getByTicket'], { input: { ticketId: TICKET }, type: 'query' }],
+      order,
+    );
+    const client = trpc.createClient({
+      links: [
+        httpBatchLink({
+          url: 'http://test.invalid/api/v1/trpc',
+          transformer: superjson,
+          fetch: () => Promise.reject(new TypeError('Failed to fetch')),
+        }),
+      ],
+    });
+    render(
+      <trpc.Provider client={client} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <WorkOrderEditor
+            ticketId={TICKET}
+            ticketNumber="WSP-901"
+            canEdit={false}
+            canEditVat={false}
+            layout="card"
+          />
+        </QueryClientProvider>
+      </trpc.Provider>,
+    );
+
+    const box = await screen.findByDisplayValue('Рекомендовано к списанию');
+    expect((box as HTMLTextAreaElement).disabled).toBe(true);
+  });
+});
+
+/**
+ * Строку наряда мы спрашиваем перед удалением (#113), а текст, который клиент
+ * подписывает, затирали молча. Спрашиваем только когда есть что терять: на
+ * пустом наряде лишний вопрос мешал бы работать.
+ */
+describe('«Применить» не затирает чужую работу молча', () => {
+  async function openProposalOver(existing: Partial<typeof WORK_ORDER>) {
+    const order = { ...WORK_ORDER, ...existing };
+    renderEditor('card', serverComposesButCannotSave(order), existing);
+    const field = (await screen.findAllByRole('textbox'))[0] as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'плата сгорела поменял' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
+    await screen.findByDisplayValue('Вышла из строя плата питания.');
+  }
+
+  it('в наряде уже есть текст — спрашиваем и показываем, что заменим', async () => {
+    goOnline();
+    await openProposalOver({ diagnosis: 'Пробой платы питания (написал диспетчер)' });
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+
+    // Вопрос показывает ИМЕННО то, что исчезнет, — иначе решать не по чему.
+    await screen.findByText(/Пробой платы питания \(написал диспетчер\)/);
+    fireEvent.click(await screen.findByRole('button', { name: /Отмена/ }));
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await queuedText()).not.toContain('Вышла из строя плата питания');
+  });
+
+  it('на пустом наряде вопроса нет — терять нечего', async () => {
+    goOnline();
+    await openProposalOver({});
+    goOffline();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+
+    await waitFor(async () => {
+      expect(await queuedText()).toContain('Вышла из строя плата питания');
+    });
+  });
+});
+
+/**
+ * Исходник инженера — единственное доказательство того, что человек написал на
+ * самом деле. При разборе «почему в акте ерунда» смотреть надо именно на него,
+ * а видел его до сих пор только сам автор на своём телефоне.
+ */
+describe('на десктопе видно, что инженер написал своими словами', () => {
+  it('текст показан и НЕ редактируется — это свидетельство, а не поле', async () => {
+    const raw = 'плата сгорела поменял всё пашет';
+    renderEditor('table', undefined, { engineerNotes: raw });
+
+    await screen.findByText(raw);
+    // Не в поле ввода: диспетчер не должен править чужие слова.
+    expect(screen.queryByDisplayValue(raw)).toBeNull();
+  });
+
+  it('инженер своими словами ничего не писал — блока нет вовсе', async () => {
+    renderEditor('table');
+    await screen.findByText('Диагноз');
+    expect(screen.queryByText(/Инженер написал своими словами/i)).toBeNull();
   });
 });
 
