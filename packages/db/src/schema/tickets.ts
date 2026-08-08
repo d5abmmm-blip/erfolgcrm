@@ -329,6 +329,14 @@ export const workOrders = pgTable(
     repairDescription: text('repair_description'),
     recommendation: text('recommendation'),
 
+    /**
+     * Что инженер написал СВОИМИ словами — одной кучей, как ему удобно.
+     * Три поля выше собираются из него («Оформить»), а исходник остаётся:
+     * по нему человек узнаёт, что писал, и может переоформить или дописать.
+     * NULL = своими словами ничего не писали (весь десктоп и вся история).
+     */
+    engineerNotes: text('engineer_notes'),
+
     vatRate: vatRateEnum('vat_rate').notNull().default('5'),
 
     /** Все суммы в копейках — bigint, чтобы избежать float-ошибок. */

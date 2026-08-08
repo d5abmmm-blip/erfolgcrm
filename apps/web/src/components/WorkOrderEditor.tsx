@@ -175,6 +175,7 @@ export function WorkOrderEditor({
         diagnosis={wo.data.diagnosis}
         repairDescription={wo.data.repairDescription}
         recommendation={wo.data.recommendation}
+        engineerNotes={wo.data.engineerNotes}
         vatRate={wo.data.vatRate}
         canEdit={canEdit}
         canEditVat={canEditVat}
@@ -265,6 +266,7 @@ function WorkOrderHeader({
   diagnosis,
   repairDescription,
   recommendation,
+  engineerNotes,
   vatRate,
   canEdit,
   canEditVat,
@@ -275,6 +277,7 @@ function WorkOrderHeader({
   diagnosis: string | null;
   repairDescription: string | null;
   recommendation: string | null;
+  engineerNotes: string | null;
   vatRate: VatRate;
   canEdit: boolean;
   canEditVat: boolean;
@@ -350,7 +353,7 @@ function WorkOrderHeader({
    * иначе набранное некому будет вернуть.
    */
   const saveHeader = async (
-    field: 'diagnosis' | 'repairDescription' | 'recommendation',
+    field: 'diagnosis' | 'repairDescription' | 'recommendation' | 'engineerNotes',
     next: string | null,
     mark?: HeaderMark,
   ): Promise<'ok' | 'queued' | 'error'> => {
@@ -377,31 +380,57 @@ function WorkOrderHeader({
 
   return (
     <div className="bg-card space-y-3 rounded-lg border p-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Field
-          label="Диагноз"
-          scope={ticketId}
-          name="diagnosis"
-          initial={diagnosis}
-          disabled={!canEdit}
-          onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
-        />
-        <RepairDescriptionField
+      {/* На телефоне у инженера ОДНО поле вместо трёх (решение владельца
+          2026-08-08: «инженеры не любят приложение, надо минимизировать их
+          контакт с программой»). На десктопе диспетчер правит поля акта
+          напрямую — там всё как было. */}
+      {layout === 'card' ? (
+        <EngineerNotesField
           ticketId={ticketId}
-          initial={repairDescription}
+          initial={engineerNotes}
+          diagnosis={diagnosis}
+          repairDescription={repairDescription}
           canEdit={canEdit}
-          layout={layout}
-          onSave={(value) => saveHeader('repairDescription', value)}
+          onSaveNotes={(value) => saveHeader('engineerNotes', value)}
+          onApply={async (composed) => {
+            const first = await saveHeader('diagnosis', composed.diagnosis);
+            const second = await saveHeader('repairDescription', composed.repairDescription);
+            // Хуже из двух: одно поле легло в очередь, а второе отказали —
+            // говорить «записано» в таком случае значит соврать.
+            return first === 'error' || second === 'error'
+              ? 'error'
+              : first === 'queued' || second === 'queued'
+                ? 'queued'
+                : 'ok';
+          }}
         />
-        <Field
-          label="Рекомендации"
-          scope={ticketId}
-          name="recommendation"
-          initial={recommendation}
-          disabled={!canEdit}
-          onSave={(next, mark) => saveHeader('recommendation', next, mark)}
-        />
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field
+            label="Диагноз"
+            scope={ticketId}
+            name="diagnosis"
+            initial={diagnosis}
+            disabled={!canEdit}
+            onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
+          />
+          <RepairDescriptionField
+            ticketId={ticketId}
+            initial={repairDescription}
+            canEdit={canEdit}
+            layout={layout}
+            onSave={(value) => saveHeader('repairDescription', value)}
+          />
+          <Field
+            label="Рекомендации"
+            scope={ticketId}
+            name="recommendation"
+            initial={recommendation}
+            disabled={!canEdit}
+            onSave={(next, mark) => saveHeader('recommendation', next, mark)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
         <select
@@ -425,6 +454,277 @@ function WorkOrderHeader({
           <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Про офлайн говорим словами, а не пустой кнопкой. */
+const OFFLINE_COMPOSE_TEXT =
+  'Нет связи. Ваш текст записан — оформить получится, когда появится связь.';
+
+/**
+ * ОДНО поле инженера: «Что было и что сделал».
+ *
+ * ЗАЧЕМ. Запрос владельца 2026-08-08: «инженеры вообще не любят мобильное
+ * приложение, надо минимизировать их контакт с программой. Они по-своему,
+ * по-колхозному пишут, что сломалось и что сделали, а ИИ грамотно
+ * перефразирует». Три поля на телефоне — три повода не заполнить ни одного.
+ *
+ * ⚠️ ГЛАВНОЕ ПРАВИЛО: «Оформить» НЕ ТРОГАЕТ текст инженера. Это единственный
+ * экземпляр написанного человеком, всё остальное из него выводится. Ровно на
+ * этом обжигалась кнопка «ИИ-черновик» (она рядом, для десктопа): собирала
+ * текст из строк наряда и затирала поле, не читая написанное.
+ *
+ * Предложенное показываем ОТДЕЛЬНО и правкой — человек видит, что уйдёт в акт,
+ * который подпишет клиент, и может исправить слово до «Применить».
+ *
+ * БЕЗ СВЯЗИ В СЕТЬ НЕ ХОДИМ ВОВСЕ. Не из вежливости: у запросов режим
+ * `networkMode: 'online'`, react-query ставит их на паузу, и обещание не
+ * выполняется никогда — так намертво зависал сканер (#112). Мутация ушла бы
+ * (у мутаций `always`) и честно упала, но человеку нужен не текст ошибки,
+ * а понимание, что делать. Набранное при этом уже записано — своим путём,
+ * через очередь.
+ */
+function EngineerNotesField({
+  ticketId,
+  initial,
+  diagnosis,
+  repairDescription,
+  canEdit,
+  onSaveNotes,
+  onApply,
+}: {
+  ticketId: string;
+  initial: string | null;
+  diagnosis: string | null;
+  repairDescription: string | null;
+  canEdit: boolean;
+  onSaveNotes: (value: string | null) => Promise<'ok' | 'queued' | 'error'>;
+  onApply: (composed: {
+    diagnosis: string | null;
+    repairDescription: string | null;
+  }) => Promise<'ok' | 'queued' | 'error'>;
+}) {
+  const outbox = useOutbox();
+  const mark = useSaveMark();
+  const box = useRef<HTMLTextAreaElement>(null);
+  /** Черновик читаем ОДИН раз, до первой отрисовки — см. такой же в `Field`. */
+  const [restored] = useState(() => readDraft(ticketId, 'engineerNotes'));
+  const typed = useRef<string | null>(null);
+  const sent = useRef<string | null>(initial ?? null);
+  useEffect(() => {
+    sent.current = initial ?? null;
+  }, [initial]);
+
+  /** Предложенное моделью (или разбором без неё). Пока не применили — только показ. */
+  const [proposal, setProposal] = useState<{
+    diagnosis: string;
+    repairDescription: string;
+    aiUsed: boolean;
+  } | null>(null);
+  const [note, setNote] = useState<string | null>(
+    restored != null ? 'Текст восстановлен из памяти телефона — проверьте' : null,
+  );
+  const [applying, setApplying] = useState(false);
+
+  const compose = trpc.workOrders.composeFromNotes.useMutation({ meta: SILENT_ERROR });
+
+  const saveNotes = () => {
+    if (!canEdit) return;
+    const raw = box.current?.value ?? typed.current ?? initial ?? '';
+    const next = raw.trim() || null;
+    if (next === sent.current) return;
+    sent.current = next;
+    mark.markSaving();
+    void onSaveNotes(next).then((status) => {
+      mark.markResult(status);
+      // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
+      // оставляем: вернуть набранное будет больше неоткуда.
+      if (status !== 'error') forgetDraft(ticketId, 'engineerNotes');
+    });
+  };
+  useFlushOnLeave(saveNotes);
+
+  const askToCompose = () => {
+    const text = (box.current?.value ?? typed.current ?? '').trim();
+    if (!text) {
+      setNote('Сначала напишите своими словами, что было и что вы сделали.');
+      return;
+    }
+    // Исходник уходит своим путём в любом случае — даже если оформить сейчас
+    // не выйдет. Это и есть обещание «набранное не потеряется».
+    saveNotes();
+    if (!outbox.isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      setProposal(null);
+      setNote(OFFLINE_COMPOSE_TEXT);
+      return;
+    }
+    setNote(null);
+    compose.mutate(
+      { ticketId, notes: text },
+      {
+        onSuccess: (res) => {
+          if (!res.diagnosis && !res.repairDescription) {
+            setNote('Не получилось разобрать написанное — впишите поля наряда сами.');
+            return;
+          }
+          setProposal({
+            diagnosis: res.diagnosis ?? '',
+            repairDescription: res.repairDescription ?? '',
+            aiUsed: res.aiUsed,
+          });
+        },
+        onError: (err) => setNote(humanizeError(err)),
+      },
+    );
+  };
+
+  const applyProposal = () => {
+    if (!proposal) return;
+    setApplying(true);
+    void onApply({
+      diagnosis: proposal.diagnosis.trim() || null,
+      repairDescription: proposal.repairDescription.trim() || null,
+    }).then((status) => {
+      setApplying(false);
+      if (status === 'error') {
+        setNote('Не удалось записать в наряд — попробуйте ещё раз.');
+        return;
+      }
+      setProposal(null);
+      setNote(
+        status === 'queued'
+          ? 'Записано в наряд — уйдёт, когда появится связь.'
+          : 'Записано в наряд.',
+      );
+    });
+  };
+
+  const actFilled = Boolean(diagnosis?.trim() || repairDescription?.trim());
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label
+          htmlFor={`engineer-notes-${ticketId}`}
+          className="text-muted-foreground mb-1 block text-[11px] uppercase"
+        >
+          Что было и что сделал
+        </label>
+        <textarea
+          id={`engineer-notes-${ticketId}`}
+          ref={box}
+          defaultValue={restored ?? initial ?? ''}
+          disabled={!canEdit}
+          rows={5}
+          placeholder="Своими словами. Например: плата сгорела, поменял, всё работает"
+          onChange={(e) => {
+            typed.current = e.target.value;
+            // Синхронно, на каждую букву: если систему прибьют — это всё, что
+            // останется от набранного (см. lib/field-draft).
+            rememberDraft(ticketId, 'engineerNotes', e.target.value);
+          }}
+          onBlur={saveNotes}
+          className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2 disabled:opacity-60"
+        />
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <SaveMark state={mark.state} />
+          {canEdit && (
+            <button
+              type="button"
+              disabled={compose.isPending}
+              onClick={askToCompose}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-11 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              {compose.isPending ? 'Оформляю…' : 'Оформить'}
+            </button>
+          )}
+        </div>
+        {note && (
+          <div className="text-muted-foreground mt-1 text-[11px]" role="status">
+            {note}
+          </div>
+        )}
+      </div>
+
+      {proposal && (
+        <div className="border-primary/40 bg-primary/5 space-y-2 rounded-lg border p-3">
+          <div className="text-sm font-semibold">Предложено — проверьте и примените</div>
+          <div className="text-muted-foreground text-[11px]">
+            {proposal.aiUsed
+              ? 'Переписал ИИ. Это уйдёт в акт, который подпишет клиент — читайте.'
+              : 'ИИ не настроен, разложил по словам без него. Это уйдёт в акт — читайте.'}
+          </div>
+          <div>
+            <label
+              htmlFor={`proposal-diagnosis-${ticketId}`}
+              className="text-muted-foreground mb-1 block text-[11px] uppercase"
+            >
+              Диагноз
+            </label>
+            <textarea
+              id={`proposal-diagnosis-${ticketId}`}
+              value={proposal.diagnosis}
+              rows={2}
+              onChange={(e) => setProposal({ ...proposal, diagnosis: e.target.value })}
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor={`proposal-repair-${ticketId}`}
+              className="text-muted-foreground mb-1 block text-[11px] uppercase"
+            >
+              Описание ремонта
+            </label>
+            <textarea
+              id={`proposal-repair-${ticketId}`}
+              value={proposal.repairDescription}
+              rows={3}
+              onChange={(e) => setProposal({ ...proposal, repairDescription: e.target.value })}
+              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={applying}
+              onClick={applyProposal}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 rounded-lg px-5 text-sm font-semibold disabled:opacity-50"
+            >
+              {applying ? 'Записываю…' : 'Применить'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setProposal(null)}
+              className="hover:bg-muted/40 h-11 rounded-lg border px-4 text-sm"
+            >
+              Не надо
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Что сейчас лежит в наряде. Прятать нельзя: инженер должен видеть, под
+          чем распишется клиент, — особенно когда правил не он. */}
+      {!proposal && actFilled && (
+        <div className="bg-muted/30 space-y-1 rounded-lg border p-3 text-sm">
+          <div className="text-muted-foreground text-[11px] uppercase">Сейчас в наряде</div>
+          {diagnosis?.trim() && (
+            <div>
+              <span className="text-muted-foreground">Диагноз: </span>
+              {diagnosis}
+            </div>
+          )}
+          {repairDescription?.trim() && (
+            <div>
+              <span className="text-muted-foreground">Описание ремонта: </span>
+              {repairDescription}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,13 @@ import {
 import { getTicket } from '../tickets/repository';
 import { assertMayEditWorkOrderOfTicket } from '../tickets/service';
 import { phraseWithLlm } from '../ai-assistant/proactive';
+import {
+  COMPOSE_SYSTEM_PROMPT,
+  composeFromNotes,
+  inventsFacts,
+  parseComposedJson,
+  type ComposedNotes,
+} from './compose-notes';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 
@@ -128,6 +135,55 @@ export async function draftRepairDescriptionQuery(
 
   const ai = await phraseWithLlm(db, tenant, system, userLines.join('\n'));
   return ai ? { text: ai.trim(), aiUsed: true } : { text: fallback, aiUsed: false };
+}
+
+/* ────────── «Инженер пишет своими словами» — разложить на два поля ────────── */
+
+export interface ComposeEngineerNotesResult extends ComposedNotes {
+  /** true — раскладывала модель; false — честный разбор без модели. */
+  aiUsed: boolean;
+}
+
+/**
+ * Разложить написанное инженером своими словами на «Диагноз» и «Описание
+ * ремонта». НИЧЕГО НЕ ПИШЕТ: это предложение, которое человек ещё увидит и
+ * либо применит, либо нет.
+ *
+ * Порядок такой: настроена модель — раскладывает она, потому что перефразировать
+ * по-человечески умеет только она (ради этого владелец всё и просил). Не
+ * настроена, сломалась, ответила мусором или что-то присочинила — работает
+ * разбор без модели (compose-notes.ts). Пустой результат инженеру не отдаём
+ * никогда: он написал текст и ждёт ответа.
+ *
+ * ПОЧЕМУ ПРОВЕРЯЕМ ЗА МОДЕЛЬЮ (`inventsFacts`): текст уходит в акт, который
+ * подписывает клиент. Выдуманная гарантия или срок — обязательство компании,
+ * которого инженер не давал.
+ */
+export async function composeEngineerNotesQuery(
+  ctx: CmdCtx,
+  ticketId: string,
+  notes: string,
+): Promise<ComposeEngineerNotesResult> {
+  // Оформляем только то, что человеку и так позволено править: своя заявка и
+  // не позже окна правки закрытой (решения владельца 2026-08-07).
+  await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+
+  const text = notes.trim();
+  // Пусто — раскладывать нечего, и модель звать незачем: с пустого входа она
+  // сочинит «работы выполнены в полном объёме».
+  if (!text) return { diagnosis: null, repairDescription: null, aiUsed: false };
+
+  const local = composeFromNotes(text);
+  const answer = await phraseWithLlm(ctx.db, ctx.tenant, COMPOSE_SYSTEM_PROMPT, text);
+  if (!answer) return { ...local, aiUsed: false };
+
+  const parsed = parseComposedJson(answer);
+  if (!parsed) return { ...local, aiUsed: false };
+
+  const produced = `${parsed.diagnosis ?? ''} ${parsed.repairDescription ?? ''}`;
+  if (inventsFacts(text, produced)) return { ...local, aiUsed: false };
+
+  return { ...parsed, aiUsed: true };
 }
 
 export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise<WorkOrderDto> {

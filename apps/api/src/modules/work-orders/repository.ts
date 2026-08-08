@@ -56,6 +56,8 @@ export interface WorkOrderDto {
   diagnosis: string | null;
   repairDescription: string | null;
   recommendation: string | null;
+  /** Исходник инженера, написанный своими словами (см. compose-notes.ts). */
+  engineerNotes: string | null;
   vatRate: VatRate;
   worksAmountKopecks: string;
   partsAmountKopecks: string;
@@ -86,6 +88,7 @@ export interface UpdateHeaderInput {
   diagnosis?: string | null;
   repairDescription?: string | null;
   recommendation?: string | null;
+  engineerNotes?: string | null;
   vatRate?: VatRate;
   engineerId?: string | null;
 }
@@ -152,6 +155,7 @@ async function selectHeader(tx: Tx, filter: SQL): Promise<Omit<WorkOrderDto, 'li
       diagnosis: workOrders.diagnosis,
       repairDescription: workOrders.repairDescription,
       recommendation: workOrders.recommendation,
+      engineerNotes: workOrders.engineerNotes,
       vatRate: workOrders.vatRate,
       worksAmountKopecks: workOrders.worksAmountKopecks,
       partsAmountKopecks: workOrders.partsAmountKopecks,
@@ -614,6 +618,7 @@ export async function updateWorkOrderHeader(
   if (patch.diagnosis !== undefined) setObj.diagnosis = patch.diagnosis;
   if (patch.repairDescription !== undefined) setObj.repairDescription = patch.repairDescription;
   if (patch.recommendation !== undefined) setObj.recommendation = patch.recommendation;
+  if (patch.engineerNotes !== undefined) setObj.engineerNotes = patch.engineerNotes;
   if (patch.vatRate !== undefined) setObj.vatRate = patch.vatRate;
   if (patch.engineerId !== undefined) setObj.engineerId = patch.engineerId;
   if (Object.keys(setObj).length === 0) return;

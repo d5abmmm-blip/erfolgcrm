@@ -11,6 +11,7 @@ import { VatRate, WorkOrderLineType } from '@erfolg/shared';
 import { router, engineerProcedure, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
+  composeEngineerNotesQuery,
   deleteLineCmd,
   draftRepairDescriptionQuery,
   ensureWorkOrderCmd,
@@ -41,6 +42,8 @@ const updateHeaderSchema = z
     diagnosis: z.string().trim().max(5000).nullable().optional(),
     repairDescription: z.string().trim().max(5000).nullable().optional(),
     recommendation: z.string().trim().max(5000).nullable().optional(),
+    /** Исходник инженера, написанный своими словами (см. compose-notes.ts). */
+    engineerNotes: z.string().trim().max(5000).nullable().optional(),
     engineerId: z.string().uuid().nullable().optional(),
   })
   .strict();
@@ -89,4 +92,21 @@ export const workOrdersRouter = router({
   draftRepairDescription: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .mutation(({ ctx, input }) => draftRepairDescriptionQuery(ctx.db, ctx.tenant, input.ticketId)),
+
+  /**
+   * Разложить написанное инженером своими словами на «Диагноз» и «Описание
+   * ремонта». Мутация, хотя ничего не пишет: это действие по кнопке, и ему
+   * нужен `networkMode: 'always'` — иначе без связи запрос не упадёт, а
+   * повиснет на паузе (ровно так намертво зависал сканер, #112).
+   */
+  composeFromNotes: engineerProcedure
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        notes: z.string().trim().max(5000),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      composeEngineerNotesQuery(buildCmdCtx(ctx), input.ticketId, input.notes),
+    ),
 });
