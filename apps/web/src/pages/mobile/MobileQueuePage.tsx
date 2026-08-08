@@ -46,7 +46,29 @@ const MAX_PAGE_SIZE = 500;
 
 const ACTIVE_STATUSES: TicketStatus[] = ['received', 'diagnostics', 'in_progress', 'act_pending'];
 
-type ReactAction = 'inwork' | 'ready' | 'part';
+type ReactAction = 'start' | 'inwork' | 'ready' | 'part';
+
+/**
+ * Что можно ответить по заявке, не открывая её.
+ *
+ * Владелец: «инженеры не любят приложение — они видят, что назначили, и
+ * реагируют: в ремонте / сделал / жду запчасть». До этого из списка отвечать
+ * было нельзя вовсе: «взял в работу» стоило четырёх тапов и двух экранов, а
+ * «жду запчасть» появлялось только когда заявка пожелтеет от простоя.
+ *
+ * Набор зависит от статуса: предлагать «готово» по заявке, к которой не
+ * приступали, бессмысленно — сервер такой переход и не пропустит.
+ */
+function listActions(status: TicketStatus): Array<{ action: ReactAction; label: string }> {
+  if (status === 'received') return [{ action: 'start', label: 'Взял в работу' }];
+  if (status === 'diagnostics' || status === 'in_progress') {
+    return [
+      { action: 'ready', label: 'Готово' },
+      { action: 'part', label: 'Жду запчасть' },
+    ];
+  }
+  return [];
+}
 
 interface Props {
   engineerId: string;
@@ -107,6 +129,12 @@ export function MobileQueuePage({ engineerId }: Props) {
   // «Ещё в работе» не сбрасывает дни простоя на доске (так задумано), поэтому
   // карточку после ответа прячем локально — иначе кнопка выглядит «неработающей».
   const [reactedIds, setReactedIds] = useState<Set<string>>(() => new Set());
+  /**
+   * Ответы из списка, которые ждут связи. Отдельно от `reactedIds`: тот прячет
+   * карточку в блоке «Провисло» насовсем, а здесь после успешной отправки
+   * заявка просто меняет статус и кнопки становятся другими сами.
+   */
+  const [queuedReacts, setQueuedReacts] = useState<Set<string>>(() => new Set());
 
   const onReact = async (ticketId: string, action: ReactAction, ticketNumber?: string) => {
     setBusyTicket(ticketId);
@@ -125,6 +153,7 @@ export function MobileQueuePage({ engineerId }: Props) {
       showToast('ok', result.data.message);
     } else if (result.status === 'queued') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
+      setQueuedReacts((prev) => new Set(prev).add(ticketId));
       showToast('queued', 'Нет связи — ответ сохранён и отправится сам');
     } else {
       showToast('error', result.error.message);
@@ -469,11 +498,15 @@ export function MobileQueuePage({ engineerId }: Props) {
             serialNumber: t.assetSerialNumber,
             inventoryNumber: t.assetInventoryNumber,
           });
+          // Провисшие уже показаны выше со своими кнопками — второй набор на
+          // том же экране только путал бы.
+          const actions = stuckCards.some((c) => c.id === t.id) ? [] : listActions(t.status);
+          const waitingAnswer = queuedReacts.has(t.id);
           return (
-            <li key={t.id}>
+            <li key={t.id} className="bg-card overflow-hidden rounded-lg border">
               <Link
                 href={`/m/tickets/${t.id}`}
-                className="bg-card hover:bg-muted/40 active:bg-muted/60 flex items-center justify-between gap-2 rounded-lg border p-3 transition"
+                className="hover:bg-muted/40 active:bg-muted/60 flex items-center justify-between gap-2 p-3 transition"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -536,6 +569,38 @@ export function MobileQueuePage({ engineerId }: Props) {
                 </div>
                 <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
               </Link>
+
+              {/* Ответ одним нажатием, не заходя в заявку. Кнопки ВНЕ ссылки:
+                  внутри неё тап уводил бы на карточку вместо ответа. */}
+              {waitingAnswer ? (
+                <div className="text-warning border-t px-3 py-2 text-xs font-medium">
+                  Ответ сохранён — уйдёт, когда появится связь
+                </div>
+              ) : (
+                actions.length > 0 && (
+                  <div
+                    className="grid gap-2 border-t p-2"
+                    style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}
+                  >
+                    {actions.map((a) => (
+                      <button
+                        key={a.action}
+                        type="button"
+                        disabled={busyTicket === t.id}
+                        onClick={() => void onReact(t.id, a.action, t.ticketNumber)}
+                        className={cn(
+                          'h-11 rounded-lg text-sm font-semibold transition disabled:opacity-50',
+                          a.action === 'ready'
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'bg-card hover:bg-muted/50 border',
+                        )}
+                      >
+                        {busyTicket === t.id ? '…' : a.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
             </li>
           );
         })}

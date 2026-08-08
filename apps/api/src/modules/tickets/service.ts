@@ -717,7 +717,7 @@ export async function setTicketEngineersCmd(
 }
 
 /** Реакция инженера одной кнопкой (Telegram / web-push / «Мой день»). */
-export type EngineerReactAction = 'inwork' | 'ready' | 'part';
+export type EngineerReactAction = 'inwork' | 'ready' | 'part' | 'start';
 
 export interface EngineerReactResult {
   kind: EngineerReactAction | 'noop';
@@ -728,6 +728,8 @@ export interface EngineerReactResult {
 
 /**
  * Единая команда «инженер ответил одной кнопкой»:
+ *   start  — «взял в работу»: из «Принята» доводит до in_progress через
+ *            диагностику (машина статусов идёт по шагам, перепрыгнуть нельзя);
  *   inwork — заметка «ещё в работе», бот замолкает по заявке на 2 дня;
  *   ready  — перевод в act_pending (готова к выдаче) со всеми штатными эффектами
  *            (письмо клиенту, push диспетчеру «позвоните клиенту»);
@@ -751,6 +753,36 @@ export async function engineerReactCmd(
   });
   if (before.status === 'closed' || before.status === 'cancelled') {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Заявка уже закрыта' });
+  }
+
+  /**
+   * «Взял в работу». Инженер жмёт это в списке, не открывая заявку.
+   *
+   * Повторный тап — не ошибка: палец соскользнул, связь моргнула, очередь
+   * прислала запись второй раз. Отвечаем noop, статус не двигаем — иначе
+   * второе нажатие увело бы заявку в «готова к выдаче».
+   */
+  if (action === 'start') {
+    if (before.status === 'in_progress' || before.status === 'act_pending') {
+      await clearUnansweredCount(ctx.tenant.id, ticketId);
+      return {
+        kind: 'noop',
+        ticketNumber: before.ticketNumber,
+        message: `${before.ticketNumber} уже в работе.`,
+      };
+    }
+    // Машина статусов ходит по шагам: received → diagnostics → in_progress.
+    // Тем же способом устроен `ready` ниже — перепрыгнуть шаг нельзя.
+    if (before.status === 'received') {
+      await changeStatusCmd(ctx, ticketId, 'diagnostics');
+    }
+    await changeStatusCmd(ctx, ticketId, 'in_progress');
+    await clearUnansweredCount(ctx.tenant.id, ticketId);
+    return {
+      kind: 'start',
+      ticketNumber: before.ticketNumber,
+      message: `${before.ticketNumber} — взяли в работу.`,
+    };
   }
 
   if (action === 'inwork') {
