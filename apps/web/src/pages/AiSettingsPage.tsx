@@ -9,23 +9,16 @@ import { AlertTriangle, CheckCircle2, Loader2, Sparkles, Wifi } from 'lucide-rea
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 
-type ApiStyle = 'openai' | 'anthropic';
+import {
+  AI_PROVIDERS,
+  CUSTOM_PROVIDER_ID,
+  providerByBaseUrl,
+  type ApiStyle,
+} from '../lib/ai-providers';
+
 type AssistantMode = 'read_only' | 'full';
 /** Единый выбор состояния ассистента для UI (маппится в enabled + mode). */
 type AssistantState = 'off' | 'read_only' | 'full';
-
-const PRESETS: Record<ApiStyle, { baseUrl: string; model: string; hint: string }> = {
-  anthropic: {
-    baseUrl: 'https://api.z.ai/api/anthropic',
-    model: 'glm-4.6',
-    hint: 'z.ai GLM Coding Plan. glm-4.6 умеет и текст, и картинки (фото документов).',
-  },
-  openai: {
-    baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'deepseek/deepseek-chat',
-    hint: 'OpenRouter и другие OpenAI-совместимые. Для фото нужна vision-модель.',
-  },
-};
 
 export function AiSettingsPage() {
   const cfg = trpc.aiAssistant.getConfig.useQuery();
@@ -95,11 +88,29 @@ export function AiSettingsPage() {
       customInstructions !== (savedCfg.customInstructions ?? '') ||
       apiKey.trim() !== '');
 
-  const applyPreset = (style: ApiStyle) => {
-    setApiStyle(style);
-    // Подставляем рекомендуемые база/модель только если поля пустые — не затираем своё.
-    if (!baseUrl.trim()) setBaseUrl(PRESETS[style].baseUrl);
-    if (!model.trim()) setModel(PRESETS[style].model);
+  /**
+   * Какой провайдер сейчас выбран — определяем по сохранённому адресу.
+   *
+   * Незнакомый адрес — это «Своё подключение», а НЕ «похожий из списка»:
+   * иначе открытие страницы молча подменило бы человеку рабочую настройку.
+   */
+  const provider = providerByBaseUrl(baseUrl);
+  const providerId = provider?.id ?? CUSTOM_PROVIDER_ID;
+
+  const pickProvider = (id: string) => {
+    const p = AI_PROVIDERS.find((x) => x.id === id);
+    if (!p) return;
+    setApiStyle(p.apiStyle);
+    if (id === CUSTOM_PROVIDER_ID) {
+      // Своё подключение: поля освобождаем, чтобы человек вписал своё, а не
+      // правил чужой адрес поверх.
+      setBaseUrl('');
+      setModel('');
+      return;
+    }
+    setBaseUrl(p.baseUrl);
+    // Модель прежнего провайдера у нового не работает — подставляем его первую.
+    setModel(p.models[0] ?? '');
   };
 
   const save = () => {
@@ -208,18 +219,30 @@ export function AiSettingsPage() {
           <div className="bg-card space-y-3 rounded-lg border p-4">
             <div className="font-medium">Провайдер и модель</div>
 
+            {/* Выбрал провайдера — адрес и тип API подставились сами. Раньше
+                правильную тройку «тип + адрес + модель» надо было знать
+                наизусть, и промах выглядел просто как «не работает». */}
             <label className="block">
-              <span className="text-xs font-medium">Тип API</span>
+              <span className="text-xs font-medium">Провайдер</span>
               <select
-                value={apiStyle}
-                onChange={(e) => applyPreset(e.target.value as ApiStyle)}
+                aria-label="Провайдер"
+                value={providerId}
+                onChange={(e) => pickProvider(e.target.value)}
                 className={inputCls}
               >
-                <option value="anthropic">Anthropic-совместимый (z.ai GLM Coding Plan)</option>
-                <option value="openai">OpenAI-совместимый (OpenRouter и др.)</option>
+                {AI_PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
-              <span className="text-muted-foreground mt-1 block text-xs">
-                {PRESETS[apiStyle].hint}
+              <span
+                className={cn(
+                  'mt-1 block text-xs',
+                  provider?.blockedOnProd ? 'text-warning' : 'text-muted-foreground',
+                )}
+              >
+                {provider?.hint ?? 'Любой другой сервис: адрес и модель вписываются руками.'}
               </span>
             </label>
 
@@ -227,20 +250,45 @@ export function AiSettingsPage() {
               <label className="block">
                 <span className="text-xs font-medium">Базовый URL</span>
                 <input
+                  aria-label="Базовый URL"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder={PRESETS[apiStyle].baseUrl}
+                  placeholder="https://…"
                   className={inputCls}
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-medium">Модель</span>
-                <input
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={PRESETS[apiStyle].model}
-                  className={inputCls}
-                />
+                {/* У известного провайдера — список его моделей: слаги у разных
+                    сервисов разные («glm-4.6» против «z-ai/glm-4.6»), и перепутать
+                    их стоило владельцу вечера. У «своего» — обычное поле. */}
+                {provider && provider.models.length > 0 ? (
+                  <select
+                    aria-label="Модель"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className={inputCls}
+                  >
+                    {(provider.models.includes(model)
+                      ? provider.models
+                      : [model, ...provider.models]
+                    )
+                      .filter(Boolean)
+                      .map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <input
+                    aria-label="Модель"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="название модели"
+                    className={inputCls}
+                  />
+                )}
               </label>
             </div>
 
