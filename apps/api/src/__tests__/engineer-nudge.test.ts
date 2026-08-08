@@ -304,6 +304,67 @@ describe('tRPC: engineerReact / myTickets / myList', () => {
     expect(t?.status).toBe('act_pending');
   });
 
+  /**
+   * «Взял в работу» одной кнопкой из списка.
+   *
+   * ЗАЧЕМ. Владелец 2026-08-08: «инженеры не любят приложение, надо
+   * минимизировать их контакт с программой — они видят, что назначили, и
+   * реагируют: в ремонте / сделал / жду запчасть».
+   *
+   * Сегодня самой частой из трёх реакций — «взял в работу» — у инженера нет
+   * вовсе: свежая заявка в статусе «Принята», и чтобы сдвинуть её, надо
+   * открыть карточку, нажать «Начать диагностику», потом «В работу» и уйти
+   * назад — четыре тапа и два экрана на каждую заявку. Кнопка из списка
+   * должна делать то же самое одним нажатием, как это уже делает `ready`
+   * (он тоже проходит цепочку статусов за один вызов).
+   */
+  it('start из «Принята» доводит до «В работе» через диагностику', async () => {
+    const ticketId = await makeTestTicket();
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+
+    const res = await caller.tickets.engineerReact({ ticketId, action: 'start' });
+
+    expect(res.kind).toBe('start');
+    const t = await caller.tickets.get({ id: ticketId });
+    expect(t?.status).toBe('in_progress');
+  });
+
+  it('start по уже начатой заявке ничего не ломает', async () => {
+    const ticketId = await makeTestTicket();
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+    await caller.tickets.engineerReact({ ticketId, action: 'start' });
+
+    // Второй тап по той же кнопке (палец соскользнул, связь моргнула,
+    // очередь отправила повтор) не должен ни падать, ни двигать статус дальше.
+    const again = await caller.tickets.engineerReact({ ticketId, action: 'start' });
+
+    expect(again.kind).toBe('noop');
+    const t = await caller.tickets.get({ id: ticketId });
+    expect(t?.status).toBe('in_progress');
+  });
+
+  it('start по чужой заявке — отказ', async () => {
+    const foreignOwner = engineer2Id || dispatcherId;
+    const ticketId = await makeTestTicket({ engineerId: foreignOwner });
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+
+    await expect(caller.tickets.engineerReact({ ticketId, action: 'start' })).rejects.toThrow();
+  });
+
+  /**
+   * Сторож: сервер «жду запчасть» на свежей заявке принимал ВСЕГДА — мешал
+   * только экран, где кнопка показывалась лишь у «провисших». Если этот тест
+   * когда-нибудь покраснеет, значит запрет уехал на сервер, и чинить надо там.
+   */
+  it('«жду запчасть» принимается и на свежей заявке — дело было не в сервере', async () => {
+    const ticketId = await makeTestTicket();
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+
+    const res = await caller.tickets.engineerReact({ ticketId, action: 'part' });
+
+    expect(res.kind).toBe('part');
+  });
+
   it('чужая заявка инженеру — FORBIDDEN; диспетчеру — можно', async () => {
     const foreignOwner = engineer2Id || dispatcherId;
     const ticketId = await makeTestTicket({ engineerId: foreignOwner });

@@ -173,7 +173,7 @@ export const ticketsRouter = router({
     .input(
       z.object({
         ticketId: z.string().uuid(),
-        action: z.enum(['inwork', 'ready', 'part']),
+        action: z.enum(['start', 'inwork', 'ready', 'part']),
       }),
     )
     .mutation(({ ctx, input }) => engineerReactCmd(buildCmdCtx(ctx), input.ticketId, input.action)),
