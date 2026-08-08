@@ -53,7 +53,7 @@ import {
 } from './repository';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
-import { clearUnansweredCount, snoozeAsk } from '../../lib/nudge-state';
+import { askSnoozedTicketIds, clearUnansweredCount, snoozeAsk } from '../../lib/nudge-state';
 import { assertWorkOrderEditable } from '../work-orders/edit-window';
 
 async function ensureRefsExist(
@@ -653,15 +653,32 @@ export async function partsWaitingQuery(
  * Активных заявок у tenant'а немного (сотни максимум) — фильтруем в памяти,
  * чтобы не плодить второй SQL-вариант boardTickets.
  */
+/**
+ * Заявка «моего дня» плюс одно поле, которого нет у доски.
+ *
+ * `askSnoozed` — инженер уже ответил «ещё в работе», и мы обещали пару дней не
+ * беспокоить. Доске это не нужно (там смотрит руководитель), а телефону нужно:
+ * без него блок «Провисло» спрашивал одно и то же при каждом входе.
+ */
+export interface MyTicketDto extends BoardTicketDto {
+  askSnoozed: boolean;
+}
+
 export async function myTicketsQuery(
   db: Db,
   tenant: ResolvedTenant,
   engineerId: string,
-): Promise<BoardTicketDto[]> {
+): Promise<MyTicketDto[]> {
   const all = await repoBoardTickets(db, tenant.id);
   // «Мой день» показывает и заявки, где инженер ПОМОЩНИК: он на них так же выезжает.
   const helperIds = new Set(await repoListHelperTicketIds(db, tenant.id, engineerId));
-  return all.filter((t) => t.assignedEngineerId === engineerId || helperIds.has(t.id));
+  const mine = all.filter((t) => t.assignedEngineerId === engineerId || helperIds.has(t.id));
+  // Один поход в Redis на весь список, а не по заявке.
+  const snoozed = await askSnoozedTicketIds(
+    tenant.id,
+    mine.map((t) => t.id),
+  );
+  return mine.map((t) => ({ ...t, askSnoozed: snoozed.has(t.id) }));
 }
 
 export interface SetTicketEngineersResult {

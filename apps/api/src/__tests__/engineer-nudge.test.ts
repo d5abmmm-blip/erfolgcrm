@@ -292,6 +292,35 @@ describe('tRPC: engineerReact / myTickets / myList', () => {
     ).toBe(true);
   });
 
+  /**
+   * ⚠️ ЖАЛОБА С БОЯ (фото телефона инженера, 2026-08-08): «инженер нажимает,
+   * что аппарат в работе, а плашка всё равно выходит при каждом входе».
+   *
+   * Так и было. Сервер на «Ещё в работе» ставит отметку «молчать 2 дня»
+   * (snoozeAsk, Redis) — и бот замолкает, как обещано человеку словами
+   * «пару дней не беспокою». А блок «Провисло» в мобильном списке считался
+   * БЕЗ этой отметки, карточка пряталась только в памяти страницы (useState).
+   * Закрыл приложение — память очистилась, плашка вернулась.
+   *
+   * То есть программа обещала одно, а делала другое. Инженеру, которого и так
+   * просили «минимизировать контакт с программой».
+   */
+  it('после «ещё в работе» заявка помечена «молчим» — и плашка это увидит', async () => {
+    const ticketId = await makeTestTicket();
+    const other = await makeTestTicket();
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+
+    const before = await caller.tickets.myTickets();
+    expect(before.find((t) => t.id === ticketId)?.askSnoozed).toBe(false);
+
+    await caller.tickets.engineerReact({ ticketId, action: 'inwork' });
+
+    const after = await caller.tickets.myTickets();
+    expect(after.find((t) => t.id === ticketId)?.askSnoozed).toBe(true);
+    // Соседняя заявка не должна замолчать заодно.
+    expect(after.find((t) => t.id === other)?.askSnoozed).toBe(false);
+  });
+
   it('ready из diagnostics доводит до act_pending через in_progress', async () => {
     const ticketId = await makeTestTicket();
     const dispatcherCaller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));

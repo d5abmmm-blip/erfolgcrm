@@ -150,7 +150,10 @@ export function MobileQueuePage({ engineerId }: Props) {
     if (result.status === 'ok') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
       await Promise.all([utils.tickets.myTickets.invalidate(), utils.tickets.myList.invalidate()]);
-      showToast('ok', result.data.message);
+      // `?.` не от недоверия к серверу, а ради инженера: ответ УЖЕ принят,
+      // и падать на отсутствующем тексте подтверждения — значит оставить
+      // человека без единого признака, что нажатие сработало.
+      showToast('ok', result.data?.message ?? 'Принято.');
     } else if (result.status === 'queued') {
       setReactedIds((prev) => new Set(prev).add(ticketId));
       setQueuedReacts((prev) => new Set(prev).add(ticketId));
@@ -206,6 +209,14 @@ export function MobileQueuePage({ engineerId }: Props) {
   // «Провисло»: без причины и давно без движения — те же пороги, что жёлтый на доске.
   // received исключаем: для непочатой заявки кнопки «готово/запчасть» бессмысленны
   // (и «Готово к выдаче» сервер для received не пускает).
+  //
+  // ⚠️ `askSnoozed` — ОТВЕТ УЖЕ ДАН. Жалоба с боя (фото телефона, 2026-08-08):
+  // «инженер нажимает, что аппарат в работе, а плашка всё равно выходит при
+  // каждом входе». Сервер на «Ещё в работе» ставит отметку «молчать 2 дня» и
+  // отвечает человеку «пару дней не беспокою» — бот замолкает, а этот блок
+  // считался без неё. Пряталась карточка только в `reactedIds`, то есть в
+  // памяти страницы: закрыл приложение — и спрашиваем то же самое снова.
+  // Теперь у обещания и поведения один источник правды.
   const stuckCards = useMemo(
     () =>
       (myTickets.data ?? [])
@@ -213,6 +224,7 @@ export function MobileQueuePage({ engineerId }: Props) {
           (c) =>
             c.effectiveReason == null &&
             c.light !== 'green' &&
+            !c.askSnoozed &&
             !reactedIds.has(c.id) &&
             (c.status === 'diagnostics' || c.status === 'in_progress'),
         )
