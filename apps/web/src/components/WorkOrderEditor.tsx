@@ -1011,6 +1011,13 @@ function RepairDescriptionField({
   const [confirmingDraft, setConfirmingDraft] = useState(false);
   const draft = trpc.workOrders.draftRepairDescription.useMutation({
     onSuccess: (res) => {
+      // Собирать не из чего (ни строк, ни диагноза) — говорим словами и поле
+      // НЕ ТРОГАЕМ. Затереть чужой текст пустотой — худшее из возможного, а
+      // выдумать «работы выполнены в полном объёме» мы больше не имеем права.
+      if (!res.text.trim()) {
+        setNote('В наряде нет ни строк, ни диагноза — черновик собирать не из чего.');
+        return;
+      }
       setValue(res.text);
       rememberDraft(ticketId, 'repairDescription', res.text);
       setNote(

@@ -89,7 +89,14 @@ services:
       # Слушает локально — наружу торчит nginx с TLS.
       - '127.0.0.1:3030:3030'
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3030/health']
+      # ⚠️ 127.0.0.1, а НЕ localhost. В контейнере `localhost` резолвится в
+      # IPv6 `::1`, приложение слушает IPv4 — wget получает «Connection
+      # refused», и api месяцами числился `unhealthy` при полностью рабочем
+      # сервисе. Проверено на бою: на 127.0.0.1:3030 отдаёт {"status":"ok"}.
+      # Ни от чего не зависело (`web depends_on api` без condition, `restart:
+      # always` на unhealthy не реагирует) — но ложный красный в `docker ps`
+      # прячет настоящий, когда он однажды случится.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3030/health']
       interval: 30s
       timeout: 5s
       retries: 3
