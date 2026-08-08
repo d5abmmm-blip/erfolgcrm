@@ -24,19 +24,38 @@ const morning = (t: string, u: string, d: string) => `erfolg:eng-nudge:morning:$
 const visit = (t: string, ticket: string, d: string) =>
   `erfolg:eng-nudge:visit:${t}:${ticket}:${d}`;
 
+/**
+ * ⚠️ ОДИН КЛЮЧ — ДВА РАЗНЫХ СОБЫТИЯ, И ИХ НАДО РАЗЛИЧАТЬ.
+ *
+ * `ASKED` ставит воркер, когда САМ спросил (дедуп: не чаще раза в 2 дня).
+ * `ANSWERED` ставит ответ инженера «ещё в работе».
+ *
+ * Для бота разницы нет — он молчит в обоих случаях, и раньше оба писали '1'.
+ * Но экран инженера читает эту же отметку, чтобы не задавать вопрос, на
+ * который уже ответили. Со значением-заглушкой он замолкал бы и тогда, когда
+ * инженер НИЧЕГО не ответил, — просто бот успел спросить первым. То есть
+ * вопрос исчезал бы с экрана сам собой. Найдено проверкой на бою.
+ */
+const ASKED = '1';
+const ANSWERED = 'answered';
+
 /** true — по заявке давно не спрашивали, слот занят нами (SET NX). */
 export async function tryAcquireAskSlot(tenantId: string, ticketId: string): Promise<boolean> {
-  const set = await getRedis().set(ask(tenantId, ticketId), '1', 'EX', NUDGE_ASK_TTL_SEC, 'NX');
+  const set = await getRedis().set(ask(tenantId, ticketId), ASKED, 'EX', NUDGE_ASK_TTL_SEC, 'NX');
   return set !== null;
 }
 
-/** Инженер ответил «ещё в работе» — молчим по заявке ещё столько же. */
+/**
+ * Инженер ответил «ещё в работе» — молчим по заявке ещё столько же.
+ * Перезаписываем без NX: ответ важнее прежней отметки «спросили», и срок
+ * отсчитывается от ответа.
+ */
 export async function snoozeAsk(tenantId: string, ticketId: string): Promise<void> {
-  await getRedis().set(ask(tenantId, ticketId), '1', 'EX', NUDGE_ASK_TTL_SEC);
+  await getRedis().set(ask(tenantId, ticketId), ANSWERED, 'EX', NUDGE_ASK_TTL_SEC);
 }
 
 /**
- * По каким из этих заявок мы сейчас молчим.
+ * По каким из этих заявок инженер УЖЕ ОТВЕТИЛ «ещё в работе».
  *
  * ЗАЧЕМ ЭТО ЧИТАЕТ ЭКРАН, А НЕ ТОЛЬКО ВОРКЕР. Инженер жмёт «Ещё в работе»,
  * ему отвечают «пару дней не беспокою» — и бот правда замолкает. А блок
@@ -57,7 +76,9 @@ export async function askSnoozedTicketIds(
     const snoozed = new Set<string>();
     values.forEach((v, i) => {
       const id = ticketIds[i];
-      if (v !== null && id) snoozed.add(id);
+      // ТОЛЬКО ответ инженера. Отметка «бот спросил» (ASKED) плашку не гасит:
+      // спросить — не значит получить ответ.
+      if (v === ANSWERED && id) snoozed.add(id);
     });
     return snoozed;
   } catch {
