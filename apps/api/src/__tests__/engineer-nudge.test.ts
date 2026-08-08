@@ -34,6 +34,7 @@ import {
   minutesOfDayInTz,
   pickAskCandidates,
 } from '../workers/engineer-nudge';
+import { tryAcquireAskSlot } from '../lib/nudge-state';
 import { appRouter } from '../trpc/router';
 import type { Context } from '../trpc/context';
 import type { SessionData } from '../lib/session';
@@ -319,6 +320,27 @@ describe('tRPC: engineerReact / myTickets / myList', () => {
     expect(after.find((t) => t.id === ticketId)?.askSnoozed).toBe(true);
     // Соседняя заявка не должна замолчать заодно.
     expect(after.find((t) => t.id === other)?.askSnoozed).toBe(false);
+  });
+
+  /**
+   * ⚠️ ИЗЪЯН, НАЙДЕННЫЙ ПРОВЕРКОЙ НА БОЮ (2026-08-08, сразу после выката).
+   *
+   * Отметка «молчим по заявке» — ОДИН ключ на два разных события: его ставит и
+   * `tryAcquireAskSlot` («бот только что спросил», дедуп), и `snoozeAsk`
+   * («инженер ответил»). Плашка, читавшая этот ключ, замолкала бы и в первом
+   * случае — то есть ровно тогда, когда инженер НИЧЕГО не ответил, а бот
+   * успел спросить первым. Вопрос исчезал бы с экрана сам собой.
+   *
+   * Различаем по значению: '1' — спросили, 'answered' — ответили.
+   */
+  it('бот спросил, но инженер молчит — плашку не прячем', async () => {
+    const ticketId = await makeTestTicket();
+    // Так делает воркер, когда шлёт нудж.
+    await tryAcquireAskSlot(erfolgId, ticketId);
+
+    const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
+    const mine = await caller.tickets.myTickets();
+    expect(mine.find((t) => t.id === ticketId)?.askSnoozed).toBe(false);
   });
 
   it('ready из diagnostics доводит до act_pending через in_progress', async () => {
