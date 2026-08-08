@@ -176,7 +176,13 @@ describe('оформление без модели', () => {
     const res = await caller.workOrders.composeFromNotes({ ticketId, notes: '   ' });
 
     expect(llm.calls).toHaveLength(0);
-    expect(res).toEqual({ diagnosis: null, repairDescription: null, aiUsed: false });
+    expect(res).toEqual({
+      diagnosis: null,
+      repairDescription: null,
+      aiUsed: false,
+      // Модель не звали — жаловаться на неё не на что.
+      aiRejected: false,
+    });
   });
 });
 
@@ -274,6 +280,40 @@ describe('модель выдумала — берём локальный раз
 
     expect(res.aiUsed).toBe(false);
     expect(res.repairDescription).not.toContain('24');
+  });
+
+  /**
+   * «ИИ не настроен» и «ИИ ответил, но приписал лишнее» — разные новости.
+   * Первая ведёт человека в настройки, вторая — к владельцу: модель
+   * фантазирует, это стоит знать. Одно сообщение на оба случая врало.
+   */
+  it('модель ответила, но её забраковали — это НЕ «ИИ не настроен»', async () => {
+    const ticketId = await myTicketWithOrder();
+    llm.answer =
+      '{"diagnosis":"Плата вышла из строя.","repairDescription":"Плата заменена. Гарантия 12 месяцев."}';
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+
+    const res = await caller.workOrders.composeFromNotes({
+      ticketId,
+      notes: 'плата сгорела поменял',
+    });
+
+    expect(res.aiUsed).toBe(false);
+    expect(res.aiRejected).toBe(true);
+  });
+
+  it('модели просто нет — тогда и говорим, что её нет', async () => {
+    const ticketId = await myTicketWithOrder();
+    llm.answer = null;
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+
+    const res = await caller.workOrders.composeFromNotes({
+      ticketId,
+      notes: 'плата сгорела поменял',
+    });
+
+    expect(res.aiUsed).toBe(false);
+    expect(res.aiRejected).toBe(false);
   });
 
   it('а числа, которые инженер написал сам, модели не запрещены', async () => {

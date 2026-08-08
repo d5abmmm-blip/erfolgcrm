@@ -57,29 +57,66 @@ const COMPOSED = {
   aiUsed: true,
 };
 
+interface FakeServer {
+  fetch: (url: unknown, init?: RequestInit) => Promise<Response>;
+  /** Наряд, каким его знает «сервер». Правится через updateHeader. */
+  order: typeof WORK_ORDER;
+  /** Что сервер ПРИНЯЛ. По нему судим о записи, а не по очереди. */
+  writes: Array<Record<string, unknown>>;
+  composeCalls: number;
+}
+
 /**
- * Заглушка сервера.
+ * Заглушка сервера, которая НЕ ВРЁТ.
  *
- * ⚠️ ОТВЕЧАЕМ ПО КАЖДОЙ ПРОЦЕДУРЕ ОТДЕЛЬНО, а не «на всё одно и то же».
- * `httpBatchLink` склеивает одновременные вызовы в ОДИН запрос: сохранение
- * исходника и оформление уезжают вместе, адресом
- * `…/workOrders.updateHeader,workOrders.composeFromNotes`. Заглушка, отдающая
- * один результат на такой запрос, роняет ОБА вызова — и тест показывает
- * «нет связи с сервером» там, где на самом деле всё работает.
+ * ⚠️ ТРИ ПРАВИЛА, каждое куплено ложным результатом.
  *
- * Настоящий офлайн честно падает: на этом падении держится вся очередь.
- * Заглушка, отвечающая 200 всегда, проверяла бы не то приложение.
+ * 1. ОТВЕЧАЕМ ПО КАЖДОЙ ПРОЦЕДУРЕ ОТДЕЛЬНО. `httpBatchLink` склеивает
+ *    одновременные вызовы в ОДИН запрос по адресу
+ *    `…/workOrders.updateHeader,workOrders.composeFromNotes`. Заглушка,
+ *    отдающая один результат на такой запрос, роняет ОБА вызова — и тест
+ *    показывает «нет связи с сервером» там, где всё работает.
+ * 2. ЗАПИСЬ РЕАЛЬНО МЕНЯЕТ НАРЯД, и перечитывание отдаёт НОВОЕ значение. Пока
+ *    заглушка отдавала исходный наряд, «сохранено» проверялось по ложной
+ *    причине, а заполненные поля акта после первого же refetch исчезали.
+ * 3. ПРИНЯТОЕ СЕРВЕРОМ ВИДНО В `writes`. Проверять запись только по
+ *    офлайн-очереди нельзя: онлайн очередь пуста ВСЕГДА, и assert вида
+ *    «в очереди нет этого текста» не может упасть — он зелёный и когда кнопка
+ *    работает, и когда она сломана. Ровно так и было (найдено разбором).
+ *
+ * Настоящий офлайн честно падает — на этом падении держится вся очередь.
  */
-function serverComposesButCannotSave(order: typeof WORK_ORDER = WORK_ORDER) {
-  return (url: unknown): Promise<Response> => {
+function makeServer(overrides: Partial<typeof WORK_ORDER> = {}): FakeServer {
+  const server: FakeServer = {
+    order: { ...WORK_ORDER, ...overrides },
+    writes: [],
+    composeCalls: 0,
+    fetch: () => Promise.reject(new TypeError('not initialised')),
+  };
+  server.fetch = (url: unknown, init?: RequestInit): Promise<Response> => {
     if (!navigator.onLine) return Promise.reject(new TypeError('Failed to fetch'));
     const path = String(url).split('/trpc/')[1]?.split('?')[0] ?? '';
-    const body = path.split(',').map((proc) => {
-      if (proc.includes('composeFromNotes')) return { result: { data: { json: COMPOSED } } };
-      // ⚠️ Отдаём ТОТ ЖЕ наряд, которым засеян кэш. Пока заглушка возвращала
-      // базовый, перечитывание стирало заполненные поля акта — и экран честно
-      // не спрашивал про замену, потому что заменять было нечего.
-      if (proc.includes('getByTicket')) return { result: { data: { json: order } } };
+    let inputs: Record<string, { json?: Record<string, unknown> }> = {};
+    try {
+      inputs = init?.body ? (JSON.parse(String(init.body)) as typeof inputs) : {};
+    } catch {
+      inputs = {};
+    }
+    const body = path.split(',').map((proc, i) => {
+      const input = inputs[String(i)]?.json ?? {};
+      if (proc.includes('composeFromNotes')) {
+        server.composeCalls += 1;
+        return { result: { data: { json: COMPOSED } } };
+      }
+      if (proc.includes('updateHeader')) {
+        const patch = (input.patch as Record<string, unknown>) ?? {};
+        server.writes.push(patch);
+        Object.assign(server.order, patch);
+        return { result: { data: { json: null } } };
+      }
+      if (proc.includes('getByTicket')) {
+        return { result: { data: { json: { ...server.order } } } };
+      }
       return { result: { data: { json: null } } };
     });
     return Promise.resolve(
@@ -89,28 +126,23 @@ function serverComposesButCannotSave(order: typeof WORK_ORDER = WORK_ORDER) {
       }),
     );
   };
+  return server;
 }
 
-function renderEditor(
-  layout: WorkOrderLayout,
-  fetchImpl?: (url: unknown) => Promise<Response>,
-  /** Чем отличается наряд в этом тесте — например, уже заполненными полями акта. */
-  orderOverride?: Partial<typeof WORK_ORDER>,
-) {
-  const order = { ...WORK_ORDER, ...orderOverride };
+function renderEditor(layout: WorkOrderLayout, server?: FakeServer, canEdit = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
   });
   queryClient.setQueryData(
     [['workOrders', 'getByTicket'], { input: { ticketId: TICKET }, type: 'query' }],
-    order,
+    server ? { ...server.order } : WORK_ORDER,
   );
   const client = trpc.createClient({
     links: [
       httpBatchLink({
         url: 'http://test.invalid/api/v1/trpc',
         transformer: superjson,
-        fetch: fetchImpl ?? (() => Promise.reject(new TypeError('Failed to fetch'))),
+        fetch: server?.fetch ?? (() => Promise.reject(new TypeError('Failed to fetch'))),
       }),
     ],
   });
@@ -120,7 +152,7 @@ function renderEditor(
         <WorkOrderEditor
           ticketId={TICKET}
           ticketNumber="WSP-901"
-          canEdit
+          canEdit={canEdit}
           canEditVat={false}
           layout={layout}
         />
@@ -132,6 +164,11 @@ function renderEditor(
 async function queuedText(): Promise<string> {
   const items = await listPending();
   return JSON.stringify(items.map((i) => ({ kind: i.kind, payload: i.payload })));
+}
+
+/** Текст поля инженера прямо из DOM — он неуправляемый, состояние не спросить. */
+function notesBox(): HTMLTextAreaElement {
+  return document.getElementById(`engineer-notes-${TICKET}`) as HTMLTextAreaElement;
 }
 
 /** Связь есть: заглушка сама решает, что ответить. */
@@ -197,40 +234,126 @@ describe('набранное сохраняется само', () => {
   });
 });
 
+const RAW = 'плата сгорела поменял всё пашет';
+
+/** Онлайн: набрать текст, нажать «Оформить», дождаться предложения. */
+async function typeAndCompose(server: FakeServer, text = RAW) {
+  goOnline();
+  renderEditor('card', server);
+  const field = await screen.findByLabelText(/Что было и что сделал/i);
+  fireEvent.change(field, { target: { value: text } });
+  fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
+  await screen.findByDisplayValue(COMPOSED.diagnosis);
+  return field as HTMLTextAreaElement;
+}
+
 describe('«Оформить» — предложение, а не подмена', () => {
   it('текст инженера остаётся на месте, предложенное показано отдельно', async () => {
-    goOnline();
-    renderEditor('card', serverComposesButCannotSave());
-    const field = (await screen.findAllByRole('textbox'))[0] as HTMLTextAreaElement;
-    fireEvent.change(field, { target: { value: 'плата сгорела поменял всё пашет' } });
+    const server = makeServer();
+    const field = await typeAndCompose(server);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
-
-    await screen.findByDisplayValue('Вышла из строя плата питания.');
-    await screen.findByDisplayValue('Плата питания заменена, работоспособность проверена.');
+    await screen.findByDisplayValue(COMPOSED.repairDescription);
     // ⚠️ Ровно этого не делала старая кнопка «ИИ-черновик»: она затирала поле.
-    expect(field.value).toBe('плата сгорела поменял всё пашет');
+    expect(field.value).toBe(RAW);
+  });
+
+  /**
+   * ⚠️ ГЛАВНОЕ ОБЕЩАНИЕ ФАЙЛА, и до разбора его НЕ ПРОВЕРЯЛ НИ ОДИН ТЕСТ:
+   * смотрели на поле только ДО «Применить». Мутация «затирать текст инженера
+   * после применения» проходила все тесты зелёной.
+   */
+  it('и ПОСЛЕ «Применить» текст инженера цел — и на экране, и на сервере', async () => {
+    const server = makeServer();
+    await typeAndCompose(server);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+    await screen.findByText(/Записано в наряд/i);
+
+    expect(notesBox().value).toBe(RAW);
+    expect(server.order.engineerNotes).toBe(RAW);
   });
 
   it('«Применить» пишет оба поля акта, и только по нажатию', async () => {
-    goOnline();
-    renderEditor('card', serverComposesButCannotSave());
-    const field = (await screen.findAllByRole('textbox'))[0] as HTMLTextAreaElement;
-    fireEvent.change(field, { target: { value: 'плата сгорела поменял всё пашет' } });
-    fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
-    await screen.findByDisplayValue('Вышла из строя плата питания.');
+    const server = makeServer();
+    await typeAndCompose(server);
 
-    // Пока не нажали — в акт ничего не ушло.
-    expect(await queuedText()).not.toContain('Вышла из строя плата питания');
+    // Пока не нажали — сервер полей акта не видел.
+    expect(server.order.diagnosis).toBeNull();
+    expect(server.order.repairDescription).toBeNull();
 
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+
+    await waitFor(() => {
+      expect(server.order.diagnosis).toBe(COMPOSED.diagnosis);
+      expect(server.order.repairDescription).toBe(COMPOSED.repairDescription);
+    });
+  });
+
+  /**
+   * Две отдельные записи означали, что вторая может не дойти — и в наряде
+   * останется новый диагноз со старым описанием ремонта. Оба поля правит одно
+   * действие человека, значит и запись должна быть одна.
+   */
+  it('оба поля уходят ОДНОЙ записью, а не двумя', async () => {
+    const server = makeServer();
+    await typeAndCompose(server);
+    server.writes.length = 0;
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+    await waitFor(() => expect(server.writes.length).toBeGreaterThan(0));
+
+    expect(server.writes).toHaveLength(1);
+    expect(server.writes[0]).toMatchObject({
+      diagnosis: COMPOSED.diagnosis,
+      repairDescription: COMPOSED.repairDescription,
+    });
+  });
+
+  it('без связи «Применить» кладёт обе правки в очередь одной записью', async () => {
+    const server = makeServer();
+    await typeAndCompose(server);
     goOffline();
-    fireEvent.click(await screen.findByRole('button', { name: /Применить/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
 
     await waitFor(async () => {
       const queued = await queuedText();
-      expect(queued).toContain('Вышла из строя плата питания');
+      expect(queued).toContain(COMPOSED.diagnosis);
       expect(queued).toContain('Плата питания заменена');
     });
+  });
+
+  /**
+   * Разбор нашёл только работу, про поломку молчок — а в наряде уже есть
+   * диагноз, написанный диспетчером со слов клиента. Пустое поле предложения
+   * не должно стирать чужой текст: это «мне нечего сказать», а не «сотри».
+   */
+  it('пустое поле предложения НЕ стирает то, что в наряде уже написано', async () => {
+    const server = makeServer({ diagnosis: 'Пробой платы питания (написал диспетчер)' });
+    await typeAndCompose(server);
+
+    // Инженер стёр предложенный диагноз — сказать про поломку ему нечего.
+    fireEvent.change(await screen.findByLabelText(/^Диагноз$/i), { target: { value: '' } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
+
+    // И вопроса нет: диагноз никто не переписывает, терять нечего.
+    expect(screen.queryByRole('button', { name: /Заменить/ })).toBeNull();
+
+    await waitFor(() => expect(server.order.repairDescription).toBe(COMPOSED.repairDescription));
+    expect(server.order.diagnosis).toBe('Пробой платы питания (написал диспетчер)');
+    expect(server.writes.some((w) => 'diagnosis' in w)).toBe(false);
+  });
+
+  /**
+   * Инженер написал в единственное поле и ушёл, не нажав «Оформить». В акте
+   * пусто, а он уверен, что всё заполнил. Раньше экран об этом молчал.
+   */
+  it('написано, но не оформлено — экран говорит, что в акт это не попадёт', async () => {
+    const server = makeServer({ engineerNotes: RAW });
+    goOnline();
+    renderEditor('card', server);
+
+    await screen.findByText(/не оформлено|не попад/i);
   });
 });
 
@@ -260,46 +383,35 @@ describe('рекомендация доступна с телефона', () => 
   });
 
   it('уже написанную видно сразу, разворачивать не надо', async () => {
-    renderEditor('card', undefined, {
-      recommendation: 'До замены датчика эксплуатация не рекомендована.',
-    });
-    await screen.findByDisplayValue('До замены датчика эксплуатация не рекомендована.');
+    renderEditor('card', makeServer({ recommendation: 'До замены эксплуатация не рекомендована.' }));
+    await screen.findByDisplayValue('До замены эксплуатация не рекомендована.');
   });
 
   it('по чужой заявке рекомендацию видно, но не изменить', async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
-    });
-    const order = { ...WORK_ORDER, recommendation: 'Рекомендовано к списанию' };
-    queryClient.setQueryData(
-      [['workOrders', 'getByTicket'], { input: { ticketId: TICKET }, type: 'query' }],
-      order,
-    );
-    const client = trpc.createClient({
-      links: [
-        httpBatchLink({
-          url: 'http://test.invalid/api/v1/trpc',
-          transformer: superjson,
-          fetch: () => Promise.reject(new TypeError('Failed to fetch')),
-        }),
-      ],
-    });
-    render(
-      <trpc.Provider client={client} queryClient={queryClient}>
-        <QueryClientProvider client={queryClient}>
-          <WorkOrderEditor
-            ticketId={TICKET}
-            ticketNumber="WSP-901"
-            canEdit={false}
-            canEditVat={false}
-            layout="card"
-          />
-        </QueryClientProvider>
-      </trpc.Provider>,
-    );
-
+    renderEditor('card', makeServer({ recommendation: 'Рекомендовано к списанию' }), false);
     const box = await screen.findByDisplayValue('Рекомендовано к списанию');
     expect((box as HTMLTextAreaElement).disabled).toBe(true);
+  });
+
+  /**
+   * Рекомендацию мог вписать диспетчер, пока инженер был на объекте. Свёрнутое
+   * состояние вычислялось ОДИН раз при монтировании — и пришедший позже текст
+   * оставался за кнопкой, о которой инженер не знает, что под ней что-то есть.
+   */
+  it('рекомендация пришла с сервера позже — разворачивается сама', async () => {
+    const server = makeServer();
+    goOnline();
+    renderEditor('card', server);
+    await screen.findByRole('button', { name: /рекомендаци/i });
+
+    // Диспетчер вписал рекомендацию, экран перечитал наряд.
+    server.order.recommendation = 'Рекомендовано к списанию';
+    fireEvent.change(await screen.findByLabelText(/Что было и что сделал/i), {
+      target: { value: 'осмотрел' },
+    });
+    fireEvent.blur(await screen.findByLabelText(/Что было и что сделал/i));
+
+    await screen.findByDisplayValue('Рекомендовано к списанию');
   });
 });
 
@@ -309,18 +421,9 @@ describe('рекомендация доступна с телефона', () => 
  * пустом наряде лишний вопрос мешал бы работать.
  */
 describe('«Применить» не затирает чужую работу молча', () => {
-  async function openProposalOver(existing: Partial<typeof WORK_ORDER>) {
-    const order = { ...WORK_ORDER, ...existing };
-    renderEditor('card', serverComposesButCannotSave(order), existing);
-    const field = (await screen.findAllByRole('textbox'))[0] as HTMLTextAreaElement;
-    fireEvent.change(field, { target: { value: 'плата сгорела поменял' } });
-    fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
-    await screen.findByDisplayValue('Вышла из строя плата питания.');
-  }
-
   it('в наряде уже есть текст — спрашиваем и показываем, что заменим', async () => {
-    goOnline();
-    await openProposalOver({ diagnosis: 'Пробой платы питания (написал диспетчер)' });
+    const server = makeServer({ diagnosis: 'Пробой платы питания (написал диспетчер)' });
+    await typeAndCompose(server);
 
     fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
 
@@ -328,20 +431,61 @@ describe('«Применить» не затирает чужую работу �
     await screen.findByText(/Пробой платы питания \(написал диспетчер\)/);
     fireEvent.click(await screen.findByRole('button', { name: /Отмена/ }));
 
-    await new Promise((r) => setTimeout(r, 50));
-    expect(await queuedText()).not.toContain('Вышла из строя плата питания');
+    // ⚠️ Проверяем ПО СЕРВЕРУ. Раньше assert смотрел в офлайн-очередь, а
+    // действие шло онлайн: очередь пуста всегда, и упасть тест не мог —
+    // он был зелёным и при работающей кнопке, и при сломанной.
+    await new Promise((r) => setTimeout(r, 60));
+    expect(server.order.diagnosis).toBe('Пробой платы питания (написал диспетчер)');
+    // Записи исходника (engineerNotes) тут законны — нельзя было только трогать акт.
+    expect(server.writes.filter((w) => 'diagnosis' in w || 'repairDescription' in w)).toHaveLength(
+      0,
+    );
   });
 
   it('на пустом наряде вопроса нет — терять нечего', async () => {
-    goOnline();
-    await openProposalOver({});
-    goOffline();
+    const server = makeServer();
+    await typeAndCompose(server);
 
     fireEvent.click(await screen.findByRole('button', { name: /^Применить$/ }));
 
-    await waitFor(async () => {
-      expect(await queuedText()).toContain('Вышла из строя плата питания');
+    await waitFor(() => expect(server.order.diagnosis).toBe(COMPOSED.diagnosis));
+    expect(screen.queryByRole('button', { name: /Заменить/ })).toBeNull();
+  });
+});
+
+/**
+ * Правки предложенного текста — это работа человека, иногда несколько минут.
+ * Жили они только в состоянии React: ни черновика, ни записи. Любой уход с
+ * экрана и любое повторное «Оформить» стирали их без следа и без вопроса.
+ */
+describe('выправленное предложение не пропадает', () => {
+  it('без связи «Оформить» не выбрасывает уже выправленное', async () => {
+    const server = makeServer();
+    await typeAndCompose(server);
+    fireEvent.change(await screen.findByLabelText(/^Диагноз$/i), {
+      target: { value: 'Выгорела силовая плата, следы перегрева' },
     });
+
+    goOffline();
+    fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
+    await screen.findByText(/появится связь|появится сеть/i);
+
+    // Панель на месте, правка цела.
+    await screen.findByDisplayValue('Выгорела силовая плата, следы перегрева');
+  });
+
+  it('ушёл с экрана и вернулся — правка восстановилась из памяти телефона', async () => {
+    const server = makeServer();
+    const view = await typeAndCompose(server);
+    void view;
+    fireEvent.change(await screen.findByLabelText(/^Диагноз$/i), {
+      target: { value: 'Выгорела силовая плата' },
+    });
+
+    cleanup();
+    renderEditor('card', server);
+
+    await screen.findByDisplayValue('Выгорела силовая плата');
   });
 });
 
@@ -353,7 +497,7 @@ describe('«Применить» не затирает чужую работу �
 describe('на десктопе видно, что инженер написал своими словами', () => {
   it('текст показан и НЕ редактируется — это свидетельство, а не поле', async () => {
     const raw = 'плата сгорела поменял всё пашет';
-    renderEditor('table', undefined, { engineerNotes: raw });
+    renderEditor('table', makeServer({ engineerNotes: raw }));
 
     await screen.findByText(raw);
     // Не в поле ввода: диспетчер не должен править чужие слова.
@@ -373,21 +517,17 @@ describe('на десктопе видно, что инженер написал
  */
 describe('без связи оформить нельзя — и об этом сказано', () => {
   it('в сеть не идём, набранное всё равно записано', async () => {
-    // Считаем ТОЛЬКО оформление. Сохранение исходника в сеть уходит и честно
-    // падает — на этом падении и держится вся очередь (см. query-defaults).
-    let composeCalls = 0;
-    const countingFetch = (url: unknown): Promise<Response> => {
-      if (String(url).includes('composeFromNotes')) composeCalls += 1;
-      return serverComposesButCannotSave()(url);
-    };
-    renderEditor('card', countingFetch);
-    const field = (await screen.findAllByRole('textbox'))[0] as HTMLTextAreaElement;
+    // Сохранение исходника в сеть уходит и честно падает — на этом падении и
+    // держится вся очередь (см. query-defaults). Считаем только оформление.
+    const server = makeServer();
+    renderEditor('card', server);
+    const field = await screen.findByLabelText(/Что было и что сделал/i);
     fireEvent.change(field, { target: { value: 'не греет' } });
 
     fireEvent.click(await screen.findByRole('button', { name: /Оформить/ }));
 
     await screen.findByText(/появится связь|появится сеть/i);
-    expect(composeCalls).toBe(0);
+    expect(server.composeCalls).toBe(0);
 
     // Главное обещание: текст человека не потерян, он просто ждёт сети.
     await waitFor(async () => {

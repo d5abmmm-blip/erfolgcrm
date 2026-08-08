@@ -142,6 +142,13 @@ export async function draftRepairDescriptionQuery(
 export interface ComposeEngineerNotesResult extends ComposedNotes {
   /** true — раскладывала модель; false — честный разбор без модели. */
   aiUsed: boolean;
+  /**
+   * Модель ОТВЕТИЛА, но её ответ не взяли: мусор вместо JSON или приписанные
+   * факты. Отдельно от `aiUsed`, потому что человеку это разные новости:
+   * «ИИ не настроен» ведёт в настройки, «ИИ фантазирует» — к владельцу.
+   * Одно сообщение на оба случая врало настроившему модель.
+   */
+  aiRejected: boolean;
 }
 
 /**
@@ -171,19 +178,22 @@ export async function composeEngineerNotesQuery(
   const text = notes.trim();
   // Пусто — раскладывать нечего, и модель звать незачем: с пустого входа она
   // сочинит «работы выполнены в полном объёме».
-  if (!text) return { diagnosis: null, repairDescription: null, aiUsed: false };
+  if (!text) {
+    return { diagnosis: null, repairDescription: null, aiUsed: false, aiRejected: false };
+  }
 
   const local = composeFromNotes(text);
   const answer = await phraseWithLlm(ctx.db, ctx.tenant, COMPOSE_SYSTEM_PROMPT, text);
-  if (!answer) return { ...local, aiUsed: false };
+  // Модели нет или она не ответила — это НЕ её вина, докладывать не о чем.
+  if (!answer) return { ...local, aiUsed: false, aiRejected: false };
 
   const parsed = parseComposedJson(answer);
-  if (!parsed) return { ...local, aiUsed: false };
+  if (!parsed) return { ...local, aiUsed: false, aiRejected: true };
 
   const produced = `${parsed.diagnosis ?? ''} ${parsed.repairDescription ?? ''}`;
-  if (inventsFacts(text, produced)) return { ...local, aiUsed: false };
+  if (inventsFacts(text, produced)) return { ...local, aiUsed: false, aiRejected: true };
 
-  return { ...parsed, aiUsed: true };
+  return { ...parsed, aiUsed: true, aiRejected: false };
 }
 
 export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise<WorkOrderDto> {
