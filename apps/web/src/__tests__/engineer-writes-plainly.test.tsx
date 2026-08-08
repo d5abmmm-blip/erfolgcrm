@@ -64,6 +64,7 @@ interface FakeServer {
   /** Что сервер ПРИНЯЛ. По нему судим о записи, а не по очереди. */
   writes: Array<Record<string, unknown>>;
   composeCalls: number;
+  draftCalls: number;
 }
 
 /**
@@ -91,6 +92,7 @@ function makeServer(overrides: Partial<typeof WORK_ORDER> = {}): FakeServer {
     order: { ...WORK_ORDER, ...overrides },
     writes: [],
     composeCalls: 0,
+    draftCalls: 0,
     fetch: () => Promise.reject(new TypeError('not initialised')),
   };
   server.fetch = (url: unknown, init?: RequestInit): Promise<Response> => {
@@ -107,6 +109,11 @@ function makeServer(overrides: Partial<typeof WORK_ORDER> = {}): FakeServer {
       if (proc.includes('composeFromNotes')) {
         server.composeCalls += 1;
         return { result: { data: { json: COMPOSED } } };
+      }
+      // Десктопная кнопка «ИИ-черновик» (фича №13) — собирает из строк наряда.
+      if (proc.includes('draftRepairDescription')) {
+        server.draftCalls += 1;
+        return { result: { data: { json: { text: 'Выполнены работы: замена платы.', aiUsed: false } } } };
       }
       if (proc.includes('updateHeader')) {
         const patch = (input.patch as Record<string, unknown>) ?? {};
@@ -186,6 +193,10 @@ function goOffline(): void {
 
 beforeEach(async () => {
   await clearAll();
+  // ⚠️ Черновики полей живут в localStorage и переживают cleanup(). Без этой
+  // строки текст из предыдущего теста подставлялся в поле следующего — и тест
+  // «поле пустое» шёл по ветке «поле не пустое», молча проверяя не то.
+  localStorage.clear();
   setCurrentUserId('engineer-A');
   goOffline();
 });
@@ -214,6 +225,38 @@ describe('на телефоне у инженера одно поле, а не �
     expect(screen.queryByText('Описание ремонта')).not.toBeNull();
     expect(screen.queryByText('Рекомендации')).not.toBeNull();
     expect(screen.queryByText(/Что было и что сделал/i)).toBeNull();
+  });
+});
+
+/**
+ * «Инженеры не любят приложение, надо минимизировать их контакт с программой»
+ * — решение владельца 2026-08-08, и полей оно касается не только трёх.
+ *
+ * НДС инженеру не нужен и НЕ ЕГО ДЕЛО: ставку меняют директор и диспетчер,
+ * у инженера селектор был заперт и подписан «меняет директор/диспетчер» —
+ * то есть занимал место, ничего не давая. Суммы работ ему нужны (от них
+ * считается сделка), а «ВСЕГО с НДС» — это счёт клиенту, не его забота.
+ */
+describe('чужого на экране инженера нет', () => {
+  it('ставки НДС у инженера нет вовсе', async () => {
+    renderEditor('card');
+    await screen.findByText(/Что было и что сделал/i);
+
+    expect(screen.queryByText(/Ставка НДС/i)).toBeNull();
+    expect(screen.queryByText(/меняет директор/i)).toBeNull();
+  });
+
+  it('суммы работ остаются — от них считается сделка инженера', async () => {
+    renderEditor('card');
+    await screen.findByText(/Итого работы/i);
+    // А вот итог с НДС — это счёт клиенту.
+    expect(screen.queryByText(/ВСЕГО \(с НДС/i)).toBeNull();
+  });
+
+  it('на десктопе НДС на месте — его правит диспетчер', async () => {
+    renderEditor('table');
+    await screen.findByText(/Ставка НДС/i);
+    expect(screen.queryByText(/ВСЕГО \(с НДС/i)).not.toBeNull();
   });
 });
 
@@ -508,6 +551,85 @@ describe('на десктопе видно, что инженер написал
     renderEditor('table');
     await screen.findByText('Диагноз');
     expect(screen.queryByText(/Инженер написал своими словами/i)).toBeNull();
+  });
+});
+
+/**
+ * Черновик в памяти телефона — последняя страховка: его пишут на каждую букву,
+ * и он один переживает выгрузку приложения из памяти.
+ *
+ * ⚠️ Стирали его по ответу на сохранение, НЕ СВЕРЯЯСЬ с тем, что в поле сейчас.
+ * Инженер печатает дальше, пока запись идёт (а без связи она идёт через
+ * IndexedDB, это не мгновенно) — и дописанное оставалось без страховки вовсе.
+ */
+describe('черновик стирается только вместе с тем, что записали', () => {
+  it('дописал, пока шла запись — дописанное остаётся под страховкой', async () => {
+    renderEditor('card');
+    const field = await screen.findByLabelText(/Что было и что сделал/i);
+
+    fireEvent.change(field, { target: { value: 'плата сгорела' } });
+    fireEvent.blur(field); // запись пошла
+    // ...и человек продолжает печатать, не дожидаясь её конца.
+    fireEvent.change(field, { target: { value: 'плата сгорела, поменял' } });
+
+    await waitFor(async () => {
+      expect(await queuedText()).toContain('плата сгорела');
+    });
+    const draft = localStorage.getItem(`erfolg-draft:${TICKET}:engineerNotes`);
+    expect(draft).not.toBeNull();
+    expect(String(draft)).toContain('плата сгорела, поменял');
+  });
+
+  it('ничего не дописывал — страховка снимается, как и раньше', async () => {
+    renderEditor('card');
+    const field = await screen.findByLabelText(/Что было и что сделал/i);
+
+    fireEvent.change(field, { target: { value: 'не греет' } });
+    fireEvent.blur(field);
+
+    await waitFor(async () => {
+      expect(await queuedText()).toContain('не греет');
+    });
+    await waitFor(() => {
+      expect(localStorage.getItem(`erfolg-draft:${TICKET}:engineerNotes`)).toBeNull();
+    });
+  });
+});
+
+/**
+ * Десктопная кнопка «ИИ-черновик» (фича №13) собирает текст из СТРОК наряда и
+ * вписывает его в поле. Текст, который человек уже набрал, она затирала без
+ * вопроса — с этого и начался весь разбор «инженер пишет своими словами».
+ * Кнопку оставляем (диспетчеру она к месту), но молча терять работу нельзя.
+ */
+describe('«ИИ-черновик» на десктопе не затирает набранное молча', () => {
+  it('в поле есть текст — спрашиваем', async () => {
+    const server = makeServer();
+    goOnline();
+    renderEditor('table', server);
+
+    const field = await screen.findByLabelText(/Описание ремонта/i);
+    fireEvent.change(field, { target: { value: 'Мой текст, который жалко' } });
+    fireEvent.click(await screen.findByRole('button', { name: /ИИ-черновик/ }));
+
+    // Вопрос задан, и черновик за ним ещё НЕ запрашивался.
+    await screen.findByText('В поле уже есть текст');
+    expect(server.draftCalls).toBe(0);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Отмена/ }));
+    expect((field as HTMLTextAreaElement).value).toBe('Мой текст, который жалко');
+    expect(server.draftCalls).toBe(0);
+  });
+
+  it('поле пустое — вопроса нет, терять нечего', async () => {
+    const server = makeServer();
+    goOnline();
+    renderEditor('table', server);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ИИ-черновик/ }));
+
+    await waitFor(() => expect(server.draftCalls).toBe(1));
+    expect(screen.queryByText('В поле уже есть текст')).toBeNull();
   });
 });
 

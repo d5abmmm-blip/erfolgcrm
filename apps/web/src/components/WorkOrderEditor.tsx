@@ -33,7 +33,12 @@ import { showToast } from '../lib/toast';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useFlushOnLeave } from '../lib/use-flush-on-leave';
 import { useSaveMark } from '../lib/use-save-mark';
-import { forgetDraft, readDraft, rememberDraft } from '../lib/field-draft';
+import {
+  forgetDraft,
+  forgetDraftIfUnchanged,
+  readDraft,
+  rememberDraft,
+} from '../lib/field-draft';
 import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
@@ -203,6 +208,7 @@ export function WorkOrderEditor({
         expenses={wo.data.expensesAmountKopecks}
         total={wo.data.totalAmountKopecks}
         vatRate={wo.data.vatRate}
+        layout={layout}
       />
 
       {canEdit && <DoneButton />}
@@ -473,6 +479,12 @@ function WorkOrderHeader({
           </div>
         </div>
       )}
+      {/* НДС — НЕ ДЕЛО ИНЖЕНЕРА (решение владельца 2026-08-08). Ставку меняют
+          директор и диспетчер; у инженера селектор был заперт и подписан
+          «меняет директор/диспетчер» — то есть занимал место на экране, ничего
+          не давая. А просьба была ровно обратная: контакт с программой
+          сократить. На десктопе всё как было. */}
+      {layout !== 'card' && (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
         <select
@@ -480,10 +492,8 @@ function WorkOrderHeader({
           // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
           value={chosenVat ?? vatRate}
           onChange={(e) => void saveVat(e.target.value as VatRate)}
-          className={cn(
-            'bg-background focus:ring-primary/40 rounded-md border outline-none focus:ring-2 disabled:opacity-50',
-            layout === 'card' ? 'h-11 px-3 text-base' : 'px-2 py-1 text-xs',
-          )}
+          // Только десктоп: на телефоне ставки НДС нет вовсе (см. выше).
+          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
         >
           {VAT_OPTS.map((o) => (
             <option key={o.v} value={o.v}>
@@ -496,6 +506,7 @@ function WorkOrderHeader({
           <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -710,7 +721,9 @@ function EngineerNotesField({
       mark.markResult(status);
       // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
       // оставляем: вернуть набранное будет больше неоткуда.
-      if (status !== 'error') forgetDraft(ticketId, 'engineerNotes');
+      // Снимаем её ТОЛЬКО с уехавшего текста: человек мог дописать, пока шла
+      // запись, и это дописанное страховать больше некому.
+      if (status !== 'error') forgetDraftIfUnchanged(ticketId, 'engineerNotes', raw);
     });
   };
   useFlushOnLeave(saveNotes);
@@ -987,6 +1000,15 @@ function RepairDescriptionField({
   const [note, setNote] = useState<string | null>(
     restored != null ? 'Текст восстановлен из памяти телефона — проверьте и сохраните' : null,
   );
+  const fieldId = useId();
+  /**
+   * ⚠️ Вопрос перед затиранием. Эта кнопка собирает текст из СТРОК наряда и
+   * вписывает его в поле — набранное человеком она не читает вовсе. Раньше
+   * затирала молча: именно с этой потери и начался весь разбор «инженер пишет
+   * своими словами». Кнопку оставили (диспетчеру она к месту), но терять
+   * чужую работу без вопроса нельзя.
+   */
+  const [confirmingDraft, setConfirmingDraft] = useState(false);
   const draft = trpc.workOrders.draftRepairDescription.useMutation({
     onSuccess: (res) => {
       setValue(res.text);
@@ -1011,13 +1033,15 @@ function RepairDescriptionField({
 
   const save = () => {
     if (!canEdit) return;
-    const next = current.current.trim() || null;
+    const raw = current.current;
+    const next = raw.trim() || null;
     if (next === sent.current) return;
     sent.current = next;
     void onSave(next).then((status) => {
       // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
-      // оставляем: вернуть набранное будет больше неоткуда.
-      if (status !== 'error') forgetDraft(ticketId, 'repairDescription');
+      // оставляем: вернуть набранное будет больше неоткуда. Снимаем её ТОЛЬКО
+      // с уехавшего текста — дописанное за время записи страховать некому.
+      if (status !== 'error') forgetDraftIfUnchanged(ticketId, 'repairDescription', raw);
     });
   };
   /**
@@ -1030,12 +1054,16 @@ function RepairDescriptionField({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-[11px] uppercase">Описание ремонта</span>
+        <label htmlFor={fieldId} className="text-muted-foreground text-[11px] uppercase">
+          Описание ремонта
+        </label>
         {canEdit && (
           <button
             type="button"
             disabled={draft.isPending}
-            onClick={() => draft.mutate({ ticketId })}
+            onClick={() =>
+              value.trim() ? setConfirmingDraft(true) : draft.mutate({ ticketId })
+            }
             className={cn(
               'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded font-medium disabled:opacity-50',
               // На телефоне кнопка была 21 пиксель высотой — пальцем не попасть.
@@ -1048,6 +1076,7 @@ function RepairDescriptionField({
         )}
       </div>
       <textarea
+        id={fieldId}
         value={value}
         disabled={!canEdit}
         rows={3}
@@ -1067,6 +1096,17 @@ function RepairDescriptionField({
       ) : (
         note && <div className="text-muted-foreground mt-1 text-[11px]">{note}</div>
       )}
+      <ConfirmDialog
+        open={confirmingDraft}
+        title="В поле уже есть текст"
+        description={`Сейчас записано:\n${value.trim()}\n\nЧерновик собирается из строк наряда и НЕ читает написанное — «Заменить» перепишет этот текст.`}
+        confirmText="Заменить"
+        onConfirm={() => {
+          setConfirmingDraft(false);
+          draft.mutate({ ticketId });
+        }}
+        onCancel={() => setConfirmingDraft(false)}
+      />
     </div>
   );
 }
@@ -1137,8 +1177,9 @@ function Field({
     sent.current = next;
     void onSave(next, mark).then((status) => {
       // Приняли (сервер или очередь) — страховка больше не нужна. Отказ —
-      // оставляем: вернуть набранное будет больше неоткуда.
-      if (status !== 'error') forgetDraft(scope, name);
+      // оставляем: вернуть набранное будет больше неоткуда. Снимаем её ТОЛЬКО
+      // с уехавшего текста — дописанное за время записи страховать некому.
+      if (status !== 'error') forgetDraftIfUnchanged(scope, name, raw);
     });
   };
   useFlushOnLeave(save);
@@ -2192,18 +2233,28 @@ function CardRow({
   );
 }
 
+/**
+ * Итоги наряда.
+ *
+ * ⚠️ У ИНЖЕНЕРА (`card`) НЕТ СТРОКИ «ВСЕГО с НДС». Суммы работ ему нужны —
+ * от них считается его сделка; итог с НДС — это счёт клиенту, чужая забота,
+ * и на телефоне он только занимал место (решение владельца 2026-08-08:
+ * «минимизировать контакт инженеров с программой»).
+ */
 function Totals({
   works,
   parts,
   expenses,
   total,
   vatRate,
+  layout,
 }: {
   works: string;
   parts: string;
   expenses: string;
   total: string;
   vatRate: VatRate;
+  layout: WorkOrderLayout;
 }) {
   return (
     <div className="bg-card rounded-lg border p-4">
@@ -2214,12 +2265,16 @@ function Totals({
         <div className="text-right tabular-nums">{kopecksToRub(parts)} ₽</div>
         <div className="text-muted-foreground">Итого расходы</div>
         <div className="text-right tabular-nums">{kopecksToRub(expenses)} ₽</div>
-        <div className="text-foreground font-semibold">
-          ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
-        </div>
-        <div className="text-right text-base font-semibold tabular-nums">
-          {kopecksToRub(total)} ₽
-        </div>
+        {layout !== 'card' && (
+          <>
+            <div className="text-foreground font-semibold">
+              ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
+            </div>
+            <div className="text-right text-base font-semibold tabular-nums">
+              {kopecksToRub(total)} ₽
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

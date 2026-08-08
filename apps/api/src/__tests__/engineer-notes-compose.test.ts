@@ -19,7 +19,7 @@
  * компании, придуманное языковой моделью.
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
-import { like } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
@@ -211,10 +211,44 @@ describe('оформление моделью', () => {
     await caller.workOrders.composeFromNotes({ ticketId, notes: 'приехал посмотрел не включается' });
 
     expect(llm.calls).toHaveLength(1);
-    expect(llm.calls[0]!.user).toContain('приехал посмотрел не включается');
-    // 152-ФЗ: наружу уходит только техника. Ни имени, ни идентификаторов.
-    expect(llm.calls[0]!.user).not.toContain(ticketId);
-    expect(llm.calls[0]!.user).not.toMatch(/клиент|телефон|адрес/i);
+    const sent = llm.calls[0]!.user;
+    // ⚠️ Сверяем с САМИМИ ДАННЫМИ, а не с ярлыками «клиент/телефон/адрес».
+    // Проверка по ярлыкам пропустила бы настоящую утечку: имя клиента в
+    // промпте не подписано словом «клиент».
+    const [client] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ name: clients.displayName }).from(clients).where(eq(clients.id, primaryClientId)),
+    );
+    expect(sent).toContain('приехал посмотрел не включается');
+    expect(sent).not.toContain(ticketId);
+    expect(sent).not.toContain(client!.name);
+    // Симптом со слов клиента — тоже не наше дело: инженер про него не писал.
+    expect(sent).not.toContain(TEST_PREFIX);
+    // Длина промпта = длина текста инженера. Ничего лишнего просто не влезло.
+    expect(sent.trim()).toBe('приехал посмотрел не включается');
+  });
+
+  /**
+   * Контракт заявлен в шапке `composeEngineerNotesQuery`: «НИЧЕГО НЕ ПИШЕТ —
+   * это предложение, которое человек ещё увидит». Экранная половина проверена,
+   * серверная не была: наряд после вызова ни разу не перечитывали.
+   */
+  it('оформление НИЧЕГО не пишет в наряд — это предложение, а не запись', async () => {
+    const ticketId = await myTicketWithOrder();
+    llm.answer =
+      '{"diagnosis":"Вышла из строя плата.","repairDescription":"Плата заменена."}';
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await caller.workOrders.updateHeader({ ticketId, patch: { diagnosis: 'Было до вызова' } });
+
+    const res = await caller.workOrders.composeFromNotes({
+      ticketId,
+      notes: 'плата сгорела поменял',
+    });
+    expect(res.diagnosis).toBe('Вышла из строя плата.');
+
+    const wo = await caller.workOrders.getByTicket({ ticketId });
+    expect(wo?.diagnosis).toBe('Было до вызова');
+    expect(wo?.repairDescription).toBeNull();
+    expect(wo?.engineerNotes).toBeNull();
   });
 
   it('модель ответила не JSON → молча откатываемся на локальный разбор', async () => {
