@@ -118,15 +118,24 @@ describe('draftRepairDescription (ИИ-черновик акта)', () => {
     expect(res.aiUsed).toBe(false);
     expect(res.text).toContain('Замена платы питания');
     expect(res.text).toContain('Плата питания Mindray PSU-70');
-    expect(res.text).toContain('работоспособность восстановлена');
+    /**
+     * ⚠️ И НИ СЛОВА СВЕРХ СТРОК НАРЯДА. Здесь дописывалась готовая фраза
+     * «Оборудование протестировано, работоспособность восстановлена» — два
+     * утверждения (о процедуре и о результате), которых никто не делал, под
+     * подписью клиента. В пути инженера её убрали, а здесь она оставалась.
+     */
+    expect(res.text).not.toMatch(/протестировано/i);
+    expect(res.text).not.toMatch(/работоспособность/i);
   });
 
-  it('пустой наряд (нет строк, нет диагноза) → базовый текст', async () => {
+  it('пустой наряд — черновик собирать НЕ ИЗ ЧЕГО, и мы это говорим', async () => {
+    // «Работы по заявке выполнены в полном объёме» при нуле строк и пустом
+    // диагнозе — заявление, за которым в системе нет вообще ничего.
     const { ticketId } = await makeTicketWithOrder();
     const caller = appRouter.createCaller(makeCtx('engineer'));
     const res = await caller.workOrders.draftRepairDescription({ ticketId });
     expect(res.aiUsed).toBe(false);
-    expect(res.text).toBe('Работы по заявке выполнены в полном объёме.');
+    expect(res.text).toBe('');
   });
 
   it('фолбэк без строк, но с диагнозом → диагноз не теряется', async () => {

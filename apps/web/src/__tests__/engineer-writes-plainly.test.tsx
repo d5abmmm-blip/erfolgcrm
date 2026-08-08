@@ -65,6 +65,8 @@ interface FakeServer {
   writes: Array<Record<string, unknown>>;
   composeCalls: number;
   draftCalls: number;
+  /** Что отдаёт «ИИ-черновик». Пусто = собирать не из чего. */
+  draftText: string;
 }
 
 /**
@@ -93,6 +95,7 @@ function makeServer(overrides: Partial<typeof WORK_ORDER> = {}): FakeServer {
     writes: [],
     composeCalls: 0,
     draftCalls: 0,
+    draftText: 'Выполнены работы: замена платы.',
     fetch: () => Promise.reject(new TypeError('not initialised')),
   };
   server.fetch = (url: unknown, init?: RequestInit): Promise<Response> => {
@@ -113,7 +116,7 @@ function makeServer(overrides: Partial<typeof WORK_ORDER> = {}): FakeServer {
       // Десктопная кнопка «ИИ-черновик» (фича №13) — собирает из строк наряда.
       if (proc.includes('draftRepairDescription')) {
         server.draftCalls += 1;
-        return { result: { data: { json: { text: 'Выполнены работы: замена платы.', aiUsed: false } } } };
+        return { result: { data: { json: { text: server.draftText, aiUsed: false } } } };
       }
       if (proc.includes('updateHeader')) {
         const patch = (input.patch as Record<string, unknown>) ?? {};
@@ -619,6 +622,26 @@ describe('«ИИ-черновик» на десктопе не затирает 
     fireEvent.click(await screen.findByRole('button', { name: /Отмена/ }));
     expect((field as HTMLTextAreaElement).value).toBe('Мой текст, который жалко');
     expect(server.draftCalls).toBe(0);
+  });
+
+  /**
+   * Собирать не из чего — не повод писать в акт «работы выполнены в полном
+   * объёме». Сервер отдаёт пустой текст, экран говорит словами и НЕ трогает
+   * поле: затирать чужой текст пустотой — худшее из возможного.
+   */
+  it('в наряде нет строк — говорим словами, поле не трогаем', async () => {
+    const server = makeServer();
+    server.draftText = '';
+    goOnline();
+    renderEditor('table', server);
+
+    const field = await screen.findByLabelText(/Описание ремонта/i);
+    fireEvent.change(field, { target: { value: 'Мой текст' } });
+    fireEvent.click(await screen.findByRole('button', { name: /ИИ-черновик/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Заменить/ }));
+
+    await screen.findByText(/не из чего|нет ни строк/i);
+    expect((field as HTMLTextAreaElement).value).toBe('Мой текст');
   });
 
   it('поле пустое — вопроса нет, терять нечего', async () => {
