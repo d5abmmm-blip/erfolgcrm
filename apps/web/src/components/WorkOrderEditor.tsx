@@ -187,33 +187,157 @@ export function WorkOrderEditor({
         layout={layout}
       />
 
-      {LINE_GROUPS.map((g) => (
-        <LineTable
-          key={g.type}
-          ticketId={ticketId}
-          ticketNumber={ticketNumber}
-          lineType={g.type}
-          title={g.title}
-          icon={g.icon}
-          totalKopecks={wo.data![g.totalKey]}
-          lines={wo.data!.lines.filter((l) => l.lineType === g.type)}
-          canEdit={canEdit}
-          layout={layout}
-        />
-      ))}
+      {/* ⚠️ У ИНЖЕНЕРА НЕТ НИ СТРОК НАРЯДА, НИ ДЕНЕГ (решение владельца
+          2026-08-08: «цена устанавливается в десктопной CRM менеджером или
+          директором», строки заводит менеджер).
 
-      <Totals
-        works={wo.data.worksAmountKopecks}
-        parts={wo.data.partsAmountKopecks}
-        expenses={wo.data.expensesAmountKopecks}
-        total={wo.data.totalAmountKopecks}
-        vatRate={wo.data.vatRate}
-        layout={layout}
-      />
+          Дело не в лишних полях. Себестоимость труда считается как ПРОЦЕНТ
+          ИНЖЕНЕРА ОТ ЦЕНЫ СТРОКИ (#88, часов в базе нет) — то есть, набирая
+          цену, инженер назначал сам себе сделку и одним числом выставлял счёт
+          больнице. А запчасть, вписанная руками, приходила с НУЛЕВОЙ
+          себестоимостью: система не знает, откуда она, и вся цена шла в
+          прибыль. На бою это видно — себестоимость есть у 22 нарядов из 6032.
+
+          Списывать со склада он по-прежнему должен: только он знает, что
+          физически взял, и оттуда себестоимость приходит из партий закупки. */}
+      {layout === 'card' ? (
+        <PartsFromInventory
+          ticketId={ticketId}
+          lines={wo.data.lines.filter((l) => l.lineType === 'part')}
+          canEdit={canEdit}
+        />
+      ) : (
+        <>
+          {LINE_GROUPS.map((g) => (
+            <LineTable
+              key={g.type}
+              ticketId={ticketId}
+              ticketNumber={ticketNumber}
+              lineType={g.type}
+              title={g.title}
+              icon={g.icon}
+              totalKopecks={wo.data![g.totalKey]}
+              lines={wo.data!.lines.filter((l) => l.lineType === g.type)}
+              canEdit={canEdit}
+            />
+          ))}
+
+          <Totals
+            works={wo.data.worksAmountKopecks}
+            parts={wo.data.partsAmountKopecks}
+            expenses={wo.data.expensesAmountKopecks}
+            total={wo.data.totalAmountKopecks}
+            vatRate={wo.data.vatRate}
+          />
+        </>
+      )}
 
       {canEdit && <DoneButton />}
     </div>
   );
+}
+
+/**
+ * Запчасти на экране инженера — ТОЛЬКО склад и без единой цифры в рублях.
+ *
+ * Что он тут делает: отмечает, что физически взял деталь. Это знает он один,
+ * и только этот путь даёт наряду настоящую себестоимость — она приходит из
+ * партий закупки (см. resolveLineCost). Свободная строка «название + цена»
+ * приходила с нулевой себестоимостью и превращала всю цену в прибыль.
+ *
+ * Что он тут НЕ делает: не заводит строки и не видит денег. Сколько это стоит
+ * клиенту — дело менеджера, и знать это, чтобы починить аппарат, не нужно.
+ */
+function PartsFromInventory({
+  ticketId,
+  lines,
+  canEdit,
+}: {
+  ticketId: string;
+  // Форма объявлена на месте, как у LineTable: тип DTO живёт в api, сюда не ходит.
+  lines: Array<{
+    id: string;
+    name: string;
+    unit: string;
+    quantity: string;
+    inventoryItemId: string | null;
+  }>;
+  canEdit: boolean;
+}) {
+  const [issuing, setIssuing] = useState(false);
+  const [returning, setReturning] = useState(false);
+  const fromWarehouse = lines.some((l) => l.inventoryItemId);
+
+  return (
+    <div className="bg-card rounded-lg border">
+      <div className="flex items-center gap-1.5 border-b px-3 py-2 text-sm font-semibold">
+        <Package className="text-primary h-4 w-4" />
+        Запчасти со склада
+      </div>
+      {lines.length === 0 ? (
+        <div className="text-muted-foreground p-3 text-center text-xs">пока ничего не списано</div>
+      ) : (
+        <ul className="divide-y">
+          {lines.map((l) => (
+            <li key={l.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span className="min-w-0 truncate">{l.name}</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {trimQuantity(l.quantity)} {l.unit}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-2 border-t p-2">
+          <button
+            type="button"
+            onClick={() => setIssuing(true)}
+            className="text-primary hover:bg-primary/10 border-primary/40 inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm"
+          >
+            <Boxes className="h-4 w-4" />
+            Списать со склада
+          </button>
+          {fromWarehouse && (
+            <button
+              type="button"
+              onClick={() => setReturning(true)}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm"
+            >
+              <Boxes className="h-4 w-4 rotate-180" />
+              Вернуть на склад
+            </button>
+          )}
+        </div>
+      )}
+      {issuing && (
+        <IssueFromInventory
+          ticketId={ticketId}
+          onClose={() => setIssuing(false)}
+          onIssued={() => setIssuing(false)}
+        />
+      )}
+      {returning && (
+        <ReturnToInventory
+          ticketId={ticketId}
+          lines={lines.map((l) => ({
+            id: l.id,
+            name: l.name,
+            quantity: l.quantity,
+            inventoryItemId: l.inventoryItemId,
+            lineType: 'part' as const,
+          }))}
+          onClose={() => setReturning(false)}
+          onReturned={() => setReturning(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** «1.000» → «1»: инженеру нужны штуки, а не знаки после запятой. */
+function trimQuantity(q: string): string {
+  return q.includes('.') ? q.replace(/\.?0+$/, '') : q;
 }
 
 /**
@@ -287,6 +411,7 @@ function WorkOrderHeader({
   vatRate: VatRate;
   canEdit: boolean;
   canEditVat: boolean;
+  /** Единственное, что различает раскладки: одно поле у инженера или три. */
   layout: WorkOrderLayout;
 }) {
   const utils = trpc.useUtils();
@@ -465,7 +590,6 @@ function WorkOrderHeader({
             ticketId={ticketId}
             initial={repairDescription}
             canEdit={canEdit}
-            layout={layout}
             onSave={(value) => saveHeader('repairDescription', value)}
           />
           <Field
@@ -984,13 +1108,11 @@ function RepairDescriptionField({
   ticketId,
   initial,
   canEdit,
-  layout,
   onSave,
 }: {
   ticketId: string;
   initial: string | null;
   canEdit: boolean;
-  layout: WorkOrderLayout;
   onSave: (value: string | null) => Promise<'ok' | 'queued' | 'error'>;
 }) {
   // Черновик в памяти телефона поднимаем ДО первой отрисовки: иначе поле
@@ -1074,10 +1196,10 @@ function RepairDescriptionField({
             className={cn(
               'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded font-medium disabled:opacity-50',
               // На телефоне кнопка была 21 пиксель высотой — пальцем не попасть.
-              layout === 'card' ? 'h-11 px-3 text-sm' : 'px-1.5 py-0.5 text-[11px]',
+              'px-1.5 py-0.5 text-[11px]',
             )}
           >
-            <Sparkles className={layout === 'card' ? 'h-4 w-4' : 'h-3 w-3'} />
+            <Sparkles className="h-3 w-3" />
             {draft.isPending ? 'ИИ пишет…' : 'ИИ-черновик'}
           </button>
         )}
@@ -1230,7 +1352,6 @@ function LineTable({
   totalKopecks,
   lines,
   canEdit,
-  layout,
 }: {
   ticketId: string;
   ticketNumber?: string;
@@ -1238,7 +1359,6 @@ function LineTable({
   title: string;
   icon: typeof Wrench;
   totalKopecks: string;
-  layout: WorkOrderLayout;
   lines: Array<{
     id: string;
     name: string;
@@ -1452,7 +1572,6 @@ function LineTable({
               lineType={lineType}
               canEdit={canEdit}
               engineerOptions={engineerOptions}
-              layout={layout}
               onDelete={() => void deleteLine(l.id)}
             />
           )),
@@ -1461,7 +1580,6 @@ function LineTable({
               key={d.uid}
               draft={d}
               engineerOptions={engineerOptions}
-              layout={layout}
               onChange={(patch) =>
                 patchDrafts((prev) => prev.map((x) => (x.uid === d.uid ? { ...x, ...patch } : x)))
               }
@@ -1472,16 +1590,6 @@ function LineTable({
         ];
         const isEmpty = lines.length === 0 && drafts.length === 0;
 
-        if (layout === 'card') {
-          return (
-            <div className="space-y-2 p-2">
-              {isEmpty && (
-                <div className="text-muted-foreground p-2 text-center text-xs">пусто</div>
-              )}
-              {rows}
-            </div>
-          );
-        }
         return (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1516,23 +1624,13 @@ function LineTable({
         );
       })()}
       {canEdit && (
-        // На телефоне это кнопки для пальца: «Добавить строку» жмут на каждую
-        // строку наряда, а была она 24 пикселя высотой.
-        <div
-          className={cn(
-            'flex items-center border-t',
-            layout === 'card' ? 'flex-wrap gap-2 p-2' : 'gap-1 p-2',
-          )}
-        >
+        <div className="flex items-center gap-1 border-t p-2">
           <button
             type="button"
             onClick={addRow}
-            className={cn(
-              'text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md',
-              layout === 'card' ? 'h-11 border px-3 text-sm' : 'px-2 py-1 text-xs',
-            )}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
           >
-            <Plus className={layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+            <Plus className="h-3.5 w-3.5" />
             Добавить строку
           </button>
           {lineType === 'part' && (
@@ -1540,28 +1638,18 @@ function LineTable({
               <button
                 type="button"
                 onClick={() => setIssuingFromInventory(true)}
-                className={cn(
-                  'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-md',
-                  layout === 'card'
-                    ? 'border-primary/40 h-11 border px-3 text-sm'
-                    : 'px-2 py-1 text-xs',
-                )}
+                className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
               >
-                <Boxes className={layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+                <Boxes className="h-3.5 w-3.5" />
                 Списать со склада
               </button>
               {lines.some((l) => l.inventoryItemId) && (
                 <button
                   type="button"
                   onClick={() => setReturningToInventory(true)}
-                  className={cn(
-                    'text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md',
-                    layout === 'card' ? 'h-11 border px-3 text-sm' : 'px-2 py-1 text-xs',
-                  )}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
                 >
-                  <Boxes
-                    className={cn('rotate-180', layout === 'card' ? 'h-4 w-4' : 'h-3.5 w-3.5')}
-                  />
+                  <Boxes className="h-3.5 w-3.5 rotate-180" />
                   Вернуть на склад
                 </button>
               )}
@@ -1601,7 +1689,6 @@ function ExistingRow({
   lineType,
   canEdit,
   engineerOptions,
-  layout,
   onDelete,
 }: {
   line: {
@@ -1618,7 +1705,6 @@ function ExistingRow({
   lineType: WorkOrderLineType;
   canEdit: boolean;
   engineerOptions: Array<{ id: string; fullName: string }>;
-  layout: WorkOrderLayout;
   onDelete: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -1720,7 +1806,6 @@ function ExistingRow({
       }}
       amountKopecks={line.amountKopecks}
       canEdit={canEdit}
-      layout={layout}
       onFieldBlur={handleBlur}
       onLeave={handleLeave}
       onDelete={onDelete}
@@ -1752,14 +1837,12 @@ function ExistingRow({
 function DraftRow({
   draft,
   engineerOptions,
-  layout,
   onChange,
   onSave,
   onCancel,
 }: {
   draft: LineDraft;
   engineerOptions: Array<{ id: string; fullName: string }>;
-  layout: WorkOrderLayout;
   onChange: (patch: Partial<LineDraft>) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -1780,7 +1863,6 @@ function DraftRow({
       controlled
       amountKopecks={amountKop}
       canEdit
-      layout={layout}
       onChange={onChange}
       onFieldBlur={() => onSave()}
       // Новая строка, которую начали набирать и ушли с экрана. Повтор того же
@@ -1806,7 +1888,6 @@ function RowInputs({
   initial,
   amountKopecks,
   canEdit,
-  layout,
   controlled,
   onChange,
   onFieldBlur,
@@ -1819,7 +1900,6 @@ function RowInputs({
   initial: { name: string; unit: string; quantity: string; unitPriceRub: string };
   amountKopecks: string;
   canEdit: boolean;
-  layout: WorkOrderLayout;
   controlled?: boolean;
   onChange?: (patch: Partial<LineDraft>) => void;
   onFieldBlur: (
@@ -1974,30 +2054,15 @@ function RowInputs({
       </div>
     );
 
-  if (layout === 'card') {
-    return (
-      <CardRow
-        vals={vals}
-        canEdit={canEdit}
-        isDraft={isDraft}
-        saveState={saveState}
-        amountKopecks={amountKopecks}
-        engineer={engineer}
-        update={update}
-        onFieldBlur={onFieldBlur}
-        numberBlur={numberBlur}
-        numberHint={numberHint}
-        deleteButton={deleteButton}
-        confirmDialog={confirmDialog}
-      />
-    );
-  }
-
   return (
     <tr className={cn(isDraft && 'bg-primary/5', saveState === 'queued' && 'bg-warning/10')}>
       <td className="px-3 py-1.5">
+        {/* Подписи полей заданы явно: смысл несёт заголовок колонки, а он с
+            полем программно не связан — ни экранный диктор, ни проверка его
+            не видят. */}
         <input
           type="text"
+          aria-label="Наименование"
           value={vals.name}
           disabled={!canEdit}
           onChange={(e) => update({ name: e.target.value })}
@@ -2010,6 +2075,7 @@ function RowInputs({
       {engineer && (
         <td className="px-3 py-1.5">
           <select
+            aria-label="Кто делал"
             value={engineer.value ?? ''}
             disabled={!canEdit}
             onChange={(e) => engineer.onChange(e.target.value || null)}
@@ -2027,6 +2093,7 @@ function RowInputs({
       <td className="px-3 py-1.5">
         <input
           type="text"
+          aria-label="Ед."
           value={vals.unit}
           disabled={!canEdit}
           onChange={(e) => update({ unit: e.target.value })}
@@ -2037,6 +2104,7 @@ function RowInputs({
       <td className="px-3 py-1.5">
         <input
           type="number"
+          aria-label="Кол-во"
           step="0.01"
           min="0"
           value={vals.quantity}
@@ -2050,6 +2118,7 @@ function RowInputs({
       <td className="px-3 py-1.5">
         <input
           type="number"
+          aria-label="Цена ₽"
           step="1"
           min="0"
           value={vals.unitPriceRub}
@@ -2069,177 +2138,6 @@ function RowInputs({
   );
 }
 
-/** Значения строки — общий тип для обеих раскладок. */
-type RowVals = { name: string; unit: string; quantity: string; unitPriceRub: string };
-
-/**
- * Строка наряда на телефоне.
- *
- * Только разметка: вся запись (уход курсора, уход с экрана, очередь, «пустое
- * не ноль») осталась в RowInputs и общая для обеих раскладок. Здесь важны три
- * вещи, которых не было в сплющенной таблице: поля во всю ширину, у каждого
- * своя подпись (заголовка колонки в карточке нет) и палец попадает — высота
- * полей и кнопок 44 пикселя.
- */
-function CardRow({
-  vals,
-  canEdit,
-  isDraft,
-  saveState,
-  amountKopecks,
-  engineer,
-  update,
-  onFieldBlur,
-  numberBlur,
-  numberHint,
-  deleteButton,
-  confirmDialog,
-}: {
-  vals: RowVals;
-  canEdit: boolean;
-  isDraft?: boolean;
-  saveState: SaveMarkState;
-  amountKopecks: string;
-  engineer?: {
-    value: string | null;
-    options: Array<{ id: string; fullName: string }>;
-    onChange: (id: string | null) => void;
-  };
-  update: (patch: Partial<RowVals>) => void;
-  onFieldBlur: (
-    field: 'name' | 'unit' | 'quantity' | 'unitPriceRub',
-    value: string,
-    extras: RowVals,
-  ) => void;
-  numberBlur: (field: 'quantity' | 'unitPriceRub', value: string) => void;
-  numberHint: (field: 'quantity' | 'unitPriceRub', align: string) => React.ReactNode;
-  deleteButton: (className: string, iconClass: string) => React.ReactNode;
-  confirmDialog: React.ReactNode;
-}) {
-  // Подписи привязываем к полям по id: поле шириной в пол-экрана без названия
-  // остаётся такой же загадкой, как поле шириной 31 пиксель.
-  const uid = useId();
-  const field =
-    'bg-background focus:ring-primary/40 h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2 disabled:opacity-60';
-  const caption = 'text-muted-foreground mb-1 block text-[11px] uppercase';
-
-  return (
-    <div
-      className={cn(
-        'bg-card space-y-2 rounded-lg border p-3',
-        isDraft && 'border-primary/40 bg-primary/5',
-        saveState === 'queued' && 'border-warning/50 bg-warning/10',
-      )}
-    >
-      <div>
-        <label className={caption} htmlFor={`${uid}-name`}>
-          Наименование
-        </label>
-        <input
-          id={`${uid}-name`}
-          type="text"
-          value={vals.name}
-          disabled={!canEdit}
-          onChange={(e) => update({ name: e.target.value })}
-          onBlur={(e) => onFieldBlur('name', e.target.value, vals)}
-          className={field}
-          placeholder="Что выполнено"
-        />
-        <SaveMark state={saveState} />
-      </div>
-
-      {engineer && (
-        <div>
-          <label className={caption} htmlFor={`${uid}-engineer`}>
-            Кто делал
-          </label>
-          <select
-            id={`${uid}-engineer`}
-            value={engineer.value ?? ''}
-            disabled={!canEdit}
-            onChange={(e) => engineer.onChange(e.target.value || null)}
-            className={field}
-          >
-            <option value="">— инженер наряда —</option>
-            {engineer.options.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.fullName}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Кол-во · ед. · цена читаются как «1 шт × 12 500» — тем же порядком,
-          каким инженер их и произносит. */}
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className={caption} htmlFor={`${uid}-qty`}>
-            Кол-во
-          </label>
-          <input
-            id={`${uid}-qty`}
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={vals.quantity}
-            disabled={!canEdit}
-            onChange={(e) => update({ quantity: e.target.value })}
-            onBlur={(e) => numberBlur('quantity', e.target.value)}
-            className={cn(field, 'text-right tabular-nums')}
-          />
-        </div>
-        <div>
-          <label className={caption} htmlFor={`${uid}-unit`}>
-            Ед.
-          </label>
-          <input
-            id={`${uid}-unit`}
-            type="text"
-            value={vals.unit}
-            disabled={!canEdit}
-            onChange={(e) => update({ unit: e.target.value })}
-            onBlur={(e) => onFieldBlur('unit', e.target.value, vals)}
-            className={field}
-          />
-        </div>
-        <div>
-          <label className={caption} htmlFor={`${uid}-price`}>
-            Цена ₽
-          </label>
-          <input
-            id={`${uid}-price`}
-            type="number"
-            inputMode="numeric"
-            step="1"
-            min="0"
-            value={vals.unitPriceRub}
-            disabled={!canEdit}
-            onChange={(e) => update({ unitPriceRub: e.target.value })}
-            onBlur={(e) => numberBlur('unitPriceRub', e.target.value)}
-            className={cn(field, 'text-right tabular-nums')}
-          />
-        </div>
-      </div>
-      {numberHint('quantity', '')}
-      {numberHint('unitPriceRub', '')}
-
-      <div className="flex items-center justify-between border-t pt-2">
-        <div className="text-sm">
-          <span className="text-muted-foreground">Сумма </span>
-          <span className="font-semibold tabular-nums">{kopecksToRub(amountKopecks)} ₽</span>
-        </div>
-        {deleteButton(
-          'text-muted-foreground hover:text-destructive hover:bg-destructive/10 grid h-11 w-11 place-items-center rounded-md',
-          'h-5 w-5',
-        )}
-      </div>
-      {confirmDialog}
-    </div>
-  );
-}
-
 /**
  * Итоги наряда.
  *
@@ -2254,14 +2152,12 @@ function Totals({
   expenses,
   total,
   vatRate,
-  layout,
 }: {
   works: string;
   parts: string;
   expenses: string;
   total: string;
   vatRate: VatRate;
-  layout: WorkOrderLayout;
 }) {
   return (
     <div className="bg-card rounded-lg border p-4">
@@ -2272,16 +2168,12 @@ function Totals({
         <div className="text-right tabular-nums">{kopecksToRub(parts)} ₽</div>
         <div className="text-muted-foreground">Итого расходы</div>
         <div className="text-right tabular-nums">{kopecksToRub(expenses)} ₽</div>
-        {layout !== 'card' && (
-          <>
-            <div className="text-foreground font-semibold">
-              ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
-            </div>
-            <div className="text-right text-base font-semibold tabular-nums">
-              {kopecksToRub(total)} ₽
-            </div>
-          </>
-        )}
+        <div className="text-foreground font-semibold">
+          ВСЕГО ({vatRate === 'without_vat' ? 'без НДС' : `с НДС ${vatRate}%`})
+        </div>
+        <div className="text-right text-base font-semibold tabular-nums">
+          {kopecksToRub(total)} ₽
+        </div>
       </div>
     </div>
   );

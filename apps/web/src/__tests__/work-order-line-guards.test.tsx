@@ -1,22 +1,27 @@
 /**
- * Наряд на телефоне — карточки, а не сплющенная таблица.
+ * Сторожа строки наряда. Строка — самый денежный объект в системе: это и счёт
+ * клиенту, и сделка в зарплате (процент от строки).
  *
- * ЧТО БЫЛО (измерено в браузере на 375×812, а не прикинуто). Одна строка работ
- * рисовалась таблицей из семи колонок, и браузер ужимал её так:
- *   наименование 96 px (≈10 символов), «кто делал» 39 px, ед. 18 px,
- *   кол-во 28 px, ЦЕНА 31 px — «12500» не помещалось в собственное поле,
- *   плюс 88 px уезжало вбок под горизонтальный скролл.
- * Кнопка удаления строки — 14 × 14 px, вплотную к полю цены, БЕЗ ВОПРОСА и без
- * отмены. Это самый денежный экран приложения: строка наряда — и счёт клиенту,
- * и сделка в зарплате (30 % от строки).
+ * ИСТОРИЯ ФАЙЛА. Он назывался «наряд карточками на телефоне» (#113) и проверял
+ * телефонную раскладку строк: на 375 пикселях таблица из семи колонок ужимала
+ * поле цены до 31 пикселя, а кнопка удаления была 14 × 14 вплотную к цене и
+ * сносила строку без вопроса.
  *
- * ЧТО ДОЛЖНО БЫТЬ. На телефоне строка — карточка во всю ширину: название
- * отдельной строкой, у каждого поля своя подпись (в таблице смысл нёс
- * заголовок колонки, в карточке его нет), удаление — через вопрос.
+ * ⚠️ ТЕЛЕФОННОЙ РАСКЛАДКИ БОЛЬШЕ НЕТ. Владелец 2026-08-08: «цена
+ * устанавливается в десктопной CRM (менеджером/директором)», строки заводит
+ * менеджер. У инженера на экране ни строк, ни денег — только «Что было и что
+ * сделал» и «Списать со склада» (это проверяет engineer-writes-plainly).
+ * Карточная разметка стала недостижимым кодом и удалена вместе с тестами.
  *
- * ДЕСКТОП НЕ ТРОГАЕМ: там таблица удобна и проверена годами. Раскладку
- * выбирает экран, который открывает редактор, а не медиазапрос внутри него —
- * так на планшете в альбомной ориентации ничего не «переключится» само.
+ * А ВОТ ДВА СТОРОЖА ОСТАЛИСЬ ЦЕННЫМИ — они не про раскладку, а про деньги, и
+ * теперь стерегут десктоп:
+ *   1. удаление строки СПРАШИВАЕТ и до ответа ничего не удаляет;
+ *   2. пустая цена не превращается в ноль (иначе клиенту выставят меньше, а
+ *      инженеру начислят меньше — и в наряде это будет выглядеть нормальной
+ *      строкой).
+ *
+ * ПОЧЕМУ ПРОВЕРЯЕМ ЧЕРЕЗ ОЧЕРЕДЬ: связи нет, значит всё, что экран решит
+ * записать, ляжет в оффлайн-очередь и будет видно вместе с числами.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -51,6 +56,7 @@ const WORK_ORDER = {
   diagnosis: null,
   repairDescription: null,
   recommendation: null,
+  engineerNotes: null,
   worksAmountKopecks: '1250000',
   partsAmountKopecks: '0',
   expensesAmountKopecks: '0',
@@ -59,7 +65,8 @@ const WORK_ORDER = {
   lines: [LINE],
 };
 
-function renderEditor(layout?: 'table' | 'card') {
+/** Десктоп менеджера — единственное место, где строки вообще правятся. */
+function renderEditor() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
   });
@@ -81,13 +88,7 @@ function renderEditor(layout?: 'table' | 'card') {
   return render(
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <WorkOrderEditor
-          ticketId={TICKET}
-          ticketNumber="WSP-6472"
-          canEdit
-          canEditVat={false}
-          layout={layout}
-        />
+        <WorkOrderEditor ticketId={TICKET} ticketNumber="WSP-6472" canEdit canEditVat={false} />
       </QueryClientProvider>
     </trpc.Provider>,
   );
@@ -99,7 +100,8 @@ async function queuedKinds(): Promise<string[]> {
 
 beforeEach(async () => {
   await clearAll();
-  setCurrentUserId('engineer-A');
+  localStorage.clear();
+  setCurrentUserId('manager-A');
   Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, value: false });
   onlineManager.setOnline(false);
 });
@@ -116,39 +118,9 @@ afterEach(async () => {
   await clearAll();
 });
 
-describe('строка наряда на телефоне', () => {
-  it('рисуется карточкой — таблицы, которую надо возить вбок, нет', async () => {
-    const { container } = renderEditor('card');
-    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
-
-    expect(container.querySelector('table')).toBeNull();
-  });
-
-  it('у каждого поля своя подпись — в карточке заголовка колонки нет', async () => {
-    renderEditor('card');
-    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
-
-    // Именно поля, а не просто текст на экране: подпись должна быть привязана
-    // к вводу, иначе «31 пиксель без названия» превращается в «поле пошире,
-    // но по-прежнему непонятно какое».
-    expect(screen.getByLabelText('Наименование')).toBeTruthy();
-    expect(screen.getByLabelText('Кол-во')).toBeTruthy();
-    expect(screen.getByLabelText('Цена ₽')).toBeTruthy();
-    expect(screen.getByLabelText('Ед.')).toBeTruthy();
-    expect(screen.getByLabelText('Кто делал')).toBeTruthy();
-  });
-
-  it('десктоп остаётся таблицей', async () => {
-    const { container } = renderEditor();
-    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
-
-    expect(container.querySelector('table')).not.toBeNull();
-  });
-});
-
 describe('удаление строки наряда спрашивает', () => {
   it('по нажатию ничего не удаляется, пока человек не подтвердил', async () => {
-    renderEditor('card');
+    renderEditor();
     await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
 
     fireEvent.click(screen.getByRole('button', { name: /Удалить строку/ }));
@@ -158,7 +130,7 @@ describe('удаление строки наряда спрашивает', () =
   });
 
   it('отказался — строка на месте', async () => {
-    renderEditor('card');
+    renderEditor();
     await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
 
     fireEvent.click(screen.getByRole('button', { name: /Удалить строку/ }));
@@ -169,7 +141,7 @@ describe('удаление строки наряда спрашивает', () =
   });
 
   it('подтвердил — удаление уходит', async () => {
-    renderEditor('card');
+    renderEditor();
     await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
 
     fireEvent.click(screen.getByRole('button', { name: /Удалить строку/ }));
@@ -179,15 +151,13 @@ describe('удаление строки наряда спрашивает', () =
   });
 });
 
-/**
- * Главный риск этой правки — сломать запись. Наряд пишет по уходу курсора из
- * поля, и на правиле «одна строка = одна запись» держится защита от дублей.
- */
-describe('карточка пишет так же, как таблица', () => {
+describe('деньги в строке не портятся молча', () => {
   it('поправил цену и ушёл из поля — правка уехала', async () => {
-    renderEditor('card');
+    renderEditor();
     await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
 
+    // Подписи полей заданы через aria-label: смысл несёт заголовок колонки, а
+    // он с полем программно не связан — ни диктор, ни проверка его не видят.
     const price = screen.getByLabelText<HTMLInputElement>('Цена ₽');
     fireEvent.change(price, { target: { value: '18000' } });
     fireEvent.blur(price);
@@ -200,8 +170,8 @@ describe('карточка пишет так же, как таблица', () =>
     });
   });
 
-  it('пустая цена по-прежнему не становится нулём', async () => {
-    renderEditor('card');
+  it('пустая цена не становится нулём', async () => {
+    renderEditor();
     await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
     // Чистим очередь прямо перед действием, а не только в beforeEach: уход с
     // экрана в предыдущем тесте — это тоже запись, и она приземляется в
@@ -214,6 +184,19 @@ describe('карточка пишет так же, как таблица', () =>
     fireEvent.blur(price);
 
     expect(await screen.findByText(/Цена не может быть пустой/)).toBeTruthy();
+    expect(await queuedKinds()).toEqual([]);
+  });
+
+  it('пустое количество тоже не становится нулём', async () => {
+    renderEditor();
+    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
+    await clearAll();
+
+    const qty = screen.getByLabelText<HTMLInputElement>('Кол-во');
+    fireEvent.change(qty, { target: { value: '' } });
+    fireEvent.blur(qty);
+
+    expect(await screen.findByText(/Количество не может быть пустым/)).toBeTruthy();
     expect(await queuedKinds()).toEqual([]);
   });
 });

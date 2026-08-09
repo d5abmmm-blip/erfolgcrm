@@ -240,6 +240,87 @@ describe('на телефоне у инженера одно поле, а не �
  * то есть занимал место, ничего не давая. Суммы работ ему нужны (от них
  * считается сделка), а «ВСЕГО с НДС» — это счёт клиенту, не его забота.
  */
+/**
+ * ⚠️ РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-08-08: «цена устанавливается в десктопной CRM
+ * (менеджером/директором)», строки наряда заводит менеджер.
+ *
+ * Почему это не просто «убрать лишние поля»:
+ *  · себестоимость труда считается как ПРОЦЕНТ ИНЖЕНЕРА ОТ ЦЕНЫ СТРОКИ (#88,
+ *    часов в базе нет) — значит, набирая цену, инженер назначал сам себе
+ *    сделку. Нельзя ставить человека в положение, где одним числом он
+ *    выставляет счёт больнице и премию себе;
+ *  · запчасть, вписанная руками, имеет НУЛЕВУЮ себестоимость — система не
+ *    знает, откуда она. Вся цена засчитывается как прибыль. Правильный путь
+ *    один: «Списать со склада», там себестоимость приходит из партий закупки.
+ *
+ * Поэтому со склада списывать инженер по-прежнему должен (только он знает, что
+ * физически взял), а денег на его экране нет вовсе.
+ */
+describe('строки и деньги — не дело инженера', () => {
+  it('таблиц наряда на телефоне нет', async () => {
+    renderEditor('card');
+    await screen.findByText(/Что было и что сделал/i);
+
+    expect(screen.queryByText('Работы')).toBeNull();
+    expect(screen.queryByText('Прочие расходы')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Добавить строку/ })).toBeNull();
+  });
+
+  it('ни цен, ни итогов', async () => {
+    renderEditor('card');
+    await screen.findByText(/Что было и что сделал/i);
+
+    expect(screen.queryByText(/Итого работы/i)).toBeNull();
+    expect(screen.queryByText(/ВСЕГО/)).toBeNull();
+    expect(screen.queryByPlaceholderText('Что выполнено')).toBeNull();
+  });
+
+  it('«Списать со склада» остаётся — это его дело, и только он знает, что взял', async () => {
+    renderEditor('card');
+    await screen.findByRole('button', { name: /Списать со склада/ });
+  });
+
+  it('что уже списано — видно, но без цены', async () => {
+    renderEditor(
+      'card',
+      makeServer({
+        lines: [
+          {
+            id: 'l1',
+            lineType: 'part',
+            name: 'Плата питания Mindray PSU-70',
+            unit: 'шт',
+            quantity: '1',
+            unitPriceKopecks: '2850000',
+            amountKopecks: '2850000',
+            costPerUnitKopecks: '0',
+            engineerId: null,
+            engineerName: null,
+            comment: null,
+            inventoryItemId: 'inv-1',
+            orderIdx: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ] as never,
+      }),
+    );
+
+    await screen.findByText(/Плата питания Mindray PSU-70/);
+    // 28 500 ₽ — не его забота и на экране быть не должно.
+    expect(screen.queryByText(/28 500/)).toBeNull();
+    expect(screen.queryByText(/₽/)).toBeNull();
+  });
+
+  it('на десктопе таблицы и итоги на месте — там работает менеджер', async () => {
+    renderEditor('table');
+    await screen.findByText('Работы');
+    expect(screen.queryByText('Прочие расходы')).not.toBeNull();
+    expect(screen.queryByText(/Итого работы/i)).not.toBeNull();
+    expect(screen.queryAllByRole('button', { name: /Добавить строку/ }).length).toBeGreaterThan(0);
+  });
+});
+
 describe('чужого на экране инженера нет', () => {
   it('ставки НДС у инженера нет вовсе', async () => {
     renderEditor('card');
@@ -249,11 +330,18 @@ describe('чужого на экране инженера нет', () => {
     expect(screen.queryByText(/меняет директор/i)).toBeNull();
   });
 
-  it('суммы работ остаются — от них считается сделка инженера', async () => {
+  /**
+   * Сначала я оставил инженеру суммы работ — рассудив, что от них считается
+   * его сделка. Владелец 2026-08-08 решил иначе: «цена устанавливается в
+   * десктопной CRM (менеджером/директором)». Раз он цены не ставит, то и
+   * видеть их незачем: чтобы починить аппарат, знать счёт больницы не нужно.
+   */
+  it('денег на экране инженера нет вовсе — ни строк, ни сумм', async () => {
     renderEditor('card');
-    await screen.findByText(/Итого работы/i);
-    // А вот итог с НДС — это счёт клиенту.
-    expect(screen.queryByText(/ВСЕГО \(с НДС/i)).toBeNull();
+    await screen.findByText(/Что было и что сделал/i);
+
+    expect(screen.queryByText(/Итого работы/i)).toBeNull();
+    expect(screen.queryByText(/ВСЕГО/)).toBeNull();
   });
 
   it('на десктопе НДС на месте — его правит диспетчер', async () => {
