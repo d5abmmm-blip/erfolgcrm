@@ -219,6 +219,7 @@ export function WorkOrderEditor({
               totalKopecks={wo.data![g.totalKey]}
               lines={wo.data!.lines.filter((l) => l.lineType === g.type)}
               canEdit={canEdit}
+              warning={g.type === 'work' ? worksNotPricedWarning(wo.data!) : null}
             />
           ))}
 
@@ -235,6 +236,29 @@ export function WorkOrderEditor({
       {canEdit && <DoneButton />}
     </div>
   );
+}
+
+/**
+ * Работа описана, а оценивать её нечем.
+ *
+ * ⚠️ ЭТО ПРЕДОХРАНИТЕЛЬ ВЗАМЕН УТРАЧЕННОГО. Раньше строку работ мог завести
+ * сам инженер — и если менеджер забывал, тот всё равно получал свою сделку.
+ * Теперь строки заводит только менеджер (решение владельца 2026-08-08), и его
+ * забывчивость стоит инженеру денег МОЛЧА: сделка считается процентом от
+ * строки работ, а строки нет.
+ *
+ * Говорим только когда есть основание: инженер что-то написал или описание
+ * ремонта заполнено. На пустом наряде молчим — там просто ещё не работали.
+ */
+function worksNotPricedWarning(wo: {
+  engineerNotes: string | null;
+  repairDescription: string | null;
+  lines: Array<{ lineType: WorkOrderLineType }>;
+}): string | null {
+  const workWasDone = Boolean(wo.engineerNotes?.trim() || wo.repairDescription?.trim());
+  const hasWorkLines = wo.lines.some((l) => l.lineType === 'work');
+  if (!workWasDone || hasWorkLines) return null;
+  return 'Работа описана, но нет ни одной строки — инженеру не начислится сделка, а клиенту не за что выставить счёт.';
 }
 
 /**
@@ -1352,6 +1376,7 @@ function LineTable({
   totalKopecks,
   lines,
   canEdit,
+  warning,
 }: {
   ticketId: string;
   ticketNumber?: string;
@@ -1370,6 +1395,8 @@ function LineTable({
     engineerId: string | null;
   }>;
   canEdit: boolean;
+  /** Предупреждение под заголовком — например, «работа описана, а строк нет». */
+  warning?: string | null;
 }) {
   const utils = trpc.useUtils();
   const tenantSubdomain = getTenantSubdomain();
@@ -1558,6 +1585,14 @@ function LineTable({
           итого {kopecksToRub(totalKopecks)} ₽
         </div>
       </div>
+      {warning && (
+        <div
+          className="bg-warning/10 text-warning border-warning/30 border-b px-3 py-2 text-xs"
+          role="status"
+        >
+          {warning}
+        </div>
+      )}
       {/* Строки одни и те же, разная только обёртка: на телефоне — карточки
           во всю ширину, на десктопе — таблица. Сама запись (уход курсора, уход
           с экрана, очередь) живёт в RowInputs и от раскладки не зависит. */}

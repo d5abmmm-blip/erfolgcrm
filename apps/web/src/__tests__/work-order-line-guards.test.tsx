@@ -53,10 +53,12 @@ const WORK_ORDER = {
   orderNumber: 'WO-1',
   ticketId: TICKET,
   vatRate: '5' as const,
-  diagnosis: null,
-  repairDescription: null,
-  recommendation: null,
-  engineerNotes: null,
+  // Типы явно: без них TS выводит литеральный `null`, и наряд с заполненным
+  // описанием уже не собрать через renderWith.
+  diagnosis: null as string | null,
+  repairDescription: null as string | null,
+  recommendation: null as string | null,
+  engineerNotes: null as string | null,
   worksAmountKopecks: '1250000',
   partsAmountKopecks: '0',
   expensesAmountKopecks: '0',
@@ -64,6 +66,51 @@ const WORK_ORDER = {
   totalAmountKopecks: '1250000',
   lines: [LINE],
 };
+
+/**
+ * ⚠️ ПРЕДОХРАНИТЕЛЬ, КОТОРЫЙ ПОЯВИЛСЯ ВМЕСТЕ С ПОТЕРЕЙ СТАРОГО.
+ *
+ * Раньше строку работ мог завести сам инженер — и если менеджер забывал, тот
+ * всё равно получал свою сделку. Теперь строки заводит только менеджер
+ * (решение владельца 2026-08-08), и его забывчивость стоит инженеру денег
+ * МОЛЧА: описание работ в наряде есть, а начислять не с чего.
+ *
+ * Поэтому на десктопе говорим об этом прямо там, где стоит «Добавить строку».
+ * На телефоне такого предупреждения нет сознательно: инженер поправить это не
+ * может, а лишний повод трогать программу — ровно то, чего просили избежать.
+ */
+function renderWith(order: Partial<typeof WORK_ORDER>, layout?: 'table' | 'card') {
+  const merged = { ...WORK_ORDER, ...order };
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
+  });
+  queryClient.setQueryData(
+    [['workOrders', 'getByTicket'], { input: { ticketId: TICKET }, type: 'query' }],
+    merged,
+  );
+  const client = trpc.createClient({
+    links: [
+      httpBatchLink({
+        url: 'http://test.invalid/api/v1/trpc',
+        transformer: superjson,
+        fetch: () => Promise.reject(new TypeError('Failed to fetch')),
+      }),
+    ],
+  });
+  return render(
+    <trpc.Provider client={client} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <WorkOrderEditor
+          ticketId={TICKET}
+          ticketNumber="WSP-6472"
+          canEdit
+          canEditVat={false}
+          layout={layout}
+        />
+      </QueryClientProvider>
+    </trpc.Provider>,
+  );
+}
 
 /** Десктоп менеджера — единственное место, где строки вообще правятся. */
 function renderEditor() {
@@ -198,5 +245,53 @@ describe('деньги в строке не портятся молча', () => 
 
     expect(await screen.findByText(/Количество не может быть пустым/)).toBeTruthy();
     expect(await queuedKinds()).toEqual([]);
+  });
+});
+
+describe('менеджер не забудет оценить работу', () => {
+  it('есть описание работ, но ни одной строки «Работы» — говорим прямо', async () => {
+    renderWith({
+      lines: [],
+      worksAmountKopecks: '0',
+      totalAmountKopecks: '0',
+      engineerNotes: 'плата сгорела поменял всё пашет',
+      repairDescription: 'Заменил. Работает исправно.',
+    });
+
+    const warning = await screen.findByText(/ни одной строки|не начислится|не за что начислить/i);
+    expect(warning).toBeTruthy();
+  });
+
+  it('строка работ есть — молчим', async () => {
+    renderWith({
+      engineerNotes: 'плата сгорела поменял',
+      repairDescription: 'Заменил.',
+    });
+    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
+
+    expect(screen.queryByText(/ни одной строки|не начислится/i)).toBeNull();
+  });
+
+  it('наряд пустой и описания нет — не дёргаем зря', async () => {
+    renderWith({ lines: [], worksAmountKopecks: '0', totalAmountKopecks: '0' });
+    await screen.findByText('Работы');
+
+    expect(screen.queryByText(/ни одной строки|не начислится/i)).toBeNull();
+  });
+
+  it('на телефоне инженера этого предупреждения нет — он его не поправит', async () => {
+    renderWith(
+      {
+        lines: [],
+        worksAmountKopecks: '0',
+        totalAmountKopecks: '0',
+        engineerNotes: 'плата сгорела поменял',
+        repairDescription: 'Заменил.',
+      },
+      'card',
+    );
+    await screen.findByText(/Что было и что сделал/i);
+
+    expect(screen.queryByText(/ни одной строки|не начислится/i)).toBeNull();
   });
 });
