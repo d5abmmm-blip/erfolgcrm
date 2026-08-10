@@ -252,13 +252,19 @@ export async function storeInboundMessage(
   return { stored: true };
 }
 
+/**
+ * Исход обработки одного письма. 'duplicate' — успех для курсора (письмо уже
+ * в базе, перечитано после сбоя соседа), но не «новое» для счётчика fetched.
+ */
+type StoreOutcome = 'stored' | 'duplicate' | 'failed';
+
 /** Разбор одного письма (MIME) и запись во входящие. Вынесено из цикла ради читаемости/вложенности. */
 async function parseAndStore(
   db: Db,
   tenantId: string,
   source: Buffer,
   uid: number,
-): Promise<boolean> {
+): Promise<StoreOutcome> {
   try {
     const p = await simpleParser(source);
     // Только вложения С именем файла (inline/cid-части без filename пропускаем).
@@ -297,10 +303,10 @@ async function parseAndStore(
       attachmentCount: p.attachments?.length ?? 0,
       attachments,
     };
-    return (await storeInboundMessage(db, tenantId, parsed)).stored;
+    return (await storeInboundMessage(db, tenantId, parsed)).stored ? 'stored' : 'duplicate';
   } catch (err) {
     logger.warn({ err, uid, tenantId }, 'imap: parse/store failed for message');
-    return false;
+    return 'failed';
   }
 }
 
@@ -356,6 +362,12 @@ export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult>
         ? `${cfg.lastUid + 1}:*`
         : `${Math.max(1, exists - FIRST_RUN_LIMIT + 1)}:*`;
 
+      // Курсор двигается только по НЕПРЕРЫВНОЙ цепочке успешно обработанных
+      // писем: первый сбой «замораживает» его, и следующий тик перечитает
+      // упавшее письмо (сохранённые соседи отфильтруются дедупом по
+      // Message-ID). Раньше курсор двигался всегда — письмо клиента,
+      // упавшее при разборе, пропадало навсегда.
+      let cursorFrozen = false;
       for await (const msg of client.fetch(
         range,
         { uid: true, source: true },
@@ -363,8 +375,12 @@ export async function fetchInbox(db: Db, tenantId: string): Promise<FetchResult>
       )) {
         // IMAP-квирк: диапазон N:* всегда возвращает последнее письмо, даже если N больше.
         if (msg.uid <= cfg.lastUid) continue;
-        if (msg.uid > maxUid) maxUid = msg.uid;
-        if (msg.source && (await parseAndStore(db, tenantId, msg.source, msg.uid))) fetched++;
+        const outcome: StoreOutcome = msg.source
+          ? await parseAndStore(db, tenantId, msg.source, msg.uid)
+          : 'failed';
+        if (outcome === 'stored') fetched++;
+        if (outcome === 'failed') cursorFrozen = true;
+        else if (!cursorFrozen && msg.uid > maxUid) maxUid = msg.uid;
       }
     } finally {
       lock.release();
