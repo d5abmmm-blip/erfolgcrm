@@ -77,8 +77,24 @@ function fromThousandths(v: bigint): string {
   return fracStr.length > 0 ? `${sign}${int}.${fracStr}` : `${sign}${int}`;
 }
 
+/** Тип транзакции withTenantTx — чтобы InTx-варианты могли принимать её снаружи. */
+type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
+
 export async function issueToWorkOrder(
   db: Db,
+  tenantId: string,
+  input: IssueToWorkOrderInput,
+): Promise<IssueResult> {
+  return withTenantTx(db, tenantId, (tx) => issueToWorkOrderInTx(tx, tenantId, input));
+}
+
+/**
+ * То же ядро, но в УЖЕ открытой транзакции — для вызовов, где движение должно
+ * быть атомарно с чем-то ещё (сервис пишет аудит в ту же транзакцию: сбой
+ * журнала откатывает списание, иначе «ошибка» на экране врала бы об исходе).
+ */
+export async function issueToWorkOrderInTx(
+  tx: Tx,
   tenantId: string,
   input: IssueToWorkOrderInput,
 ): Promise<IssueResult> {
@@ -87,7 +103,7 @@ export async function issueToWorkOrder(
     throw new Error('issueToWorkOrder: quantity must be > 0');
   }
 
-  return withTenantTx(db, tenantId, async (tx) => {
+  {
     // FEFO: SELECT FOR UPDATE — блокирует строки до конца транзакции.
     // ORDER BY expires_at NULLS LAST, received_at: партии без срока — последние.
     const batches = await tx
@@ -200,7 +216,7 @@ export async function issueToWorkOrder(
     }
 
     return { consumed };
-  });
+  }
 }
 
 export interface ReturnFromWorkOrderInput {
@@ -229,10 +245,19 @@ export async function returnFromWorkOrder(
   tenantId: string,
   input: ReturnFromWorkOrderInput,
 ): Promise<ReturnResult> {
+  return withTenantTx(db, tenantId, (tx) => returnFromWorkOrderInTx(tx, tenantId, input));
+}
+
+/** То же ядро в открытой транзакции — см. issueToWorkOrderInTx. */
+export async function returnFromWorkOrderInTx(
+  tx: Tx,
+  tenantId: string,
+  input: ReturnFromWorkOrderInput,
+): Promise<ReturnResult> {
   const qtyT = toThousandths(input.quantity);
   if (qtyT <= 0n) throw new Error('returnFromWorkOrder: quantity must be > 0');
 
-  return withTenantTx(db, tenantId, async (tx) => {
+  {
     // Берём целевую партию и блокируем её одним SELECT FOR UPDATE — без второго запроса.
     // Раньше была race: SELECT id ORDER BY received_at без блокировки → вернул ID,
     // другой tx insert новой партии (или delete) → второй SELECT FOR UPDATE по этому id
@@ -299,7 +324,7 @@ export async function returnFromWorkOrder(
       comment: input.comment ?? 'Возврат на склад',
     });
     return { batchId: targetBatchId, newRemaining: fromThousandths(newRemainingT) };
-  });
+  }
 }
 
 export interface ListMovementsOpts {

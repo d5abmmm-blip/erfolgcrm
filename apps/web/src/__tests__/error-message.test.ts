@@ -50,15 +50,32 @@ describe('humanizeError', () => {
     );
   });
 
-  it('SQL из INTERNAL_SERVER_ERROR наружу не выходит', () => {
+  /**
+   * Ошибка сервера и «не ответил вовремя» — два случая, когда исход НЕИЗВЕСТЕН:
+   * запись могла пройти, а упасть могло уже после неё (журнал действий пишется
+   * отдельной операцией). Прежний текст утверждал «не сохранено» и советовал
+   * повторить — на списании со склада это второй расход запчасти.
+   */
+  it('SQL из INTERNAL_SERVER_ERROR наружу не выходит, а исход не выдумывается', () => {
     const msg = humanizeError(
       trpcError(
         'insert into "work_order_lines" ("id","name") values ($1,$2) - duplicate key value violates unique constraint',
         'INTERNAL_SERVER_ERROR',
       ),
     );
-    expect(msg).toBe('Ошибка на сервере. Изменение не сохранено, попробуйте ещё раз');
+    expect(msg).toBe(
+      'Ошибка на сервере. Сохранилось ли изменение — неизвестно: обновите страницу и проверьте',
+    );
     expect(msg).not.toMatch(/insert|constraint|work_order_lines/i);
+    expect(msg).not.toMatch(/попробуйте|повторите/i);
+  });
+
+  it('TIMEOUT не утверждает «не сохранено» и не советует повторить', () => {
+    const msg = humanizeError(trpcError('timeout', 'TIMEOUT', 408));
+    expect(msg).toBe(
+      'Сервер не ответил вовремя. Сохранилось ли изменение — неизвестно: обновите страницу и проверьте',
+    );
+    expect(msg).not.toMatch(/попробуйте|повторите/i);
   });
 
   it('JSON от Zod наружу не выходит', () => {
