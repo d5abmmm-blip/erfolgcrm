@@ -88,8 +88,11 @@ function jsonOf(input: PrintTechConditionActInput): string {
 }
 
 describe('buildTechConditionActDoc', () => {
-  it('заголовок: номер по умолчанию = номер заявки, дата = receivedAt', () => {
-    expect(jsonOf(base)).toContain('АКТ ТЕХНИЧЕСКОГО СОСТОЯНИЯ № T-183 от 29.05.2026');
+  it('заголовок: номер по умолчанию = номер заявки, дата = день составления', () => {
+    const today = new Date().toLocaleDateString('ru-RU');
+    const json = jsonOf(base);
+    expect(json).toContain(`АКТ ТЕХНИЧЕСКОГО СОСТОЯНИЯ № T-183 от ${today}`);
+    expect(json).not.toContain('от 29.05.2026');
   });
 
   it('actNumber и issuedAt переопределяют номер и дату', () => {

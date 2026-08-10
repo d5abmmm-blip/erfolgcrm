@@ -362,7 +362,9 @@ function signaturesBlock(input: BuildWorkActInput): Content {
 }
 
 export function buildWorkActDoc(input: BuildWorkActInput): TDocumentDefinitions {
-  const issueDate = input.issuedAt ?? input.ticket.receivedAt;
+  // Дата документа — день составления. Раньше по умолчанию подставлялась дата
+  // ПРИЁМКИ заявки: акт, напечатанный через месяц, датировался задним числом.
+  const issueDate = input.issuedAt ?? new Date().toISOString();
   const works = input.workOrder.lines.filter((l) => l.lineType === ('work' as LineType));
   const parts = input.workOrder.lines.filter((l) => l.lineType === ('part' as LineType));
   const expenses = input.workOrder.lines.filter((l) => l.lineType === ('expense' as LineType));

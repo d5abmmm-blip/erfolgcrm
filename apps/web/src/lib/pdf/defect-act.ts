@@ -258,7 +258,8 @@ function signaturesBlock(input: PrintDefectActInput): Content {
 
 export function buildDefectActDoc(input: PrintDefectActInput): TDocumentDefinitions {
   const number = input.actNumber ?? input.ticket.ticketNumber;
-  const issueDate = input.issuedAt ?? input.ticket.receivedAt;
+  // Дата документа — день составления, не дата приёмки (см. work-act.ts).
+  const issueDate = input.issuedAt ?? new Date().toISOString();
 
   const content: Content[] = [
     headerBlock(input),

@@ -83,9 +83,13 @@ function jsonOf(input: PrintDefectActInput): string {
 }
 
 describe('buildDefectActDoc', () => {
-  it('заголовок: номер по умолчанию = номер заявки, дата = receivedAt', () => {
+  it('заголовок: номер по умолчанию = номер заявки, дата = день составления', () => {
+    // Акт составляется в день печати. Раньше по умолчанию подставлялась дата
+    // ПРИЁМКИ заявки — акт, напечатанный через месяц, датировался задним числом.
+    const today = new Date().toLocaleDateString('ru-RU');
     const json = jsonOf(base);
-    expect(json).toContain('ДЕФЕКТНЫЙ АКТ № T-183 от 29.05.2026');
+    expect(json).toContain(`ДЕФЕКТНЫЙ АКТ № T-183 от ${today}`);
+    expect(json).not.toContain('от 29.05.2026');
   });
 
   it('actNumber и issuedAt переопределяют номер и дату', () => {
