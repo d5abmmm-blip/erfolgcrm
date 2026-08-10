@@ -79,7 +79,11 @@ const WORK_ORDER = {
  * На телефоне такого предупреждения нет сознательно: инженер поправить это не
  * может, а лишний повод трогать программу — ровно то, чего просили избежать.
  */
-function renderWith(order: Partial<typeof WORK_ORDER>, layout?: 'table' | 'card') {
+function renderWith(
+  order: Partial<typeof WORK_ORDER>,
+  layout?: 'table' | 'card',
+  opts?: { canEditLines?: boolean },
+) {
   const merged = { ...WORK_ORDER, ...order };
   const queryClient = new QueryClient({
     defaultOptions: { queries: { ...QUERY_DEFAULTS, retry: false }, mutations: MUTATION_DEFAULTS },
@@ -105,6 +109,7 @@ function renderWith(order: Partial<typeof WORK_ORDER>, layout?: 'table' | 'card'
           ticketNumber="WSP-6472"
           canEdit
           canEditVat={false}
+          canEditLines={opts?.canEditLines}
           layout={layout}
         />
       </QueryClientProvider>
@@ -293,5 +298,39 @@ describe('менеджер не забудет оценить работу', () 
     await screen.findByText(/Что было и что сделал/i);
 
     expect(screen.queryByText(/ни одной строки|не начислится/i)).toBeNull();
+  });
+});
+
+describe('инженер на десктопе: строки менеджера, склад свой', () => {
+  // «Открыть полную версию» ведёт инженера в этот же редактор. Сервер строки
+  // от него не принимает (решение владельца 2026-08-08, закрыто 2026-08-10),
+  // и экран не должен обещать обратное. А «Списать со склада» — его
+  // единственный путь, создающий строку, — остаётся.
+  it('«Добавить строку» нет, поля строк только на чтение', async () => {
+    renderWith({}, 'table', { canEditLines: false });
+    await screen.findByText('Работы');
+
+    expect(screen.queryByRole('button', { name: /Добавить строку/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Удалить строку/ })).toBeNull();
+    // Существующая строка видна, но поле выключено — не примет ввод.
+    const name = screen.getByDisplayValue<HTMLInputElement>(
+      'Замена блока питания рентген-аппарата',
+    );
+    expect(name.disabled).toBe(true);
+  });
+
+  it('«Списать со склада» остаётся', async () => {
+    renderWith({}, 'table', { canEditLines: false });
+    await screen.findByText('Запчасти');
+
+    expect(screen.getByRole('button', { name: /Списать со склада/ })).toBeTruthy();
+  });
+
+  it('менеджеру всё как было', async () => {
+    renderWith({}, 'table');
+    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
+
+    expect(screen.getByRole('button', { name: /Списать со склада/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Добавить строку/ }).length).toBeGreaterThan(0);
   });
 });

@@ -66,6 +66,16 @@ interface Props {
   canEdit: boolean;
   /** Если true — даём редактировать ставку НДС (директор/диспетчер). */
   canEditVat: boolean;
+  /**
+   * Если true — даём заводить/править/удалять строки наряда (директор/диспетчер).
+   *
+   * Отдельно от canEdit, потому что у инженера права РАЗНЫЕ: текст шапки
+   * (диагноз, «что было и что сделал») и склад — его зона, а строки и цены —
+   * зона менеджера (решение владельца 2026-08-08; сервер с 2026-08-10 чужие
+   * строки не принимает, и экран не должен обещать обратное).
+   * По умолчанию = canEdit — прежнее поведение для staff-экранов.
+   */
+  canEditLines?: boolean;
   /** По умолчанию таблица — десктопное поведение не меняется. */
   layout?: WorkOrderLayout;
 }
@@ -131,6 +141,7 @@ export function WorkOrderEditor({
   ticketNumber,
   canEdit,
   canEditVat,
+  canEditLines = canEdit,
   layout = 'table',
 }: Props) {
   const utils = trpc.useUtils();
@@ -218,7 +229,8 @@ export function WorkOrderEditor({
               icon={g.icon}
               totalKopecks={wo.data![g.totalKey]}
               lines={wo.data!.lines.filter((l) => l.lineType === g.type)}
-              canEdit={canEdit}
+              canEdit={canEditLines}
+              canUseInventory={canEdit}
               warning={g.type === 'work' ? worksNotPricedWarning(wo.data!) : null}
             />
           ))}
@@ -1376,6 +1388,7 @@ function LineTable({
   totalKopecks,
   lines,
   canEdit,
+  canUseInventory = canEdit,
   warning,
 }: {
   ticketId: string;
@@ -1395,6 +1408,11 @@ function LineTable({
     engineerId: string | null;
   }>;
   canEdit: boolean;
+  /**
+   * Склад («Списать/Вернуть») доступен и тому, кому строки править нельзя:
+   * это единственный путь инженера, создающий строку (запчасть, цена 0).
+   */
+  canUseInventory?: boolean;
   /** Предупреждение под заголовком — например, «работа описана, а строк нет». */
   warning?: string | null;
 }) {
@@ -1658,17 +1676,19 @@ function LineTable({
           </div>
         );
       })()}
-      {canEdit && (
+      {(canEdit || (lineType === 'part' && canUseInventory)) && (
         <div className="flex items-center gap-1 border-t p-2">
-          <button
-            type="button"
-            onClick={addRow}
-            className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Добавить строку
-          </button>
-          {lineType === 'part' && (
+          {canEdit && (
+            <button
+              type="button"
+              onClick={addRow}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/40 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Добавить строку
+            </button>
+          )}
+          {lineType === 'part' && canUseInventory && (
             <>
               <button
                 type="button"
