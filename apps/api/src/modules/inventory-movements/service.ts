@@ -1,16 +1,22 @@
 /**
  * Service слой inventory-movements.
  * Ядро — issueToWorkOrderCmd: оборачивает FEFO-ядро + audit + перевод исключения в TRPCError.
+ *
+ * ⚠️ Движение и журнал действий — ОДНА транзакция. Раньше журнал писался
+ * следом отдельной: его сбой превращал УДАВШЕЕСЯ списание в «ошибку на
+ * сервере», а текст ещё и советовал повторить — вторая запчасть уходила со
+ * склада. Теперь упал журнал → откатилось движение: «ошибка» означает
+ * «ничего не произошло», повтор безопасен.
  */
 import { TRPCError } from '@trpc/server';
-import type { Db } from '@erfolg/db';
-import { writeAudit } from '../../lib/audit';
+import { withTenantTx, type Db } from '@erfolg/db';
+import { writeAuditInTx } from '../../lib/audit';
 import { itemExists } from '../inventory-items/repository';
 import {
   NotEnoughStockError,
-  issueToWorkOrder as repoIssue,
+  issueToWorkOrderInTx as repoIssueInTx,
   listMovements as repoList,
-  returnFromWorkOrder as repoReturn,
+  returnFromWorkOrderInTx as repoReturnInTx,
   type IssueResult,
   type IssueToWorkOrderInput,
   type ListMovementsOpts,
@@ -58,7 +64,24 @@ export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Pr
   };
   let result: IssueResult;
   try {
-    result = await repoIssue(ctx.db, ctx.tenant.id, repoInput);
+    // Движение + журнал в одной транзакции (см. шапку файла).
+    result = await withTenantTx(ctx.db, ctx.tenant.id, async (tx) => {
+      const r = await repoIssueInTx(tx, ctx.tenant.id, repoInput);
+      await writeAuditInTx(tx, ctx.tenant.id, {
+        userId: ctx.session.userId,
+        action: 'create',
+        entityType: 'inventory_movement',
+        entityId: input.workOrderLineId,
+        after: {
+          itemId: input.itemId,
+          quantity: input.quantity,
+          batches: r.consumed.length,
+        },
+        ip: ctx.audit.ip ?? null,
+        userAgent: ctx.audit.userAgent ?? null,
+      });
+      return r;
+    });
   } catch (err) {
     if (err instanceof NotEnoughStockError) {
       throw new TRPCError({
@@ -69,19 +92,6 @@ export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Pr
     }
     throw err;
   }
-  await writeAudit(ctx.db, ctx.tenant.id, {
-    userId: ctx.session.userId,
-    action: 'create',
-    entityType: 'inventory_movement',
-    entityId: input.workOrderLineId,
-    after: {
-      itemId: input.itemId,
-      quantity: input.quantity,
-      batches: result.consumed.length,
-    },
-    ip: ctx.audit.ip ?? null,
-    userAgent: ctx.audit.userAgent ?? null,
-  });
   return result;
 }
 
@@ -117,7 +127,25 @@ export async function returnFromWorkOrderCmd(
   };
   let result: ReturnResult;
   try {
-    result = await repoReturn(ctx.db, ctx.tenant.id, repoInput);
+    // Движение + журнал в одной транзакции (см. шапку файла).
+    result = await withTenantTx(ctx.db, ctx.tenant.id, async (tx) => {
+      const r = await repoReturnInTx(tx, ctx.tenant.id, repoInput);
+      await writeAuditInTx(tx, ctx.tenant.id, {
+        userId: ctx.session.userId,
+        action: 'create',
+        entityType: 'inventory_movement',
+        entityId: input.workOrderLineId,
+        after: {
+          itemId: input.itemId,
+          quantity: input.quantity,
+          batchId: r.batchId,
+          kind: 'return',
+        },
+        ip: ctx.audit.ip ?? null,
+        userAgent: ctx.audit.userAgent ?? null,
+      });
+      return r;
+    });
   } catch (err) {
     if (err instanceof Error && err.message === 'RETURN_EXCEEDS_BATCH_INITIAL') {
       throw new TRPCError({
@@ -128,19 +156,5 @@ export async function returnFromWorkOrderCmd(
     }
     throw err;
   }
-  await writeAudit(ctx.db, ctx.tenant.id, {
-    userId: ctx.session.userId,
-    action: 'create',
-    entityType: 'inventory_movement',
-    entityId: input.workOrderLineId,
-    after: {
-      itemId: input.itemId,
-      quantity: input.quantity,
-      batchId: result.batchId,
-      kind: 'return',
-    },
-    ip: ctx.audit.ip ?? null,
-    userAgent: ctx.audit.userAgent ?? null,
-  });
   return result;
 }
