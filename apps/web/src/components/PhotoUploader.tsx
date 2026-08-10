@@ -59,6 +59,21 @@ interface Props {
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
 const MAX_BYTES = 25 * 1024 * 1024;
 
+/**
+ * Кому показывать корзинку на загруженном вложении. Сервер разрешает инженеру
+ * удалять только СВОЁ (attachments.deleteCmd); чужие и безавторные (импорт) —
+ * менеджер/директор. Пока пользователь не загружен — не показываем.
+ */
+export function mayDeleteAttachment(
+  me: { id: string; role: string } | null | undefined,
+  uploadedByUserId: string | null,
+  allowDelete: boolean,
+): boolean {
+  if (!allowDelete || !me) return false;
+  if (me.role !== 'engineer') return true;
+  return uploadedByUserId === me.id;
+}
+
 export function PhotoUploader({
   kind,
   referenceType,
@@ -208,6 +223,9 @@ export function PhotoUploader({
 
   const items = list.data ?? [];
   const allowDelete = canDelete ?? canUpload;
+  // В приложении auth.me уже в кэше react-query — лишнего запроса не будет.
+  const me = trpc.auth.me.useQuery();
+  const meUser = me.data?.user ?? null;
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -349,7 +367,7 @@ export function PhotoUploader({
               mime={a.mimeType}
               url={a.presignedGetUrl}
               sizeBytes={a.sizeBytes}
-              canDelete={allowDelete}
+              canDelete={mayDeleteAttachment(meUser, a.uploadedByUserId, allowDelete)}
               onDelete={() => {
                 // Было `confirm.isPending` — это мутация ПОДТВЕРЖДЕНИЯ ЗАГРУЗКИ,
                 // а не удаления: пока грузилось любое фото, кнопка удаления

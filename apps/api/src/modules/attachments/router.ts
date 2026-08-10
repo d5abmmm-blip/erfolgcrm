@@ -1,9 +1,11 @@
 /**
  * tRPC роутер attachments.
  * RBAC:
- *   - createUploadUrl / confirmUpload / delete: staffProcedure (диспетчер + директор)
- *     + engineerProcedure для photo (инженер должен фото повреждений лить).
- *   - listByReference: engineerProcedure.
+ *   - createUploadUrl / confirmUpload / listByReference: engineerProcedure
+ *     (инженер льёт фото повреждений/выполнения со своей заявки).
+ *   - delete: engineerProcedure, но инженер удаляет только СВОЁ вложение
+ *     (uploadedByUserId); чужие и безавторные (импорт) — менеджер/директор.
+ *     Проверка в deleteCmd: удаление необратимо (purge из хранилища).
  */
 import { z } from 'zod';
 import { engineerProcedure, router } from '../../trpc/trpc';
