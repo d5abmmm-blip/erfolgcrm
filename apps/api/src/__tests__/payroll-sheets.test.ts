@@ -284,6 +284,67 @@ describe('payroll sheets — проведение в кассу', () => {
     }
   });
 
+  /**
+   * Гонка двух проведений. На экране двойной клик закрыт (кнопка блокируется),
+   * но директоров четверо: два человека могли нажать «Провести» одновременно.
+   * Каждый видел ведомость непроведённой → каждый вставлял расход → в кассе
+   * ДВА расхода на всю зарплату, а «Отменить проведение» убирал только один
+   * (ссылка в ведомости пережила лишь последнего писателя).
+   */
+  it('два одновременных проведения не задваивают расход', async () => {
+    const [acc] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .insert(cashAccounts)
+        .values({
+          tenantId: erfolgId,
+          name: 'ТЕСТ-ЗП-гонка',
+          kind: 'cash',
+          openingBalanceKopecks: 1_000_000n,
+          balanceKopecks: 1_000_000n,
+        })
+        .returning({ id: cashAccounts.id }),
+    );
+    const accountId = acc!.id;
+    try {
+      await saveSheet(ctxFor(erfolgId), { month: '2099-09', entries: [entry(1_000_000)] });
+
+      await Promise.all([
+        postToCash(ctxFor(erfolgId), '2099-09', accountId),
+        postToCash(ctxFor(erfolgId), '2099-09', accountId),
+      ]);
+
+      // Живой расход ровно один — второе проведение перепроводит, а не дублирует.
+      const live = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx
+          .select({ id: cashTransactions.id })
+          .from(cashTransactions)
+          .where(
+            and(eq(cashTransactions.accountId, accountId), isNull(cashTransactions.deletedAt)),
+          ),
+      );
+      expect(live).toHaveLength(1);
+
+      // Ведомость ссылается именно на него — «Отменить проведение» его и уберёт.
+      const sheet = await getSheetByMonth(getDb(), erfolgId, '2099-09');
+      expect(sheet?.cashTransactionId).toBe(live[0]!.id);
+
+      // Остаток снят один раз: 1 000 000 − 1 000 000 = 0.
+      const [a] = await withTenantTx(getDb(), erfolgId, (tx) =>
+        tx
+          .select({ b: cashAccounts.balanceKopecks })
+          .from(cashAccounts)
+          .where(eq(cashAccounts.id, accountId))
+          .limit(1),
+      );
+      expect(String(a?.b)).toBe('0');
+    } finally {
+      await withTenantTx(getDb(), erfolgId, async (tx) => {
+        await tx.delete(cashTransactions).where(eq(cashTransactions.accountId, accountId));
+        await tx.delete(cashAccounts).where(eq(cashAccounts.id, accountId));
+      });
+    }
+  });
+
   it('нельзя провести несохранённую ведомость (NOT_FOUND)', async () => {
     const [acc] = await withTenantTx(getDb(), erfolgId, (tx) =>
       tx

@@ -271,11 +271,17 @@ export async function postToCash(
 ): Promise<PayrollSheetDto> {
   const tenantId = ctx.tenant.id;
   return withTenantTx(ctx.db, tenantId, async (tx) => {
+    // FOR UPDATE: два директора могли нажать «Провести» одновременно. Без
+    // замка оба видели ведомость непроведённой, каждый вставлял расход —
+    // в кассе оказывалось ДВА расхода на всю зарплату, а «Отменить
+    // проведение» убирал только один (ссылку пережил последний писатель).
+    // С замком второй ждёт первого, видит его расход и перепроводит.
     const sheet = (
       await tx
         .select()
         .from(payrollSheets)
         .where(and(eq(payrollSheets.month, month), isNull(payrollSheets.deletedAt)))
+        .for('update')
         .limit(1)
     )[0];
     if (!sheet) {
@@ -367,11 +373,15 @@ export async function postToCash(
 export async function unpostFromCash(ctx: CmdCtx, month: string): Promise<PayrollSheetDto> {
   const tenantId = ctx.tenant.id;
   return withTenantTx(ctx.db, tenantId, async (tx) => {
+    // FOR UPDATE — тот же замок, что у postToCash, и берётся ПЕРВЫМ в обеих
+    // функциях (одинаковый порядок = нет взаимной блокировки): «Провести» и
+    // «Отменить» параллельно теперь выстраиваются в очередь, а не рвут ссылку.
     const sheet = (
       await tx
         .select()
         .from(payrollSheets)
         .where(and(eq(payrollSheets.month, month), isNull(payrollSheets.deletedAt)))
+        .for('update')
         .limit(1)
     )[0];
     if (!sheet) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ведомость не найдена' });
