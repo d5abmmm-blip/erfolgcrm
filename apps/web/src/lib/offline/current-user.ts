@@ -14,10 +14,34 @@
  */
 let currentUserId: string | null = null;
 
+type Listener = () => void;
+const listeners: Set<Listener> = new Set();
+
 export function setCurrentUserId(id: string | null): void {
+  if (currentUserId === id) return;
   currentUserId = id;
+  // Очередь пересчитывает «что можно отправить» по автору записи, поэтому
+  // смена человека — такое же событие, как изменение самой очереди. Без
+  // оповещения накопленное «своё» лежало бы до первого касания очереди:
+  // при запуске имя вошедшего приходит с сервера ПОЗЖЕ, чем автосинк
+  // впервые смотрит на очередь, и в этот момент отправлять нельзя ничего.
+  for (const l of listeners) {
+    try {
+      l();
+    } catch {
+      /* слушатель не должен ронять смену пользователя */
+    }
+  }
 }
 
 export function getCurrentUserId(): string | null {
   return currentUserId;
+}
+
+/** Подписка на смену человека за телефоном (вход/выход/другой сотрудник). */
+export function subscribeCurrentUser(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

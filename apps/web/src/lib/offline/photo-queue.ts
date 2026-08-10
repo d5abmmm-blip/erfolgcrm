@@ -212,10 +212,17 @@ export async function countSendablePhotos(): Promise<number> {
   return all.filter((p) => isPhotoSendable(p, currentUserId)).length;
 }
 
-/** Снимок можно отправить прямо сейчас: не отклонён и не чужой. */
+/**
+ * Снимок можно отправить прямо сейчас: не отклонён и не чужой.
+ *
+ * «Чужой» — в том числе когда автор снимка известен, а кто за телефоном —
+ * ещё нет (currentUserId === null): при запуске очередь из IndexedDB
+ * готова раньше, чем `auth.me` принесёт имя. То же правило, что у правок
+ * в `queue.ts` (isSendable) — расходиться им нельзя.
+ */
 export function isPhotoSendable(photo: PendingPhoto, currentUserId: string | null): boolean {
   if (photo.failedHard) return false;
-  return !(photo.userId && currentUserId && photo.userId !== currentUserId);
+  return !(photo.userId && photo.userId !== currentUserId);
 }
 
 export async function pendingPhotoBytes(): Promise<number> {
