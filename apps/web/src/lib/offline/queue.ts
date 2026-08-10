@@ -212,10 +212,17 @@ export async function countSendable(): Promise<number> {
   return all.filter((i) => isSendable(i, currentUserId)).length;
 }
 
-/** Запись можно отправить прямо сейчас: не отклонена сервером и не чужая. */
+/**
+ * Запись можно отправить прямо сейчас: не отклонена сервером и не чужая.
+ *
+ * «Чужая» — в том числе когда автор записи известен, а кто сейчас за
+ * телефоном — ещё нет (currentUserId === null): при запуске приложения имя
+ * вошедшего приходит с сервера позже, чем очередь из IndexedDB. Отправка в
+ * этот промежуток ушла бы под тем, чья сессия окажется живой.
+ */
 export function isSendable(item: OutboxItem, currentUserId: string | null): boolean {
   if (item.failedHard) return false;
-  return !(item.userId && currentUserId && item.userId !== currentUserId);
+  return !(item.userId && item.userId !== currentUserId);
 }
 
 // --- live subscription -----------------------------------------------------

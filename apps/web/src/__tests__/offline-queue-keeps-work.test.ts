@@ -20,7 +20,11 @@ import type { AppRouter } from '@erfolg/api';
 import { clearAll, count, enqueue, listPending, retryOutboxItem } from '../lib/offline/queue';
 import { syncOutbox } from '../lib/offline/executor';
 import { describeOutboxItem } from '../lib/offline/describe-outbox';
-import { getCurrentUserId, setCurrentUserId } from '../lib/offline/current-user';
+import {
+  getCurrentUserId,
+  setCurrentUserId,
+  subscribeCurrentUser,
+} from '../lib/offline/current-user';
 
 /** Ошибка от сервера с конкретным кодом tRPC. */
 function trpcError(code: string, httpStatus: number, message = code) {
@@ -139,6 +143,22 @@ describe('правки принадлежат автору', () => {
     expect(await count()).toBe(0);
   });
 
+  it('пока неизвестно, кто за телефоном, чужая запись не уходит', async () => {
+    // Приложение только запустилось: очередь из IndexedDB читается сразу, а имя
+    // вошедшего приходит с сервера и появляется позже. В этот промежуток автосинк
+    // уже стреляет — и запись А не должна уйти под чужой сессией.
+    setCurrentUserId('engineer-A');
+    await enqueue('tickets.addNote', { ticketId: 't1', comment: 'это писал А' }, 'erfolg');
+
+    setCurrentUserId(null); // имя вошедшего ещё не пришло
+    const runner = vi.fn().mockResolvedValue({});
+    const r = await syncOutbox(runner);
+
+    expect(runner).not.toHaveBeenCalled();
+    expect(r.skippedOther).toBe(1);
+    expect(await count()).toBe(1);
+  });
+
   it('записи, сделанные до этой правки, не застревают навсегда', async () => {
     // Старая запись без автора: отправляем как раньше, иначе после обновления
     // приложения накопленное осталось бы лежать мёртвым грузом.
@@ -154,6 +174,25 @@ describe('правки принадлежат автору', () => {
     expect(getCurrentUserId()).toBe('u-42');
     setCurrentUserId(null);
     expect(getCurrentUserId()).toBeNull();
+  });
+
+  it('смена человека будит подписчиков — очередь пересчитает «своё»', () => {
+    // Раз отправка при неизвестном авторе молчит, кто-то обязан её разбудить,
+    // когда имя вошедшего наконец пришло. Это событие и есть будильник.
+    const listener = vi.fn();
+    const unsub = subscribeCurrentUser(listener);
+
+    setCurrentUserId('u-1');
+    expect(listener).toHaveBeenCalledTimes(1);
+    // То же значение — не событие: иначе каждый рендер App дёргал бы очередь.
+    setCurrentUserId('u-1');
+    expect(listener).toHaveBeenCalledTimes(1);
+    setCurrentUserId(null);
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsub();
+    setCurrentUserId('u-2');
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });
 

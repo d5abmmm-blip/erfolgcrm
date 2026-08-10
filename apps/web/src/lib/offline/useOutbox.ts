@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { count, countSendable, subscribe } from './queue';
 import { countPendingPhotos, countSendablePhotos, subscribePhotos } from './photo-queue';
+import { subscribeCurrentUser } from './current-user';
 import { syncOutbox, type SyncResult } from './executor';
 import { sendPendingPhotos, type PhotoSyncResult } from './photo-sender';
 import { runOutboxItem, uploadPendingPhoto } from './runner';
@@ -133,9 +134,16 @@ export function useOutbox() {
     const unsubPhotos = subscribePhotos(() => {
       void refreshCount();
     });
+    // Смена человека меняет «что можно отправить», не меняя саму очередь:
+    // при запуске имя вошедшего приходит позже очереди, и до него отправка
+    // молчит. Пришло — пересчитываем, автосинк подхватывает своё.
+    const unsubUser = subscribeCurrentUser(() => {
+      void refreshCount();
+    });
     return () => {
       unsub();
       unsubPhotos();
+      unsubUser();
     };
   }, [refreshCount]);
 

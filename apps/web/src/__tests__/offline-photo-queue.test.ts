@@ -24,6 +24,7 @@ import {
   photoQueueFullMessage,
 } from '../lib/offline/photo-queue';
 import { sendPendingPhotos } from '../lib/offline/photo-sender';
+import { setCurrentUserId } from '../lib/offline/current-user';
 
 function file(name: string, bytes: number, type = 'image/jpeg'): File {
   return new File([new Uint8Array(bytes)], name, { type });
@@ -44,9 +45,11 @@ async function add(name: string, bytes = 1024, referenceId = TICKET) {
 
 beforeEach(async () => {
   await clearAllPhotos();
+  setCurrentUserId(null);
 });
 afterEach(async () => {
   await clearAllPhotos();
+  setCurrentUserId(null);
 });
 
 describe('фото кладётся в очередь и переживает перезапуск', () => {
@@ -147,6 +150,28 @@ describe('отправка накопленных фото', () => {
     expect(second).toMatchObject({ succeeded: 0, failedSoft: 0, failedHard: 0 });
     expect(upload).toHaveBeenCalledOnce();
     expect(await countPendingPhotos()).toBe(1);
+  });
+
+  it('снимок инженера А не уходит, пока неизвестно, кто за телефоном', async () => {
+    // Запуск приложения: очередь из IndexedDB готова сразу, имя вошедшего
+    // приходит с сервера позже. Отправлять в этот промежуток нельзя —
+    // снимок записался бы на того, чья сессия окажется живой.
+    setCurrentUserId('engineer-A');
+    await add('чужое.jpg');
+
+    setCurrentUserId(null);
+    const upload = vi.fn().mockResolvedValue(undefined);
+    const r = await sendPendingPhotos(upload);
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(r.skippedOther).toBe(1);
+    expect(await countPendingPhotos()).toBe(1);
+
+    // Имя пришло — снимок уходит.
+    setCurrentUserId('engineer-A');
+    const r2 = await sendPendingPhotos(upload);
+    expect(r2.succeeded).toBe(1);
+    expect(await countPendingPhotos()).toBe(0);
   });
 
   it('бизнес-отказ сервера тоже не стирает файл', async () => {
