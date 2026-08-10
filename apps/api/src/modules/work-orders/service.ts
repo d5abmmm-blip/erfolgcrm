@@ -243,6 +243,43 @@ async function resolveWorkOrderForTicket(
   return id;
 }
 
+/**
+ * Что инженеру можно со строками наряда. null — можно, иначе текст отказа.
+ *
+ * РЕШЕНИЕ ВЛАДЕЛЬЦА (2026-08-08, подтверждено 2026-08-10): строки наряда
+ * заводит менеджер/директор, он же ставит цены. Причина не косметика:
+ * себестоимость труда = процент инженера от цены строки (#88), то есть,
+ * набирая цену, инженер одним числом выставлял счёт клиенту и назначал себе
+ * сделку. #122 закрыл это на мобильном экране; здесь — серверная половина,
+ * без которой правило обходилось десктопным редактором («Открыть полную
+ * версию») и прямым вызовом API.
+ *
+ * Единственное исключение — путь «Списать со склада»: только инженер знает,
+ * что физически взял, и только этот путь несёт себестоимость из партий.
+ * Он создаёт НОВУЮ строку-запчасть с нулевой ценой и без исполнителя
+ * (цену продажи потом ставит менеджер). Всё остальное — отказ.
+ */
+export function engineerLineChangeError(input: {
+  lineId: string | null;
+  lineType: string;
+  unitPriceKopecks: bigint;
+  engineerId?: string | null;
+}): string | null {
+  if (input.lineId) {
+    return 'Строки наряда меняет менеджер или директор';
+  }
+  if (input.lineType !== 'part') {
+    return 'Строки наряда заводит менеджер или директор';
+  }
+  if (input.unitPriceKopecks !== 0n) {
+    return 'Цену устанавливает менеджер или директор';
+  }
+  if (input.engineerId) {
+    return 'Исполнителя строки назначает менеджер или директор';
+  }
+  return null;
+}
+
 export async function upsertLineCmd(
   ctx: CmdCtx,
   input: UpsertLineCmdInput,
@@ -250,6 +287,15 @@ export async function upsertLineCmd(
   // Строка наряда — это деньги: от неё считается зарплата (процент со строки).
   // Инженер пишет строки только в наряд СВОЕЙ заявки.
   await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, input.ticketId);
+  if (ctx.session.role === 'engineer') {
+    const reason = engineerLineChangeError({
+      lineId: input.lineId ?? null,
+      lineType: input.lineType,
+      unitPriceKopecks: input.unitPriceKopecks,
+      engineerId: input.engineerId,
+    });
+    if (reason) throw new TRPCError({ code: 'FORBIDDEN', message: reason });
+  }
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, input.ticketId);
   const result = await repoUpsertLine(ctx.db, ctx.tenant.id, workOrderId, input.lineId ?? null, {
     lineType: input.lineType,
@@ -281,6 +327,14 @@ export async function upsertLineCmd(
 
 export async function deleteLineCmd(ctx: CmdCtx, ticketId: string, lineId: string): Promise<void> {
   await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  // Строки — зона менеджера (см. engineerLineChangeError). Ошибочное списание
+  // инженер откатывает «Вернуть на склад» — строки оно не трогает.
+  if (ctx.session.role === 'engineer') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Удалить строку наряда может менеджер или директор',
+    });
+  }
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
   await repoDeleteLine(ctx.db, ctx.tenant.id, workOrderId, lineId);
   await writeAudit(ctx.db, ctx.tenant.id, {
@@ -300,6 +354,15 @@ export async function updateHeaderCmd(
   patch: UpdateHeaderInput,
 ): Promise<void> {
   await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
+  // Текстовые поля (диагноз, «что было и что сделал», рекомендации) — зона
+  // инженера. А исполнитель наряда — деньги: по нему ведомость делит сделку
+  // (COALESCE(line.engineer_id, wo.engineer_id)), назначает его менеджер.
+  if (ctx.session.role === 'engineer' && patch.engineerId !== undefined) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Исполнителя наряда назначает менеджер или директор',
+    });
+  }
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
   await repoUpdateHeader(ctx.db, ctx.tenant.id, workOrderId, patch);
   await writeAudit(ctx.db, ctx.tenant.id, {

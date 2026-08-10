@@ -424,21 +424,32 @@ describe('правка наряда после закрытия заявки', (
     unitPriceRub: 25000,
   };
 
+  // Окно инженера проверяем ТЕКСТОМ шапки, а не строкой: строки наряда инженеру
+  // теперь нельзя вовсе (решение владельца 2026-08-08, work-order-lines-staff-only).
+  // Возьми сюда upsertLine — и отказ «две недели» стал бы зелёным по ложной
+  // причине: не окно сработало, а запрет строк.
   it('закрыта вчера — инженер ещё правит', async () => {
     const id = await createBaseTicket(engineerId);
     await closeDaysAgo(id, 1);
     const caller = appRouter.createCaller(makeCtx('engineer'));
-    const r = await caller.workOrders.upsertLine({ ticketId: id, line });
-    expect(r.id).toBeTruthy();
+    await expect(
+      caller.workOrders.updateHeader({
+        ticketId: id,
+        patch: { engineerNotes: 'дописал по горячим следам' },
+      }),
+    ).resolves.not.toThrow();
   });
 
   it('закрыта две недели назад — инженеру нельзя', async () => {
     const id = await createBaseTicket(engineerId);
     await closeDaysAgo(id, 14);
     const caller = appRouter.createCaller(makeCtx('engineer'));
-    await expect(caller.workOrders.upsertLine({ ticketId: id, line })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-    });
+    await expect(
+      caller.workOrders.updateHeader({
+        ticketId: id,
+        patch: { engineerNotes: 'слишком поздно' },
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('той же заявке диспетчер правку вносит — это и есть «разрешение»', async () => {

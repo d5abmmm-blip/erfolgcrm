@@ -679,6 +679,10 @@ export function TicketCardPage() {
                     ticketNumber={t.ticketNumber}
                     canEdit={canEditWorkOrder}
                     canEditVat={isStaff}
+                    // Строки и цены — зона менеджера (решение владельца
+                    // 2026-08-08): инженеру по своей заявке остаются текст
+                    // шапки и склад, сервер строки от него не принимает.
+                    canEditLines={isStaff}
                   />
                 </div>
                 <TicketKpBlock ticketId={t.id} canManage={isStaff} />
