@@ -288,13 +288,19 @@ function performersBlock(input: BuildWorkActInput): Content | null {
   };
 }
 
-function warrantyBlock(hasParts: boolean): Content {
+function warrantyBlock(hasParts: boolean, assertsHealthy: boolean): Content {
   // Гарантия даётся ТОЛЬКО на установленные запчасти (6 месяцев). На сами работы
   // (ремонт без замены з/ч) гарантия не предоставляется. Если запчастей не было —
   // гарантии нет вовсе.
   const warrantyText = hasParts
     ? 'Гарантия на установленные запасные части — 6 месяцев со дня подписания акта. На выполненные работы (ремонт) гарантия не предоставляется.'
     : 'Гарантия на выполненные работы не предоставляется.';
+  // «Оборудование передано в исправном состоянии» — фактическое утверждение,
+  // печатается только когда данные наряда его подтверждают (assertsHealthy);
+  // формула про отсутствие претензий к работам — всегда.
+  const closingText = assertsHealthy
+    ? 'Стороны претензий по объёму, качеству и срокам выполнения работ не имеют. Оборудование передано Заказчику в исправном состоянии.'
+    : 'Стороны претензий по объёму, качеству и срокам выполнения работ не имеют.';
   return {
     margin: [0, 12, 0, 0],
     stack: [
@@ -305,7 +311,7 @@ function warrantyBlock(hasParts: boolean): Content {
         margin: [0, 2, 0, 0] as [number, number, number, number],
       },
       {
-        text: 'Стороны претензий по объёму, качеству и срокам выполнения работ не имеют. Оборудование передано Заказчику в исправном состоянии.',
+        text: closingText,
         fontSize: 9,
         margin: [0, 4, 0, 0] as [number, number, number, number],
       },
@@ -412,7 +418,13 @@ export function buildWorkActDoc(input: BuildWorkActInput): TDocumentDefinitions 
   const performers = performersBlock(input);
   if (performers) content.push(performers);
 
-  content.push(warrantyBlock(parts.length > 0));
+  // Исправность утверждаем только по данным наряда: ремонт описан, а заключение
+  // не отправляет технику в списание (recommendation — свободный текст, поэтому
+  // ловим основу «списа»: списание/списанию/списать).
+  const wo = input.workOrder;
+  const recommendsWriteOff = /списа/iu.test(wo.recommendation ?? '');
+  const assertsHealthy = Boolean(wo.repairDescription?.trim()) && !recommendsWriteOff;
+  content.push(warrantyBlock(parts.length > 0, assertsHealthy));
 
   if (input.barcodeDataUrl) {
     content.push({
