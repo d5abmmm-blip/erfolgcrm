@@ -51,6 +51,13 @@ export interface DraftRepairDescriptionResult {
   text: string;
   /** true — текст сгенерирован ИИ; false — простой черновик собран из строк наряда (деградация). */
   aiUsed: boolean;
+  /**
+   * Модель ОТВЕТИЛА, но её текст не взят: приписала факты, которых нет в
+   * наряде. Отдельно от aiUsed, потому что человеку это разные новости:
+   * «ИИ не настроен» ведёт в настройки, «ИИ фантазирует» — к владельцу.
+   * То же разделение, что в пути инженера (#118).
+   */
+  aiRejected: boolean;
 }
 
 /**
@@ -114,7 +121,7 @@ export async function draftRepairDescriptionQuery(
 
   // Нечего описывать (ни строк, ни диагноза) — отдаём базовый текст без вызова ИИ.
   if (works.length === 0 && parts.length === 0 && !wo.diagnosis?.trim()) {
-    return { text: fallback, aiUsed: false };
+    return { text: fallback, aiUsed: false, aiRejected: false };
   }
 
   const ticket = await getTicket(db, tenant.id, ticketId);
@@ -145,8 +152,19 @@ export async function draftRepairDescriptionQuery(
         .join('; ')}`,
     );
 
-  const ai = await phraseWithLlm(db, tenant, system, userLines.join('\n'));
-  return ai ? { text: ai.trim(), aiUsed: true } : { text: fallback, aiUsed: false };
+  const sourceText = userLines.join('\n');
+  const ai = await phraseWithLlm(db, tenant, system, sourceText);
+  if (!ai) return { text: fallback, aiUsed: false, aiRejected: false };
+
+  // Сторож от выдумок — тот же, что в пути инженера (#118). Текст уходит в
+  // акт под подпись клиента: выдуманная гарантия, срок или сумма — это
+  // обязательство компании, которого никто не давал. Число не из входа,
+  // «гаранти», деньги → ответ модели не принимается, берётся честный
+  // черновик из строк наряда.
+  if (inventsFacts(sourceText, ai)) {
+    return { text: fallback, aiUsed: false, aiRejected: true };
+  }
+  return { text: ai.trim(), aiUsed: true, aiRejected: false };
 }
 
 /* ────────── «Инженер пишет своими словами» — разложить на два поля ────────── */

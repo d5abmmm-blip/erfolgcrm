@@ -9,15 +9,23 @@
  *   3. Наряд не создан → BAD_REQUEST.
  *   4. RBAC: engineer имеет доступ (процедура engineerProcedure).
  */
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { like } from 'drizzle-orm';
 import { clients, getDb, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import { phraseWithLlm } from '../modules/ai-assistant/proactive';
 import { appRouter } from '../trpc/router';
 import type { Context } from '../trpc/context';
 import type { SessionData } from '../lib/session';
+
+// Модель подменяем: по умолчанию «не настроена» (null) — прежние тесты фолбэка
+// не меняются; в тестах сторожа отвечаем за неё mockResolvedValueOnce.
+vi.mock('../modules/ai-assistant/proactive', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../modules/ai-assistant/proactive')>();
+  return { ...orig, phraseWithLlm: vi.fn(async () => null) };
+});
 
 const TEST_PREFIX = 'TEST-ACTDRAFT-';
 
@@ -157,6 +165,70 @@ describe('draftRepairDescription (ИИ-черновик акта)', () => {
     });
     const caller = appRouter.createCaller(makeCtx('engineer'));
     await expect(caller.workOrders.draftRepairDescription({ ticketId })).rejects.toThrow(/наряд/i);
+  });
+
+  /**
+   * Сторож от выдумок — тот же, что в пути инженера (#118, inventsFacts).
+   * Текст уходит в акт под подпись клиента: выдуманная гарантия или срок —
+   * обязательство компании, которого никто не давал. Ответ модели с числом
+   * не из входа или словом «гарантия» не принимается — берётся честный
+   * черновик из строк наряда, а экран говорит об этом прямо.
+   */
+  it('модель приписала гарантию — её текст не принимается, берётся фолбэк', async () => {
+    const { ticketId, workOrderId } = await makeTicketWithOrder();
+    await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'work',
+      name: 'Замена платы питания',
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 350_000n,
+    });
+    vi.mocked(phraseWithLlm).mockResolvedValueOnce(
+      'Выполнена замена платы питания. Гарантия на работы — 6 месяцев.',
+    );
+
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    const res = await caller.workOrders.draftRepairDescription({ ticketId });
+
+    expect(res.aiUsed).toBe(false);
+    expect(res.aiRejected).toBe(true);
+    expect(res.text).toContain('Замена платы питания');
+    expect(res.text).not.toMatch(/гаранти/i);
+    expect(res.text).not.toContain('6 месяцев');
+  });
+
+  it('модель ответила по делу — её текст берётся (aiUsed=true)', async () => {
+    const { ticketId, workOrderId } = await makeTicketWithOrder();
+    await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'work',
+      name: 'Замена платы питания',
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 350_000n,
+    });
+    vi.mocked(phraseWithLlm).mockResolvedValueOnce('Выполнена замена платы питания.');
+
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    const res = await caller.workOrders.draftRepairDescription({ ticketId });
+
+    expect(res.aiUsed).toBe(true);
+    expect(res.aiRejected).toBe(false);
+    expect(res.text).toBe('Выполнена замена платы питания.');
+  });
+
+  it('в фолбэке без модели aiRejected=false — «не настроен» и «фантазирует» разные новости', async () => {
+    const { ticketId, workOrderId } = await makeTicketWithOrder();
+    await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'work',
+      name: 'Диагностика',
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 100_000n,
+    });
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    const res = await caller.workOrders.draftRepairDescription({ ticketId });
+    expect(res.aiUsed).toBe(false);
+    expect(res.aiRejected).toBe(false);
   });
 
   it('диспетчер тоже имеет доступ (staff ⊆ engineerProcedure)', async () => {
