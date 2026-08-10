@@ -386,7 +386,12 @@ export async function transitionToIssued(
     if (row.status !== 'draft') {
       throw new Error(`transitionToIssued: счёт уже в статусе ${row.status}`);
     }
-    // Refresh totals из текущего work_order
+    // Снимок из текущего наряда целиком: и сумма, И ставка НДС. Ставка на
+    // счёте руками не правится нигде (updateDraft с ней не зовёт ни один
+    // экран) — её источник тот же наряд, что и у суммы. Раньше сумма
+    // освежалась, а НДС считался по ставке, запомненной при создании
+    // черновика: поменял менеджер ставку наряда после черновика — клиент
+    // получал счёт с новой суммой и старой ставкой.
     const woRows = await tx
       .select({ total: workOrders.totalAmountKopecks, vatRate: workOrders.vatRate })
       .from(workOrders)
@@ -397,13 +402,14 @@ export async function transitionToIssued(
     if (wo.total <= 0n) {
       throw new Error('transitionToIssued: нельзя выставить счёт на сумму 0');
     }
-    const vat = calcVatInclusive(wo.total, row.vatRate);
+    const vat = calcVatInclusive(wo.total, wo.vatRate);
     const now = new Date();
     const updated = await tx
       .update(invoices)
       .set({
         status: 'issued',
         totalAmountKopecks: wo.total,
+        vatRate: wo.vatRate,
         vatAmountKopecks: vat,
         issueDate: isoDate(now),
         dueDate: opts.dueDate ?? row.dueDate,
