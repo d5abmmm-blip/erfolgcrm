@@ -43,6 +43,12 @@ export interface IssueToWorkOrderInput {
   /** Кто провёл — для аудита и user_id в movement. */
   userId: string | null;
   comment?: string | null;
+  /**
+   * Ключ одного запроса списания (офлайн-очередь генерирует в момент действия
+   * и повторяет при реплее). Повтор с тем же ключом не списывает второй раз.
+   * null/не задан — поведение как раньше (десктоп, старые записи очереди).
+   */
+  clientRequestId?: string | null;
 }
 
 export interface IssueResult {
@@ -51,6 +57,8 @@ export interface IssueResult {
     quantity: string;
     expiresAt: Date | null;
   }>;
+  /** true — этот clientRequestId уже был применён, списание НЕ повторялось. */
+  alreadyApplied?: boolean;
 }
 
 /**
@@ -101,6 +109,29 @@ export async function issueToWorkOrderInTx(
   const requestedT = toThousandths(input.quantity);
   if (requestedT <= 0n) {
     throw new Error('issueToWorkOrder: quantity must be > 0');
+  }
+
+  if (input.clientRequestId) {
+    // Реплей офлайн-очереди: этот ключ уже списывал (ответ мог потеряться) —
+    // второй раз не списываем. Advisory-замок сериализует два одновременных
+    // реплея одного ключа: без него оба прошли бы SELECT-проверку и списали
+    // дважды. Замок транзакционный — отпустится сам на commit/rollback.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.clientRequestId}, 0))`,
+    );
+    const applied = await tx
+      .select({ id: inventoryMovements.id })
+      .from(inventoryMovements)
+      .where(
+        and(
+          eq(inventoryMovements.tenantId, tenantId),
+          eq(inventoryMovements.clientRequestId, input.clientRequestId),
+        ),
+      )
+      .limit(1);
+    if (applied.length > 0) {
+      return { consumed: [], alreadyApplied: true };
+    }
   }
 
   {
@@ -180,6 +211,7 @@ export async function issueToWorkOrderInTx(
         referenceId: input.workOrderLineId,
         userId: input.userId,
         comment: input.comment ?? null,
+        clientRequestId: input.clientRequestId ?? null,
       });
     }
 

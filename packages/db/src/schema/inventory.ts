@@ -136,11 +136,21 @@ export const inventoryMovements = pgTable(
     /** Кто провёл. NULL для системных операций. */
     userId: uuid('user_id'),
     comment: text('comment'),
+    /**
+     * Ключ одного запроса списания (идемпотентный реплей офлайн-очереди).
+     * Группа движений одного запроса (FEFO — несколько партий) несёт один ключ,
+     * поэтому индекс НЕ уникальный; проверка «уже применён» — под advisory-замком
+     * (issueToWorkOrderInTx). NULL — движение без ключа (десктоп/ручные/история).
+     */
+    clientRequestId: uuid('client_request_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('inventory_movements_tenant_item_idx').on(t.tenantId, t.itemId, t.createdAt),
     index('inventory_movements_tenant_ref_idx').on(t.tenantId, t.referenceType, t.referenceId),
+    index('inventory_movements_client_request_idx')
+      .on(t.tenantId, t.clientRequestId)
+      .where(sql`${t.clientRequestId} IS NOT NULL`),
     check('inventory_movements_qty_nonzero', sql`${t.quantity} <> 0`),
   ],
 );

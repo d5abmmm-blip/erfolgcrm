@@ -33,6 +33,8 @@ export const inventoryMovementsRouter = router({
         itemId: z.string().uuid(),
         quantity: z.string().regex(QUANTITY_REGEX, 'Количество в формате "12.345"'),
         comment: z.string().trim().max(2000).nullable().optional(),
+        /** Ключ запроса из офлайн-очереди — идемпотентный реплей списания. */
+        clientRequestId: z.string().uuid().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -41,6 +43,7 @@ export const inventoryMovementsRouter = router({
         itemId: input.itemId,
         quantity: input.quantity,
         comment: input.comment ?? null,
+        clientRequestId: input.clientRequestId ?? null,
       }),
     ),
 
