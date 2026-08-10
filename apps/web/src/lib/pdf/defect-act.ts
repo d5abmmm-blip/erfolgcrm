@@ -7,7 +7,8 @@
  * но в фирменной шапке СРМ — единообразно с актом приёма/работ и счётом.
  *
  * Заключение («Рекомендовано к списанию» и т.п.) берётся из workOrder.recommendation,
- * причина — из ticket.symptom, выполненные работы — из diagnosis + repairDescription.
+ * причина — из ticket.symptom, выявленная неисправность — из diagnosis,
+ * выполненные работы — из repairDescription (каждый текст под своим заголовком).
  */
 
 import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
@@ -279,10 +280,13 @@ export function buildDefectActDoc(input: PrintDefectActInput): TDocumentDefiniti
     ownerBlock(input),
   ];
 
-  const works = section(
-    'Выполненные работы:',
-    input.workOrder.repairDescription || input.workOrder.diagnosis,
-  );
+  // Каждый текст — под СВОИМ заголовком (как в акте выполненных работ).
+  // Раньше при пустом описании ремонта сюда подставлялся ДИАГНОЗ — и в
+  // подписываемом документе диагностика выдавалась за выполненные работы.
+  const defect = section('Выявленная неисправность:', input.workOrder.diagnosis);
+  if (defect) content.push(defect);
+
+  const works = section('Выполненные работы:', input.workOrder.repairDescription);
   if (works) content.push(works);
 
   const conclusion = section(
