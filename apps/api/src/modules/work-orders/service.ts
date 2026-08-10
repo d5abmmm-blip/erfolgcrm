@@ -244,6 +244,8 @@ export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise
 export interface UpsertLineCmdInput extends UpsertLineInput {
   ticketId: string;
   lineId?: string | null;
+  /** Клиентский id для вставки — идемпотентный реплей офлайн-очереди. */
+  newLineId?: string | null;
 }
 
 async function resolveWorkOrderForTicket(
@@ -324,6 +326,7 @@ export async function upsertLineCmd(
     engineerId: input.engineerId,
     comment: input.comment,
     orderIdx: input.orderIdx,
+    newLineId: input.newLineId ?? null,
   });
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
