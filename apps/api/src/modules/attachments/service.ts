@@ -160,6 +160,22 @@ export async function listByReferenceQuery(
 }
 
 export async function deleteCmd(ctx: CmdCtx, id: string): Promise<{ ok: true }> {
+  // Менеджер/директор удаляют любое вложение, инженер — только загруженное им
+  // самим (у импортированных автор пуст — их тоже удаляет только менеджер).
+  // Удаление необратимо (purge из хранилища фоновым job'ом), поэтому право
+  // на него уже, чем право видеть заявку.
+  if (ctx.session.role === 'engineer') {
+    const existing = await repoGetById(ctx.db, ctx.tenant.id, id);
+    if (!existing) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Вложение не найдено' });
+    }
+    if (existing.uploadedByUserId !== ctx.session.userId) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Чужое вложение может удалить только менеджер или директор',
+      });
+    }
+  }
   const result = await softDelete(ctx.db, ctx.tenant.id, id);
   if (!result) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Вложение не найдено' });
