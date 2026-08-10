@@ -172,3 +172,21 @@ describe('ГРАНИЦА: юридическая часть акта не тро
     expect(json).toContain('Хаджиев Т. Р.');
   });
 });
+
+describe('дата акта', () => {
+  it('по умолчанию — день составления, не дата приёмки', () => {
+    // Акт, напечатанный через месяц после приёмки, раньше датировался задним
+    // числом (receivedAt). Дата документа = день, когда его составили.
+    const today = new Date().toLocaleDateString('ru-RU');
+    const json = jsonOf(withTwoPerformers());
+    expect(json).toContain(`от ${today}`);
+    expect(json).not.toContain('от 29.05.2026');
+  });
+
+  it('переданный issuedAt переопределяет', () => {
+    const json = JSON.stringify(
+      buildWorkActDoc({ ...withTwoPerformers(), issuedAt: '2026-06-01T00:00:00.000Z' }),
+    );
+    expect(json).toContain('от 01.06.2026');
+  });
+});
