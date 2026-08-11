@@ -30,6 +30,10 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
   const [selectedUnit, setSelectedUnit] = useState('шт');
   const [quantity, setQuantity] = useState('1');
   const [error, setError] = useState<string | null>(null);
+  // Ключ запроса списания — один на жизнь модалки. Сценарий «запрос дошёл,
+  // ответ потерялся» показывает «повторите» — и раньше повтор списывал со
+  // склада ВТОРОЙ раз; теперь сервер по ключу узнаёт повтор и не списывает.
+  const [requestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q.trim()), 200);
@@ -74,6 +78,7 @@ export function IssueFromInventory({ ticketId, onClose, onIssued }: Props) {
           workOrderLineId: upserted.id,
           itemId: selectedId,
           quantity: qty,
+          clientRequestId: requestId,
         });
       } catch (issueErr) {
         if (issueErr instanceof Error && issueErr.message === 'NOT_ENOUGH_STOCK') {
