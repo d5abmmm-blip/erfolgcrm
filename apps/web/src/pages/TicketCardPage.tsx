@@ -685,8 +685,8 @@ export function TicketCardPage() {
                     canEditLines={isStaff}
                   />
                 </div>
-                <TicketKpBlock ticketId={t.id} canManage={isStaff} />
-                {/* Счёт — деньги, инженеру не показывается и сервером не отдаётся. */}
+                {/* КП и счёт — деньги: инженеру не показываются и сервером не отдаются. */}
+                {isStaff && <TicketKpBlock ticketId={t.id} canManage={isStaff} />}
                 {isStaff && (
                   <TicketInvoiceSection
                     ticketId={t.id}
