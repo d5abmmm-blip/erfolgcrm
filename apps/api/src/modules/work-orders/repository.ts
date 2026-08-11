@@ -8,6 +8,7 @@
  * Все денежные значения в БД — bigint (копейки). В DTO сериализуются как string,
  * чтобы корректно проходить через superjson и BigInt-парсинг на фронте.
  */
+import { TRPCError } from '@trpc/server';
 import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import {
@@ -82,6 +83,12 @@ export interface UpsertLineInput {
   engineerId?: string | null;
   comment?: string | null;
   orderIdx?: number;
+  /**
+   * Клиентский id для ВСТАВКИ (lineId отсутствует). Реплей офлайн-очереди с
+   * тем же newLineId не создаёт вторую строку: INSERT … ON CONFLICT (id)
+   * DO UPDATE (guard по workOrderId) доносит последнее состояние строки.
+   */
+  newLineId?: string | null;
 }
 
 export interface UpdateHeaderInput {
@@ -567,25 +574,54 @@ export async function upsertLine(
         engineerId: input.engineerId ?? null,
         unitPriceKopecks: input.unitPriceKopecks,
       });
+      const values = {
+        // Клиентский id (если прислан) делает вставку идемпотентной: реплей
+        // офлайн-очереди с тем же newLineId попадает в ON CONFLICT и доносит
+        // последнее состояние строки вместо второй вставки (счёт ×2, сделка ×2).
+        ...(input.newLineId ? { id: input.newLineId } : {}),
+        tenantId,
+        workOrderId,
+        lineType: input.lineType,
+        name: input.name,
+        unit: input.unit,
+        quantity: input.quantity,
+        unitPriceKopecks: input.unitPriceKopecks,
+        amountKopecks: amount,
+        costPerUnitKopecks: costPerUnit,
+        engineerId: input.engineerId ?? null,
+        comment: input.comment ?? null,
+        orderIdx: input.orderIdx ?? 0,
+      };
       const inserted = await tx
         .insert(workOrderLines)
-        .values({
-          tenantId,
-          workOrderId,
-          lineType: input.lineType,
-          name: input.name,
-          unit: input.unit,
-          quantity: input.quantity,
-          unitPriceKopecks: input.unitPriceKopecks,
-          amountKopecks: amount,
-          costPerUnitKopecks: costPerUnit,
-          engineerId: input.engineerId ?? null,
-          comment: input.comment ?? null,
-          orderIdx: input.orderIdx ?? 0,
+        .values(values)
+        .onConflictDoUpdate({
+          target: workOrderLines.id,
+          set: {
+            lineType: values.lineType,
+            name: values.name,
+            unit: values.unit,
+            quantity: values.quantity,
+            unitPriceKopecks: values.unitPriceKopecks,
+            amountKopecks: values.amountKopecks,
+            costPerUnitKopecks: values.costPerUnitKopecks,
+            engineerId: values.engineerId,
+            comment: values.comment,
+            orderIdx: values.orderIdx,
+          },
+          // Обновлять можно только строку СВОЕГО наряда: чужой id (коллизия или
+          // злоупотребление) не перезаписывается — вставка «не происходит»,
+          // returning пуст, ниже это превращается в явный отказ.
+          setWhere: eq(workOrderLines.workOrderId, workOrderId),
         })
         .returning({ id: workOrderLines.id });
       const newId = inserted[0]?.id;
-      if (!newId) throw new Error('upsertLine: insert returned nothing');
+      if (!newId) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Строка с таким номером уже существует в другом наряде.',
+        });
+      }
       resultId = newId;
     }
     await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);

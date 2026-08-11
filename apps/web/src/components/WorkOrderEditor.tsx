@@ -89,6 +89,13 @@ interface LineDraft {
   uid: string;
   /** UUID существующей строки или null для новой. */
   id: string | null;
+  /**
+   * Клиентский id НОВОЙ строки (crypto.randomUUID). Уходит на сервер как
+   * line.newId и делает вставку идемпотентной: реплей офлайн-очереди по
+   * сценарию «запрос дошёл, ответ потерялся» не создаёт вторую строку
+   * (счёт ×2, сделка ×2), а доносит последнее состояние.
+   */
+  newId?: string;
   lineType: WorkOrderLineType;
   name: string;
   unit: string;
@@ -1497,6 +1504,7 @@ function LineTable({
       {
         uid: newDraftUid(),
         id: null,
+        newId: crypto.randomUUID(),
         lineType,
         name: '',
         unit: 'шт',
@@ -1515,6 +1523,7 @@ function LineTable({
       ticketId,
       line: {
         id: line.id ?? undefined,
+        ...(!line.id && line.newId ? { newId: line.newId } : {}),
         lineType,
         name: line.name.trim(),
         unit: line.unit.trim() || 'шт',
