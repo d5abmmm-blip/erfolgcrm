@@ -125,9 +125,7 @@ async function outboundCount(itemId: string): Promise<number> {
     tx
       .select({ id: inventoryMovements.id })
       .from(inventoryMovements)
-      .where(
-        and(eq(inventoryMovements.itemId, itemId), eq(inventoryMovements.kind, 'outbound')),
-      ),
+      .where(and(eq(inventoryMovements.itemId, itemId), eq(inventoryMovements.kind, 'outbound'))),
   );
   return rows.length;
 }

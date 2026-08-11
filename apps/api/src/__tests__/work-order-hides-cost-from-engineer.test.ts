@@ -7,7 +7,15 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
-import { clients, getDb, tickets, users, withTenantTx, workOrders, workOrderLines } from '@erfolg/db';
+import {
+  clients,
+  getDb,
+  tickets,
+  users,
+  withTenantTx,
+  workOrders,
+  workOrderLines,
+} from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket } from '../modules/tickets/repository';
 import { appRouter } from '../trpc/router';
