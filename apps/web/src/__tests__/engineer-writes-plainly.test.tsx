@@ -517,7 +517,10 @@ describe('рекомендация доступна с телефона', () => 
   });
 
   it('уже написанную видно сразу, разворачивать не надо', async () => {
-    renderEditor('card', makeServer({ recommendation: 'До замены эксплуатация не рекомендована.' }));
+    renderEditor(
+      'card',
+      makeServer({ recommendation: 'До замены эксплуатация не рекомендована.' }),
+    );
     await screen.findByDisplayValue('До замены эксплуатация не рекомендована.');
   });
 

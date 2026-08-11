@@ -21,11 +21,7 @@ import {
   updateWorkOrderHeader,
   upsertLine,
 } from '../modules/work-orders/repository';
-import {
-  calcVatInclusive,
-  createDraft,
-  transitionToIssued,
-} from '../modules/invoices/repository';
+import { calcVatInclusive, createDraft, transitionToIssued } from '../modules/invoices/repository';
 
 let erfolgId = '';
 let clientId = '';

@@ -199,9 +199,7 @@ export function splitClauses(text: string): string[] {
   return marked
     .split(/[.;!?\n]+|,\s*/)
     .map((s) => s.trim().replace(EDGE_NOISE, '').trim())
-    .filter(
-      (s) => s.length > 0 && new RegExp(`[${LETTER}\\d]`).test(s) && !FILLER_ONLY.test(s),
-    );
+    .filter((s) => s.length > 0 && new RegExp(`[${LETTER}\\d]`).test(s) && !FILLER_ONLY.test(s));
 }
 
 export type ClauseKind = 'problem' | 'action' | 'result';
