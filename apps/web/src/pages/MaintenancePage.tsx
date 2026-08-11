@@ -31,6 +31,12 @@ export function MaintenancePage() {
   const log = trpc.maintenance.listLog.useQuery({ limit: 100 }, { enabled: tab === 'log' });
 
   const utils = trpc.useUtils();
+  // Инженер отмечает ТО только по графику, где он ответственный (решение
+  // владельца 2026-08-11); графики заводит staff. Кнопки с гарантированным
+  // отказом сервера не показываем.
+  const me = trpc.auth.me.useQuery();
+  const meUser = me.data?.user;
+  const isStaff = meUser?.role === 'director' || meUser?.role === 'dispatcher';
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
@@ -45,14 +51,16 @@ export function MaintenancePage() {
             Плановое и срочное ТО с автоматическим расчётом next_due_at
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition"
-        >
-          <Plus className="h-4 w-4" />
-          Создать график
-        </button>
+        {isStaff && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition"
+          >
+            <Plus className="h-4 w-4" />
+            Создать график
+          </button>
+        )}
       </div>
 
       <div className="inline-flex flex-wrap rounded-md border p-0.5">
@@ -143,13 +151,15 @@ export function MaintenancePage() {
                         {s.nextDueAt.toLocaleDateString('ru-RU')}
                       </td>
                       <td className="px-2 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setRecordFor({ scheduleId: s.id, assetId: s.assetId })}
-                          className="hover:bg-muted rounded-md border px-2 py-1 text-xs transition"
-                        >
-                          Записать
-                        </button>
+                        {(isStaff || s.responsibleUserId === meUser?.id) && (
+                          <button
+                            type="button"
+                            onClick={() => setRecordFor({ scheduleId: s.id, assetId: s.assetId })}
+                            className="hover:bg-muted rounded-md border px-2 py-1 text-xs transition"
+                          >
+                            Записать
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
