@@ -287,6 +287,16 @@ export async function scheduleEmailCmd(
       message: 'Время отправки должно быть в будущем (хотя бы через минуту).',
     });
   }
+  // Вложение хранить негде (PDF собирается на клиенте в момент действия, в строке
+  // письма — только имя для журнала). Раньше оно МОЛЧА выбрасывалось и письмо
+  // уходило без счёта/акта. Честный отказ вместо тихой потери.
+  if (input.attachment) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        'Вложение не сохранится при отложенной отправке. Отправьте письмо сейчас или уберите вложение.',
+    });
+  }
   const id = await upsertOutbox(ctx.db, ctx.tenant.id, {
     id: input.fromDraftId,
     status: 'scheduled',
@@ -326,6 +336,8 @@ export async function sendScheduledNowCmd(
   await cancelScheduledSend(id);
   return sendEmailCmd(ctx, {
     to: msg.to ?? '',
+    cc: msg.cc ?? undefined,
+    bcc: msg.bcc ?? undefined,
     subject: msg.subject ?? '',
     bodyText: msg.bodyText ?? '',
     bodyHtml: msg.bodyHtml ?? undefined,
