@@ -1,15 +1,13 @@
 /**
  * tRPC роутер invoices.
  *
- * Чтение по СВОЕЙ заявке — engineerProcedure (getById, listByTicket): инженеру нужны счета
- * заявки, которую он ведёт.
- * Перечисление по клиенту/по всему тенанту (listByClient, listForTenant) — staffProcedure
- * (директор + диспетчер): это весь «инвойс-бук» тенанта (суммы/долги всех клиентов), инженеру
- * он не положен (least-privilege, паритет с кассой/дебиторкой — они тоже staff/director).
- * Создание/issue/cancel/update/delete — staffProcedure (директор + диспетчер).
+ * ВСЁ — staffProcedure (директор + диспетчер). Решение владельца 2026-08-11:
+ * «инженеру не нужны счета, у инженера только техническая часть вопроса» —
+ * раньше getById/listByTicket были engineerProcedure, и суммы счетов любой
+ * заявки читались инженером (и оседали в телефоне).
  */
 import { z } from 'zod';
-import { engineerProcedure, router, staffProcedure } from '../../trpc/trpc';
+import { router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   cancelCmd,
@@ -37,11 +35,11 @@ const vatRateEnum = z.enum(['0', '5', '10', '20', 'without_vat']);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата должна быть в формате YYYY-MM-DD');
 
 export const invoicesRouter = router({
-  getById: engineerProcedure
+  getById: staffProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(({ ctx, input }) => getByIdQuery(ctx.db, ctx.tenant, input.id)),
 
-  listByTicket: engineerProcedure
+  listByTicket: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => listByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
