@@ -35,9 +35,10 @@ import {
 } from '../modules/inventory-movements/service';
 import { issueToWorkOrder } from '../modules/inventory-movements/repository';
 import type { CmdCtx } from '../trpc/helpers';
+import type * as AuditModule from '../lib/audit';
 
 vi.mock('../lib/audit', async (importOriginal) => {
-  const orig = await importOriginal<typeof import('../lib/audit')>();
+  const orig = await importOriginal<typeof AuditModule>();
   const broken = async () => {
     throw new Error('журнал недоступен (тест)');
   };

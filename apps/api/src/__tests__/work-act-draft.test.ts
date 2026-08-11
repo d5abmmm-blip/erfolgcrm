@@ -19,11 +19,12 @@ import { phraseWithLlm } from '../modules/ai-assistant/proactive';
 import { appRouter } from '../trpc/router';
 import type { Context } from '../trpc/context';
 import type { SessionData } from '../lib/session';
+import type * as ProactiveModule from '../modules/ai-assistant/proactive';
 
 // Модель подменяем: по умолчанию «не настроена» (null) — прежние тесты фолбэка
 // не меняются; в тестах сторожа отвечаем за неё mockResolvedValueOnce.
 vi.mock('../modules/ai-assistant/proactive', async (importOriginal) => {
-  const orig = await importOriginal<typeof import('../modules/ai-assistant/proactive')>();
+  const orig = await importOriginal<typeof ProactiveModule>();
   return { ...orig, phraseWithLlm: vi.fn(async () => null) };
 });
 
