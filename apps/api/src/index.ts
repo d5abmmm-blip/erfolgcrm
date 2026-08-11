@@ -206,10 +206,15 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   registerEmailScheduledWorker();
   registerStuckAlertWorker();
   registerEngineerNudgeWorker();
-  // Cron-расписание ставится только если явно разрешено (на dev/test обычно не нужно).
-  if (process.env.INVOICE_REMINDER_ENABLED === 'true') {
-    void enqueueInvoiceReminderSchedule();
-  }
+  // Ночной тик по счетам ТОЛЬКО помечает просрочку (markOverdueAsOf) — рассылка
+  // вырезана из воркера ещё 2026-07-23. Флаг INVOICE_REMINDER_ENABLED защищал
+  // именно письма и на бою (false) душил безобидную пометку: статус «просрочен»
+  // не ставился НИКОГДА — дашборд, отчёты и кабинет клиента показывали ноль
+  // просроченных при живых долгах. Расписание ставим всегда, как и у остальных
+  // внутренних тиков; флаг больше не читается.
+  void enqueueInvoiceReminderSchedule().catch((err) =>
+    logger.warn({ err }, 'invoice-reminder schedule failed'),
+  );
   // Напоминания календаря — внутренний push, внешних зависимостей нет:
   // расписание ставим всегда (тик без «созревших» событий — no-op).
   void enqueueCalendarReminderSchedule().catch((err) =>

@@ -15,7 +15,8 @@
  *
  * ENV:
  *   INVOICE_REMINDER_CRON='0 9 * * *' (каждый день в 9:00 серверного времени)
- *   INVOICE_REMINDER_ENABLED=true — без неё расписание вообще не ставится (index.ts)
+ *   (INVOICE_REMINDER_ENABLED больше не читается: флаг защищал вырезанную рассылку,
+ *   а на бою заодно душил пометку просрочки — расписание теперь ставится всегда.)
  *
  * Добавление repeatable job: enqueueInvoiceReminderSchedule() — идемпотентно по jobId
  * (BullMQ сам деаплицирует repeat по pattern + jobId).
