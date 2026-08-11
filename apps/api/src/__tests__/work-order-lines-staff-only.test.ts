@@ -195,9 +195,9 @@ describe('инженер и строки наряда (своя заявка)', 
     });
 
     const caller = appRouter.createCaller(makeCtx({ role: 'engineer' }));
-    await expect(
-      caller.workOrders.deleteLine({ ticketId, lineId: line.id }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.workOrders.deleteLine({ ticketId, lineId: line.id })).rejects.toMatchObject(
+      { code: 'FORBIDDEN' },
+    );
   });
 
   it('отказ объясняет причину по-человечески', async () => {

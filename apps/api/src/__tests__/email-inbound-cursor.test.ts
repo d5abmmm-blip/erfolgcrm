@@ -103,10 +103,7 @@ function directorCtx(): Context {
 
 async function setLastUid(uid: number): Promise<void> {
   await withTenantTx(getDb(), erfolgId, (tx) =>
-    tx
-      .update(emailConfigs)
-      .set({ imapLastUid: uid })
-      .where(eq(emailConfigs.tenantId, erfolgId)),
+    tx.update(emailConfigs).set({ imapLastUid: uid }).where(eq(emailConfigs.tenantId, erfolgId)),
   );
 }
 

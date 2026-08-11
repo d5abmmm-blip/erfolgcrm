@@ -33,12 +33,7 @@ import { showToast } from '../lib/toast';
 import { useOutbox } from '../lib/offline/useOutbox';
 import { useFlushOnLeave } from '../lib/use-flush-on-leave';
 import { useSaveMark } from '../lib/use-save-mark';
-import {
-  forgetDraft,
-  forgetDraftIfUnchanged,
-  readDraft,
-  rememberDraft,
-} from '../lib/field-draft';
+import { forgetDraft, forgetDraftIfUnchanged, readDraft, rememberDraft } from '../lib/field-draft';
 import type { SaveMarkState } from '../lib/save-state';
 import { SaveMark } from './SaveMark';
 import { IssueFromInventory } from './IssueFromInventory';
@@ -593,8 +588,7 @@ function WorkOrderHeader({
                */
               const patch: Record<string, string> = {};
               if (composed.diagnosis) patch.diagnosis = composed.diagnosis;
-              if (composed.repairDescription)
-                patch.repairDescription = composed.repairDescription;
+              if (composed.repairDescription) patch.repairDescription = composed.repairDescription;
               if (Object.keys(patch).length === 0) return Promise.resolve('ok' as const);
               return savePatch(patch, `wo-act:${ticketId}`);
             }}
@@ -621,28 +615,28 @@ function WorkOrderHeader({
             </div>
           )}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field
-            label="Диагноз"
-            scope={ticketId}
-            name="diagnosis"
-            initial={diagnosis}
-            disabled={!canEdit}
-            onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
-          />
-          <RepairDescriptionField
-            ticketId={ticketId}
-            initial={repairDescription}
-            canEdit={canEdit}
-            onSave={(value) => saveHeader('repairDescription', value)}
-          />
-          <Field
-            label="Рекомендации"
-            scope={ticketId}
-            name="recommendation"
-            initial={recommendation}
-            disabled={!canEdit}
-            onSave={(next, mark) => saveHeader('recommendation', next, mark)}
-          />
+            <Field
+              label="Диагноз"
+              scope={ticketId}
+              name="diagnosis"
+              initial={diagnosis}
+              disabled={!canEdit}
+              onSave={(next, mark) => saveHeader('diagnosis', next, mark)}
+            />
+            <RepairDescriptionField
+              ticketId={ticketId}
+              initial={repairDescription}
+              canEdit={canEdit}
+              onSave={(value) => saveHeader('repairDescription', value)}
+            />
+            <Field
+              label="Рекомендации"
+              scope={ticketId}
+              name="recommendation"
+              initial={recommendation}
+              disabled={!canEdit}
+              onSave={(next, mark) => saveHeader('recommendation', next, mark)}
+            />
           </div>
         </div>
       )}
@@ -652,27 +646,27 @@ function WorkOrderHeader({
           не давая. А просьба была ровно обратная: контакт с программой
           сократить. На десктопе всё как было. */}
       {layout !== 'card' && (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
-        <select
-          disabled={!canEditVat}
-          // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
-          value={chosenVat ?? vatRate}
-          onChange={(e) => void saveVat(e.target.value as VatRate)}
-          // Только десктоп: на телефоне ставки НДС нет вовсе (см. выше).
-          className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
-        >
-          {VAT_OPTS.map((o) => (
-            <option key={o.v} value={o.v}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <SaveMark state={vatMark.state} />
-        {!canEditVat && (
-          <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
-        )}
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground text-xs uppercase">Ставка НДС</span>
+          <select
+            disabled={!canEditVat}
+            // Пока правка ждёт связи, показываем ВЫБРАННОЕ, а не то, что на сервере.
+            value={chosenVat ?? vatRate}
+            onChange={(e) => void saveVat(e.target.value as VatRate)}
+            // Только десктоп: на телефоне ставки НДС нет вовсе (см. выше).
+            className="bg-background focus:ring-primary/40 rounded-md border px-2 py-1 text-xs outline-none focus:ring-2 disabled:opacity-50"
+          >
+            {VAT_OPTS.map((o) => (
+              <option key={o.v} value={o.v}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <SaveMark state={vatMark.state} />
+          {!canEditVat && (
+            <span className="text-muted-foreground text-[11px]">меняет директор/диспетчер</span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -721,9 +715,7 @@ function PhoneRecommendation({
    * или черновик, переживший выгрузку приложения. Спрятанный за кнопкой
    * черновик человек не найдёт никогда — он о нём не знает.
    */
-  const [opened, setOpened] = useState(
-    () => readDraft(ticketId, 'recommendation') != null,
-  );
+  const [opened, setOpened] = useState(() => readDraft(ticketId, 'recommendation') != null);
   /**
    * ⚠️ Наличие текста проверяем НА КАЖДОЙ отрисовке, а не один раз при
    * монтировании. Рекомендацию мог вписать диспетчер, пока инженер был на
@@ -1081,9 +1073,7 @@ function EngineerNotesField({
               id={`proposal-repair-${ticketId}`}
               value={proposal.repairDescription}
               rows={3}
-              onChange={(e) =>
-                changeProposal({ ...proposal, repairDescription: e.target.value })
-              }
+              onChange={(e) => changeProposal({ ...proposal, repairDescription: e.target.value })}
               className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-base outline-none focus:ring-2"
             />
           </div>
@@ -1237,9 +1227,7 @@ function RepairDescriptionField({
           <button
             type="button"
             disabled={draft.isPending}
-            onClick={() =>
-              value.trim() ? setConfirmingDraft(true) : draft.mutate({ ticketId })
-            }
+            onClick={() => (value.trim() ? setConfirmingDraft(true) : draft.mutate({ ticketId }))}
             className={cn(
               'text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded font-medium disabled:opacity-50',
               // На телефоне кнопка была 21 пиксель высотой — пальцем не попасть.

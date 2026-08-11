@@ -208,7 +208,10 @@ describe('оформление моделью', () => {
     llm.answer = '{"diagnosis":"Не включается.","repairDescription":"Осмотрено."}';
     const caller = appRouter.createCaller(makeCtx('engineer'));
 
-    await caller.workOrders.composeFromNotes({ ticketId, notes: 'приехал посмотрел не включается' });
+    await caller.workOrders.composeFromNotes({
+      ticketId,
+      notes: 'приехал посмотрел не включается',
+    });
 
     expect(llm.calls).toHaveLength(1);
     const sent = llm.calls[0]!.user;
@@ -234,8 +237,7 @@ describe('оформление моделью', () => {
    */
   it('оформление НИЧЕГО не пишет в наряд — это предложение, а не запись', async () => {
     const ticketId = await myTicketWithOrder();
-    llm.answer =
-      '{"diagnosis":"Вышла из строя плата.","repairDescription":"Плата заменена."}';
+    llm.answer = '{"diagnosis":"Вышла из строя плата.","repairDescription":"Плата заменена."}';
     const caller = appRouter.createCaller(makeCtx('engineer'));
     await caller.workOrders.updateHeader({ ticketId, patch: { diagnosis: 'Было до вызова' } });
 
