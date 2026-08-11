@@ -251,6 +251,32 @@ describe('деньги в строке не портятся молча', () => 
     expect(await screen.findByText(/Количество не может быть пустым/)).toBeTruthy();
     expect(await queuedKinds()).toEqual([]);
   });
+
+  /**
+   * Реплей очереди не должен задваивать строку: «запрос дошёл, ответ потерялся»
+   * раньше вставлял вторую строку (счёт ×2, сделка ×2). Поэтому НОВАЯ строка
+   * несёт клиентский id (line.newId) — сервер делает вставку идемпотентной.
+   */
+  it('новая строка уезжает с клиентским id (newId), а не без номера', async () => {
+    renderEditor();
+    await screen.findByDisplayValue('Замена блока питания рентген-аппарата');
+    await clearAll();
+
+    // Кнопок три (Работы/Запчасти/Расходы) — добавляем строку работ.
+    fireEvent.click(screen.getAllByRole('button', { name: /Добавить строку/ })[0]!);
+    const names = screen.getAllByLabelText<HTMLInputElement>('Наименование');
+    const name = names[names.length - 1]!;
+    fireEvent.change(name, { target: { value: 'Калибровка дозиметра' } });
+    fireEvent.blur(name);
+
+    await waitFor(async () => {
+      const items = await listPending();
+      expect(items).toHaveLength(1);
+      const line = (items[0]!.payload as { line: Record<string, unknown> }).line;
+      expect(line.id).toBeUndefined();
+      expect(String(line.newId)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i);
+    });
+  });
 });
 
 describe('менеджер не забудет оценить работу', () => {

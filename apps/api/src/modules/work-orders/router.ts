@@ -27,6 +27,12 @@ const MAX_UNIT_PRICE_RUB = 9_999_999_999;
 
 const lineUpsertSchema = z.object({
   id: z.string().uuid().optional(),
+  /**
+   * Клиентский id для ВСТАВКИ (id ещё нет). Делает создание идемпотентным:
+   * реплей офлайн-очереди с тем же newId не плодит вторую строку, а доносит
+   * последнее состояние (сценарий «запрос дошёл, ответ потерялся»).
+   */
+  newId: z.string().uuid().optional(),
   lineType: WorkOrderLineType,
   name: z.string().trim().min(1).max(500),
   unit: z.string().trim().max(20).default('шт'),
@@ -51,7 +57,9 @@ const updateHeaderSchema = z
 export const workOrdersRouter = router({
   getByTicket: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
-    .query(({ ctx, input }) => getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
+    .query(({ ctx, input }) =>
+      getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId, ctx.session.role),
+    ),
 
   ensure: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
@@ -63,6 +71,7 @@ export const workOrdersRouter = router({
       upsertLineCmd(buildCmdCtx(ctx), {
         ticketId: input.ticketId,
         lineId: input.line.id ?? null,
+        newLineId: input.line.newId ?? null,
         lineType: input.line.lineType,
         name: input.line.name,
         unit: input.line.unit,

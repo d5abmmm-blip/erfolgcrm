@@ -33,6 +33,8 @@ export interface IssueCmdInput {
   itemId: string;
   quantity: string;
   comment?: string | null;
+  /** Ключ запроса из офлайн-очереди — идемпотентный реплей (см. repository). */
+  clientRequestId?: string | null;
 }
 
 /** Строка наряда принадлежит заявке, которую этому человеку можно менять. */
@@ -61,12 +63,15 @@ export async function issueToWorkOrderCmd(ctx: CmdCtx, input: IssueCmdInput): Pr
     quantity: input.quantity,
     userId: ctx.session.userId,
     comment: input.comment ?? null,
+    clientRequestId: input.clientRequestId ?? null,
   };
   let result: IssueResult;
   try {
     // Движение + журнал в одной транзакции (см. шапку файла).
     result = await withTenantTx(ctx.db, ctx.tenant.id, async (tx) => {
       const r = await repoIssueInTx(tx, ctx.tenant.id, repoInput);
+      // Повтор реплея ничего не списал — второй записи в журнале не место.
+      if (r.alreadyApplied) return r;
       await writeAuditInTx(tx, ctx.tenant.id, {
         userId: ctx.session.userId,
         action: 'create',

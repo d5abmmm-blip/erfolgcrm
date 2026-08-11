@@ -657,7 +657,7 @@ export function TicketCardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section className="bg-card rounded-lg border lg:col-span-2">
-          <Tabs value={tab} onChange={setTab} />
+          <Tabs value={tab} onChange={setTab} isStaff={isStaff} />
           <div className="space-y-6 p-4 md:p-6">
             {tab === 'details' && (
               <>
@@ -685,13 +685,15 @@ export function TicketCardPage() {
                     canEditLines={isStaff}
                   />
                 </div>
-                {/* КП — деньги, инженеру не показывается и сервером не отдаётся. */}
+                {/* КП и счёт — деньги: инженеру не показываются и сервером не отдаются. */}
                 {isStaff && <TicketKpBlock ticketId={t.id} canManage={isStaff} />}
-                <TicketInvoiceSection
-                  ticketId={t.id}
-                  workOrderId={wo.data?.id ?? null}
-                  isStaff={isStaff}
-                />
+                {isStaff && (
+                  <TicketInvoiceSection
+                    ticketId={t.id}
+                    workOrderId={wo.data?.id ?? null}
+                    isStaff={isStaff}
+                  />
+                )}
               </>
             )}
             {tab === 'history' && (
@@ -711,7 +713,9 @@ export function TicketCardPage() {
                 </ol>
               </div>
             )}
-            {tab === 'payments' && <TicketPayments ticketId={t.id} canManage={isStaff} />}
+            {tab === 'payments' && isStaff && (
+              <TicketPayments ticketId={t.id} canManage={isStaff} />
+            )}
             {tab === 'docs' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold">Фото и сканы документов</h3>
@@ -1067,11 +1071,21 @@ function StagesTimeline({ status }: { status: TicketStatus }) {
   );
 }
 
-function Tabs({ value, onChange }: { value: Tab; onChange: (v: Tab) => void }) {
+function Tabs({
+  value,
+  onChange,
+  isStaff,
+}: {
+  value: Tab;
+  onChange: (v: Tab) => void;
+  isStaff: boolean;
+}) {
   const tabs: Array<{ v: Tab; label: string }> = [
     { v: 'details', label: 'Детали' },
     { v: 'history', label: 'История' },
-    { v: 'payments', label: 'Платежи' },
+    // Деньги — не инженеру («у инженера только техническая часть вопроса»,
+    // решение владельца 2026-08-11); сервер это тоже не отдаст (staffProcedure).
+    ...(isStaff ? [{ v: 'payments' as Tab, label: 'Платежи' }] : []),
     { v: 'docs', label: 'Документы' },
     { v: 'checklists', label: 'Чек-листы' },
   ];

@@ -285,6 +285,62 @@ describe('payroll sheets — проведение в кассу', () => {
   });
 
   /**
+   * Аванс больше начисленного — долг сотрудника, а не скидка на зарплату
+   * остальных. Раньше отрицательный остаток одного человека УМЕНЬШАЛ сумму
+   * проводки: остальным фактически выплачивают их полные остатки, а касса
+   * записывала меньше — расхождение с реальными деньгами.
+   */
+  it('переплата аванса одному не уменьшает проводку по остальным', async () => {
+    const [acc] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .insert(cashAccounts)
+        .values({
+          tenantId: erfolgId,
+          name: 'ТЕСТ-ЗП-переаванс',
+          kind: 'cash',
+          openingBalanceKopecks: 5_000_000n,
+          balanceKopecks: 5_000_000n,
+        })
+        .returning({ id: cashAccounts.id }),
+    );
+    const accountId = acc!.id;
+    try {
+      await saveSheet(ctxFor(erfolgId), {
+        month: '2099-10',
+        entries: [
+          {
+            employeeId: 'manual_a',
+            employeeName: 'Иванов',
+            salaryKopecks: 2_000_000,
+            pieceworkKopecks: 0,
+            advanceKopecks: 0,
+            bonusKopecks: 0,
+          },
+          {
+            // Начислено 10 000 ₽, аванс 15 000 ₽ → долг 5000 ₽, к выплате 0.
+            employeeId: 'manual_b',
+            employeeName: 'Петров',
+            salaryKopecks: 1_000_000,
+            pieceworkKopecks: 0,
+            advanceKopecks: 1_500_000,
+            bonusKopecks: 0,
+          },
+        ],
+      });
+
+      const posted = await postToCash(ctxFor(erfolgId), '2099-10', accountId);
+      // Иванову выплатят 20 000 ₽ живыми деньгами — столько и уходит из кассы.
+      // (Раньше: 2 000 000 − 500 000 = 1 500 000 — касса врала на долг Петрова.)
+      expect(posted.postedAmountKopecks).toBe('2000000');
+    } finally {
+      await withTenantTx(getDb(), erfolgId, async (tx) => {
+        await tx.delete(cashTransactions).where(eq(cashTransactions.accountId, accountId));
+        await tx.delete(cashAccounts).where(eq(cashAccounts.id, accountId));
+      });
+    }
+  });
+
+  /**
    * Гонка двух проведений. На экране двойной клик закрыт (кнопка блокируется),
    * но директоров четверо: два человека могли нажать «Провести» одновременно.
    * Каждый видел ведомость непроведённой → каждый вставлял расход → в кассе

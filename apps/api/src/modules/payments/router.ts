@@ -1,9 +1,11 @@
 /**
  * tRPC роутер для payments.
- * RBAC: чтение — engineer; добавление/удаление — staffProcedure.
+ * RBAC: ВСЁ — staffProcedure. Решение владельца 2026-08-11: «инженеру не нужны
+ * счета, у инженера только техническая часть вопроса» — оплаты и итоги оплат
+ * тоже деньги клиента, раньше их чтение было engineerProcedure.
  */
 import { z } from 'zod';
-import { engineerProcedure, router, staffProcedure } from '../../trpc/trpc';
+import { router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import { addPaymentCmd, deletePaymentCmd, getTotalsQuery, listByTicketQuery } from './service';
 
@@ -36,11 +38,11 @@ const amountRubSchema = z
   );
 
 export const paymentsRouter = router({
-  listByTicket: engineerProcedure
+  listByTicket: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => listByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
-  getTotals: engineerProcedure
+  getTotals: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => getTotalsQuery(ctx.db, ctx.tenant, input.ticketId)),
 

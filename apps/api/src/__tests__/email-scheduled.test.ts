@@ -24,7 +24,7 @@ import type { SessionData } from '../lib/session';
 
 let erfolgId = '';
 let mid = 0;
-const sentMail: Array<{ to: string; subject: string }> = [];
+const sentMail: Array<{ to: string; subject: string; cc?: string; bcc?: string }> = [];
 
 beforeAll(async () => {
   const seed = await ensureSeed();
@@ -32,7 +32,7 @@ beforeAll(async () => {
   __setTransporterForTesting({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sendMail: vi.fn(async (opts: any) => {
-      sentMail.push({ to: opts.to, subject: opts.subject });
+      sentMail.push({ to: opts.to, subject: opts.subject, cc: opts.cc, bcc: opts.bcc });
       return { messageId: `mock-${++mid}` };
     }),
     close: () => undefined,
@@ -203,5 +203,58 @@ describe('email отложенная отправка', () => {
     const out = await caller.email.list({ folder: 'out' });
     expect(out.items.length).toBe(1);
     expect(out.items[0]?.status).toBe('sent');
+  });
+
+  /**
+   * Вложение при планировании сохранить негде (PDF собирается на клиенте в момент
+   * действия), поэтому раньше оно МОЛЧА выбрасывалось: письмо уходило без счёта.
+   * Честное поведение — отказ с причиной, а не тихая потеря.
+   */
+  it('schedule с вложением → честный отказ, а не молчаливая потеря', async () => {
+    const caller = appRouter.createCaller(makeCtx('director'));
+    try {
+      await caller.email.schedule({
+        to: 'later@example.com',
+        subject: 'Счёт',
+        bodyText: 'во вложении',
+        scheduledAt: future(),
+        attachment: { filename: 'invoice.pdf', base64: 'JVBERi0=', kind: 'invoice' },
+      });
+      throw new Error('expected BAD_REQUEST');
+    } catch (err) {
+      expect(err).toBeInstanceOf(TRPCError);
+      expect((err as TRPCError).code).toBe('BAD_REQUEST');
+      expect((err as TRPCError).message).toMatch(/вложени/i);
+    }
+    // Ничего не запланировано и не отправлено.
+    expect((await caller.email.list({ folder: 'scheduled' })).items.length).toBe(0);
+    expect(sentMail.length).toBe(0);
+  });
+
+  it('sendScheduledNow не теряет копии (cc/bcc) запланированного письма', async () => {
+    const caller = appRouter.createCaller(makeCtx('director'));
+    const { id } = await caller.email.schedule({
+      to: 'now@example.com',
+      cc: 'boss@example.com',
+      bcc: 'archive@example.com',
+      subject: 'С копиями',
+      bodyText: 'тело',
+      scheduledAt: future(),
+    });
+    await caller.email.sendScheduledNow({ id });
+
+    expect(sentMail.length).toBe(1);
+    expect(sentMail[0]?.cc).toBe('boss@example.com');
+    expect(sentMail[0]?.bcc).toBe('archive@example.com');
+
+    // И в журнале (строке письма) копии не затёрты.
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({ cc: emailMessages.ccAddr, bcc: emailMessages.bccAddr })
+        .from(emailMessages)
+        .where(eq(emailMessages.id, id)),
+    );
+    expect(row?.cc).toBe('boss@example.com');
+    expect(row?.bcc).toBe('archive@example.com');
   });
 });

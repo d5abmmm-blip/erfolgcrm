@@ -40,8 +40,19 @@ export async function getWorkOrderByTicketQuery(
   db: Db,
   tenant: ResolvedTenant,
   ticketId: string,
+  role?: string,
 ): Promise<WorkOrderDto | null> {
-  return repoGetByTicket(db, tenant.id, ticketId);
+  const dto = await repoGetByTicket(db, tenant.id, ticketId);
+  if (!dto || role !== 'engineer') return dto;
+  // Себестоимость и маржа — отчётные цифры директора (profitability); инженеру
+  // они не показываются ни на одном экране, а из этого DTO ещё и оседали в
+  // офлайн-кэше телефона (снимок заявок в IndexedDB). Обнуляем, остальное — как есть.
+  return {
+    ...dto,
+    costAmountKopecks: '0',
+    marginAmountKopecks: '0',
+    lines: dto.lines.map((l) => ({ ...l, costPerUnitKopecks: '0' })),
+  };
 }
 
 /* ─────────── Фича №13 «AI-черновик акта» — текст «Выполненные работы» ─────────── */
@@ -244,6 +255,8 @@ export async function ensureWorkOrderCmd(ctx: CmdCtx, ticketId: string): Promise
 export interface UpsertLineCmdInput extends UpsertLineInput {
   ticketId: string;
   lineId?: string | null;
+  /** Клиентский id для вставки — идемпотентный реплей офлайн-очереди. */
+  newLineId?: string | null;
 }
 
 async function resolveWorkOrderForTicket(
@@ -324,6 +337,7 @@ export async function upsertLineCmd(
     engineerId: input.engineerId,
     comment: input.comment,
     orderIdx: input.orderIdx,
+    newLineId: input.newLineId ?? null,
   });
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
