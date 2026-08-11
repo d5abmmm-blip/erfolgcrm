@@ -290,6 +290,22 @@ export async function listLog(
 }
 
 /** Проверка что asset принадлежит этому tenant'у. */
+/** Ответственный по графику (для проверки «инженер отмечает только своё»). */
+export async function scheduleResponsible(
+  db: Db,
+  tenantId: string,
+  scheduleId: string,
+): Promise<{ responsibleUserId: string | null } | null> {
+  const rows = await withTenantTx(db, tenantId, (tx) =>
+    tx
+      .select({ responsibleUserId: maintenanceSchedules.responsibleUserId })
+      .from(maintenanceSchedules)
+      .where(eq(maintenanceSchedules.id, scheduleId))
+      .limit(1),
+  );
+  return rows[0] ?? null;
+}
+
 export async function assetExists(db: Db, tenantId: string, assetId: string): Promise<boolean> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx

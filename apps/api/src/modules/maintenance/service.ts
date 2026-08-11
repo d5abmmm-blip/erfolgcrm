@@ -11,6 +11,7 @@ import {
   listLog as repoListLog,
   listSchedules as repoListSchedules,
   recordPerformed as repoRecordPerformed,
+  scheduleResponsible,
   updateSchedule as repoUpdateSchedule,
   type CreateScheduleInput,
   type MaintenanceLogDto,
@@ -86,6 +87,19 @@ export async function recordPerformedCmd(
       code: 'BAD_REQUEST',
       message: 'Техника не найдена в этом тенанте',
     });
+  }
+  // Решение владельца 2026-08-11 («ограничить»): инженер отмечает ТО только по
+  // графику, где он ответственный. Разовые отметки без графика и чужие графики —
+  // менеджер/директор. Раньше проверок не было вовсе: любой инженер закрывал
+  // любой график (и двигал его next_due_at).
+  if (ctx.session.role === 'engineer') {
+    const denied = new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Отметить ТО может ответственный по графику, менеджер или директор',
+    });
+    if (!input.scheduleId) throw denied;
+    const schedule = await scheduleResponsible(ctx.db, ctx.tenant.id, input.scheduleId);
+    if (!schedule || schedule.responsibleUserId !== ctx.session.userId) throw denied;
   }
   const result = await repoRecordPerformed(ctx.db, ctx.tenant.id, {
     ...input,
