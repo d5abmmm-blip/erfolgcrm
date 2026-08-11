@@ -1,14 +1,13 @@
 /**
  * tRPC роутер ticketKp (версии коммерческих предложений по заявке).
- * RBAC:
- *   - listByTicket / latest: engineerProcedure (инженер видит КП своей заявки; ownership
- *     обеспечивается тем, что листинг идёт по конкретному ticketId через RLS).
- *   - create / update / approve / archive: staffProcedure.
+ * RBAC: ВСЁ — staffProcedure. Решение владельца 2026-08-11: суммы КП инженеру
+ * «не нужны видеть» — раньше listByTicket/latest были engineerProcedure, и
+ * суммы предложений любой заявки читались инженером.
  *
  * Суммы принимаются в копейках (целое число ≥ 0) и конвертируются в bigint.
  */
 import { z } from 'zod';
-import { engineerProcedure, router, staffProcedure } from '../../trpc/trpc';
+import { router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   approveKpCmd,
@@ -26,11 +25,11 @@ const kopecks = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const editableStatus = z.enum(['draft', 'sent', 'rejected', 'revision']);
 
 export const ticketKpRouter = router({
-  listByTicket: engineerProcedure
+  listByTicket: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => listByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
-  latest: engineerProcedure
+  latest: staffProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
     .query(({ ctx, input }) => latestByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
 
