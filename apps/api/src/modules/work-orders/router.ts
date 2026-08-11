@@ -57,7 +57,9 @@ const updateHeaderSchema = z
 export const workOrdersRouter = router({
   getByTicket: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
-    .query(({ ctx, input }) => getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId)),
+    .query(({ ctx, input }) =>
+      getWorkOrderByTicketQuery(ctx.db, ctx.tenant, input.ticketId, ctx.session.role),
+    ),
 
   ensure: engineerProcedure
     .input(z.object({ ticketId: z.string().uuid() }))
