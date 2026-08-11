@@ -17,3 +17,17 @@ export function vedomostNetTotal(parts: {
 }): number {
   return parts.salary + parts.piecework + parts.bonus - parts.advance;
 }
+
+/**
+ * Сколько ДЕНЕГ уходит по ведомости: сумма остатков, но по каждому сотруднику
+ * не меньше нуля. Отрицательный остаток строки (аванс превысил начисление) —
+ * ДОЛГ человека, он виден в его строке (vedomostNetTotal), но не уменьшает
+ * выплату остальным: платить «минус» нельзя. Ровно эту сумму сервер проводит
+ * в кассу (sheetTotalKopecks) — «Всего к выплате» и сверка needsRepost обязаны
+ * совпадать с ней, иначе экран вечно предлагал бы перепровести.
+ */
+export function vedomostPayoutTotal(
+  rows: Array<{ salary: number; piecework: number; bonus: number; advance: number }>,
+): number {
+  return rows.reduce((sum, r) => sum + Math.max(0, vedomostNetTotal(r)), 0);
+}

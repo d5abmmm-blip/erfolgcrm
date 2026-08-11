@@ -18,7 +18,7 @@ import {
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { SILENT_ERROR } from '../lib/error-message';
-import { vedomostNetTotal } from '../lib/payroll-total';
+import { vedomostNetTotal, vedomostPayoutTotal } from '../lib/payroll-total';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 type Period = 'today' | 'week' | 'month' | 'quarter';
@@ -741,7 +741,16 @@ function PayrollVedomost() {
       salary,
       advance,
       bonus,
-      total: vedomostNetTotal({ piecework, salary, advance, bonus }),
+      // По СТРОКАМ, не по сумме колонок: переплата аванса одному — его долг,
+      // а не скидка на выплату остальным (ровно так же считает сервер).
+      total: vedomostPayoutTotal(
+        rows.map((r) => ({
+          piecework: parseRubNumber(r.piecework),
+          salary: parseRubNumber(r.salary),
+          advance: parseRubNumber(r.advance),
+          bonus: parseRubNumber(r.bonus),
+        })),
+      ),
     };
   }, [rows]);
 
@@ -792,16 +801,15 @@ function PayrollVedomost() {
   const postedAmount = savedSheet?.postedAmountKopecks ?? null;
   const savedTotalKop = useMemo(() => {
     if (!savedSheet) return 0;
-    return savedSheet.entries.reduce(
-      (s, e) =>
-        s +
-        vedomostNetTotal({
-          salary: e.salaryKopecks,
-          piecework: e.pieceworkKopecks ?? 0,
-          bonus: e.bonusKopecks,
-          advance: e.advanceKopecks,
-        }),
-      0,
+    // Как сервер (sheetTotalKopecks): долг переавансированного не уменьшает
+    // проводку — иначе сверка needsRepost вечно предлагала бы перепровести.
+    return vedomostPayoutTotal(
+      savedSheet.entries.map((e) => ({
+        salary: e.salaryKopecks,
+        piecework: e.pieceworkKopecks ?? 0,
+        bonus: e.bonusKopecks,
+        advance: e.advanceKopecks,
+      })),
     );
   }, [savedSheet]);
   const needsRepost = posted && postedAmount != null && String(savedTotalKop) !== postedAmount;
