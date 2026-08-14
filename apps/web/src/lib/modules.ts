@@ -21,6 +21,7 @@ export type ModuleKey =
   | 'leads'
   | 'schedule'
   | 'calendar'
+  | 'attendance'
   | 'kb'
   | 'contracts'
   | 'assets'
@@ -72,6 +73,13 @@ export const TOGGLEABLE_MODULES: readonly ModuleMeta[] = [
     group: 'Работа',
     description: 'События компании: выезды, дедлайны, окончания договоров',
     routes: ['/calendar'],
+  },
+  {
+    key: 'attendance',
+    label: 'Посещения',
+    group: 'Работа',
+    description: 'Журнал учёта посещений сотрудников (табель) с печатной формой',
+    routes: ['/attendance'],
   },
   {
     key: 'kb',

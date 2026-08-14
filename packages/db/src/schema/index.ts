@@ -49,3 +49,4 @@ export * from './cash';
 export * from './sales';
 export * from './tenders';
 export * from './ai';
+export * from './attendance';

@@ -14,6 +14,7 @@ import {
   Calendar,
   CalendarCheck,
   CalendarDays,
+  CalendarRange,
   Receipt,
   FileSignature,
   Settings,
@@ -92,6 +93,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: CalendarDays,
         roles: ['director', 'dispatcher'],
         module: 'calendar',
+      },
+      {
+        href: '/attendance',
+        label: 'Посещения',
+        icon: CalendarRange,
+        roles: ['director', 'dispatcher'],
+        module: 'attendance',
       },
       { href: '/kb', label: 'База знаний', icon: BookOpen, module: 'kb' },
       {
