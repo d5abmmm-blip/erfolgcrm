@@ -1,11 +1,13 @@
 /**
  * tRPC роутер профиля инженера: навыки (типы техники) и занятость.
  *
- * Чтение — staff (нужно доске и назначению). Правка навыков — директор.
- * Занятость может ставить и диспетчер (staff): «сегодня на выезде».
+ * Чтение — staff (нужно доске и назначению). Правку навыков и занятость ставит любой
+ * из staff: решение владельца 2026-08-15 — техника не была отмечена у 11 инженеров из
+ * 14 именно потому, что отметить её мог только директор, а в программе каждый день
+ * сидит менеджер. Без отметки не работает подсказка «кому отдать заявку».
  */
 import { z } from 'zod';
-import { directorProcedure, router, staffProcedure } from '../../trpc/trpc';
+import { router, staffProcedure } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
 import {
   deleteAvailability,
@@ -33,7 +35,7 @@ function todayInTz(tz: string): string {
 export const engineerProfileRouter = router({
   listSkills: staffProcedure.query(({ ctx }) => listSkills(ctx.db, ctx.tenant.id)),
 
-  setSkills: directorProcedure
+  setSkills: staffProcedure
     .input(
       z.object({
         userId: z.string().uuid(),

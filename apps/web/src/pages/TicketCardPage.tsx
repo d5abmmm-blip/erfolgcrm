@@ -759,7 +759,8 @@ export function TicketCardPage() {
             isDirector={isDirector}
             requiredAttestationCategory={assetFull.data?.requiredAttestationCategory ?? null}
             assetId={t.assetId ?? null}
-            deviceType={assetFull.data?.deviceType ?? null}
+            deviceType={assetFull.data?.deviceTypeResolved ?? null}
+            deviceTypeSource={assetFull.data?.deviceTypeSource ?? null}
             onChangeStatus={(s) => changeStatus.mutate({ id: t.id, status: s })}
             onUpdate={(patch) => update.mutate({ id: t.id, patch })}
             onAddNote={(comment) => addNote.mutate({ ticketId: t.id, comment })}
@@ -1156,6 +1157,7 @@ function ActionsPanel({
   requiredAttestationCategory,
   assetId,
   deviceType,
+  deviceTypeSource,
   onChangeStatus,
   onUpdate,
   onAddNote,
@@ -1180,8 +1182,12 @@ function ActionsPanel({
   requiredAttestationCategory: string | null;
   /** Единица техники заявки — для подсказок при назначении (аттестация). */
   assetId: string | null;
-  /** Тип техники заявки — для подсказки «есть ли навык». */
+  /**
+   * Тип техники заявки — для подсказки «есть ли навык». Если в карточке техники он не
+   * заполнен, приходит выведенный по архиву прежних ремонтов той же модели.
+   */
   deviceType: string | null;
+  deviceTypeSource: 'own' | 'archive' | null;
   onChangeStatus: (s: TicketStatus) => void;
   onUpdate: (patch: Record<string, unknown>) => void;
   onAddNote: (c: string) => void;
@@ -1317,6 +1323,7 @@ function ActionsPanel({
           />
           <EngineerAssignmentHints
             deviceType={deviceType}
+            deviceTypeSource={deviceTypeSource}
             assetId={assetId}
             selectedEngineerId={t.assignedEngineerId}
           />

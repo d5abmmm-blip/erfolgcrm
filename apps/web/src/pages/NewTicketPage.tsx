@@ -118,11 +118,14 @@ export function NewTicketPage() {
   // Тип техники для подсказок при назначении: из сохранённой единицы (по assetId)
   // или из выбранной модели каталога в режиме «Новый аппарат».
   const selectedAsset = trpc.assets.get.useQuery({ id: assetId || '' }, { enabled: !!assetId });
+  // deviceTypeResolved: если в карточке техники тип не заполнен (на бою — везде),
+  // он выведен по прежним ремонтам этой же модели из архива.
   const hintDeviceType = assetId
-    ? (selectedAsset.data?.deviceType ?? null)
+    ? (selectedAsset.data?.deviceTypeResolved ?? null)
     : addingAsset
       ? (naModel?.deviceType ?? null)
       : null;
+  const hintDeviceTypeSource = assetId ? (selectedAsset.data?.deviceTypeSource ?? null) : null;
 
   // AI-диагностика по симптому: живая подсказка «похожие ремонты» под полем симптома.
   const me = trpc.auth.me.useQuery();
@@ -596,6 +599,7 @@ export function NewTicketPage() {
             )}
             <EngineerAssignmentHints
               deviceType={hintDeviceType}
+              deviceTypeSource={hintDeviceTypeSource}
               assetId={assetId || null}
               selectedEngineerId={assignedEngineerId || null}
             />

@@ -38,3 +38,45 @@ export function mergeDeviceTypeSuggestions(used: readonly string[] | undefined):
   }
   return out;
 }
+
+/** Убирает дубли без учёта регистра, сохраняя порядок первого появления. */
+function dedupe(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const t = raw.trim();
+    const key = t.toLowerCase();
+    if (!t || seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Кнопки «какую технику обслуживает инженер».
+ *
+ * Главный источник — РЕАЛЬНЫЙ словарь типов из базы (архив ремонтов + заведённая
+ * техника, по частоте): навык и тип техники обязаны быть одними и теми же словами,
+ * иначе они не совпадут никогда. Список из кода — только запасной, на случай пустой
+ * базы у нового тенанта; подмешивать его к реальному словарю нельзя, это снова даст
+ * два разных набора слов на один смысл.
+ *
+ * Уже отмеченное человеку добавляем всегда — иначе редкий свой тип пропал бы из вида.
+ */
+export function deviceTypeOptions(
+  vocabulary: readonly string[] | undefined,
+  own: readonly string[],
+): string[] {
+  const base = vocabulary && vocabulary.length > 0 ? vocabulary : COMMON_DEVICE_TYPES;
+  return dedupe([...base, ...own]);
+}
+
+/**
+ * Ни у одного инженера не отмечена техника заявки. Тогда честнее написать это одной
+ * строкой, чем ставить «нет навыка» каждому: виновата незаполненность, а не люди.
+ * При неизвестном типе техники (hasSkill = null) сравнивать не с чем — не считается.
+ */
+export function nobodyHasSkill(hints: ReadonlyArray<{ hasSkill: boolean | null }>): boolean {
+  return hints.length > 0 && hints.every((h) => h.hasSkill === false);
+}

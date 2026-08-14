@@ -468,21 +468,76 @@ export async function listManufacturers(db: Db, tenantId: string): Promise<strin
 }
 
 /**
- * Distinct типы оборудования (device_type) для autosuggest в форме.
- * Берём из обеих таблиц: реально заведённой техники и каталога моделей,
- * чтобы подсказки были даже до первой единицы техники.
+ * Словарь типов оборудования — и для формы техники, и для отметки «что обслуживает
+ * инженер». Один список на оба конца сравнения: если навык записан словом из другого
+ * словаря («Кардиограф»), он не совпадёт с техникой («ЭКГ») никогда.
+ *
+ * Источники — только реальные данные: заведённая техника, каталог моделей и архив
+ * ремонтов прежней системы. Архив здесь главный: на бою `assets.device_type` пуст у
+ * всех 5044 единиц, а в архиве тип проставлен у 4266 строк из 4267.
+ *
+ * Порядок — по частоте: сверху то, что чинят чаще всего, с него и начинают отмечать.
+ * Одинаковые типы в разном регистре схлопываем (кириллице нужен COLLATE "ru-x-icu" —
+ * в C-локали lower() её не сворачивает), показываем самое частое написание.
  */
 export async function listDeviceTypes(db: Db, tenantId: string): Promise<string[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx.execute<{ device_type: string }>(sql`
-      SELECT DISTINCT device_type FROM (
-        SELECT device_type FROM assets WHERE device_type IS NOT NULL
-        UNION
-        SELECT device_type FROM asset_models WHERE device_type IS NOT NULL
-      ) t
-       ORDER BY device_type ASC
+      WITH src AS (
+        SELECT btrim(device_type) AS device_type FROM assets
+         WHERE device_type IS NOT NULL AND btrim(device_type) <> ''
+        UNION ALL
+        SELECT btrim(device_type) FROM asset_models
+         WHERE device_type IS NOT NULL AND btrim(device_type) <> ''
+        UNION ALL
+        SELECT btrim(device_type) FROM repair_archive
+         WHERE device_type IS NOT NULL AND btrim(device_type) <> ''
+      ),
+      spellings AS (
+        SELECT lower(device_type COLLATE "ru-x-icu") AS key,
+               device_type,
+               count(*)::int AS spelling_cnt
+          FROM src GROUP BY 1, 2
+      ),
+      totals AS (
+        SELECT key, sum(spelling_cnt)::int AS cnt FROM spellings GROUP BY 1
+      )
+      SELECT x.device_type FROM (
+        SELECT DISTINCT ON (s.key) s.device_type AS device_type, t.cnt AS cnt
+          FROM spellings s JOIN totals t ON t.key = s.key
+         ORDER BY s.key, s.spelling_cnt DESC, s.device_type ASC
+      ) x
+       ORDER BY x.cnt DESC, x.device_type ASC
        LIMIT 200
     `);
     return (rows as unknown as Array<{ device_type: string }>).map((r) => r.device_type);
+  });
+}
+
+/**
+ * Тип техники по названию модели — из архива ремонтов прежней системы.
+ *
+ * Нужен там, где в карточке техники тип не заполнен (на бою — везде). Отдаём ТОЛЬКО
+ * когда все архивные записи по этой модели сходятся в одном типе: если в архиве по
+ * одной модели встречаются разные типы, угадывать нельзя — молчим.
+ */
+export async function deviceTypeByModel(
+  db: Db,
+  tenantId: string,
+  model: string,
+): Promise<string | null> {
+  const needle = model.trim();
+  if (!needle) return null;
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx.execute<{ device_type: string }>(sql`
+      SELECT min(btrim(device_type)) AS device_type
+        FROM repair_archive
+       WHERE device_model IS NOT NULL
+         AND device_type IS NOT NULL
+         AND btrim(device_type) <> ''
+         AND lower(btrim(device_model) COLLATE "ru-x-icu") = lower(${needle} COLLATE "ru-x-icu")
+      HAVING count(DISTINCT lower(btrim(device_type) COLLATE "ru-x-icu")) = 1
+    `);
+    return (rows as unknown as Array<{ device_type: string }>)[0]?.device_type ?? null;
   });
 }

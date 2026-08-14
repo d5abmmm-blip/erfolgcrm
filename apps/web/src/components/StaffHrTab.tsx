@@ -30,7 +30,7 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from './ui';
 import { QueryError } from './QueryError';
-import { COMMON_DEVICE_TYPES } from '../lib/device-types';
+import { deviceTypeOptions } from '../lib/device-types';
 import { AWAY_LABELS, formatAwayRange, pluralRu } from '../lib/staff';
 import { formatWorkedTime, monthTitle, summarize, type AttendanceRecord } from '../lib/attendance';
 import {
@@ -92,7 +92,9 @@ export function StaffHrTab({
       </div>
 
       <div className="space-y-4">
-        {role === 'engineer' && <SkillsBlock userId={userId} isDirector={isDirector} />}
+        {/* Технику отмечает любой из staff: карточку и так видят только менеджер и
+            директор, а пустое поле ломает подсказку «кому отдать заявку». */}
+        {role === 'engineer' && <SkillsBlock userId={userId} />}
         <AwayBlock userId={userId} today={today} rows={availQ.data ?? []} error={availQ.error} />
       </div>
     </div>
@@ -394,9 +396,12 @@ function AttestationsBlock({
 
 /* ========================== Техника (навыки) ========================== */
 
-function SkillsBlock({ userId, isDirector }: { userId: string; isDirector: boolean }) {
+function SkillsBlock({ userId }: { userId: string }) {
   const utils = trpc.useUtils();
   const skillsQ = trpc.engineerProfile.listSkills.useQuery();
+  // Словарь типов — из реальных данных (архив ремонтов + заведённая техника). Именно
+  // этими словами подписан тип у техники, поэтому отмеченный навык с ним совпадёт.
+  const vocabularyQ = trpc.assets.deviceTypes.useQuery(undefined, { staleTime: 5 * 60_000 });
   const [custom, setCustom] = useState('');
 
   const mine = useMemo(
@@ -411,20 +416,16 @@ function SkillsBlock({ userId, isDirector }: { userId: string; isDirector: boole
       // «Сейчас» останется старый набор до перезагрузки страницы.
       void utils.staff.get.invalidate();
       void utils.staff.list.invalidate();
+      // И подсказка при назначении: у неё staleTime минута, без сброса она ещё минуту
+      // будет уверять, что технику не обслуживает никто. Поймано живой проверкой.
+      void utils.engineerProfile.assignmentHints.invalidate();
     },
   });
 
-  const options = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const t of [...COMMON_DEVICE_TYPES, ...mine]) {
-      const key = t.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(t);
-    }
-    return out;
-  }, [mine]);
+  const options = useMemo(
+    () => deviceTypeOptions(vocabularyQ.data, mine),
+    [vocabularyQ.data, mine],
+  );
 
   return (
     <section className="bg-card rounded-lg border">
@@ -434,84 +435,60 @@ function SkillsBlock({ userId, isDirector }: { userId: string; isDirector: boole
         {setSkills.isPending && <Loader2 className="text-muted-foreground h-3 w-3 animate-spin" />}
       </header>
       <div className="p-4">
-        {!isDirector ? (
-          <>
-            {mine.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {mine.map((t) => (
-                  <span
-                    key={t}
-                    className="bg-secondary text-secondary-foreground rounded px-2 py-0.5 text-xs"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Не заполнено.</p>
-            )}
-            <p className="text-muted-foreground mt-3 text-[11px]">
-              Список типов техники правит директор.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-1.5">
-              {options.map((t) => {
-                const on = mine.includes(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    disabled={setSkills.isPending}
-                    onClick={() =>
-                      setSkills.mutate({
-                        userId,
-                        deviceTypes: on ? mine.filter((s) => s !== t) : [...mine, t],
-                      })
-                    }
-                    className={cn(
-                      'rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-60',
-                      on
-                        ? 'bg-primary/10 text-primary border-primary/30'
-                        : 'bg-background text-muted-foreground hover:bg-muted',
-                    )}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <input
-                type="text"
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                placeholder="Свой тип техники"
-                className={cn(INPUT_CLASS, 'text-xs')}
-              />
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((t) => {
+            const on = mine.includes(t);
+            return (
               <button
+                key={t}
                 type="button"
-                disabled={!custom.trim() || setSkills.isPending}
-                onClick={() => {
-                  const t = custom.trim();
-                  if (t && !mine.some((s) => s.toLowerCase() === t.toLowerCase())) {
-                    setSkills.mutate({ userId, deviceTypes: [...mine, t] });
-                  }
-                  setCustom('');
-                }}
-                className="bg-secondary hover:bg-muted shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+                disabled={setSkills.isPending}
+                onClick={() =>
+                  setSkills.mutate({
+                    userId,
+                    deviceTypes: on ? mine.filter((s) => s !== t) : [...mine, t],
+                  })
+                }
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-60',
+                  on
+                    ? 'bg-primary/10 text-primary border-primary/30'
+                    : 'bg-background text-muted-foreground hover:bg-muted',
+                )}
               >
-                Добавить
+                {t}
               </button>
-            </div>
-            {mine.length === 0 && (
-              <p className="text-muted-foreground mt-3 text-[11px]">
-                Пока техника не указана, подсказка «кому отдать заявку» этого инженера не
-                предлагает.
-              </p>
-            )}
-          </>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            placeholder="Свой тип техники"
+            className={cn(INPUT_CLASS, 'text-xs')}
+          />
+          <button
+            type="button"
+            disabled={!custom.trim() || setSkills.isPending}
+            onClick={() => {
+              const t = custom.trim();
+              if (t && !mine.some((s) => s.toLowerCase() === t.toLowerCase())) {
+                setSkills.mutate({ userId, deviceTypes: [...mine, t] });
+              }
+              setCustom('');
+            }}
+            className="bg-secondary hover:bg-muted shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+          >
+            Добавить
+          </button>
+        </div>
+        {mine.length === 0 && (
+          <p className="text-muted-foreground mt-3 text-[11px]">
+            Пока техника не отмечена, подсказка «кому отдать заявку» этого инженера не предлагает.
+            Кнопки выше — реальные типы из архива ремонтов, самые частые сверху.
+          </p>
         )}
       </div>
     </section>
