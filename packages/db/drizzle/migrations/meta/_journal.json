@@ -526,6 +526,13 @@
       "when": 1778800000001,
       "tag": "0083_issue_request_id",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1778900000000,
+      "tag": "0084_attendance",
+      "breakpoints": true
     }
   ]
 }

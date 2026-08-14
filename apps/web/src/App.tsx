@@ -13,6 +13,7 @@ import { BoardPage } from './pages/BoardPage';
 import { PartsWaitingPage } from './pages/PartsWaitingPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { CalendarPage } from './pages/CalendarPage';
+import { AttendancePage } from './pages/AttendancePage';
 import { NewTicketPage } from './pages/NewTicketPage';
 import { LoginPage } from './pages/LoginPage';
 import { ClientsListPage } from './pages/ClientsListPage';
@@ -227,6 +228,7 @@ function StaffApp() {
       <Route path="/tickets/kanban" component={TicketsKanbanPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/calendar" component={CalendarPage} />
+      <Route path="/attendance" component={AttendancePage} />
       <Route path="/tickets/new" component={NewTicketPage} />
       <Route path="/tickets/:id" component={TicketCardPage} />
       <Route path="/leads" component={LeadsListPage} />

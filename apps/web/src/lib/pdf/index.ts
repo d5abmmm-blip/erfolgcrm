@@ -13,6 +13,7 @@ import type * as pdfMakeNs from 'pdfmake/build/pdfmake';
 
 import { generateBarcodeDataUrl } from './barcode';
 import { buildAssetLabelDoc, type PrintAssetLabelInput } from './asset-label';
+import { buildAttendanceSheetDoc, type PrintAttendanceSheetInput } from './attendance-sheet';
 import { buildContractDoc, type PrintContractInput } from './contract';
 import { buildDailySummaryDoc, type DailySummaryInput } from './daily-summary';
 import { buildDefectActDoc, type PrintDefectActInput } from './defect-act';
@@ -202,6 +203,14 @@ export async function printDailySummary(
   await openDoc(doc, win, 'Сводка_дня.pdf');
 }
 
+export async function printAttendanceSheet(
+  input: PrintAttendanceSheetInput,
+  win?: Window | null,
+): Promise<void> {
+  const doc = buildAttendanceSheetDoc(input);
+  await openDoc(doc, win, `Табель ${input.monthTitle}.pdf`);
+}
+
 export async function printAssetLabel(
   input: PrintAssetLabelInput,
   win?: Window | null,
@@ -345,3 +354,10 @@ export { buildTechConditionActDoc } from './tech-condition-act';
 export type { PrintTechConditionActInput } from './tech-condition-act';
 export type { ExtendedPrintInvoiceInput } from './invoice';
 export type { DailySummaryInput } from './daily-summary';
+export { buildAttendanceSheetDoc } from './attendance-sheet';
+export type {
+  AttendanceLegendItem,
+  AttendanceSheetDay,
+  AttendanceSheetRowInput,
+  PrintAttendanceSheetInput,
+} from './attendance-sheet';
