@@ -184,7 +184,24 @@ export function AttendancePage() {
 
       {monthQ.data && employees.length > 0 && (
         <div className="bg-card overflow-x-auto rounded-lg border">
-          <table className="w-full border-collapse text-sm">
+          {/*
+            table-fixed + colgroup: без них браузер раздаёт ширину по содержимому, и
+            колонка с ФИО забирает треть таблицы, а числа месяца сжимаются до нечитаемых
+            полосок. Служебные колонки закреплены, весь остаток делится между 31 днём
+            поровну. min-w держит день читаемым на узком экране — вместо того чтобы
+            сплющить сетку, контейнер уезжает в горизонтальную прокрутку.
+          */}
+          <table className="w-full min-w-[1140px] table-fixed border-collapse text-sm">
+            <colgroup>
+              {/* 248px — самое длинное реальное ФИО с отчеством («Магомадов Муслим
+                  Лемаевич») влезает целиком. Уже — и обрезалась бы треть списка. */}
+              <col className="w-[248px]" />
+              {days.map((d) => (
+                <col key={d.date} />
+              ))}
+              <col className="w-[48px]" />
+              <col className="w-[92px]" />
+            </colgroup>
             <thead>
               <tr className="bg-muted/50">
                 <th className="bg-card sticky left-0 z-10 border-b border-r px-3 py-2 text-left text-xs font-semibold">
@@ -215,15 +232,16 @@ export function AttendancePage() {
                 const totals = summarize(byDate ? [...byDate.values()] : []);
                 return (
                   <tr key={e.userId} className="hover:bg-muted/30">
-                    <td className="bg-card sticky left-0 z-10 whitespace-nowrap border-b border-r px-3 py-1.5">
-                      <span className={cn(!e.isActive && 'text-muted-foreground')}>
+                    <td className="bg-card sticky left-0 z-10 border-b border-r px-3 py-1.5">
+                      {/* Длинное ФИО обрезаем многоточием, а не раздвигаем им таблицу.
+                          Целиком его видно в подсказке. */}
+                      <div
+                        className={cn('truncate', !e.isActive && 'text-muted-foreground')}
+                        title={e.isActive ? e.fullName : `${e.fullName} — не работает`}
+                      >
                         {e.fullName}
-                      </span>
-                      {!e.isActive && (
-                        <span className="text-muted-foreground ml-1.5 text-[11px]">
-                          (не работает)
-                        </span>
-                      )}
+                        {!e.isActive && <span className="ml-1.5 text-[11px]">(не работает)</span>}
+                      </div>
                     </td>
                     {days.map((d) => {
                       const rec = byDate?.get(d.date);
