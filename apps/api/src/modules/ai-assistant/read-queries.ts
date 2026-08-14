@@ -115,6 +115,12 @@ export interface AgedTicketsResult {
   count: number;
   /** До 20 самых «застоявшихся» заявок (по убыванию простоя). */
   items: AgedTicketRow[];
+  /**
+   * Незакрытые заявки, перенесённые из старой программы: в список простоя они не
+   * идут (иначе заняли бы его целиком), но ассистент обязан о них сказать — иначе
+   * его ответ разойдётся с разделом «Сотрудники», где они посчитаны.
+   */
+  legacyCount: number;
 }
 
 /**
@@ -147,6 +153,10 @@ export async function listAgedTickets(
         LEFT JOIN clients cl ON cl.id = t.client_id
         WHERE t.status IN ${OPEN_STATUSES_SQL}
           AND t.deleted_at IS NULL
+          -- Заявки прежней программы мимо: их 58 незакрытых, самая старая «в работе»
+          -- с февраля 2015 года, и при любом пороге они заняли бы весь ответ.
+          -- Не молчим о них — считаем отдельным числом ниже.
+          AND substring(t.id::text, 15, 1) <> '5'
       )
       SELECT ticket_number AS "ticketNumber",
              COALESCE(client_name, '') AS "clientName",
@@ -157,10 +167,19 @@ export async function listAgedTickets(
       ORDER BY last_at ASC
     `)) as unknown as AgedTicketRow[];
 
+    const legacyRows = (await tx.execute(sql`
+      SELECT COUNT(*)::int AS cnt
+        FROM tickets t
+       WHERE t.status IN ${OPEN_STATUSES_SQL}
+         AND t.deleted_at IS NULL
+         AND substring(t.id::text, 15, 1) = '5'
+    `)) as unknown as Array<{ cnt: number }>;
+
     return {
       thresholdDays: threshold,
       count: rows.length,
       items: rows.slice(0, 20),
+      legacyCount: legacyRows[0]?.cnt ?? 0,
     };
   });
 }

@@ -11,12 +11,14 @@ import {
   List,
 } from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
+import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { useDebounce } from '../lib/hooks/useDebounce';
 import { assetIdentifierLine } from '../lib/asset-identifiers';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { Pagination } from '../components/ui/Pagination';
 import {
   TICKET_STATUS_META,
@@ -80,18 +82,25 @@ export function TicketsListPage() {
     {
       key: 'ticketNumber',
       label: '№',
-      render: (t) => (
-        <div className="flex flex-col gap-1">
-          <Link
-            href={`/tickets/${t.id}`}
-            className="text-foreground hover:text-primary font-mono font-medium"
-          >
-            {t.ticketNumber}
-          </Link>
-          {t.waitingForPart && <WaitingPartBadge />}
-          {isTicketStale(t.status, t.idleDays) && <StaleBadge days={t.idleDays} />}
-        </div>
-      ),
+      render: (t) => {
+        const legacy = isLegacyNumber(t.ticketNumber) || isLegacyId(t.id);
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <Link
+              href={`/tickets/${t.id}`}
+              className="text-foreground hover:text-primary font-mono font-medium"
+            >
+              {t.ticketNumber}
+            </Link>
+            {legacy && <LegacyBadge compact />}
+            {t.waitingForPart && <WaitingPartBadge />}
+            {/* «Висит N дн.» на перенесённой заявке даёт четырёхзначные числа: у неё
+                дата приёма из старой программы, иногда 2015 год. Такой бейдж не
+                сообщает ничего и обесценивает тот же бейдж на живых заявках. */}
+            {!legacy && isTicketStale(t.status, t.idleDays) && <StaleBadge days={t.idleDays} />}
+          </div>
+        );
+      },
     },
     {
       key: 'client',
@@ -195,7 +204,7 @@ export function TicketsListPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="T-номер, клиент, модель техники, симптом…"
+            placeholder="Номер T- или WSP-, клиент, модель техники, симптом…"
             className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
         </div>

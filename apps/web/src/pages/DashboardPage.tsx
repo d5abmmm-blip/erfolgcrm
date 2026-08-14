@@ -221,7 +221,16 @@ function DirectorDashboard() {
             <MetricTile
               title="Активные заявки"
               value={formatNumber(m.activeTicketsCount)}
-              hint={m.slaAtRiskCount > 0 ? `На грани SLA: ${m.slaAtRiskCount}` : 'все по плану'}
+              /* Хвост переноса показываем отдельной строкой: эти заявки существуют,
+                 но работой сегодняшнего дня не являются — большая часть висит на
+                 служебной учётке с 2015 года. */
+              hint={
+                m.legacyActiveTicketsCount > 0
+                  ? `Ещё ${formatNumber(m.legacyActiveTicketsCount)} не закрыто в старой системе`
+                  : m.slaAtRiskCount > 0
+                    ? `На грани SLA: ${m.slaAtRiskCount}`
+                    : 'все по плану'
+              }
               tone={m.slaAtRiskCount > 0 ? 'warning' : 'default'}
               icon={Clock}
               href="/tickets"

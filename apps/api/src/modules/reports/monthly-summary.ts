@@ -13,6 +13,7 @@
  *
  * Без миграции: своей таблицы нет, кэша LLM-текста нет (генерируем по запросу).
  */
+import { isLegacyId } from '@erfolg/shared';
 import type { Db } from '@erfolg/db';
 import type { ResolvedTenant } from '../../lib/tenant';
 import { getAccountBalances, getPeriodSummary } from '../cash/repository';
@@ -143,6 +144,19 @@ function firstNamed(
 }
 
 /**
+ * То же, но пропуская учётки, заведённые импортом. Итог месяца уходит в модель фразой
+ * «больше всех заработал инженер X», и за любой месяц до июля 2026 этим X оказывалась
+ * учётка-двойник — директор получал персональное утверждение о человеке, которого не
+ * существует. Деньги месяца при этом остаются полными: их считает другой агрегат.
+ */
+function firstNamedLivePerson(
+  rows: Array<{ key: string | null; name: string; marginAmountKopecks: string }>,
+): { name: string; marginKopecks: string } | null {
+  const r = rows.find((x) => x.key !== null && !isLegacyId(x.key));
+  return r ? { name: r.name, marginKopecks: r.marginAmountKopecks } : null;
+}
+
+/**
  * Детерминированные данные итога месяца — БЕЗ LLM. Три готовых агрегата + разбор.
  * Отдельная от buildMonthlySummary функция, чтобы тестировать цифры без вызова модели
  * (образец — buildDailySummaryData в proactive.ts).
@@ -185,7 +199,7 @@ export async function buildMonthlySummaryData(
       costKopecks: profit.summary.costAmountKopecks,
       marginKopecks: profit.summary.marginAmountKopecks,
       marginPercent: profit.summary.marginPercent,
-      topEngineer: firstNamed(profit.byEngineer),
+      topEngineer: firstNamedLivePerson(profit.byEngineer),
       topEquipment: firstNamed(profit.byEquipment),
     },
     receivables: {

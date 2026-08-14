@@ -35,6 +35,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { TicketEventType, TicketPriority, TicketStatus } from '@erfolg/shared';
+import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
@@ -53,6 +54,8 @@ import { ExplainBlockPanel } from '../components/ExplainBlockPanel';
 import { TicketKpBlock } from '../components/TicketKpBlock';
 import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeEmailModal';
 import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
+import { eventPriorityLabel, eventStatusLabel } from '../lib/ticket-events';
+import { LegacyBadge } from '../components/ui/LegacyBadge';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -197,6 +200,9 @@ export function TicketCardPage() {
   }
   const t = ticket.data;
   const statusBadge = STATUS_BADGE[t.status];
+  // Заявка из прежней программы: помечаем и подписываем, но ничего не прячем —
+  // на этих записях держится история клиента и вся себестоимость системы.
+  const isLegacy = isLegacyId(t.id) || isLegacyNumber(t.ticketNumber);
   const totalKop = wo.data?.totalAmountKopecks ?? '0';
   const vatRate = wo.data?.vatRate ?? '20';
   const ticketContact = t.contactId
@@ -593,9 +599,16 @@ export function TicketCardPage() {
                 {statusBadge.label}
               </span>
               <SlaInline target={t.slaTargetAt} status={t.status} />
+              {isLegacy && <LegacyBadge />}
             </div>
             {t.cancelReason && (
               <div className="text-destructive mt-1 text-xs">Причина отмены: {t.cancelReason}</div>
+            )}
+            {isLegacy && (
+              <p className="text-muted-foreground mt-1 max-w-xl text-xs">
+                Заявка заведена в прежней программе и перенесена целиком. Сроки, SLA и часть полей
+                там не велись — поэтому здесь они пустые.
+              </p>
             )}
           </div>
           <div className="text-right">
@@ -672,6 +685,20 @@ export function TicketCardPage() {
                     {t.symptom?.trim() || '—'}
                   </p>
                 </div>
+                {/* Импорт сложил в notes старый номер заказа, комплектацию и все
+                    комментарии прежней программы, но веб не показывал это поле нигде —
+                    десять лет переписки лежали в базе невидимыми. */}
+                {isLegacy && t.notes?.trim() && (
+                  <div>
+                    <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold">
+                      Записи прежней программы
+                      <LegacyBadge compact />
+                    </h3>
+                    <p className="text-muted-foreground bg-muted/30 whitespace-pre-wrap rounded-md border p-3 text-xs leading-relaxed">
+                      {t.notes.trim()}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <h3 className="mb-2 text-sm font-semibold">Наряд</h3>
                   <WorkOrderEditor
@@ -1782,11 +1809,11 @@ function EventRow({ event, compact }: { event: EventDto; compact?: boolean }) {
     icon = <Activity className="text-primary h-4 w-4" />;
     title = 'Изменение статуса';
     body = (
+      // Перенесённые заявки хранят историю без поля «откуда» и со статусами старой
+      // программы: без защиты на экране печаталось «undefined → Аппарат готов».
       <div className="text-muted-foreground text-xs">
-        {STATUS_BADGE[String(p.from) as TicketStatus]?.label ?? String(p.from)} →{' '}
-        <span className="text-foreground font-medium">
-          {STATUS_BADGE[String(p.to) as TicketStatus]?.label ?? String(p.to)}
-        </span>
+        {eventStatusLabel(p.from)} →{' '}
+        <span className="text-foreground font-medium">{eventStatusLabel(p.to)}</span>
       </div>
     );
   } else if (event.type === 'assignment_change') {
@@ -1803,10 +1830,8 @@ function EventRow({ event, compact }: { event: EventDto; compact?: boolean }) {
     title = 'Изменение приоритета';
     body = (
       <div className="text-muted-foreground text-xs">
-        {PRIORITY_LABEL[String(p.from) as TicketPriority] ?? String(p.from)} →{' '}
-        <span className="text-foreground font-medium">
-          {PRIORITY_LABEL[String(p.to) as TicketPriority] ?? String(p.to)}
-        </span>
+        {eventPriorityLabel(p.from)} →{' '}
+        <span className="text-foreground font-medium">{eventPriorityLabel(p.to)}</span>
       </div>
     );
   } else if (event.type === 'sla_change') {

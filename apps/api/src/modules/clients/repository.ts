@@ -130,7 +130,11 @@ export async function listClients(
       })
       .from(clients)
       .where(whereClause)
-      .orderBy(desc(clients.createdAt))
+      // По алфавиту, а не по дате заведения: у всех 665 перенесённых клиентов
+      // created_at — это момент прогона импорта, одна и та же секунда. Сортировка по
+      // ней давала случайную первую страницу картотеки. Русской букве нужен явный
+      // COLLATE — в C-локали «Я» встаёт раньше «а».
+      .orderBy(sql`${clients.displayName} COLLATE "ru-x-icu" ASC`)
       .limit(PAGE_SIZE_DEFAULT)
       .offset(offset);
 

@@ -13,6 +13,8 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui';
 import { EngineerProfileSection } from '../components/EngineerProfileSection';
+import { LegacyBadge } from '../components/ui/LegacyBadge';
+import { isLegacyId } from '@erfolg/shared';
 import { QueryErrorRow } from '../components/QueryError';
 
 type Role = 'director' | 'dispatcher' | 'engineer';
@@ -126,7 +128,12 @@ export function UsersPage() {
             {usersQ.data?.map((u) => (
               <tr key={u.id} className={cn('hover:bg-muted/30', !u.isActive && 'opacity-60')}>
                 <td className="p-3">
-                  <div className="font-medium">{u.fullName}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{u.fullName}</span>
+                    {/* Учётки, заведённые импортом: живого человека за ними нет, но
+                        роль им проставлена из старой базы — вплоть до «директора». */}
+                    {isLegacyId(u.id) && <LegacyBadge compact />}
+                  </div>
                   {u.position && <div className="text-muted-foreground text-xs">{u.position}</div>}
                 </td>
                 <td className="p-3 font-mono text-xs">
@@ -288,7 +295,9 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
         description={
           isBlocking
             ? `${user.fullName}: вход будет закрыт, активные сессии отозваны.`
-            : `${user.fullName} снова сможет входить в систему. Если этим аккаунтом ещё ни разу не входили, система выдаст новый пароль — старый работать не будет.`
+            : isLegacyId(user.id)
+              ? `${user.fullName} — учётная запись перенесена из старой программы, живого человека за ней нет. Разблокировав её, вы выдадите полный доступ к финансам и персональным данным аккаунту-призраку, и его прежние работы начнут попадать в расчёты. Если это не задумано — не разблокируйте.`
+              : `${user.fullName} снова сможет входить в систему. Если этим аккаунтом ещё ни разу не входили, система выдаст новый пароль — старый работать не будет.`
         }
         variant={isBlocking ? 'danger' : 'default'}
         confirmText={isBlocking ? 'Заблокировать' : 'Разблокировать'}

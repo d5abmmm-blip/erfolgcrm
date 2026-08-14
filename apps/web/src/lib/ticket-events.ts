@@ -34,12 +34,20 @@ function asKey(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
-function statusLabel(v: unknown): string {
+/**
+ * Подпись статуса в событии. Три случая, и все встречаются на бою:
+ *   • свой статус CRM — переводим по словарю;
+ *   • статус старой программы («Аппарат готов») — показываем как есть, он осмысленный;
+ *   • значения нет вовсе — прочерк. Перенесённая история хранит только «куда», без
+ *     «откуда», и десктопная карточка печатала это словом «undefined».
+ */
+export function eventStatusLabel(v: unknown): string {
   const key = asKey(v);
   return TICKET_STATUS_META[key as TicketStatus]?.label ?? (key || '—');
 }
 
-function priorityLabel(v: unknown): string {
+/** То же для приоритета. */
+export function eventPriorityLabel(v: unknown): string {
   const key = asKey(v);
   return TICKET_PRIORITY_META[key as TicketPriority]?.label ?? (key || '—');
 }
@@ -50,14 +58,17 @@ export function describeTicketEvent(e: TicketEventLike): { title: string; body: 
     case 'created':
       return { title: 'Заявка создана', body: null };
     case 'status_change':
-      return { title: 'Статус', body: `${statusLabel(p.from)} → ${statusLabel(p.to)}` };
+      return { title: 'Статус', body: `${eventStatusLabel(p.from)} → ${eventStatusLabel(p.to)}` };
     case 'assignment_change':
       return {
         title: p.role === 'dispatcher' ? 'Назначен диспетчер' : 'Назначен инженер',
         body: `${typeof p.from === 'string' ? p.from : '—'} → ${typeof p.to === 'string' ? p.to : '—'}`,
       };
     case 'priority_change':
-      return { title: 'Приоритет', body: `${priorityLabel(p.from)} → ${priorityLabel(p.to)}` };
+      return {
+        title: 'Приоритет',
+        body: `${eventPriorityLabel(p.from)} → ${eventPriorityLabel(p.to)}`,
+      };
     case 'sla_change':
       return { title: 'Изменён SLA / дедлайн', body: null };
     case 'note':

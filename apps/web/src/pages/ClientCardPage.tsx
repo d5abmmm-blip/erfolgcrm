@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { isLegacyId } from '@erfolg/shared';
+import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -150,11 +152,14 @@ export function ClientCardPage() {
                 : 'Физическое лицо'}
             </div>
             <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">{c.displayName}</h1>
-            {c.status === 'archived' && (
-              <span className="bg-muted text-muted-foreground mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs">
-                В архиве
-              </span>
-            )}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {c.status === 'archived' && (
+                <span className="bg-muted text-muted-foreground inline-flex items-center rounded-md px-2 py-0.5 text-xs">
+                  В архиве
+                </span>
+              )}
+              {isLegacyId(c.id) && <LegacyBadge />}
+            </div>
           </div>
         </div>
       </header>

@@ -24,6 +24,7 @@ import {
   type Db,
 } from '@erfolg/db';
 import type { LeadStatus, TicketPriority } from '@erfolg/shared';
+import { isOwnIdSql } from '../../lib/legacy-origin';
 
 export interface Period {
   /** YYYY-MM-DD, включительно. */
@@ -107,7 +108,11 @@ export async function engineerPerformance(
       .from(tickets)
       .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
       .leftJoin(workOrders, eq(workOrders.ticketId, tickets.id))
-      .where(and(isNull(tickets.deletedAt), ...ticketPeriodFilters(period)))
+      // Заявки прежней программы в загрузку людей НЕ идут: 5999 архивных записей
+      // разложились бы по учёткам-двойникам и встали в один столбец с живыми
+      // инженерами, а среднее время закрытия ушло бы в сотни дней. Деньги в отчётах
+      // при этом остаются полными — там архив и есть история клиента.
+      .where(and(isNull(tickets.deletedAt), isOwnIdSql(tickets.id), ...ticketPeriodFilters(period)))
       .groupBy(users.id, users.fullName)
       .orderBy(desc(sql`COUNT(DISTINCT ${tickets.id})`));
     return rows;

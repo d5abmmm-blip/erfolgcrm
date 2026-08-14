@@ -102,6 +102,12 @@ async function recalcPaidAmountInTx(
   tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
   tenantId: string,
   ticketId: string,
+  /**
+   * Оплата, пришедшая из старой программы. Считается ДО изменения строк платежей
+   * (см. readLegacyPaidBaseline) и прибавляется к сумме платежей CRM — иначе первый
+   * же платёж по перенесённой заявке стирал историческую оплату.
+   */
+  legacyPaidBaseline: bigint = 0n,
 ): Promise<bigint> {
   const woRows = await tx
     .select({ id: workOrders.id })
@@ -126,12 +132,45 @@ async function recalcPaidAmountInTx(
     })
     .from(payments)
     .where(eq(payments.ticketId, ticketId));
-  const total = BigInt(sumRows[0]?.sum ?? '0');
+  const fromPayments = BigInt(sumRows[0]?.sum ?? '0');
+  const total = legacyPaidBaseline + fromPayments;
   await tx
     .update(workOrders)
     .set({ paidAmountKopecks: total })
     .where(and(eq(workOrders.id, woId), eq(workOrders.tenantId, tenantId)));
   return total;
+}
+
+/**
+ * Оплата, которую наряд принёс из старой программы, — «сколько в шапке сверх суммы
+ * платежей CRM». Читать ОБЯЗАТЕЛЬНО до изменения строк платежей: после вставки или
+ * удаления разница уже другая.
+ *
+ * Импорт кладёт в шапку сумму, оплаченную в прежней системе, но строк платежей не
+ * создаёт вовсе. Пересчёт же переписывал шапку суммой платежей CRM — то есть первый
+ * платёж по старой заявке стирал историческую оплату, а удаление платежа обнуляло её
+ * совсем. Ровно эту беду с себестоимостью здесь уже лечили (resolveHeaderCost).
+ *
+ * У обычного наряда шапка равна сумме платежей, база выходит нулевой и поведение не
+ * меняется.
+ */
+async function readLegacyPaidBaseline(
+  tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
+  tenantId: string,
+  ticketId: string,
+): Promise<bigint> {
+  const [header] = await tx
+    .select({ paid: workOrders.paidAmountKopecks })
+    .from(workOrders)
+    .where(and(eq(workOrders.ticketId, ticketId), eq(workOrders.tenantId, tenantId)))
+    .limit(1);
+  if (!header) return 0n;
+  const [sumRow] = await tx
+    .select({ sum: sql<string>`COALESCE(SUM(${payments.amountKopecks}), 0)` })
+    .from(payments)
+    .where(eq(payments.ticketId, ticketId));
+  const baseline = (header.paid ?? 0n) - BigInt(sumRow?.sum ?? '0');
+  return baseline > 0n ? baseline : 0n;
 }
 
 export async function ticketBelongsToTenant(
@@ -261,6 +300,10 @@ export async function addPayment(
             .limit(1);
         }
 
+        // Историческую оплату (из старой программы) фиксируем ДО любых изменений строк
+        // платежей — после вставки разница «шапка минус платежи» станет другой.
+        const legacyPaid = await readLegacyPaidBaseline(tx, tenantId, input.ticketId);
+
         // Идемпотентность: если задан externalPaymentId, сначала пробуем найти существующую запись.
         // ON CONFLICT (tenant_id, invoice_id, external_payment_id) DO NOTHING + RETURNING вернёт
         // пустую строку при конфликте — тогда читаем существующий id.
@@ -282,7 +325,7 @@ export async function addPayment(
             )
             .limit(1);
           if (existing.length > 0) {
-            const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
+            const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId, legacyPaid);
             const invoicePaid = input.invoiceId
               ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
               : null;
@@ -311,7 +354,7 @@ export async function addPayment(
           .returning({ id: payments.id });
         const id = inserted[0]?.id;
         if (!id) throw new Error('addPayment: insert returned nothing');
-        const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId);
+        const total = await recalcPaidAmountInTx(tx, tenantId, input.ticketId, legacyPaid);
         const invoicePaid = input.invoiceId
           ? (await recalcInvoicePaidInTx(tx, input.invoiceId)).toString()
           : null;
@@ -349,10 +392,12 @@ export async function deletePayment(
       .limit(1);
     const row = rows[0];
     if (!row) return null;
+    // База считается до удаления — см. readLegacyPaidBaseline.
+    const legacyPaid = await readLegacyPaidBaseline(tx, tenantId, row.ticketId);
     await tx.delete(payments).where(eq(payments.id, paymentId));
     // Убираем связанный авто-доход из кассы (soft-delete + пересчёт остатка).
     await removeCashForPaymentInTx(tx, tenantId, paymentId);
-    const total = await recalcPaidAmountInTx(tx, tenantId, row.ticketId);
+    const total = await recalcPaidAmountInTx(tx, tenantId, row.ticketId, legacyPaid);
     const invoicePaid = row.invoiceId
       ? (await recalcInvoicePaidInTx(tx, row.invoiceId)).toString()
       : null;

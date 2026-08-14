@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Search, X, Loader2 } from 'lucide-react';
+import { LEGACY_LABEL } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { kopecksToRub } from '../lib/money';
@@ -84,12 +85,17 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
     const data = search.data;
     if (!data) return [];
     const acc: FlatHit[] = [];
+    // Перенесённые записи из выдачи НЕ убираем — по серийнику и старому номеру их
+    // ищут чаще всего, — но подписываем словом: в плотном списке поиска бейджей нет,
+    // и заводить их здесь незачем.
     for (const t of data.tickets) {
       acc.push({
         key: `t:${t.id}`,
         href: `/tickets/${t.id}`,
         title: `${t.ticketNumber} · ${statusRu(t.status)}`,
-        subtitle: t.clientName || null,
+        subtitle: [t.clientName || null, t.isLegacy ? LEGACY_LABEL : null]
+          .filter(Boolean)
+          .join(' · '),
         group: 'Заявки',
       });
     }
@@ -104,6 +110,7 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
           c.type === 'legal' ? 'Юрлицо' : 'Физлицо',
           c.inn,
           c.status === 'archived' ? 'В архиве' : null,
+          c.isLegacy ? LEGACY_LABEL : null,
         ]
           .filter(Boolean)
           .join(' · '),
@@ -116,7 +123,9 @@ export function GlobalSearchModal({ open, onClose }: GlobalSearchModalProps) {
         href: `/assets/${a.id}`,
         title: a.model,
         subtitle:
-          [assetIdentifierLine(a) || null, a.ownerClientName].filter(Boolean).join(' · ') || null,
+          [assetIdentifierLine(a) || null, a.ownerClientName, a.isLegacy ? LEGACY_LABEL : null]
+            .filter(Boolean)
+            .join(' · ') || null,
         group: 'Техника',
       });
     }

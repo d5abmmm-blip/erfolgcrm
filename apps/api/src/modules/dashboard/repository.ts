@@ -28,6 +28,11 @@ export interface DashboardMetrics {
   marginPercent: number | null;
   /** Дебиторка: SUM(total - paid) по issued+partially_paid+overdue. */
   receivablesTotalKopecks: string;
+  /**
+   * Незакрытые заявки, перенесённые из старой программы. Отдельным числом: в работу
+   * они не входят, но и делать вид, что их нет, нельзя.
+   */
+  legacyActiveTicketsCount: number;
   /** Просрочка: то же по status='overdue'. */
   overdueTotalKopecks: string;
   /** Активные заявки (не closed/cancelled, не deleted). */
@@ -111,14 +116,21 @@ export async function getMetrics(
     const receivable = bigIntFromSum(recRows[0]?.receivable ?? '0');
     const overdue = bigIntFromSum(recRows[0]?.overdue ?? '0');
 
-    // 4) Active tickets
+    // 4) Active tickets — считаем СВОИ и перенесённые по отдельности.
+    // Незакрытых заявок из старой программы 58, 41 из них на служебном
+    // «Администраторе», самая старая «в работе» с февраля 2015 года. Пока они входили
+    // в общее число, директор видел «активные заявки», почти наполовину состоящие из
+    // хвоста переноса. Прятать нельзя — заявки существуют; поэтому две цифры.
     const activeRows = (await tx.execute(sql`
-      SELECT COUNT(*)::int AS cnt
+      SELECT
+        COUNT(*) FILTER (WHERE substring(id::text, 15, 1) <> '5')::int AS cnt,
+        COUNT(*) FILTER (WHERE substring(id::text, 15, 1) =  '5')::int AS legacy_cnt
         FROM tickets
        WHERE deleted_at IS NULL
          AND status IN ${POSITIVE_TICKET_STATUSES}
-    `)) as unknown as CountRow[];
+    `)) as unknown as Array<{ cnt: number; legacy_cnt: number }>;
     const activeTickets = activeRows[0]?.cnt ?? 0;
+    const legacyActiveTickets = activeRows[0]?.legacy_cnt ?? 0;
 
     // 5) SLA at risk: дедлайн в ближайшие 24ч (или уже просрочен), не закрытые
     const slaRows = (await tx.execute(sql`
@@ -164,6 +176,7 @@ export async function getMetrics(
       receivablesTotalKopecks: receivable.toString(),
       overdueTotalKopecks: overdue.toString(),
       activeTicketsCount: activeTickets,
+      legacyActiveTicketsCount: legacyActiveTickets,
       slaAtRiskCount: slaAtRisk,
       lowStockCount: lowStock,
       todayMaintenanceCount: todayMaintenance,
