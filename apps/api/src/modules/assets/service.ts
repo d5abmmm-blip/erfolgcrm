@@ -16,6 +16,7 @@ import {
   addNote as repoAddNote,
   clientBelongsToTenant,
   createAssetWithEvent,
+  deviceTypeByModel as repoDeviceTypeByModel,
   getAsset as repoGetAsset,
   listAssets as repoListAssets,
   listAssetsByClient as repoListAssetsByClient,
@@ -170,10 +171,26 @@ export async function listAssetsQuery(
   return repoListAssets(db, tenant.id, opts);
 }
 
+/**
+ * Карточка техники. Кроме своих полей отдаёт РАЗРЕШЁННЫЙ тип техники: если в карточке
+ * он не заполнен (на бою — у всех 5044 единиц), берём его из архива ремонтов по
+ * названию модели. Без этого подсказка «кому отдать заявку» не может сверить навык
+ * инженера ни с чем и молчит всегда.
+ *
+ * Источник отдаём наружу честно: 'own' — заполнено в карточке, 'archive' — выведено
+ * по прежним ремонтам этой же модели. Экран так и подписывает, а не выдаёт догадку
+ * за факт.
+ */
 export async function getAssetQuery(db: Db, tenant: ResolvedTenant, id: string) {
   const a = await repoGetAsset(db, tenant.id, id);
   if (!a) throw new TRPCError({ code: 'NOT_FOUND', message: 'Техника не найдена' });
-  return a;
+  const own = a.deviceType?.trim() ? a.deviceType.trim() : null;
+  const fromArchive = own ? null : await repoDeviceTypeByModel(db, tenant.id, a.model);
+  return {
+    ...a,
+    deviceTypeResolved: own ?? fromArchive,
+    deviceTypeSource: own ? ('own' as const) : fromArchive ? ('archive' as const) : null,
+  };
 }
 
 export async function searchAssetsQuery(db: Db, tenant: ResolvedTenant, q: string) {

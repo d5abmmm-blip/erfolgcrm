@@ -5,6 +5,13 @@
 import { z } from 'zod';
 
 export { generatePassword, GENERATED_PASSWORD_LENGTH } from './generate-password';
+export {
+  isLegacyId,
+  isLegacyNumber,
+  LEGACY_HINT,
+  LEGACY_LABEL,
+  LEGACY_LABEL_SHORT,
+} from './legacy-origin';
 
 export const UserRole = z.enum(['director', 'dispatcher', 'engineer']);
 export type UserRole = z.infer<typeof UserRole>;

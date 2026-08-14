@@ -15,6 +15,8 @@ import {
   Tag,
   Wrench,
 } from 'lucide-react';
+import { isLegacyId } from '@erfolg/shared';
+import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { trpc } from '../lib/trpc';
 import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
@@ -157,8 +159,18 @@ export function AssetCardPage() {
                 Техника
               </div>
               <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">{a.model}</h1>
-              {a.deviceType && <div className="text-muted-foreground text-sm">{a.deviceType}</div>}
+              {/* Тип: свой из карточки, иначе выведенный по архиву ремонтов — источник
+                  подписываем, чтобы догадка не выглядела заполненным полем. */}
+              {a.deviceTypeResolved && (
+                <div className="text-muted-foreground text-sm">
+                  {a.deviceTypeResolved}
+                  {a.deviceTypeSource === 'archive' && (
+                    <span className="text-[11px]"> · тип по архиву ремонтов</span>
+                  )}
+                </div>
+              )}
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                {isLegacyId(a.id) && <LegacyBadge />}
                 <span
                   className={cn(
                     'inline-flex items-center rounded-md px-2 py-0.5 font-medium',
@@ -387,6 +399,12 @@ function EventRow({
   if (type === 'created') {
     icon = <Sparkles className="text-primary h-4 w-4" />;
     title = 'Техника заведена в системе';
+    // У перенесённой техники импорт кладёт сюда «Перенос из WinServisePro» —
+    // единственный след происхождения. Комментарий не выводился, и аппарат 2015 года
+    // выглядел заведённым в день прогона импорта.
+    if (payload.comment) {
+      body = <div className="text-muted-foreground text-xs">{payload.comment}</div>;
+    }
   } else if (type === 'status_change') {
     icon = <Activity className="text-primary h-4 w-4" />;
     title = 'Изменение статуса';

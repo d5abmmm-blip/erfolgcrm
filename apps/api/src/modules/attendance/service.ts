@@ -13,6 +13,7 @@ import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import {
   deleteRecord as repoDeleteRecord,
+  fillDays as repoFillDays,
   listEmployees as repoListEmployees,
   listRecords as repoListRecords,
   upsertRecord as repoUpsertRecord,
@@ -73,6 +74,22 @@ export async function monthQuery(
     ...new Set(records.map((r) => r.userId)),
   ]);
   return { ...range, employees, records };
+}
+
+/**
+ * Дни периода включительно, YYYY-MM-DD. Конец раньше начала — пустой список, а не
+ * бесконечный цикл. Считаем в UTC: тут только календарь, времени суток нет.
+ */
+export function enumerateDays(from: string, to: string): string[] {
+  const out: string[] = [];
+  const last = Date.parse(`${to}T00:00:00Z`);
+  const cursor = new Date(`${from}T00:00:00Z`);
+  if (Number.isNaN(last) || Number.isNaN(cursor.getTime())) return out;
+  while (cursor.getTime() <= last) {
+    out.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
 }
 
 export interface UpsertInput {
@@ -148,6 +165,84 @@ export async function upsertCmd(ctx: CmdCtx, input: UpsertInput): Promise<{ id: 
   });
 
   return { id: result.id };
+}
+
+/**
+ * Больше квартала одним махом не заливаем: опечатка в годе («по 2119-й») не должна
+ * забить табель на сто лет вперёд.
+ */
+const MAX_FILL_DAYS = 92;
+
+export interface FillRangeInput {
+  userId: string;
+  dateFrom: string;
+  dateTo: string;
+  status: AttendanceStatus;
+}
+
+/**
+ * Отметить период целиком одним видом дня — «внёс отпуск, проставилось и в табеле».
+ *
+ * Связь плана и табеля сознательно НЕ автоматическая (решение владельца 2026-08-14):
+ * это отдельное действие по галочке человека, а не побочный эффект записи отсутствия.
+ *
+ * Уже отмеченные дни НЕ переписываем: в табеле лежит факт, который кто-то ставил
+ * руками, и массовая заливка не имеет права его затирать. Пропуск делает сама база
+ * через уникальный индекс — гонка двух менеджеров невозможна по построению.
+ */
+export async function fillRangeCmd(
+  ctx: CmdCtx,
+  input: FillRangeInput,
+): Promise<{ created: number; skipped: number }> {
+  if (input.status === 'present') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Явку отмечают по дням в журнале — оптом её не ставят',
+    });
+  }
+  if (input.dateTo < input.dateFrom) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Дата окончания раньше даты начала',
+    });
+  }
+
+  const days = enumerateDays(input.dateFrom, input.dateTo);
+  if (days.length > MAX_FILL_DAYS) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Период длиннее ${MAX_FILL_DAYS} дней — проверьте даты`,
+    });
+  }
+  if (!(await userExists(ctx.db, ctx.tenant.id, input.userId))) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Сотрудник не найден' });
+  }
+
+  const createdDates = await repoFillDays(ctx.db, ctx.tenant.id, {
+    userId: input.userId,
+    dates: days,
+    status: input.status,
+  });
+
+  if (createdDates.length > 0) {
+    await writeAudit(ctx.db, ctx.tenant.id, {
+      userId: ctx.session.userId,
+      action: 'create',
+      entityType: 'attendance_record',
+      after: {
+        userId: input.userId,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        status: input.status,
+        created: createdDates.length,
+        skipped: days.length - createdDates.length,
+      },
+      ip: ctx.audit.ip ?? null,
+      userAgent: ctx.audit.userAgent ?? null,
+    });
+  }
+
+  return { created: createdDates.length, skipped: days.length - createdDates.length };
 }
 
 export async function removeCmd(

@@ -1,20 +1,23 @@
 /**
- * /staff/:id — карточка сотрудника, вкладка «Сейчас».
+ * /staff/:id — карточка сотрудника.
  *
- * Отвечает на один вопрос: можно ли отдать этому человеку заявку. Поэтому здесь
- * текущие незакрытые заявки (свои, из CRM), отсутствия и техника, с которой он умеет
- * работать. Остальные вкладки («Работа», «Кадры», «Деньги») добавляются следующими
- * шагами — их заглушки честно говорят, что появится и почему пока пусто.
+ * «Сейчас» отвечает на один вопрос: можно ли отдать этому человеку заявку. Поэтому
+ * здесь текущие незакрытые заявки (свои, из CRM), отсутствия и техника, с которой он
+ * умеет работать, — всё только для просмотра.
  *
- * Навыки и отсутствия здесь можно ЗАПОЛНИТЬ, а не только посмотреть: на бою они
- * пусты у всех, потому что форма спрятана в настройках, куда никто не заходит.
+ * «Кадры» — место ВНЕСЕНИЯ: аттестации, типы техники, отпуска и табель. На бою во всех
+ * этих модулях по нулю записей, потому что формы были спрятаны в настройках, куда
+ * никто не заходит. Оставшиеся вкладки («Работа», «Деньги») — честные заглушки.
  */
 import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
-import { ArrowLeft, AlertTriangle, Archive, CalendarOff, Wrench } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Archive, CalendarOff, Phone, Wrench } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { QueryError } from '../components/QueryError';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { StaffHrTab } from '../components/StaffHrTab';
+import { StaffWorkTab } from '../components/StaffWorkTab';
 import {
   AWAY_LABELS,
   ROLE_LABELS_RU,
@@ -79,25 +82,59 @@ export function StaffCardPage() {
 
       {card && (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold md:text-2xl">{card.fullName}</h1>
-              <div className="text-muted-foreground mt-0.5 text-sm">
-                {card.position || ROLE_LABELS_RU[card.role]}
-                {!card.isActive && ' · не работает'}
-                {card.phone && ` · ${card.phone}`}
+          {/* Шапка сделана по образцу карточки инженера из прежней CRM владельца:
+              крупный инициал, имя и должность, строка контактов, а показатели — полосой
+              под чертой, где они читаются одинаково на телефоне и на мониторе. */}
+          <section className="bg-card rounded-lg border p-4 md:p-6">
+            <div className="flex items-start gap-4">
+              <div className="bg-primary/15 text-primary grid size-14 shrink-0 place-items-center rounded-2xl text-xl font-bold md:size-16 md:text-2xl">
+                {card.fullName.trim().charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold md:text-2xl">{card.fullName}</h1>
+                  {card.awayToday ? (
+                    <StatusBadge variant="warning">
+                      {AWAY_LABELS[card.awayToday.kind]} ·{' '}
+                      {formatAwayRange(card.awayToday.dateFrom, card.awayToday.dateTo)}
+                    </StatusBadge>
+                  ) : (
+                    card.isActive && <StatusBadge variant="success">на месте</StatusBadge>
+                  )}
+                  {!card.isActive && <StatusBadge variant="muted">не работает</StatusBadge>}
+                </div>
+                <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span>{card.position || ROLE_LABELS_RU[card.role]}</span>
+                  {card.phone && (
+                    <span className="inline-flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {card.phone}
+                    </span>
+                  )}
+                  {card.skills.length > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <Wrench className="h-3 w-3" />
+                      {card.skills.join(', ')}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Metric value={String(card.openTickets)} label="в работе" />
-              <Metric
+
+            <div className="mt-4 grid grid-cols-2 gap-2.5 border-t pt-4 lg:grid-cols-4">
+              <Tile value={String(card.openTickets)} label="в работе" />
+              <Tile
                 value={String(card.overdueTickets)}
                 label="просрочено"
                 tone={card.overdueTickets > 0 ? 'bad' : 'normal'}
               />
-              <Metric value={loadLevel(card.openTickets)} label="загрузка" />
+              <Tile value={loadLevel(card.openTickets)} label="загрузка" />
+              <Tile
+                value={card.archiveOpenTickets === 0 ? '—' : String(card.archiveOpenTickets)}
+                label="из старой системы"
+              />
             </div>
-          </div>
+          </section>
 
           <div className="inline-flex flex-wrap rounded-md border p-0.5">
             {visibleTabs.map((t) => (
@@ -113,6 +150,11 @@ export function StaffCardPage() {
                 )}
               >
                 {t.label}
+                {t.key === 'now' && card.openTickets > 0 && (
+                  <span className="text-muted-foreground ml-1 tabular-nums">
+                    ({card.openTickets})
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -196,13 +238,13 @@ export function StaffCardPage() {
                         этому человеку работать не будет.
                       </p>
                     )}
-                    <p className="text-muted-foreground mt-3 text-xs">
-                      Заполняется в{' '}
-                      <Link href="/users" className="underline underline-offset-2">
-                        настройках пользователей
-                      </Link>{' '}
-                      — там же, где заводят учётную запись.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setTab('hr')}
+                      className="text-muted-foreground hover:text-foreground mt-3 text-xs underline underline-offset-2"
+                    >
+                      Изменить во вкладке «Кадры»
+                    </button>
                   </div>
                 </section>
 
@@ -229,20 +271,32 @@ export function StaffCardPage() {
                         Отпусков и выходных не отмечено.
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setTab('hr')}
+                      className="text-muted-foreground hover:text-foreground mt-3 text-xs underline underline-offset-2"
+                    >
+                      Отметить во вкладке «Кадры»
+                    </button>
                   </div>
                 </section>
               </div>
             </div>
           )}
 
-          {tab !== 'now' && <ComingSoon tab={tab} />}
+          {tab === 'hr' && <StaffHrTab userId={userId} role={card.role} isDirector={isDirector} />}
+
+          {tab === 'work' && <StaffWorkTab userId={userId} />}
+
+          {tab === 'money' && <ComingSoon tab="money" />}
         </>
       )}
     </div>
   );
 }
 
-function Metric({
+/** Плитка полосы показателей. Прочерк вместо нуля там, где ноль означает «нет данных». */
+function Tile({
   value,
   label,
   tone = 'normal',
@@ -252,34 +306,30 @@ function Metric({
   tone?: 'normal' | 'bad';
 }) {
   return (
-    <div className="text-right">
+    <div className="bg-muted/40 rounded-md px-3 py-2">
+      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{label}</div>
       <div
         className={cn(
-          'text-lg font-semibold tabular-nums leading-none',
+          'mt-0.5 text-lg font-semibold tabular-nums leading-none',
           tone === 'bad' && 'text-destructive',
         )}
       >
         {value}
       </div>
-      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{label}</div>
     </div>
   );
 }
 
 /**
- * Заглушки остальных вкладок. Говорим прямо, что появится и почему пока пусто, —
+ * Заглушки оставшихся вкладок. Говорим прямо, что появится и почему пока пусто, —
  * это честнее, чем нарисовать блок с прочерками и выдать его за готовый.
  */
-function ComingSoon({ tab }: { tab: Tab }) {
-  const text: Record<Exclude<Tab, 'now'>, string> = {
-    work: 'Здесь будет история работы за период: сколько заявок закрыто, по каким клиентам и какой технике человек ездит чаще всего. Считать будем только по данным CRM — в перенесённом архиве исполнитель не указан.',
-    hr: 'Здесь будут аттестации со сроками, отпуска и табель. Сейчас в базе нет ни одной аттестации и ни одной отметки табеля — не потому, что негде хранить, а потому, что их пока не вносили.',
+function ComingSoon({ tab }: { tab: 'money' }) {
+  const text: Record<'money', string> = {
     money:
       'Здесь будут оклад, процент сделки, аванс и выплаты. Вкладка видна только директору. Сейчас в базе одна ведомость и ни одной проведённой выплаты.',
   };
   return (
-    <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">
-      {text[tab as Exclude<Tab, 'now'>]}
-    </div>
+    <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">{text[tab]}</div>
   );
 }

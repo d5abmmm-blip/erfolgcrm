@@ -1,5 +1,6 @@
 import { AlertTriangle, Award, CalendarOff, Gauge, Wrench } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { nobodyHasSkill } from '../lib/device-types';
 
 type AvailabilityKind = 'day_off' | 'vacation' | 'onsite';
 
@@ -12,6 +13,12 @@ const AVAILABILITY_LABEL: Record<AvailabilityKind, string> = {
 interface Props {
   /** Тип техники заявки — для проверки навыка инженера. */
   deviceType?: string | null;
+  /**
+   * Откуда взялся тип: 'own' — заполнен в карточке техники, 'archive' — выведен по
+   * прежним ремонтам этой же модели. Подписываем честно, чтобы догадка не выглядела
+   * как заполненное поле.
+   */
+  deviceTypeSource?: 'own' | 'archive' | null;
   /** Единица техники заявки — для проверки обязательной аттестации. */
   assetId?: string | null;
   /** Текущий выбранный инженер (для панели «по выбранному»); null — никто. */
@@ -34,6 +41,7 @@ interface Props {
  */
 export function EngineerAssignmentHints({
   deviceType = null,
+  deviceTypeSource = null,
   assetId = null,
   selectedEngineerId = null,
   mode = 'auto',
@@ -50,6 +58,10 @@ export function EngineerAssignmentHints({
 
   const hints = q.data;
   const effectiveMode = mode === 'auto' ? (selectedEngineerId ? 'selected' : 'overview') : mode;
+  // Никому не отмечена эта техника — виновата незаполненность, а не инженер. Ставить
+  // «нет навыка» каждому из четырнадцати в такой ситуации значит просто врать про людей.
+  const nobody = nobodyHasSkill(hints);
+  const typeNote = deviceTypeSource === 'archive' ? ' (тип по архиву ремонтов)' : '';
 
   if (effectiveMode === 'selected') {
     if (!selectedEngineerId) return null;
@@ -60,9 +72,14 @@ export function EngineerAssignmentHints({
         <Chip tone="muted" icon={Gauge}>
           {hint.activeLoad} {plural(hint.activeLoad)}
         </Chip>
-        {hint.hasSkill === false && (
+        {hint.hasSkill === false && !nobody && (
           <Chip tone="warning" icon={AlertTriangle}>
             нет навыка{deviceType ? ` под «${deviceType}»` : ''}
+          </Chip>
+        )}
+        {hint.hasSkill === false && nobody && (
+          <Chip tone="muted" icon={Wrench}>
+            {deviceType ? `«${deviceType}»` : 'эта техника'} не отмечена ни у кого
           </Chip>
         )}
         {hint.hasSkill === true && (
@@ -100,8 +117,14 @@ export function EngineerAssignmentHints({
   return (
     <div className="bg-muted/40 mt-1.5 space-y-1 rounded-md border p-2">
       <div className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
-        Загрузка инженеров{deviceType ? ` · навык «${deviceType}»` : ''}
+        Загрузка инженеров{deviceType ? ` · навык «${deviceType}»${typeNote}` : ''}
       </div>
+      {nobody && (
+        <div className="text-muted-foreground text-[11px]">
+          Эту технику не обслуживает никто по данным программы — её просто не отметили. Отметить
+          можно в карточке сотрудника, вкладка «Кадры».
+        </div>
+      )}
       <ul className="space-y-0.5">
         {sorted.slice(0, 6).map((h) => (
           <li key={h.userId} className="flex items-center justify-between gap-2 text-xs">

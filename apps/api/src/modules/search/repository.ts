@@ -11,8 +11,9 @@
  *   • Пустой/слишком короткий query → возвращаем пусто без удара по БД.
  *   • % и _ в pattern экранируем (иначе клиент может подставить wildcard).
  */
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
+import { isLegacyIdSql } from '../../lib/legacy-origin';
 import { alias } from 'drizzle-orm/pg-core';
 import { assets, clients, contracts, invoices, tickets, withTenantTx, type Db } from '@erfolg/db';
 
@@ -25,6 +26,8 @@ export interface TicketHit {
   status: string;
   clientName: string;
   createdAt: Date;
+  /** Запись перенесена из старой системы — подписываем в выдаче, но не прячем. */
+  isLegacy: boolean;
 }
 
 export interface ClientHit {
@@ -39,6 +42,7 @@ export interface ClientHit {
    * «не найдено» на существующего клиента. Вместо этого помечаем.
    */
   status: 'active' | 'archived';
+  isLegacy: boolean;
 }
 
 export interface AssetHit {
@@ -48,6 +52,7 @@ export interface AssetHit {
   /** Ищем по нему давно (см. условие ниже), но до этого не показывали в выдаче. */
   inventoryNumber: string | null;
   ownerClientName: string | null;
+  isLegacy: boolean;
 }
 
 export interface InvoiceHit {
@@ -98,6 +103,7 @@ async function searchTicketsHits(tenantId: string, pattern: string, db: Db): Pro
         status: tickets.status,
         clientName: clients.displayName,
         createdAt: tickets.createdAt,
+        isLegacy: isLegacyIdSql(tickets.id).mapWith(Boolean),
       })
       .from(tickets)
       .leftJoin(clients, eq(tickets.clientId, clients.id))
@@ -119,24 +125,30 @@ async function searchTicketsHits(tenantId: string, pattern: string, db: Db): Pro
 
 async function searchClientsHits(tenantId: string, pattern: string, db: Db): Promise<ClientHit[]> {
   return withTenantTx(db, tenantId, async (tx) => {
-    return tx
-      .select({
-        id: clients.id,
-        displayName: clients.displayName,
-        type: clients.type,
-        inn: clients.inn,
-        status: clients.status,
-      })
-      .from(clients)
-      .where(
-        or(
-          ruIlike(clients.displayName, pattern),
-          ruIlike(clients.inn, pattern),
-          ruIlike(clients.email, pattern),
-        ),
-      )
-      .orderBy(asc(clients.displayName))
-      .limit(LIMIT_PER_TYPE);
+    return (
+      tx
+        .select({
+          id: clients.id,
+          displayName: clients.displayName,
+          type: clients.type,
+          inn: clients.inn,
+          status: clients.status,
+          isLegacy: isLegacyIdSql(clients.id).mapWith(Boolean),
+        })
+        .from(clients)
+        .where(
+          or(
+            ruIlike(clients.displayName, pattern),
+            ruIlike(clients.inn, pattern),
+            ruIlike(clients.email, pattern),
+          ),
+        )
+        // Сначала свои записи, потом перенесённые. Перенесённых 664 из 665, и при
+        // сортировке по алфавиту свежезаведённый клиент не попадал в пятёрку НИКОГДА —
+        // человек делал вывод, что его нет, и заводил дубль.
+        .orderBy(sql`${isLegacyIdSql(clients.id)} ASC`, asc(clients.displayName))
+        .limit(LIMIT_PER_TYPE)
+    );
   });
 }
 
@@ -150,6 +162,7 @@ async function searchAssetsHits(tenantId: string, pattern: string, db: Db): Prom
         serialNumber: assets.serialNumber,
         inventoryNumber: assets.inventoryNumber,
         ownerClientName: ownerClient.displayName,
+        isLegacy: isLegacyIdSql(assets.id).mapWith(Boolean),
       })
       .from(assets)
       .leftJoin(ownerClient, eq(ownerClient.id, assets.ownerClientId))
@@ -160,7 +173,8 @@ async function searchAssetsHits(tenantId: string, pattern: string, db: Db): Prom
           ruIlike(assets.inventoryNumber, pattern),
         ),
       )
-      .orderBy(asc(assets.model))
+      // Та же беда, что и с клиентами: перенесено 5044 единицы из 5079.
+      .orderBy(sql`${isLegacyIdSql(assets.id)} ASC`, asc(assets.model))
       .limit(LIMIT_PER_TYPE);
     return rows.map((r) => ({
       ...r,

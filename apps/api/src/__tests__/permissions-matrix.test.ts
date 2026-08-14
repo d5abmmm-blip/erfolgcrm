@@ -206,14 +206,13 @@ describe('permissions matrix: dispatcher не имеет доступа к direc
     await expectForbiddenOrUnauthorized(caller.audit.list({}), 'FORBIDDEN');
   });
 
-  it('attestations.create → FORBIDDEN для dispatcher', async () => {
+  // Заводить и править аттестации менеджеру РАЗРЕШЕНО (решение владельца 2026-08-14:
+  // модуль стоял пустым, потому что вносить мог только директор). А вот удаление —
+  // по-прежнему только директор: это документ о допуске, стирать его менеджеру нечего.
+  it('attestations.remove → FORBIDDEN для dispatcher', async () => {
     const caller = appRouter.createCaller(makeCtx({ role: 'dispatcher' }));
     await expectForbiddenOrUnauthorized(
-      caller.attestations.create({
-        engineerId,
-        category: 'medical_devices',
-        issuedAt: '2026-01-01',
-      }),
+      caller.attestations.remove({ id: '00000000-0000-0000-0000-000000000000' }),
       'FORBIDDEN',
     );
   });

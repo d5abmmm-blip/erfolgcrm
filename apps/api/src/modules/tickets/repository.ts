@@ -44,6 +44,7 @@ import {
 } from '@erfolg/db';
 import { TicketNotFoundError } from '../../lib/errors';
 import { ruIlike } from '../../lib/ru-search';
+import { isOwnIdSql } from '../../lib/legacy-origin';
 
 type Tx = PgTransaction<never, never, never>;
 import type {
@@ -1770,7 +1771,17 @@ export async function boardTickets(db: Db, tenantId: string): Promise<BoardTicke
       .leftJoin(assets, eq(tickets.assetId, assets.id))
       .leftJoin(engineerUser, eq(engineerUser.id, tickets.assignedEngineerId))
       .leftJoin(dispatcherUser, eq(dispatcherUser.id, tickets.assignedDispatcherId))
-      .where(and(isNull(tickets.deletedAt), inArray(tickets.status, BOARD_ACTIVE_STATUSES)));
+      // Заявки прежней программы на доску не берём: она сортирует по времени простоя,
+      // а у архива дата приёма 2015 года — тысячи дней и вечный красный свет. Они
+      // занимали первые экраны, оттесняя настоящую работу. Не пропадают: их считает
+      // отдельной цифрой раздел «Сотрудники» и дашборд.
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          inArray(tickets.status, BOARD_ACTIVE_STATUSES),
+          isOwnIdSql(tickets.id),
+        ),
+      );
 
     const nowMs = Date.now();
     const mapped: BoardTicketDto[] = rows.map((r) => {

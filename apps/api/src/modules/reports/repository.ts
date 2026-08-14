@@ -12,7 +12,7 @@
  * leads.estimated_value — РУБЛИ numeric(14,2) (см. schema/leads.ts) → number в DTO.
  * Все запросы под withTenantTx (RLS).
  */
-import { and, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import {
   clients,
   invoices,
@@ -24,6 +24,8 @@ import {
   type Db,
 } from '@erfolg/db';
 import type { LeadStatus, TicketPriority } from '@erfolg/shared';
+import { isOwnIdSql } from '../../lib/legacy-origin';
+import { STATS_SINCE } from '../../lib/stats-since';
 
 export interface Period {
   /** YYYY-MM-DD, включительно. */
@@ -107,7 +109,19 @@ export async function engineerPerformance(
       .from(tickets)
       .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
       .leftJoin(workOrders, eq(workOrders.ticketId, tickets.id))
-      .where(and(isNull(tickets.deletedAt), ...ticketPeriodFilters(period)))
+      // Архив прежней программы в загрузку людей не идёт: 5999 записей разложились бы
+      // по учёткам-двойникам и встали в один столбец с живыми инженерами, а среднее
+      // время закрытия ушло бы в сотни дней. ИСКЛЮЧЕНИЕ — заявка, закрытая уже в CRM:
+      // это чей-то сегодняшний труд (решение владельца 2026-08-15 — считать работу по
+      // дате закрытия). Деньги в отчётах при этом остаются полными: там архив и есть
+      // история клиента.
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          or(isOwnIdSql(tickets.id), gte(tickets.closedAt, STATS_SINCE)),
+          ...ticketPeriodFilters(period),
+        ),
+      )
       .groupBy(users.id, users.fullName)
       .orderBy(desc(sql`COUNT(DISTINCT ${tickets.id})`));
     return rows;

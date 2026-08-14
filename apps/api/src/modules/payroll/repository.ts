@@ -197,6 +197,12 @@ async function loadAggregates(
        AND t.closed_at >= ${startIso}::timestamptz
        AND t.closed_at <  ${endIso}::timestamptz
        AND wol.line_type = 'work'
+       -- Работы, перенесённые из старой программы, в ведомость НЕ идут: они там уже
+       -- оплачены, платить второй раз нельзя. Признак — версия идентификатора строки
+       -- (импорт выдаёт 5, CRM — 4/7), см. lib/legacy-origin.ts. Раньше их не пускала
+       -- только случайность: перенесённые сотрудники заведены неактивными, и хватило
+       -- бы одной кнопки «разблокировать», чтобы 2218 архивных строк стали к выплате.
+       AND substring(wol.id::text, 15, 1) <> '5'
        AND COALESCE(wol.engineer_id, wo.engineer_id) IS NOT NULL
        -- Только действующие сотрудники: заблокированных/уволенных (is_active=false) и
        -- удалённых в ведомость ЗП не показываем (в т.ч. служебные/легаси-аккаунты, под
@@ -227,6 +233,9 @@ async function loadAggregates(
        AND t.closed_at >= ${startIso}::timestamptz
        AND t.closed_at <  ${endIso}::timestamptz
        AND wo.engineer_id IS NOT NULL
+       -- Наряды старой программы — тоже мимо, иначе справочные числа рядом с суммой
+       -- к выплате рассказывали бы про работу, которой в CRM не было.
+       AND substring(wo.id::text, 15, 1) <> '5'
        -- Только действующие сотрудники (см. коммент выше по works).
        AND u.is_active = true
        AND u.deleted_at IS NULL

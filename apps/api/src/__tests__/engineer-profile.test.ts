@@ -58,10 +58,10 @@ function fakeRes() {
   return res;
 }
 
-function makeCtx(role: 'director' | 'dispatcher', tenantId = erfolgId): Context {
+function makeCtx(role: 'director' | 'dispatcher' | 'engineer', tenantId = erfolgId): Context {
   const session: SessionData = {
     tenantId,
-    userId: role === 'director' ? directorId : dispatcherId,
+    userId: role === 'director' ? directorId : role === 'dispatcher' ? dispatcherId : engineerId,
     username: `${role}-test`,
     role,
     fullName: `Test ${role}`,
@@ -84,6 +84,27 @@ function makeCtx(role: 'director' | 'dispatcher', tenantId = erfolgId): Context 
     res: fakeRes(),
   };
 }
+
+/**
+ * Кто отмечает технику. Решение владельца 2026-08-15: менеджер тоже — он в программе
+ * каждый день, а поле стоит пустым у 11 инженеров из 14, и из-за этого не работает
+ * подсказка «кому отдать заявку».
+ */
+describe('Профиль инженера: кто правит технику', () => {
+  it('менеджер отмечает технику инженеру', async () => {
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    await caller.engineerProfile.setSkills({ userId: engineerId, deviceTypes: ['ЭКГ'] });
+    const skills = await caller.engineerProfile.listSkills();
+    expect(skills.filter((s) => s.userId === engineerId).map((s) => s.deviceType)).toEqual(['ЭКГ']);
+  });
+
+  it('инженер сам себе технику не отмечает', async () => {
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(
+      caller.engineerProfile.setSkills({ userId: engineerId, deviceTypes: ['ЭКГ'] }),
+    ).rejects.toThrow(/Доступ только для ролей/i);
+  });
+});
 
 describe('Профиль инженера: навыки', () => {
   it('setSkills заменяет набор целиком и дедуплицирует', async () => {

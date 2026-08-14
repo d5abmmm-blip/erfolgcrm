@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
-import { COMMON_DEVICE_TYPES } from '../lib/device-types';
+import { deviceTypeOptions } from '../lib/device-types';
 import { TelegramLinkSection } from './TelegramLinkSection';
 
 const KIND_LABEL: Record<'day_off' | 'vacation' | 'onsite', string> = {
@@ -27,7 +27,12 @@ export function EngineerProfileSection({ userId }: { userId: string }) {
   );
 
   const setSkills = trpc.engineerProfile.setSkills.useMutation({
-    onSuccess: () => utils.engineerProfile.listSkills.invalidate(),
+    onSuccess: async () => {
+      // Подсказку при назначении сбрасываем тоже: у неё staleTime минута, и без этого
+      // она ещё минуту показывает старый набор техники.
+      await utils.engineerProfile.listSkills.invalidate();
+      await utils.engineerProfile.assignmentHints.invalidate();
+    },
   });
 
   const toggleSkill = (deviceType: string) => {
@@ -37,18 +42,14 @@ export function EngineerProfileSection({ userId }: { userId: string }) {
     setSkills.mutate({ userId, deviceTypes: next });
   };
 
-  // Опции = частые типы + уже выбранные (свои, вне списка).
-  const options = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const t of [...COMMON_DEVICE_TYPES, ...mySkills]) {
-      const key = t.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(t);
-    }
-    return out;
-  }, [mySkills]);
+  // Опции — реальный словарь типов из базы (архив ремонтов + заведённая техника) плюс
+  // уже отмеченное этому человеку. Тот же список, что и на вкладке «Кадры»: два разных
+  // набора слов на один смысл — и навык никогда не совпадёт с типом техники.
+  const vocabularyQ = trpc.assets.deviceTypes.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const options = useMemo(
+    () => deviceTypeOptions(vocabularyQ.data, mySkills),
+    [vocabularyQ.data, mySkills],
+  );
 
   const [customSkill, setCustomSkill] = useState('');
 
