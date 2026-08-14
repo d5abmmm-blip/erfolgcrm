@@ -29,6 +29,7 @@ import type { ResolvedTenant } from '../lib/tenant';
 const PREFIX = 'TEST-LEGACY-OPS-';
 /** Идентификаторы версии 5 — так выглядят записи, перенесённые импортом. */
 const LEGACY_TICKET_ID = '3f2504e0-4f89-51d3-9a0c-0305e82c3a01';
+const LEGACY_CLOSED_IN_CRM_ID = '3f2504e0-4f89-51d3-9a0c-0305e82c3a02';
 
 let erfolgId = '';
 let clientId = '';
@@ -114,6 +115,30 @@ describe('отчёт «загрузка инженеров»', () => {
     await insertLegacyTicket();
     const after = await countFor();
     expect(after).toBe(before);
+  });
+});
+
+describe('работа по дате закрытия', () => {
+  it('архивная заявка, закрытая уже в CRM, засчитывается инженеру в отчёте', async () => {
+    const period = { from: '2015-01-01', to: '2030-01-01' };
+    const countFor = async (): Promise<number> => {
+      const rows = await engineerPerformance(getDb(), erfolgId, period);
+      return rows.find((r) => r.engineerId === engineerId)?.ticketsCount ?? 0;
+    };
+
+    const before = await countFor();
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`
+        INSERT INTO tickets
+          (id, tenant_id, ticket_number, barcode, client_id, assigned_engineer_id, status,
+           symptom, received_at, created_at, closed_at)
+        VALUES (${LEGACY_CLOSED_IN_CRM_ID}::uuid, ${erfolgId}::uuid, ${'WSP-CLOSED-' + PREFIX},
+                ${'BC-CLOSED-' + PREFIX}, ${clientId}::uuid, ${engineerId}::uuid, 'closed',
+                ${PREFIX + 'закрыта в CRM'}, '2015-02-08T09:00:00Z', '2015-02-08T09:00:00Z',
+                '2026-08-14T10:00:00Z')
+      `),
+    );
+    expect(await countFor()).toBe(before + 1);
   });
 });
 

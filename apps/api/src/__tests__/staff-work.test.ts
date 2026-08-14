@@ -8,9 +8,11 @@
  *    «закрыл за август» означает «заведена в августе» — на карточке это выглядело бы
  *    как чужая цифра.
  *
- * 2. Считаем только заявки, заведённые в CRM (STATS_SINCE). В перенесённом архиве
- *    исполнителя фактически нет: работали под одной учёткой, и 5999 чужих заявок
- *    приписались бы живому человеку.
+ * 2. Работа засчитывается по дате, когда её СДЕЛАЛИ (решение владельца 2026-08-15).
+ *    Если инженер сегодня закрывает заявку, заведённую ещё в старой программе, — это
+ *    его сегодняшний труд, и он обязан попасть в статистику. Отсечка STATS_SINCE
+ *    остаётся, но накладывается на дату закрытия: то, что закрыли ДО запуска CRM,
+ *    по людям не разложено (работали под одной учёткой) и человеку не приписывается.
  *
  * 3. Ни одной суммы в копейках. Карточка открыта менеджеру, деньги по человеку —
  *    только директору и только на своей вкладке.
@@ -24,6 +26,7 @@ import { getStaffWork } from '../modules/staff/repository';
 
 const PREFIX = 'TEST-STAFFWORK-';
 const LEGACY_TICKET_ID = '3f2504e0-4f89-51d3-9a0c-0305e82c3b02';
+const LEGACY_OLD_CLOSED_ID = '3f2504e0-4f89-51d3-9a0c-0305e82c3b03';
 
 let erfolgId = '';
 let clientId = '';
@@ -83,8 +86,8 @@ describe('период считается по дате закрытия', () =>
   });
 });
 
-describe('архив старой системы в работу человека не идёт', () => {
-  it('перенесённая заявка, закрытая в периоде, не считается', async () => {
+describe('работа считается по дате закрытия, а не заведения', () => {
+  it('старая заявка, закрытая инженером в этом периоде, засчитывается ему', async () => {
     await withTenantTx(getDb(), erfolgId, (tx) =>
       tx.execute(sql`
         INSERT INTO tickets
@@ -98,7 +101,29 @@ describe('архив старой системы в работу человек�
     );
 
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
-    expect(work.totals.closedInPeriod).toBe(0);
+    expect(work.totals.closedInPeriod).toBe(1);
+  });
+
+  it('но закрытая ещё в старой программе — не засчитывается никому', async () => {
+    // Закрыта в 2015-м, до запуска CRM: кто именно работал, в перенесённых данных не
+    // сохранилось — там всё делали под одной учётной записью.
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`
+        INSERT INTO tickets
+          (id, tenant_id, ticket_number, barcode, client_id, assigned_engineer_id, status,
+           symptom, received_at, created_at, closed_at)
+        VALUES (${LEGACY_OLD_CLOSED_ID}::uuid, ${erfolgId}::uuid, ${'WSP-OLD-' + PREFIX},
+                ${'BC-OLD-' + PREFIX}, ${clientId}::uuid, ${engineerId}::uuid, 'closed',
+                ${PREFIX + 'закрыта в 2015'}, '2015-02-08T09:00:00Z', '2015-02-08T09:00:00Z',
+                '2015-03-01T10:00:00Z')
+      `),
+    );
+
+    const work = await getStaffWork(getDb(), erfolgId, engineerId, {
+      from: new Date('2015-01-01T00:00:00Z'),
+      to: new Date('2030-01-01T00:00:00Z'),
+    });
+    expect(work.recent.some((t) => t.ticketNumber.startsWith('WSP-OLD-'))).toBe(false);
   });
 });
 

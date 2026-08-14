@@ -259,9 +259,13 @@ function weekStarts(from: Date, to: Date): string[] {
  * История работы человека за период.
  *
  * Ось периода — ДАТА ЗАКРЫТИЯ (в отчётах она по дате заведения, и «закрыл за август»
- * там значит «заведена в августе» — на карточке это была бы чужая цифра). Пол по
- * STATS_SINCE обязателен: в перенесённом архиве исполнителя нет, и 5999 чужих заявок
- * приписались бы живому человеку.
+ * там значит «заведена в августе» — на карточке это была бы чужая цифра).
+ *
+ * Отсечка STATS_SINCE тоже наложена на дату ЗАКРЫТИЯ (решение владельца 2026-08-15:
+ * «считать по дате закрытия работы»). Смысл: заявка могла быть заведена ещё в старой
+ * программе, но если инженер закрыл её уже в CRM — это его сегодняшний труд, и он
+ * обязан быть виден. А то, что закрыли ДО запуска CRM, человеку не приписывается: в
+ * перенесённых данных исполнителя фактически нет, там работали под одной учёткой.
  *
  * Ни одной суммы: карточку открывают и менеджеру, деньги по человеку живут отдельной
  * вкладкой под директором.
@@ -279,7 +283,8 @@ export async function getStaffWork(
     const closedInPeriod = and(
       isNull(tickets.deletedAt),
       eq(tickets.assignedEngineerId, userId),
-      gte(tickets.createdAt, STATS_SINCE),
+      // Пол по дате ЗАКРЫТИЯ, а не заведения — см. шапку функции.
+      gte(tickets.closedAt, STATS_SINCE),
       eq(tickets.status, 'closed'),
       gte(tickets.closedAt, period.from),
       lt(tickets.closedAt, period.to),
@@ -309,7 +314,7 @@ export async function getStaffWork(
         JOIN tickets t ON t.id = te.ticket_id
        WHERE te.user_id = ${userId}::uuid
          AND t.deleted_at IS NULL
-         AND t.created_at >= ${STATS_SINCE.toISOString()}::timestamptz
+         AND t.closed_at >= ${STATS_SINCE.toISOString()}::timestamptz
          AND t.status = 'closed'
          AND t.closed_at >= ${fromIso}::timestamptz
          AND t.closed_at <  ${toIso}::timestamptz
@@ -328,6 +333,10 @@ export async function getStaffWork(
     const statusRows = await tx
       .select({ status: tickets.status, count: sql<number>`COUNT(*)::int` })
       .from(tickets)
+      // Срез «что на человеке сейчас» остаётся по дате ЗАВЕДЕНИЯ — ровно тот же набор,
+      // что и на вкладке «Сейчас». Иначе два экрана давали бы разные ответы на один
+      // вопрос «сколько на нём заявок», а незакрытый хвост переноса там показан
+      // отдельным числом.
       .where(
         and(
           isNull(tickets.deletedAt),
@@ -369,7 +378,7 @@ export async function getStaffWork(
         LEFT JOIN model_type mt ON mt.model = lower(btrim(a.model) COLLATE "ru-x-icu")
        WHERE t.deleted_at IS NULL
          AND t.assigned_engineer_id = ${userId}::uuid
-         AND t.created_at >= ${STATS_SINCE.toISOString()}::timestamptz
+         AND t.closed_at >= ${STATS_SINCE.toISOString()}::timestamptz
          AND t.status = 'closed'
          AND t.closed_at >= ${fromIso}::timestamptz
          AND t.closed_at <  ${toIso}::timestamptz
