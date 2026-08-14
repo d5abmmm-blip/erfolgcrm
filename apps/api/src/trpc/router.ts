@@ -35,6 +35,7 @@ import { roadmapRouter } from '../modules/roadmap';
 import { calendarRouter } from '../modules/calendar';
 import { tasksRouter } from '../modules/tasks';
 import { attendanceRouter } from '../modules/attendance';
+import { staffRouter } from '../modules/staff';
 import { settingsRouter } from '../modules/settings';
 import { emailRouter } from '../modules/email';
 import { cashRouter } from '../modules/cash';
@@ -111,6 +112,8 @@ export const appRouter = router({
   tasks: tasksRouter,
   /** Журнал посещений (табель): кто из сотрудников в какой день был на работе. */
   attendance: attendanceRouter,
+  /** Раздел «Сотрудники»: кто чем занят сейчас, карточка человека. */
+  staff: staffRouter,
   /** Настройки tenant'а: отключаемые разделы (модули) интерфейса. */
   settings: settingsRouter,
   /** Раздел «Почта» (Этап A): реквизиты ящика, отправка писем, журнал. */
