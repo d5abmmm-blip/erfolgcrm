@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Ticket,
   Users,
+  UsersRound,
   Wrench,
   Package,
   Calendar,
@@ -93,6 +94,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: CalendarDays,
         roles: ['director', 'dispatcher'],
         module: 'calendar',
+      },
+      {
+        href: '/staff',
+        label: 'Сотрудники',
+        icon: UsersRound,
+        roles: ['director', 'dispatcher'],
+        module: 'staff',
       },
       {
         href: '/attendance',
