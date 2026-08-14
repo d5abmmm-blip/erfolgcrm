@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { router, staffProcedure } from '../../trpc/trpc';
 import { buildCmdCtx } from '../../trpc/helpers';
-import { monthQuery, removeCmd, upsertCmd } from './service';
+import { fillRangeCmd, monthQuery, removeCmd, upsertCmd } from './service';
 
 /** YYYY-MM-DD — та же форма, что и колонка date в БД. */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата должна быть в формате ГГГГ-ММ-ДД');
@@ -52,4 +52,19 @@ export const attendanceRouter = router({
   remove: staffProcedure
     .input(z.object({ userId: z.string().uuid(), workDate: isoDate }))
     .mutation(({ ctx, input }) => removeCmd(buildCmdCtx(ctx), input)),
+
+  /**
+   * Отметить период целиком — «поставил отпуск в карточке, проставилось и в табеле».
+   * Вызывается по галочке человека с карточки сотрудника; уже отмеченные дни не трогает.
+   */
+  fillRange: staffProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        dateFrom: isoDate,
+        dateTo: isoDate,
+        status: statusEnum,
+      }),
+    )
+    .mutation(({ ctx, input }) => fillRangeCmd(buildCmdCtx(ctx), input)),
 });

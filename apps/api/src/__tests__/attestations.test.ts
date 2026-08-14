@@ -35,6 +35,8 @@ import {
   updateAttestation,
 } from '../modules/attestations';
 import { createTicketCmd } from '../modules/tickets/service';
+import { appRouter } from '../trpc/router';
+import type { Context } from '../trpc/context';
 import type { ResolvedTenant } from '../lib/tenant';
 import type { SessionData } from '../lib/session';
 
@@ -141,6 +143,91 @@ function makeCmdCtx(
     audit: { ip: null, userAgent: null },
   };
 }
+
+/** Полный tRPC-контекст: нужен там, где проверяем права, а не чистую логику. */
+function makeRouterCtx(role: 'director' | 'dispatcher' | 'engineer'): Context {
+  const userId = role === 'engineer' ? erfolgEngineerId : erfolgDispatcherId;
+  return {
+    db: getDb(),
+    tenant: {
+      id: erfolgId,
+      subdomain: 'erfolg',
+      displayName: 'erfolg',
+      status: 'active',
+      timezone: 'Europe/Moscow',
+      kmsKeyId: null,
+    },
+    session: {
+      tenantId: erfolgId,
+      userId,
+      username: `${role}-test`,
+      role,
+      fullName: `Test ${role}`,
+      expiresAt: Date.now() + 3600_000,
+    },
+    clientUser: null,
+    ip: '127.0.0.1',
+    userAgent: 'vitest',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res: { cookie: () => {}, clearCookie: () => {}, req: { cookies: {} } } as any,
+  };
+}
+
+/**
+ * Кто заводит аттестации. Решение владельца 2026-08-14: вносить и править разрешено
+ * менеджеру — модуль стоял пустым ровно потому, что это мог только директор, а он в
+ * программе бывает реже. Удаление осталось директорским: это документ о допуске.
+ */
+describe('права на аттестации', () => {
+  it('менеджер заводит аттестацию и правит её', async () => {
+    const caller = appRouter.createCaller(makeRouterCtx('dispatcher'));
+    const created = await caller.attestations.create({
+      engineerId: erfolgEngineerId,
+      category: TEST_CATEGORY_A,
+      issuedAt: isoOffset(-10),
+      validUntil: isoOffset(200),
+      notes: `${TEST_PREFIX}rbac-dispatcher`,
+    });
+    expect(created.id).toBeTruthy();
+
+    const updated = await caller.attestations.update({
+      id: created.id,
+      patch: { certificateNumber: 'УЦ-777' },
+    });
+    expect(updated.certificateNumber).toBe('УЦ-777');
+  });
+
+  it('менеджер не может удалить аттестацию', async () => {
+    const director = appRouter.createCaller(makeRouterCtx('director'));
+    const created = await director.attestations.create({
+      engineerId: erfolgEngineerId,
+      category: TEST_CATEGORY_A,
+      issuedAt: isoOffset(-10),
+      notes: `${TEST_PREFIX}rbac-remove`,
+    });
+
+    const dispatcher = appRouter.createCaller(makeRouterCtx('dispatcher'));
+    await expect(dispatcher.attestations.remove({ id: created.id })).rejects.toThrow(
+      /Доступ только для ролей/i,
+    );
+
+    // Запись на месте — отказ не оставил половинчатого состояния.
+    const still = await listAttestations(getDb(), erfolgId, { engineerId: erfolgEngineerId });
+    expect(still.find((r) => r.id === created.id)).toBeDefined();
+  });
+
+  it('инженер не заводит аттестации даже себе', async () => {
+    const caller = appRouter.createCaller(makeRouterCtx('engineer'));
+    await expect(
+      caller.attestations.create({
+        engineerId: erfolgEngineerId,
+        category: TEST_CATEGORY_A,
+        issuedAt: isoOffset(-10),
+        notes: `${TEST_PREFIX}rbac-engineer`,
+      }),
+    ).rejects.toThrow(/Доступ только для ролей/i);
+  });
+});
 
 describe('createAttestation + listAttestations', () => {
   it('создаёт аттестацию и возвращает её через list', async () => {

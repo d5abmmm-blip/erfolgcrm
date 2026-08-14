@@ -162,6 +162,39 @@ export async function upsertRecord(
   });
 }
 
+/**
+ * Проставить один вид дня на список дат, НЕ трогая уже отмеченные дни.
+ * Возвращает даты, которые действительно завели.
+ *
+ * Пропуск существующих держит уникальный индекс attendance_records_uniq: сначала
+ * прочитать, потом вставить — значит оставить щель, в которую пролезет второй
+ * менеджер. `ON CONFLICT DO NOTHING` решает это в самой базе.
+ */
+export async function fillDays(
+  db: Db,
+  tenantId: string,
+  input: { userId: string; dates: readonly string[]; status: AttendanceStatus },
+): Promise<string[]> {
+  if (input.dates.length === 0) return [];
+  return withTenantTx(db, tenantId, async (tx) => {
+    const inserted = await tx
+      .insert(attendanceRecords)
+      .values(
+        input.dates.map((workDate) => ({
+          tenantId,
+          userId: input.userId,
+          workDate,
+          status: input.status,
+        })),
+      )
+      .onConflictDoNothing({
+        target: [attendanceRecords.tenantId, attendanceRecords.userId, attendanceRecords.workDate],
+      })
+      .returning({ workDate: attendanceRecords.workDate });
+    return inserted.map((r) => r.workDate);
+  });
+}
+
 /** Снять отметку с дня. Возвращает id удалённой строки либо null, если её не было. */
 export async function deleteRecord(
   db: Db,

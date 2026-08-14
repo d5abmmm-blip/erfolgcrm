@@ -1,13 +1,13 @@
 /**
- * /staff/:id — карточка сотрудника, вкладка «Сейчас».
+ * /staff/:id — карточка сотрудника.
  *
- * Отвечает на один вопрос: можно ли отдать этому человеку заявку. Поэтому здесь
- * текущие незакрытые заявки (свои, из CRM), отсутствия и техника, с которой он умеет
- * работать. Остальные вкладки («Работа», «Кадры», «Деньги») добавляются следующими
- * шагами — их заглушки честно говорят, что появится и почему пока пусто.
+ * «Сейчас» отвечает на один вопрос: можно ли отдать этому человеку заявку. Поэтому
+ * здесь текущие незакрытые заявки (свои, из CRM), отсутствия и техника, с которой он
+ * умеет работать, — всё только для просмотра.
  *
- * Навыки и отсутствия здесь можно ЗАПОЛНИТЬ, а не только посмотреть: на бою они
- * пусты у всех, потому что форма спрятана в настройках, куда никто не заходит.
+ * «Кадры» — место ВНЕСЕНИЯ: аттестации, типы техники, отпуска и табель. На бою во всех
+ * этих модулях по нулю записей, потому что формы были спрятаны в настройках, куда
+ * никто не заходит. Оставшиеся вкладки («Работа», «Деньги») — честные заглушки.
  */
 import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
@@ -15,6 +15,7 @@ import { ArrowLeft, AlertTriangle, Archive, CalendarOff, Wrench } from 'lucide-r
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { QueryError } from '../components/QueryError';
+import { StaffHrTab } from '../components/StaffHrTab';
 import {
   AWAY_LABELS,
   ROLE_LABELS_RU,
@@ -196,13 +197,13 @@ export function StaffCardPage() {
                         этому человеку работать не будет.
                       </p>
                     )}
-                    <p className="text-muted-foreground mt-3 text-xs">
-                      Заполняется в{' '}
-                      <Link href="/users" className="underline underline-offset-2">
-                        настройках пользователей
-                      </Link>{' '}
-                      — там же, где заводят учётную запись.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setTab('hr')}
+                      className="text-muted-foreground hover:text-foreground mt-3 text-xs underline underline-offset-2"
+                    >
+                      Изменить во вкладке «Кадры»
+                    </button>
                   </div>
                 </section>
 
@@ -229,13 +230,22 @@ export function StaffCardPage() {
                         Отпусков и выходных не отмечено.
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setTab('hr')}
+                      className="text-muted-foreground hover:text-foreground mt-3 text-xs underline underline-offset-2"
+                    >
+                      Отметить во вкладке «Кадры»
+                    </button>
                   </div>
                 </section>
               </div>
             </div>
           )}
 
-          {tab !== 'now' && <ComingSoon tab={tab} />}
+          {tab === 'hr' && <StaffHrTab userId={userId} role={card.role} isDirector={isDirector} />}
+
+          {(tab === 'work' || tab === 'money') && <ComingSoon tab={tab} />}
         </>
       )}
     </div>
@@ -267,19 +277,16 @@ function Metric({
 }
 
 /**
- * Заглушки остальных вкладок. Говорим прямо, что появится и почему пока пусто, —
+ * Заглушки оставшихся вкладок. Говорим прямо, что появится и почему пока пусто, —
  * это честнее, чем нарисовать блок с прочерками и выдать его за готовый.
  */
-function ComingSoon({ tab }: { tab: Tab }) {
-  const text: Record<Exclude<Tab, 'now'>, string> = {
+function ComingSoon({ tab }: { tab: 'work' | 'money' }) {
+  const text: Record<'work' | 'money', string> = {
     work: 'Здесь будет история работы за период: сколько заявок закрыто, по каким клиентам и какой технике человек ездит чаще всего. Считать будем только по данным CRM — в перенесённом архиве исполнитель не указан.',
-    hr: 'Здесь будут аттестации со сроками, отпуска и табель. Сейчас в базе нет ни одной аттестации и ни одной отметки табеля — не потому, что негде хранить, а потому, что их пока не вносили.',
     money:
       'Здесь будут оклад, процент сделки, аванс и выплаты. Вкладка видна только директору. Сейчас в базе одна ведомость и ни одной проведённой выплаты.',
   };
   return (
-    <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">
-      {text[tab as Exclude<Tab, 'now'>]}
-    </div>
+    <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">{text[tab]}</div>
   );
 }

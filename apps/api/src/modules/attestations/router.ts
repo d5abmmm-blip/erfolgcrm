@@ -3,7 +3,13 @@
  *
  * RBAC:
  *   - list / getEngineerCategories / categories — staffProcedure (директор + диспетчер).
- *   - create / update / remove — directorProcedure (только директор управляет).
+ *   - create / update — staffProcedure. Решение владельца 2026-08-14: раздел стоял
+ *     пустым (ноль записей на бою) ровно потому, что вносить мог только директор, а в
+ *     программе каждый день сидит менеджер. Аттестация без записи не работает вообще —
+ *     проверка при назначении инженера молчит, — поэтому цена «менеджер завёл лишнее»
+ *     ниже цены «не завёл никто».
+ *   - remove — directorProcedure. Это документ о допуске: стирать его менеджеру нечего,
+ *     ошибочную запись он поправит через update.
  *
  * Все мутации пишут writeAudit (152-ФЗ — аудит изменений).
  */
@@ -105,7 +111,7 @@ export const attestationsRouter = router({
       }),
     ),
 
-  create: directorProcedure.input(createSchema).mutation(async ({ ctx, input }) => {
+  create: staffProcedure.input(createSchema).mutation(async ({ ctx, input }) => {
     try {
       const row = await createAttestation(ctx.db, ctx.tenant.id, {
         engineerId: input.engineerId,
@@ -136,7 +142,7 @@ export const attestationsRouter = router({
     }
   }),
 
-  update: directorProcedure
+  update: staffProcedure
     .input(z.object({ id: z.string().uuid(), patch: updateSchema }))
     .mutation(async ({ ctx, input }) => {
       const before = await getAttestationById(ctx.db, ctx.tenant.id, input.id);
