@@ -11,11 +11,13 @@
  */
 import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
-import { ArrowLeft, AlertTriangle, Archive, CalendarOff, Wrench } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Archive, CalendarOff, Phone, Wrench } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { QueryError } from '../components/QueryError';
+import { StatusBadge } from '../components/ui/StatusBadge';
 import { StaffHrTab } from '../components/StaffHrTab';
+import { StaffWorkTab } from '../components/StaffWorkTab';
 import {
   AWAY_LABELS,
   ROLE_LABELS_RU,
@@ -80,25 +82,59 @@ export function StaffCardPage() {
 
       {card && (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold md:text-2xl">{card.fullName}</h1>
-              <div className="text-muted-foreground mt-0.5 text-sm">
-                {card.position || ROLE_LABELS_RU[card.role]}
-                {!card.isActive && ' · не работает'}
-                {card.phone && ` · ${card.phone}`}
+          {/* Шапка сделана по образцу карточки инженера из прежней CRM владельца:
+              крупный инициал, имя и должность, строка контактов, а показатели — полосой
+              под чертой, где они читаются одинаково на телефоне и на мониторе. */}
+          <section className="bg-card rounded-lg border p-4 md:p-6">
+            <div className="flex items-start gap-4">
+              <div className="bg-primary/15 text-primary grid size-14 shrink-0 place-items-center rounded-2xl text-xl font-bold md:size-16 md:text-2xl">
+                {card.fullName.trim().charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold md:text-2xl">{card.fullName}</h1>
+                  {card.awayToday ? (
+                    <StatusBadge variant="warning">
+                      {AWAY_LABELS[card.awayToday.kind]} ·{' '}
+                      {formatAwayRange(card.awayToday.dateFrom, card.awayToday.dateTo)}
+                    </StatusBadge>
+                  ) : (
+                    card.isActive && <StatusBadge variant="success">на месте</StatusBadge>
+                  )}
+                  {!card.isActive && <StatusBadge variant="muted">не работает</StatusBadge>}
+                </div>
+                <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span>{card.position || ROLE_LABELS_RU[card.role]}</span>
+                  {card.phone && (
+                    <span className="inline-flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {card.phone}
+                    </span>
+                  )}
+                  {card.skills.length > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <Wrench className="h-3 w-3" />
+                      {card.skills.join(', ')}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Metric value={String(card.openTickets)} label="в работе" />
-              <Metric
+
+            <div className="mt-4 grid grid-cols-2 gap-2.5 border-t pt-4 lg:grid-cols-4">
+              <Tile value={String(card.openTickets)} label="в работе" />
+              <Tile
                 value={String(card.overdueTickets)}
                 label="просрочено"
                 tone={card.overdueTickets > 0 ? 'bad' : 'normal'}
               />
-              <Metric value={loadLevel(card.openTickets)} label="загрузка" />
+              <Tile value={loadLevel(card.openTickets)} label="загрузка" />
+              <Tile
+                value={card.archiveOpenTickets === 0 ? '—' : String(card.archiveOpenTickets)}
+                label="из старой системы"
+              />
             </div>
-          </div>
+          </section>
 
           <div className="inline-flex flex-wrap rounded-md border p-0.5">
             {visibleTabs.map((t) => (
@@ -114,6 +150,11 @@ export function StaffCardPage() {
                 )}
               >
                 {t.label}
+                {t.key === 'now' && card.openTickets > 0 && (
+                  <span className="text-muted-foreground ml-1 tabular-nums">
+                    ({card.openTickets})
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -245,14 +286,17 @@ export function StaffCardPage() {
 
           {tab === 'hr' && <StaffHrTab userId={userId} role={card.role} isDirector={isDirector} />}
 
-          {(tab === 'work' || tab === 'money') && <ComingSoon tab={tab} />}
+          {tab === 'work' && <StaffWorkTab userId={userId} />}
+
+          {tab === 'money' && <ComingSoon tab="money" />}
         </>
       )}
     </div>
   );
 }
 
-function Metric({
+/** Плитка полосы показателей. Прочерк вместо нуля там, где ноль означает «нет данных». */
+function Tile({
   value,
   label,
   tone = 'normal',
@@ -262,16 +306,16 @@ function Metric({
   tone?: 'normal' | 'bad';
 }) {
   return (
-    <div className="text-right">
+    <div className="bg-muted/40 rounded-md px-3 py-2">
+      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{label}</div>
       <div
         className={cn(
-          'text-lg font-semibold tabular-nums leading-none',
+          'mt-0.5 text-lg font-semibold tabular-nums leading-none',
           tone === 'bad' && 'text-destructive',
         )}
       >
         {value}
       </div>
-      <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{label}</div>
     </div>
   );
 }
@@ -280,9 +324,8 @@ function Metric({
  * Заглушки оставшихся вкладок. Говорим прямо, что появится и почему пока пусто, —
  * это честнее, чем нарисовать блок с прочерками и выдать его за готовый.
  */
-function ComingSoon({ tab }: { tab: 'work' | 'money' }) {
-  const text: Record<'work' | 'money', string> = {
-    work: 'Здесь будет история работы за период: сколько заявок закрыто, по каким клиентам и какой технике человек ездит чаще всего. Считать будем только по данным CRM — в перенесённом архиве исполнитель не указан.',
+function ComingSoon({ tab }: { tab: 'money' }) {
+  const text: Record<'money', string> = {
     money:
       'Здесь будут оклад, процент сделки, аванс и выплаты. Вкладка видна только директору. Сейчас в базе одна ведомость и ни одной проведённой выплаты.',
   };

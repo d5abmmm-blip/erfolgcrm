@@ -10,8 +10,9 @@
  * Помощники (ticket_engineers) в загрузку НЕ входят — так же, как в отчётах загрузки
  * (решение принято при вводе нескольких инженеров на заявку). Считаем ответственного.
  */
-import { and, asc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import {
+  assets,
   clients,
   tickets,
   userAvailability,
@@ -199,6 +200,224 @@ export async function listStaff(
           : null,
       };
     });
+  });
+}
+
+/* ══════════════════════ Вкладка «Работа»: что человек сделал ══════════════════════ */
+
+export interface StaffWorkPeriod {
+  /** Включительно. */
+  from: Date;
+  /** Исключительно — полуинтервал, чтобы последний день месяца не терялся. */
+  to: Date;
+}
+
+export interface StaffWorkResult {
+  from: string;
+  to: string;
+  totals: {
+    /** Закрыто за период — ось по дате закрытия. */
+    closedInPeriod: number;
+    /** Сейчас незакрытых (без периода) — сходится со вкладкой «Сейчас». */
+    openNow: number;
+    /** Среднее время от заведения до закрытия, дни. null — закрытых нет. */
+    avgCloseDays: number | null;
+    /** Ещё столько заявок за период человек вёл вторым инженером. */
+    helperInPeriod: number;
+  };
+  /** По неделям периода, включая пустые: без них график рвётся. */
+  byWeek: Array<{ weekStart: string; closed: number }>;
+  /** Срез ТЕКУЩИХ статусов заявок человека — без периода. */
+  byStatus: Array<{ status: string; count: number }>;
+  topClients: Array<{ clientId: string; name: string; closed: number }>;
+  topDeviceTypes: Array<{ deviceType: string | null; closed: number }>;
+  /** Последние закрытые за период — «5 штук и ссылка на все». */
+  recent: Array<{
+    id: string;
+    ticketNumber: string;
+    clientName: string | null;
+    assetModel: string | null;
+    closedAt: Date | null;
+  }>;
+}
+
+/** Понедельники периода — ряд для графика, включая недели без единого закрытия. */
+function weekStarts(from: Date, to: Date): string[] {
+  const out: string[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  // К понедельнику текущей недели: getUTCDay() 0 — воскресенье.
+  const shift = (cursor.getUTCDay() + 6) % 7;
+  cursor.setUTCDate(cursor.getUTCDate() - shift);
+  while (cursor.getTime() < to.getTime()) {
+    out.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return out;
+}
+
+/**
+ * История работы человека за период.
+ *
+ * Ось периода — ДАТА ЗАКРЫТИЯ (в отчётах она по дате заведения, и «закрыл за август»
+ * там значит «заведена в августе» — на карточке это была бы чужая цифра). Пол по
+ * STATS_SINCE обязателен: в перенесённом архиве исполнителя нет, и 5999 чужих заявок
+ * приписались бы живому человеку.
+ *
+ * Ни одной суммы: карточку открывают и менеджеру, деньги по человеку живут отдельной
+ * вкладкой под директором.
+ */
+export async function getStaffWork(
+  db: Db,
+  tenantId: string,
+  userId: string,
+  period: StaffWorkPeriod,
+): Promise<StaffWorkResult> {
+  const fromIso = period.from.toISOString();
+  const toIso = period.to.toISOString();
+
+  return withTenantTx(db, tenantId, async (tx) => {
+    const closedInPeriod = and(
+      isNull(tickets.deletedAt),
+      eq(tickets.assignedEngineerId, userId),
+      gte(tickets.createdAt, STATS_SINCE),
+      eq(tickets.status, 'closed'),
+      gte(tickets.closedAt, period.from),
+      lt(tickets.closedAt, period.to),
+    );
+
+    const totalsRows = await tx
+      .select({
+        closed: sql<number>`COUNT(*)::int`,
+        avgDays: sql<
+          number | null
+        >`ROUND((AVG(EXTRACT(EPOCH FROM (${tickets.closedAt} - ${tickets.createdAt})) / 86400))::numeric, 1)::float`,
+      })
+      .from(tickets)
+      .where(closedInPeriod);
+
+    const openRows = await tx
+      .select({ open: sql<number>`COUNT(*)::int` })
+      .from(tickets)
+      .where(and(openInCrm(), eq(tickets.assignedEngineerId, userId)));
+
+    // Вторым инженером — считаем отдельно и показываем строкой: в загрузку помощники
+    // не входят (единственное определение «его работы» — ответственный), но молча
+    // занижать число человеку нечестно.
+    const helperRows = (await tx.execute(sql`
+      SELECT COUNT(DISTINCT t.id)::int AS cnt
+        FROM ticket_engineers te
+        JOIN tickets t ON t.id = te.ticket_id
+       WHERE te.user_id = ${userId}::uuid
+         AND t.deleted_at IS NULL
+         AND t.created_at >= ${STATS_SINCE.toISOString()}::timestamptz
+         AND t.status = 'closed'
+         AND t.closed_at >= ${fromIso}::timestamptz
+         AND t.closed_at <  ${toIso}::timestamptz
+         AND t.assigned_engineer_id IS DISTINCT FROM ${userId}::uuid
+    `)) as unknown as Array<{ cnt: number }>;
+
+    const weekRows = await tx
+      .select({
+        weekStart: sql<string>`to_char(date_trunc('week', ${tickets.closedAt}), 'YYYY-MM-DD')`,
+        closed: sql<number>`COUNT(*)::int`,
+      })
+      .from(tickets)
+      .where(closedInPeriod)
+      .groupBy(sql`date_trunc('week', ${tickets.closedAt})`);
+
+    const statusRows = await tx
+      .select({ status: tickets.status, count: sql<number>`COUNT(*)::int` })
+      .from(tickets)
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          eq(tickets.assignedEngineerId, userId),
+          gte(tickets.createdAt, STATS_SINCE),
+        ),
+      )
+      .groupBy(tickets.status);
+
+    const clientRows = await tx
+      .select({
+        clientId: tickets.clientId,
+        name: clients.displayName,
+        closed: sql<number>`COUNT(*)::int`,
+      })
+      .from(tickets)
+      .leftJoin(clients, eq(clients.id, tickets.clientId))
+      .where(closedInPeriod)
+      .groupBy(tickets.clientId, clients.displayName)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(5);
+
+    // Тип техники: свой из карточки, иначе — выведенный по архиву ремонтов (у всей
+    // перенесённой техники поле пустое, а в архиве тип есть, см. assets/repository).
+    const deviceRows = (await tx.execute(sql`
+      WITH model_type AS (
+        SELECT lower(btrim(device_model) COLLATE "ru-x-icu") AS model,
+               min(btrim(device_type)) AS device_type
+          FROM repair_archive
+         WHERE device_model IS NOT NULL AND device_type IS NOT NULL
+           AND btrim(device_type) <> ''
+         GROUP BY 1
+        HAVING count(DISTINCT lower(btrim(device_type) COLLATE "ru-x-icu")) = 1
+      )
+      SELECT COALESCE(NULLIF(btrim(a.device_type), ''), mt.device_type) AS device_type,
+             COUNT(*)::int AS closed
+        FROM tickets t
+        LEFT JOIN assets a ON a.id = t.asset_id
+        LEFT JOIN model_type mt ON mt.model = lower(btrim(a.model) COLLATE "ru-x-icu")
+       WHERE t.deleted_at IS NULL
+         AND t.assigned_engineer_id = ${userId}::uuid
+         AND t.created_at >= ${STATS_SINCE.toISOString()}::timestamptz
+         AND t.status = 'closed'
+         AND t.closed_at >= ${fromIso}::timestamptz
+         AND t.closed_at <  ${toIso}::timestamptz
+       GROUP BY 1
+       ORDER BY 2 DESC
+       LIMIT 5
+    `)) as unknown as Array<{ device_type: string | null; closed: number }>;
+
+    const recent = await tx
+      .select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        clientName: clients.displayName,
+        assetModel: assets.model,
+        closedAt: tickets.closedAt,
+      })
+      .from(tickets)
+      .leftJoin(clients, eq(clients.id, tickets.clientId))
+      .leftJoin(assets, eq(assets.id, tickets.assetId))
+      .where(closedInPeriod)
+      .orderBy(desc(tickets.closedAt))
+      .limit(5);
+
+    const byWeekMap = new Map(weekRows.map((r) => [r.weekStart, r.closed]));
+    const byWeek = weekStarts(period.from, period.to).map((weekStart) => ({
+      weekStart,
+      closed: byWeekMap.get(weekStart) ?? 0,
+    }));
+
+    return {
+      from: fromIso,
+      to: toIso,
+      totals: {
+        closedInPeriod: totalsRows[0]?.closed ?? 0,
+        openNow: openRows[0]?.open ?? 0,
+        avgCloseDays: totalsRows[0]?.avgDays ?? null,
+        helperInPeriod: helperRows[0]?.cnt ?? 0,
+      },
+      byWeek,
+      byStatus: statusRows.map((r) => ({ status: r.status, count: r.count })),
+      topClients: clientRows.map((r) => ({
+        clientId: r.clientId,
+        name: r.name ?? 'без клиента',
+        closed: r.closed,
+      })),
+      topDeviceTypes: deviceRows.map((r) => ({ deviceType: r.device_type, closed: r.closed })),
+      recent,
+    };
   });
 }
 

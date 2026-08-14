@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, staffProcedure } from '../../trpc/trpc';
-import { getStaffCard, listStaff } from './repository';
+import { getStaffCard, getStaffWork, listStaff } from './repository';
 import { STATS_SINCE, STATS_SINCE_LABEL } from '../../lib/stats-since';
 
 export const staffRouter = router({
@@ -23,6 +23,29 @@ export const staffRouter = router({
       statsSinceLabel: STATS_SINCE_LABEL,
       rows: await listStaff(ctx.db, ctx.tenant.id, ctx.tenant.timezone, {
         includeBlocked: input?.includeBlocked,
+      }),
+    })),
+
+  /**
+   * История работы человека за период — вкладка «Работа».
+   *
+   * Период считается по ДАТЕ ЗАКРЫТИЯ и приходит готовыми границами с экрана
+   * (полуинтервал). Денег в ответе нет вовсе: карточку открывают и менеджеру.
+   */
+  work: staffProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        from: z.date(),
+        to: z.date(),
+      }),
+    )
+    .query(async ({ ctx, input }) => ({
+      statsSince: STATS_SINCE,
+      statsSinceLabel: STATS_SINCE_LABEL,
+      work: await getStaffWork(ctx.db, ctx.tenant.id, input.userId, {
+        from: input.from,
+        to: input.to,
       }),
     })),
 
