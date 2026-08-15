@@ -26,6 +26,7 @@ import {
   saveSheet,
   unpostFromCash,
 } from './sheets';
+import { getStaffMoney } from './staff-money';
 
 const periodPresetSchema = z.object({
   preset: z.enum(['today', 'week', 'month', 'quarter', 'custom']),
@@ -94,6 +95,20 @@ export const payrollRouter = router({
     });
     return { enabled: true as const, ...result };
   }),
+
+  /**
+   * Вкладка «Деньги» на карточке сотрудника: условия оплаты, начислено за месяц,
+   * строки ведомостей и история выплат одного человека. Только директор — как и
+   * весь расчёт ЗП; карточку целиком видит и менеджер, но эту вкладку сервер
+   * ему не отдаёт.
+   */
+  staffMoney: directorProcedure
+    .input(z.object({ userId: z.string().uuid(), month: monthKey }))
+    .query(async ({ ctx, input }) => {
+      const dto = await getStaffMoney(ctx.db, ctx.tenant.id, input.userId, input.month);
+      if (!dto) throw new TRPCError({ code: 'NOT_FOUND', message: 'Сотрудник не найден' });
+      return dto;
+    }),
 
   /** Тумблер: показывать инженерам их заработок в кабинете (директор). */
   setEngineersSeeEarnings: directorProcedure

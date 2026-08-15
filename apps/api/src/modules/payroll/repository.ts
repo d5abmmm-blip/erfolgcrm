@@ -10,7 +10,7 @@
  *
  * Учитываем только work_orders, ticket которых закрыт в периоде.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
   cashAccounts,
   cashCategories,
@@ -286,7 +286,7 @@ export interface UserPayoutConfig {
   bonusPercent: number | null;
 }
 
-function hasPersonalRule(cfg: UserPayoutConfig | undefined): cfg is UserPayoutConfig {
+export function hasPersonalRule(cfg: UserPayoutConfig | undefined): cfg is UserPayoutConfig {
   // isActive: личный оклад/бонус — свойство РАБОТАЮЩЕГО сотрудника. Уволенный считается
   // по общему правилу (так же фильтрует loadUserPayoutConfigs: AND is_active = true).
   return !!cfg && cfg.isActive && (cfg.baseSalaryKopecks !== null || cfg.bonusPercent !== null);
@@ -801,6 +801,29 @@ export async function deletePayout(db: Db, tenantId: string, id: string): Promis
       return true;
     }),
   );
+}
+
+/** Все выплаты одного человека (вкладка «Деньги» на карточке), свежие сверху. */
+export async function listPayoutsByEngineer(
+  db: Db,
+  tenantId: string,
+  engineerId: string,
+): Promise<PayoutDto[]> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select()
+      .from(payrollPayouts)
+      .where(
+        and(
+          eq(payrollPayouts.tenantId, tenantId),
+          eq(payrollPayouts.engineerId, engineerId),
+          isNull(payrollPayouts.deletedAt),
+        ),
+      )
+      .orderBy(desc(payrollPayouts.paidOn), desc(payrollPayouts.createdAt))
+      .limit(100);
+    return rows.map(toPayoutDto);
+  });
 }
 
 /** Выплаты за период (по period_start) — чтобы показать «Выплачено» в таблице. */
