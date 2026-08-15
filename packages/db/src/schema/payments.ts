@@ -1,7 +1,9 @@
 /**
  * Этап 5 — Финансы Lite. Платежи по заявкам.
  *
- * Связан с tickets (ON DELETE CASCADE: удалили заявку — удалили платежи).
+ * Связан с tickets (ON DELETE RESTRICT с миграции 0085: заявку с платежами
+ * физически не удалить — история оплат не может исчезнуть молча; приложение
+ * и так удаляет заявки только мягко, через deleted_at).
  * work_orders.paid_amount_kopecks материализован — пересчитывается при insert/delete payment.
  *
  * До интеграции с 1С (Этап 8) этот модуль — основной учёт оплаты.
@@ -24,8 +26,8 @@ export const payments = pgTable(
      * Этап 8.B — опциональная привязка к счёту (invoices.id).
      * NULL = «свободный» платёж по тикету (старый поток до Этапа 8).
      * NOT NULL = платёж по конкретному invoice → пересчитывает invoice.paid_amount.
-     * CASCADE: удаление invoice убирает все связанные платежи (но в практике invoice не удаляется,
-     * а отменяется через transitionToCancelled).
+     * RESTRICT (с миграции 0038): счёт с платежами удалить нельзя; на практике
+     * invoice и не удаляется, а отменяется через transitionToCancelled.
      */
     invoiceId: uuid('invoice_id'),
     amountKopecks: bigint('amount_kopecks', { mode: 'bigint' }).notNull(),
