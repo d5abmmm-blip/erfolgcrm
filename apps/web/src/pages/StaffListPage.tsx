@@ -5,6 +5,11 @@
  * у человека незакрытых заявок, сколько из них просрочено, отсутствует ли он сегодня
  * и с какой техникой умеет работать.
  *
+ * Подача — СТРОКАМИ, не карточками (просьба владельца 2026-08-15): на 21 человеке
+ * строки читаются сверху вниз как таблица и сравниваются глазами по колонкам.
+ * Вся строка — ссылка на карточку человека. На узком экране список прокручивается
+ * вбок внутри своего контейнера, страница горизонтально не ездит.
+ *
  * Загрузка считается только по заявкам, заведённым в CRM. Хвост переноса из прежней
  * системы (незакрытые заявки 2015–2023 годов, большей частью на служебной учётке)
  * показываем отдельной пометкой — он не работа, но и молчать о нём нечестно.
@@ -16,6 +21,10 @@ import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { QueryError } from '../components/QueryError';
 import { AWAY_LABELS, ROLE_LABELS_RU, awayText, openTicketsPhrase } from '../lib/staff';
+
+/** Одна сетка колонок на шапку и строки — разъедутся, если задавать порознь. */
+const GRID_COLS =
+  'grid grid-cols-[minmax(200px,1.3fr)_150px_80px_110px_80px_minmax(170px,1fr)] items-center gap-3';
 
 export function StaffListPage() {
   const me = trpc.auth.me.useQuery();
@@ -114,73 +123,94 @@ export function StaffListPage() {
       )}
 
       {rows.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((r) => (
-            <Link
-              key={r.userId}
-              href={`/staff/${r.userId}`}
-              className="bg-card hover:border-primary/50 block rounded-lg border p-4 transition hover:shadow-sm"
+        <div className="bg-card overflow-x-auto rounded-lg border">
+          <div className="min-w-[820px]">
+            <div
+              className={cn(
+                GRID_COLS,
+                'text-muted-foreground border-b px-4 py-2 text-[11px] font-medium uppercase tracking-wide',
+              )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate font-medium" title={r.fullName}>
-                    {r.fullName}
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    {r.position || ROLE_LABELS_RU[r.role]}
-                    {!r.isActive && ' · не работает'}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold tabular-nums leading-none">
-                    {r.openTickets}
-                  </div>
-                  <div className="text-muted-foreground text-[10px] uppercase tracking-wide">
-                    в работе
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                {r.overdueTickets > 0 && (
-                  <span className="text-destructive bg-destructive/10 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium">
-                    <AlertTriangle className="h-3 w-3" />
-                    просрочено {r.overdueTickets}
-                  </span>
-                )}
-                {r.awayToday && (
-                  <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 text-[11px] font-medium">
-                    {AWAY_LABELS[r.awayToday.kind]} до{' '}
-                    {new Date(`${r.awayToday.dateTo}T00:00:00Z`).toLocaleDateString('ru-RU', {
-                      day: 'numeric',
-                      month: 'short',
-                      timeZone: 'UTC',
-                    })}
-                  </span>
-                )}
-                {r.archiveOpenTickets > 0 && (
-                  <span
-                    className="text-muted-foreground rounded border px-1.5 py-0.5 text-[11px]"
-                    title="Незакрытые заявки из прежней системы. В загрузку не входят."
+              <span>Сотрудник</span>
+              <span>Статус</span>
+              <span className="text-right">В работе</span>
+              <span className="text-right">Просрочено</span>
+              <span className="text-right">Архив</span>
+              <span>Техника</span>
+            </div>
+            <ul className="divide-y">
+              {rows.map((r) => (
+                <li key={r.userId}>
+                  <Link
+                    href={`/staff/${r.userId}`}
+                    className={cn(GRID_COLS, 'hover:bg-muted/40 px-4 py-2.5 transition')}
                   >
-                    архив {r.archiveOpenTickets}
-                  </span>
-                )}
-              </div>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium" title={r.fullName}>
+                        {r.fullName}
+                      </span>
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {r.position || ROLE_LABELS_RU[r.role]}
+                      </span>
+                    </span>
 
-              <div className="text-muted-foreground mt-2 truncate text-xs">
-                {r.skills.length > 0 ? (
-                  r.skills.join(', ')
-                ) : (
-                  <span
-                    className={cn(r.role === 'engineer' && 'text-amber-600 dark:text-amber-500')}
-                  >
-                    {r.role === 'engineer' ? 'техника не указана' : '—'}
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
+                    <span className="text-xs">
+                      {!r.isActive ? (
+                        <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-medium">
+                          не работает
+                        </span>
+                      ) : r.awayToday ? (
+                        <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 font-medium">
+                          {AWAY_LABELS[r.awayToday.kind]} до{' '}
+                          {new Date(`${r.awayToday.dateTo}T00:00:00Z`).toLocaleDateString('ru-RU', {
+                            day: 'numeric',
+                            month: 'short',
+                            timeZone: 'UTC',
+                          })}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">на месте</span>
+                      )}
+                    </span>
+
+                    <span className="text-right font-semibold tabular-nums">{r.openTickets}</span>
+
+                    <span className="text-right">
+                      {r.overdueTickets > 0 ? (
+                        <span className="text-destructive inline-flex items-center gap-1 text-sm font-medium tabular-nums">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {r.overdueTickets}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </span>
+
+                    <span
+                      className="text-muted-foreground text-right text-sm tabular-nums"
+                      title="Незакрытые заявки из прежней системы. В загрузку не входят."
+                    >
+                      {r.archiveOpenTickets > 0 ? r.archiveOpenTickets : '—'}
+                    </span>
+
+                    <span className="text-muted-foreground min-w-0 truncate text-xs">
+                      {r.skills.length > 0 ? (
+                        r.skills.join(', ')
+                      ) : (
+                        <span
+                          className={cn(
+                            r.role === 'engineer' && 'text-amber-600 dark:text-amber-500',
+                          )}
+                        >
+                          {r.role === 'engineer' ? 'техника не указана' : '—'}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 
