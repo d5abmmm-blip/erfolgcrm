@@ -64,7 +64,7 @@ export async function executeOrQueue<P, T>(
  * Раньше очередь считала такой ответ обычной бизнес-ошибкой и стирала ВСЮ
  * накопленную за смену работу — молча, одним числом в тосте.
  */
-function isSessionExpired(err: unknown): boolean {
+export function isSessionExpired(err: unknown): boolean {
   if (!(err instanceof TRPCClientError)) return false;
   const code = (err.data as { code?: string } | null | undefined)?.code;
   return code === 'UNAUTHORIZED';

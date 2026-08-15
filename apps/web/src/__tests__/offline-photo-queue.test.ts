@@ -152,6 +152,40 @@ describe('отправка накопленных фото', () => {
     expect(await countPendingPhotos()).toBe(1);
   });
 
+  /**
+   * Истёкшая сессия — НЕ «отказ по существу»: снимок верный, просто некому
+   * принять. Раньше 401 клеймил фото «не принято» навсегда, и после повторного
+   * входа автоотправка его больше не брала — только ручное «Повторить»,
+   * которое инженер должен ещё заметить. Очередь ПРАВОК так уже умеет
+   * (needsLogin в executor) — фото обязано вести себя так же.
+   */
+  it('сессия истекла (401) — фото остаётся чистым и после входа уходит само', async () => {
+    await add('после-смены.jpg');
+    const expired = new TRPCClientError<AppRouter>('UNAUTHORIZED', {
+      result: {
+        error: {
+          code: -32600,
+          message: 'UNAUTHORIZED',
+          data: { code: 'UNAUTHORIZED', httpStatus: 401, path: 'attachments.createUploadUrl' },
+        },
+      },
+    } as never);
+    const upload = vi.fn().mockRejectedValue(expired);
+
+    const first = await sendPendingPhotos(upload);
+    expect(first).toMatchObject({ succeeded: 0, failedSoft: 1, failedHard: 0, needsLogin: true });
+
+    // Не заклеймено «не принято» — авто-отправка снимок не бросила.
+    const [item] = await listPendingPhotos();
+    expect(item!.failedHard).toBeFalsy();
+
+    // Человек вошёл заново — тот же снимок уходит сам, без ручного «Повторить».
+    upload.mockResolvedValue(undefined);
+    const second = await sendPendingPhotos(upload);
+    expect(second).toMatchObject({ succeeded: 1 });
+    expect(await countPendingPhotos()).toBe(0);
+  });
+
   it('снимок инженера А не уходит, пока неизвестно, кто за телефоном', async () => {
     // Запуск приложения: очередь из IndexedDB готова сразу, имя вошедшего
     // приходит с сервера позже. Отправлять в этот промежуток нельзя —
