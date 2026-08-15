@@ -16,6 +16,7 @@ import {
   getOrCreateWorkOrder as repoGetOrCreate,
   getWorkOrderByTicket as repoGetByTicket,
   updateWorkOrderHeader as repoUpdateHeader,
+  type HeaderBaseSnapshot,
   upsertLine as repoUpsertLine,
   workOrderIdForTicket,
   type UpdateHeaderInput,
@@ -384,6 +385,8 @@ export async function updateHeaderCmd(
   ctx: CmdCtx,
   ticketId: string,
   patch: UpdateHeaderInput,
+  /** Снимок «что видел человек» из офлайн-очереди — сторож от затирания свежего. */
+  base?: HeaderBaseSnapshot,
 ): Promise<void> {
   await assertMayEditWorkOrderOfTicket(ctx.db, ctx.tenant.id, ctx.session, ticketId);
   // Текстовые поля (диагноз, «что было и что сделал», рекомендации) — зона
@@ -396,7 +399,7 @@ export async function updateHeaderCmd(
     });
   }
   const workOrderId = await resolveWorkOrderForTicket(ctx.db, ctx.tenant.id, ticketId);
-  await repoUpdateHeader(ctx.db, ctx.tenant.id, workOrderId, patch);
+  await repoUpdateHeader(ctx.db, ctx.tenant.id, workOrderId, patch, { base });
   await writeAudit(ctx.db, ctx.tenant.id, {
     userId: ctx.session.userId,
     action: 'update',
