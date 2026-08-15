@@ -11,21 +11,21 @@ import { monthOptions, monthTitleRu, payoutKindRu } from '../lib/staff-money';
 
 describe('monthOptions', () => {
   it('от текущего месяца назад до месяца запуска CRM, свежие сверху', () => {
-    expect(monthOptions(new Date('2026-08-15T12:00:00Z'), new Date('2026-07-05T00:00:00Z'))).toEqual(
-      ['2026-08', '2026-07'],
-    );
+    expect(
+      monthOptions(new Date('2026-08-15T12:00:00Z'), new Date('2026-07-05T00:00:00Z')),
+    ).toEqual(['2026-08', '2026-07']);
   });
 
   it('в первый месяц работы — один пункт', () => {
-    expect(monthOptions(new Date('2026-07-20T12:00:00Z'), new Date('2026-07-05T00:00:00Z'))).toEqual(
-      ['2026-07'],
-    );
+    expect(
+      monthOptions(new Date('2026-07-20T12:00:00Z'), new Date('2026-07-05T00:00:00Z')),
+    ).toEqual(['2026-07']);
   });
 
   it('переваливает через границу года', () => {
-    expect(monthOptions(new Date('2027-01-10T12:00:00Z'), new Date('2026-11-05T00:00:00Z'))).toEqual(
-      ['2027-01', '2026-12', '2026-11'],
-    );
+    expect(
+      monthOptions(new Date('2027-01-10T12:00:00Z'), new Date('2026-11-05T00:00:00Z')),
+    ).toEqual(['2027-01', '2026-12', '2026-11']);
   });
 });
 

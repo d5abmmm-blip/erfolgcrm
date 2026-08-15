@@ -175,8 +175,7 @@ export async function getStaffMoney(
   // По уволенному computePayouts не зовём: он вернул бы пустоту, а пустота на этой
   // вкладке — не то же самое, что «0 ₽» (buildStaffMoney дублирует эту гарантию).
   const earnings = user.isActive
-    ? ((await computePayouts(db, tenantId, { start, end }, { engineerId: userId })).rows[0] ??
-      null)
+    ? ((await computePayouts(db, tenantId, { start, end }, { engineerId: userId })).rows[0] ?? null)
     : null;
   const [payouts, sheets] = await Promise.all([
     listPayoutsByEngineer(db, tenantId, userId),

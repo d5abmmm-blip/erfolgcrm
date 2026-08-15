@@ -77,10 +77,10 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
         <>
           {!money.isActive && (
             <div className="bg-muted/40 text-muted-foreground rounded-lg border p-4 text-sm">
-              Сотрудник не работает, начисление по нему не считается: расчёт зарплаты ведётся
-              только по действующим людям. Чтобы рассчитать бывшего сотрудника, его нужно
-              временно вернуть в активные в настройках пользователей. История выплат и
-              ведомостей — ниже, она сохраняется.
+              Сотрудник не работает, начисление по нему не считается: расчёт зарплаты ведётся только
+              по действующим людям. Чтобы рассчитать бывшего сотрудника, его нужно временно вернуть
+              в активные в настройках пользователей. История выплат и ведомостей — ниже, она
+              сохраняется.
             </div>
           )}
 
@@ -104,8 +104,7 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
                   )}
                   {money.config.personalBonusPercent !== null && (
                     <>
-                      <b className="tabular-nums">{money.config.personalBonusPercent} %</b> от
-                      работ
+                      <b className="tabular-nums">{money.config.personalBonusPercent} %</b> от работ
                     </>
                   )}
                 </p>
@@ -118,14 +117,13 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
                       <b className="tabular-nums">
                         {formatRub(money.config.ruleBaseSalaryKopecks)}
                       </b>{' '}
-                      в месяц + <b className="tabular-nums">{money.config.ruleBonusPercent} %</b>{' '}
-                      от работ
+                      в месяц + <b className="tabular-nums">{money.config.ruleBonusPercent} %</b> от
+                      работ
                     </>
                   ) : (
                     <>
-                      сделка{' '}
-                      <b className="tabular-nums">{money.config.rulePieceworkPercent} %</b> от
-                      работ
+                      сделка <b className="tabular-nums">{money.config.rulePieceworkPercent} %</b>{' '}
+                      от работ
                     </>
                   )}
                 </p>
@@ -165,8 +163,8 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
                   </div>
                   <p className="text-muted-foreground mt-3 text-[11px]">
                     Считается по заявкам, закрытым в выбранном месяце. Работы, перенесённые из
-                    старой программы, в начисление не входят — они оплачены ещё там. Оклад
-                    месячный и показан целиком.
+                    старой программы, в начисление не входят — они оплачены ещё там. Оклад месячный
+                    и показан целиком.
                   </p>
                 </div>
               ) : (
@@ -255,9 +253,7 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
                     </span>
                     <span className="min-w-0 flex-1 truncate">
                       {payoutKindRu(p.kind)}
-                      {p.comment && (
-                        <span className="text-muted-foreground"> · {p.comment}</span>
-                      )}
+                      {p.comment && <span className="text-muted-foreground"> · {p.comment}</span>}
                     </span>
                     <span className="shrink-0 font-medium tabular-nums">
                       {formatRub(p.amountKopecks)}
