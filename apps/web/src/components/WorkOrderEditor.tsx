@@ -537,9 +537,16 @@ function WorkOrderHeader({
     mark?: HeaderMark,
   ): Promise<'ok' | 'queued' | 'error'> => {
     mark?.markSaving();
+    // Снимок «что человек видел» по каждому правимому полю. Едет вместе с
+    // патчем (и ложится в офлайн-очередь тем же payload'ом): сервер отклонит
+    // правку CONFLICT'ом, если поле уже изменили позже, — реплей очереди
+    // не затрёт более свежую правку молча.
+    const shown = { diagnosis, repairDescription, recommendation, engineerNotes };
+    const base: Partial<typeof shown> = {};
+    for (const k of Object.keys(patch) as Array<keyof typeof shown>) base[k] = shown[k];
     const res = await executeOrQueue(
       'workOrders.updateHeader',
-      { ticketId, patch },
+      { ticketId, patch, base },
       (p) => updateHeader.mutateAsync(p),
       tenantSubdomain,
       dedupe,

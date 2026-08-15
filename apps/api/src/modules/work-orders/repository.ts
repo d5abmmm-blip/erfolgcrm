@@ -100,6 +100,21 @@ export interface UpdateHeaderInput {
   engineerId?: string | null;
 }
 
+/**
+ * Снимок «что человек видел в поле, когда правил» — для реплея офлайн-очереди.
+ *
+ * Сторож ПО ЗНАЧЕНИЮ поля, а не по updatedAt наряда, намеренно: updatedAt
+ * дёргает любой пересчёт итогов (правка строк), и две свои офлайн-правки
+ * разных полей делят один момент времени — сторож по времени давал бы ложные
+ * отказы на собственных правках. Значения же полей независимы.
+ */
+export interface HeaderBaseSnapshot {
+  diagnosis?: string | null;
+  repairDescription?: string | null;
+  recommendation?: string | null;
+  engineerNotes?: string | null;
+}
+
 function toLineDto(row: {
   id: string;
   lineType: WorkOrderLineType;
@@ -649,6 +664,7 @@ export async function updateWorkOrderHeader(
   tenantId: string,
   workOrderId: string,
   patch: UpdateHeaderInput,
+  opts?: { base?: HeaderBaseSnapshot },
 ): Promise<void> {
   const setObj: Record<string, unknown> = {};
   if (patch.diagnosis !== undefined) setObj.diagnosis = patch.diagnosis;
@@ -658,8 +674,37 @@ export async function updateWorkOrderHeader(
   if (patch.vatRate !== undefined) setObj.vatRate = patch.vatRate;
   if (patch.engineerId !== undefined) setObj.engineerId = patch.engineerId;
   if (Object.keys(setObj).length === 0) return;
+
+  // Атомарно: условие «поле всё ещё такое, каким его видел человек» живёт в
+  // самом UPDATE, а не в отдельном SELECT — окна между проверкой и записью нет.
+  const base = opts?.base;
+  const guards: SQL[] = [];
+  if (base) {
+    if (base.diagnosis !== undefined)
+      guards.push(sql`${workOrders.diagnosis} IS NOT DISTINCT FROM ${base.diagnosis}`);
+    if (base.repairDescription !== undefined)
+      guards.push(
+        sql`${workOrders.repairDescription} IS NOT DISTINCT FROM ${base.repairDescription}`,
+      );
+    if (base.recommendation !== undefined)
+      guards.push(sql`${workOrders.recommendation} IS NOT DISTINCT FROM ${base.recommendation}`);
+    if (base.engineerNotes !== undefined)
+      guards.push(sql`${workOrders.engineerNotes} IS NOT DISTINCT FROM ${base.engineerNotes}`);
+  }
+
   await withTenantTx(db, tenantId, async (tx) => {
-    await tx.update(workOrders).set(setObj).where(eq(workOrders.id, workOrderId));
+    const updated = await tx
+      .update(workOrders)
+      .set(setObj)
+      .where(and(eq(workOrders.id, workOrderId), ...guards))
+      .returning({ id: workOrders.id });
+    if (guards.length > 0 && updated.length === 0) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message:
+          'Наряд уже изменён позже вашей правки — она не применена, чтобы не затереть свежее. Обновите экран и при необходимости повторите.',
+      });
+    }
   });
 }
 

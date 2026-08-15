@@ -43,6 +43,18 @@ const lineUpsertSchema = z.object({
   orderIdx: z.number().int().min(0).max(10000).optional(),
 });
 
+/**
+ * Снимок «что человек видел в поле, когда правил». Шлётся вместе с патчем
+ * (в т.ч. реплеем офлайн-очереди): сервер отклонит правку CONFLICT'ом, если
+ * именно это поле уже изменили позже, — свежее не затирается молча.
+ */
+const headerBaseSchema = z.object({
+  diagnosis: z.string().max(5000).nullable().optional(),
+  repairDescription: z.string().max(5000).nullable().optional(),
+  recommendation: z.string().max(5000).nullable().optional(),
+  engineerNotes: z.string().max(5000).nullable().optional(),
+});
+
 const updateHeaderSchema = z
   .object({
     diagnosis: z.string().trim().max(5000).nullable().optional(),
@@ -90,8 +102,16 @@ export const workOrdersRouter = router({
     .mutation(({ ctx, input }) => deleteLineCmd(buildCmdCtx(ctx), input.ticketId, input.lineId)),
 
   updateHeader: engineerProcedure
-    .input(z.object({ ticketId: z.string().uuid(), patch: updateHeaderSchema }))
-    .mutation(({ ctx, input }) => updateHeaderCmd(buildCmdCtx(ctx), input.ticketId, input.patch)),
+    .input(
+      z.object({
+        ticketId: z.string().uuid(),
+        patch: updateHeaderSchema,
+        base: headerBaseSchema.optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      updateHeaderCmd(buildCmdCtx(ctx), input.ticketId, input.patch, input.base),
+    ),
 
   setVatRate: staffProcedure
     .input(z.object({ ticketId: z.string().uuid(), vatRate: VatRate }))
