@@ -16,6 +16,13 @@
  *
  * 3. Ни одной суммы в копейках. Карточка открыта менеджеру, деньги по человеку —
  *    только директору и только на своей вкладке.
+ *
+ * ⚠️ Окна периодов здесь — 2031 год, и это НЕ опечатка. getStaffWork считает ВСЕ
+ * заявки сид-инженера, а соседние тест-файлы (payroll, e2e, dashboard-metrics…)
+ * закрывают заявки на том же инженере: changeStatus ставит closed_at = сейчас, и
+ * до подмены даты заявка мгновение живёт «закрытой в текущем месяце». Vitest
+ * гоняет файлы параллельно — окно на ТЕКУЩЕМ месяце ловило чужую заявку и падало
+ * («expected 2 to be 1», CI на PR #148). В 2031-м заявок не закрывает никто.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
@@ -66,20 +73,20 @@ async function closedTicket(closedAt: Date, createdAt = new Date('2026-07-20T09:
   return id;
 }
 
-const PERIOD = { from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-09-01T00:00:00Z') };
+const PERIOD = { from: new Date('2031-08-01T00:00:00Z'), to: new Date('2031-09-01T00:00:00Z') };
 
 describe('период считается по дате закрытия', () => {
   it('закрытая внутри периода попадает, закрытая раньше — нет', async () => {
-    await closedTicket(new Date('2026-08-15T12:00:00Z'));
-    await closedTicket(new Date('2026-07-15T12:00:00Z'));
+    await closedTicket(new Date('2031-08-15T12:00:00Z'));
+    await closedTicket(new Date('2031-07-15T12:00:00Z'));
 
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
     expect(work.totals.closedInPeriod).toBe(1);
   });
 
   it('граница периода — полуинтервал: последний день входит, первый день следующего нет', async () => {
-    await closedTicket(new Date('2026-08-31T23:59:00Z'));
-    await closedTicket(new Date('2026-09-01T00:00:01Z'));
+    await closedTicket(new Date('2031-08-31T23:59:00Z'));
+    await closedTicket(new Date('2031-09-01T00:00:01Z'));
 
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
     expect(work.totals.closedInPeriod).toBe(1);
@@ -96,7 +103,7 @@ describe('работа считается по дате закрытия, а н�
         VALUES (${LEGACY_TICKET_ID}::uuid, ${erfolgId}::uuid, ${'WSP-' + PREFIX},
                 ${'BC-' + PREFIX}, ${clientId}::uuid, ${engineerId}::uuid, 'closed',
                 ${PREFIX + 'архивная'}, '2015-02-08T09:00:00Z', '2015-02-08T09:00:00Z',
-                '2026-08-15T10:00:00Z')
+                '2031-08-15T10:00:00Z')
       `),
     );
 
@@ -129,8 +136,8 @@ describe('работа считается по дате закрытия, а н�
 
 describe('разрезы', () => {
   it('по неделям: пустые недели остаются в ряду, иначе график порвётся', async () => {
-    await closedTicket(new Date('2026-08-05T12:00:00Z'));
-    await closedTicket(new Date('2026-08-26T12:00:00Z'));
+    await closedTicket(new Date('2031-08-05T12:00:00Z'));
+    await closedTicket(new Date('2031-08-26T12:00:00Z'));
 
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
     expect(work.byWeek.length).toBeGreaterThanOrEqual(4);
@@ -140,7 +147,7 @@ describe('разрезы', () => {
   });
 
   it('по клиентам считает закрытые за период', async () => {
-    await closedTicket(new Date('2026-08-15T12:00:00Z'));
+    await closedTicket(new Date('2031-08-15T12:00:00Z'));
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
     const row = work.topClients.find((c) => c.clientId === clientId);
     expect(row?.closed).toBe(1);
@@ -162,7 +169,7 @@ describe('разрезы', () => {
 
 describe('деньги на этой вкладке не отдаются вовсе', () => {
   it('в ответе нет ни одного поля с копейками', async () => {
-    await closedTicket(new Date('2026-08-15T12:00:00Z'));
+    await closedTicket(new Date('2031-08-15T12:00:00Z'));
     const work = await getStaffWork(getDb(), erfolgId, engineerId, PERIOD);
     expect(JSON.stringify(work)).not.toMatch(/kopeck/i);
   });
