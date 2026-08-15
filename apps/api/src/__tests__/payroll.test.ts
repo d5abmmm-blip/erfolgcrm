@@ -38,7 +38,10 @@ let demoId = '';
 let erfolgClientId = '';
 let erfolgEngineerId = '';
 
-const TEST_PREFIX = 'TEST-PAY-';
+// Своя метка, НЕ 'TEST-PAY-': её делит payments-totals.test.ts, и параллельная
+// чистка чужих заявок по общей метке с миграции 0085 (payments RESTRICT)
+// падает на чужих платежах вместо тихого каскада.
+const TEST_PREFIX = 'TEST-PAYRL-';
 
 beforeAll(async () => {
   const seed = await ensureSeed();

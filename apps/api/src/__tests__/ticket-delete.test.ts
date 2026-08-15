@@ -14,7 +14,7 @@
  * чистка в beforeEach. Клиента берём из seed (как parts-waiting.test).
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { like } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { clients, getDb, invoices, payments, tickets, users, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import {
@@ -169,6 +169,42 @@ describe('softDeleteTicket', () => {
     if (res.status === 'blocked') {
       expect(res.blockers.issuedInvoices).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('страховка БД: жёсткое удаление заявки', () => {
+  // Приложение удаляет только мягко (deleted_at) и блокирует при деньгах.
+  // Но FK payments.ticket_id из 0007 стоял ON DELETE CASCADE: прямой DELETE
+  // мимо приложения (ручная команда в базе, будущий код) молча уносил платежи —
+  // ровно то, от чего 0038 обещала защитить финансовые документы.
+  it('заявку с платежом физически удалить нельзя — платёж не исчезает молча', async () => {
+    const id = await makeTicket();
+    await addPaymentRow(id);
+
+    // drizzle заворачивает ошибку постгреса (DrizzleQueryError), сам текст
+    // «violates foreign key constraint» лежит в cause — проверяем всю цепочку,
+    // чтобы отказ был именно из-за FK платежей, а не по другой причине.
+    const rejection = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.delete(tickets).where(eq(tickets.id, id)),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(rejection).toBeTruthy();
+    const chain = `${String(rejection)} ${String((rejection as { cause?: unknown }).cause ?? '')}`;
+    expect(chain).toMatch(/payments_ticket_id_fkey|foreign key/i);
+
+    const paid = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.select({ id: payments.id }).from(payments).where(eq(payments.ticketId, id)),
+    );
+    expect(paid.length).toBe(1);
+    expect(await getTicket(getDb(), erfolgId, id)).toBeTruthy();
+  });
+
+  it('чистую заявку (без платежей) жёстко удалить по-прежнему можно', async () => {
+    const id = await makeTicket();
+    await withTenantTx(getDb(), erfolgId, (tx) => tx.delete(tickets).where(eq(tickets.id, id)));
+    expect(await getTicket(getDb(), erfolgId, id)).toBeFalsy();
   });
 });
 
