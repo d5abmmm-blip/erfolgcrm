@@ -26,20 +26,22 @@ export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
   const sent = r.succeeded + (photos?.succeeded ?? 0);
   const stuck = r.failedSoft + (photos?.failedSoft ?? 0);
   const photosRejected = photos?.failedHard ?? 0;
+  // Сессия могла истечь и на правке, и на фото — причина одна, тост один.
+  const needsLogin = r.needsLogin || (photos?.needsLogin ?? false);
   if (
     sent === 0 &&
     stuck === 0 &&
     r.failedHard === 0 &&
     photosRejected === 0 &&
     r.skippedOther === 0 &&
-    !r.needsLogin
+    !needsLogin
   ) {
     return;
   }
 
   // Сессия кончилась, пока человек работал без связи. Раньше это считалось
   // отказом по существу и стирало ВСЮ накопленную за смену работу молча.
-  if (r.needsLogin) {
+  if (needsLogin) {
     showToast(
       'error',
       'Вход в систему закончился — войдите заново. Накопленное сохранено и уйдёт само.',
@@ -74,7 +76,7 @@ export function reportSync(r: SyncResult, photos?: PhotoSyncResult): void {
   }
   // При протухшей сессии про «связи всё ещё нет» молчим — причина другая,
   // и она уже названа выше.
-  if (stuck > 0 && !r.needsLogin) {
+  if (stuck > 0 && !needsLogin) {
     showToast('queued', `Связи всё ещё нет — ${stuck} в очереди, попробуем позже`);
   }
 }

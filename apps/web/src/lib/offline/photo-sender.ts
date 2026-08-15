@@ -11,7 +11,7 @@
  * переснять его после сдачи объекта нельзя. Пусть лучше висит в списке
  * «не отправлено», где человек решит: повторить или убрать.
  */
-import { isNetworkError } from './executor';
+import { isNetworkError, isSessionExpired } from './executor';
 import { humanUploadError } from '../photo-upload-error';
 import {
   isPhotoSendable,
@@ -30,6 +30,8 @@ export interface PhotoSyncResult {
   failedHard: number;
   /** Снимки другого сотрудника — пропущены, ждут своего автора. */
   skippedOther: number;
+  /** Сервер ответил «вы не авторизованы» — нужен повторный вход. */
+  needsLogin: boolean;
 }
 
 export type PhotoUploader = (item: PendingPhoto) => Promise<void>;
@@ -38,7 +40,8 @@ export type PhotoUploader = (item: PendingPhoto) => Promise<void>;
 let sendInProgress = false;
 
 export async function sendPendingPhotos(upload: PhotoUploader): Promise<PhotoSyncResult> {
-  if (sendInProgress) return { succeeded: 0, failedSoft: 0, failedHard: 0, skippedOther: 0 };
+  if (sendInProgress)
+    return { succeeded: 0, failedSoft: 0, failedHard: 0, skippedOther: 0, needsLogin: false };
   sendInProgress = true;
   try {
     return await runSend(upload);
@@ -54,6 +57,7 @@ async function runSend(upload: PhotoUploader): Promise<PhotoSyncResult> {
   let failedSoft = 0;
   let failedHard = 0;
   let skippedOther = 0;
+  let needsLogin = false;
   for (const item of items) {
     // Уже отвергнутое сервером не долбим при каждом возврате связи.
     if (item.failedHard) continue;
@@ -67,6 +71,14 @@ async function runSend(upload: PhotoUploader): Promise<PhotoSyncResult> {
       await removePhoto(item.id);
       succeeded++;
     } catch (err) {
+      if (isSessionExpired(err)) {
+        // Снимок верный — просто некому принять. Держим его ЧИСТЫМ, чтобы
+        // после повторного входа ушёл сам (как очередь правок), и просим
+        // человека войти. Пометка failedHard здесь хоронила бы автоотправку.
+        needsLogin = true;
+        failedSoft++;
+        continue;
+      }
       const soft = isNetworkError(err);
       await updatePhoto({
         ...item,
@@ -78,5 +90,5 @@ async function runSend(upload: PhotoUploader): Promise<PhotoSyncResult> {
       else failedHard++;
     }
   }
-  return { succeeded, failedSoft, failedHard, skippedOther };
+  return { succeeded, failedSoft, failedHard, skippedOther, needsLogin };
 }
