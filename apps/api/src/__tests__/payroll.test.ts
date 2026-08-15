@@ -10,6 +10,14 @@
  *   6. computePayouts учитывает только закрытые в окне ticket'ы.
  *   7. computePayouts атрибутирует работу через line.engineer_id (а не только wo.engineer_id).
  *   8. myEarnings (через computePayouts с engineerId) — фильтр работает.
+ *
+ * ⚠️ Окна расчёта — 2032 год, и это НЕ опечатка. computePayouts суммирует работы ВСЕХ
+ * закрытых в окне заявок сид-инженера, а соседние тест-файлы (e2e, dashboard-metrics…)
+ * закрывают заявки на том же инженере: changeStatus ставит closed_at = сейчас, и окно
+ * на ТЕКУЩЕМ дне ловило чужую заявку — суммы удваивались. Тот же класс гонки, что в
+ * staff-work на PR #148 (лечение — PR #149). В 2032-м заявок не закрывает никто:
+ * 2031-й занят соседями (staff-work, staff-money, calendar, monthly-summary), 2027-й —
+ * «пустым окном» окладника ниже, а окна legacy-тестов кончаются 2030-м.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, like, sql } from 'drizzle-orm';
@@ -42,6 +50,13 @@ let erfolgEngineerId = '';
 // чистка чужих заявок по общей метке с миграции 0085 (payments RESTRICT)
 // падает на чужих платежах вместо тихого каскада.
 const TEST_PREFIX = 'TEST-PAYRL-';
+
+// Закрытие и окно расчёта — один «пустой» месяц в далёком 2032-м (см. шапку файла).
+const CLOSED_AT = new Date('2032-08-15T12:00:00Z');
+const WINDOW = {
+  start: new Date('2032-08-01T00:00:00Z'),
+  end: new Date('2032-09-01T00:00:00Z'),
+};
 
 beforeAll(async () => {
   const seed = await ensureSeed();
@@ -157,7 +172,7 @@ describe('payroll compute', () => {
       mode: 'piecework',
       pieceworkPercent: 30,
     });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -166,10 +181,7 @@ describe('payroll compute', () => {
       closedAt,
     );
 
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const result = await computePayouts(getDb(), erfolgId, { start, end });
     const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
@@ -186,7 +198,7 @@ describe('payroll compute', () => {
       baseSalaryKopecks: 50_000_000n, // 500 000 ₽
       bonusPercent: 10,
     });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -195,10 +207,7 @@ describe('payroll compute', () => {
       closedAt,
     );
 
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const result = await computePayouts(getDb(), erfolgId, { start, end });
     const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
@@ -239,7 +248,7 @@ describe('payroll compute', () => {
 
   it('фильтр engineerId возвращает только этого инженера', async () => {
     await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 50 });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -248,10 +257,7 @@ describe('payroll compute', () => {
       closedAt,
     );
 
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const result = await computePayouts(
       getDb(),
@@ -266,7 +272,7 @@ describe('payroll compute', () => {
 
   it('cross-tenant: payouts erfolg не видны из demo', async () => {
     await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -275,10 +281,7 @@ describe('payroll compute', () => {
       closedAt,
     );
 
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const demoResult = await computePayouts(getDb(), demoId, { start, end });
     expect(demoResult.rows.find((r) => r.engineerId === erfolgEngineerId)).toBeUndefined();
@@ -295,7 +298,7 @@ describe('payroll персональные правила', () => {
       baseSalaryKopecks: 100_000n,
       bonusPercent: 10,
     });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -303,10 +306,7 @@ describe('payroll персональные правила', () => {
       [200_000n],
       closedAt,
     );
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const result = await computePayouts(getDb(), erfolgId, { start, end });
     const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
@@ -338,7 +338,7 @@ describe('payroll персональные правила', () => {
     // которым закрывали наряды) в ведомости ЗП быть не должно. Чтобы выплатить бывшему —
     // временно сделать его активным.
     await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -346,10 +346,7 @@ describe('payroll персональные правила', () => {
       [100_000n],
       closedAt,
     );
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     // Пока активен — в ведомости есть.
     const active = await computePayouts(getDb(), erfolgId, { start, end });
@@ -392,7 +389,7 @@ describe('payroll персональные правила', () => {
       baseSalaryKopecks: null,
       bonusPercent: null,
     });
-    const closedAt = new Date();
+    const closedAt = CLOSED_AT;
     await createClosedTicketWithWorks(
       erfolgId,
       erfolgClientId,
@@ -400,10 +397,7 @@ describe('payroll персональные правила', () => {
       [100_000n],
       closedAt,
     );
-    const start = new Date(closedAt);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = WINDOW;
 
     const result = await computePayouts(getDb(), erfolgId, { start, end });
     const row = result.rows.find((r) => r.engineerId === erfolgEngineerId);
