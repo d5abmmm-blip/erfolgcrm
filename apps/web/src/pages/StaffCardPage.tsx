@@ -7,7 +7,7 @@
  *
  * «Кадры» — место ВНЕСЕНИЯ: аттестации, типы техники, отпуска и табель. На бою во всех
  * этих модулях по нулю записей, потому что формы были спрятаны в настройках, куда
- * никто не заходит. Оставшиеся вкладки («Работа», «Деньги») — честные заглушки.
+ * никто не заходит. «Работа» — история за период, «Деньги» — только директору.
  */
 import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
@@ -17,6 +17,7 @@ import { cn } from '../lib/utils';
 import { QueryError } from '../components/QueryError';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { StaffHrTab } from '../components/StaffHrTab';
+import { StaffMoneyTab } from '../components/StaffMoneyTab';
 import { StaffWorkTab } from '../components/StaffWorkTab';
 import {
   AWAY_LABELS,
@@ -288,7 +289,7 @@ export function StaffCardPage() {
 
           {tab === 'work' && <StaffWorkTab userId={userId} />}
 
-          {tab === 'money' && <ComingSoon tab="money" />}
+          {tab === 'money' && <StaffMoneyTab userId={userId} />}
         </>
       )}
     </div>
@@ -317,19 +318,5 @@ function Tile({
         {value}
       </div>
     </div>
-  );
-}
-
-/**
- * Заглушки оставшихся вкладок. Говорим прямо, что появится и почему пока пусто, —
- * это честнее, чем нарисовать блок с прочерками и выдать его за готовый.
- */
-function ComingSoon({ tab }: { tab: 'money' }) {
-  const text: Record<'money', string> = {
-    money:
-      'Здесь будут оклад, процент сделки, аванс и выплаты. Вкладка видна только директору. Сейчас в базе одна ведомость и ни одной проведённой выплаты.',
-  };
-  return (
-    <div className="bg-card text-muted-foreground rounded-lg border p-6 text-sm">{text[tab]}</div>
   );
 }
