@@ -105,7 +105,16 @@ export interface OutboxState {
   isSyncing: boolean;
 }
 
-export function useOutbox() {
+/**
+ * Пауза между автоматическими кругами, когда сеть по мнению браузера есть,
+ * а до сервера не достучаться (лёг, DNS, туннель больницы). Без неё завершение
+ * неудачного круга меняло isSyncing туда-обратно и тем же движением
+ * перезапускало автосинк — сотни запросов в минуту, телефон молотил впустую.
+ * Настоящее событие «сеть вернулась» паузу снимает сразу.
+ */
+export const AUTOSYNC_RETRY_DELAY_MS = 30_000;
+
+export function useOutbox(retryDelayMs: number = AUTOSYNC_RETRY_DELAY_MS) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<OutboxState>({
     pending: 0,
@@ -113,6 +122,8 @@ export function useOutbox() {
     isOnline: typeof navigator === 'undefined' ? true : navigator.onLine,
     isSyncing: false,
   });
+  /** До какого момента (Date.now()) автосинк молчит; 0 — паузы нет. */
+  const [cooldownUntil, setCooldownUntil] = useState(0);
 
   const refreshCount = useCallback(async () => {
     const [mutations, photos, sendableMutations, sendablePhotos] = await Promise.all([
@@ -150,7 +161,11 @@ export function useOutbox() {
   }, [refreshCount]);
 
   useEffect(() => {
-    const onOnline = () => setState((s) => ({ ...s, isOnline: true }));
+    const onOnline = () => {
+      // Новое знание о связи — пробуем сразу, паузу не досиживаем.
+      setCooldownUntil(0);
+      setState((s) => ({ ...s, isOnline: true }));
+    };
     const onOffline = () => setState((s) => ({ ...s, isOnline: false }));
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -175,12 +190,17 @@ export function useOutbox() {
       if (r.succeeded > 0 || photos.succeeded > 0) {
         await queryClient.invalidateQueries();
       }
+      // Круг ничего не отправил и упёрся в недоступный сервер (или истёкшую
+      // сессию) — берём паузу, иначе конец круга тут же запустит следующий.
+      const nothingSent = r.succeeded === 0 && photos.succeeded === 0;
+      const stuckSoft = r.failedSoft + photos.failedSoft > 0;
+      setCooldownUntil(nothingSent && stuckSoft ? Date.now() + retryDelayMs : 0);
       reportSync(r, photos);
       return r;
     } finally {
       setState((s) => ({ ...s, isSyncing: false }));
     }
-  }, [refreshCount, queryClient]);
+  }, [refreshCount, queryClient, retryDelayMs]);
 
   // Авто-синк при возврате онлайн, если накопилось то, что реально уйдёт.
   // Считаем именно `sendable`: по `pending` этот эффект крутился вечно —
@@ -188,8 +208,15 @@ export function useOutbox() {
   // isSyncing туда-обратно перезапускала эффект на новый круг.
   useEffect(() => {
     if (!state.isOnline || state.isSyncing || state.sendable === 0) return;
+    const wait = cooldownUntil - Date.now();
+    if (wait > 0) {
+      // Пауза: напомним себе, когда она кончится, — без будильника очередь
+      // проспала бы до следующего внешнего события.
+      const t = setTimeout(() => setCooldownUntil(0), wait);
+      return () => clearTimeout(t);
+    }
     void sync();
-  }, [state.isOnline, state.isSyncing, state.sendable, sync]);
+  }, [state.isOnline, state.isSyncing, state.sendable, cooldownUntil, sync]);
 
   return { ...state, sync };
 }
