@@ -4,6 +4,7 @@ import { Plus, Search, Users } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { useDebounce } from '../lib/hooks/useDebounce';
+import { listEmptyText } from '../lib/empty-text';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
@@ -150,7 +151,7 @@ export function ClientsListPage() {
         columns={columns}
         loading={list.isLoading}
         error={list.error ? { message: list.error.message } : null}
-        emptyText="Клиентов пока нет — добавьте первого"
+        emptyText={listEmptyText(!!debounced, 'Клиентов пока нет — добавьте первого')}
         rowKey={(c) => c.id}
       />
 
