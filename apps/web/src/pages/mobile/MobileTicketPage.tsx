@@ -530,8 +530,12 @@ export function MobileTicketPage() {
         className="bg-card hover:bg-muted/40 flex h-14 w-full items-center justify-center gap-2 rounded-lg border text-base font-semibold transition"
       >
         <Wrench className="h-5 w-5" />
-        Журнал работ{' '}
-        {wo.data ? `· ${(Number(wo.data.totalAmountKopecks) / 100).toLocaleString('ru-RU')} ₽` : ''}
+        {/* Рублей здесь нет намеренно (решение владельца #122): цену и строки наряда
+            заводит менеджер в десктопе. Себестоимость труда — процент от цены строки,
+            поэтому одним числом инженер и счёт клиенту выставлял бы, и сделку себе
+            назначал. Итог наряда печатался ровно тот, который прячут двумя экранами
+            дальше. Количество строк — не деньги, и ориентироваться по нему можно. */}
+        Журнал работ{wo.data ? ` · ${wo.data.lines.length} стр.` : ''}
       </Link>
 
       {canEdit && (
