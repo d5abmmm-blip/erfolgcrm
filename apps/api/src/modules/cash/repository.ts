@@ -617,7 +617,12 @@ export const INTERNAL_INCOME_CATEGORY = 'Внесение в кассу';
 export const INTERNAL_EXPENSE_CATEGORY = 'Выдача из кассы';
 
 /** id системных статей внутренних операций (пусто, если ещё не создавались). */
-async function internalCategoryIds(tx: Tx, tenantId: string): Promise<string[]> {
+/**
+ * Статьи «внутреннее движение»: их суммы не доход и не расход компании, а перекладывание
+ * из кармана в карман. Экспортируется, чтобы плитка «Выручка» на главной считала ровно
+ * то же, что «Собрано» в разделе «Финансы» — раньше она считала payments и расходилась.
+ */
+export async function internalCategoryIds(tx: Tx, tenantId: string): Promise<string[]> {
   const rows = await tx
     .select({ id: cashCategories.id })
     .from(cashCategories)
@@ -633,7 +638,7 @@ async function internalCategoryIds(tx: Tx, tenantId: string): Promise<string[]> 
 }
 
 /** SQL-условие «без внутренних операций». col — имя колонки в конкретном запросе. */
-function exclInternalCond(ids: string[], col: 'category_id' | 'ct.category_id') {
+export function exclInternalCond(ids: string[], col: 'category_id' | 'ct.category_id') {
   if (ids.length === 0) return sql``;
   const list = sql.join(
     ids.map((id) => sql`${id}::uuid`),
