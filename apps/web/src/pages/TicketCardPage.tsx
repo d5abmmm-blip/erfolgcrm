@@ -719,6 +719,7 @@ export function TicketCardPage() {
                     ticketId={t.id}
                     workOrderId={wo.data?.id ?? null}
                     isStaff={isStaff}
+                    ticketCancelled={t.status === 'cancelled'}
                   />
                 )}
               </>
@@ -1901,10 +1902,13 @@ function TicketInvoiceSection({
   ticketId,
   workOrderId,
   isStaff,
+  ticketCancelled,
 }: {
   ticketId: string;
   workOrderId: string | null;
   isStaff: boolean;
+  /** Отменённая заявка — денег по ней не бывает, сервер счёт и не выставит. */
+  ticketCancelled: boolean;
 }) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
@@ -1956,7 +1960,7 @@ function TicketInvoiceSection({
             Открыть
           </Link>
         </div>
-      ) : isStaff && workOrderId ? (
+      ) : isStaff && workOrderId && !ticketCancelled ? (
         <button
           type="button"
           disabled={createDraft.isPending}
@@ -1967,7 +1971,11 @@ function TicketInvoiceSection({
         </button>
       ) : (
         <div className="text-muted-foreground text-sm">
-          {!workOrderId ? 'Сначала создайте наряд' : 'Счёт не создан'}
+          {ticketCancelled
+            ? 'Заявка отменена — счёт по ней не выставляется'
+            : !workOrderId
+              ? 'Сначала создайте наряд'
+              : 'Счёт не создан'}
         </div>
       )}
       {createDraft.error && (

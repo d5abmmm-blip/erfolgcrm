@@ -14,6 +14,7 @@ import {
   createDraft as repoCreateDraft,
   getById as repoGetById,
   invoiceBelongsToTenant,
+  ticketStatusForWorkOrder,
   listByClient as repoListByClient,
   listByTicket as repoListByTicket,
   listClientOverdueInvoices,
@@ -217,6 +218,16 @@ export async function sendReminderCmd(ctx: CmdCtx, clientId: string): Promise<Se
 }
 
 export async function createDraftCmd(ctx: CmdCtx, input: CreateDraftInput): Promise<InvoiceDto> {
+  // Отмена — это «работы не будет». Счёт по отменённой заявке уходит клиенту как
+  // действующий и потом всплывает в дебиторке. Статус заявки здесь не проверялся
+  // вовсе, а кнопка «Выставить счёт» на карточке показывалась при любом статусе.
+  const ticketStatus = await ticketStatusForWorkOrder(ctx.db, ctx.tenant.id, input.workOrderId);
+  if (ticketStatus === 'cancelled') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Заявка отменена — счёт по ней выставить нельзя. Сначала переоткройте заявку.',
+    });
+  }
   let dto: InvoiceDto;
   try {
     dto = await repoCreateDraft(ctx.db, ctx.tenant.id, input);

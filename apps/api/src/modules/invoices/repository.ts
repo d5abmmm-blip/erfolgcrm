@@ -156,6 +156,29 @@ export interface CreateDraftInput {
  * total/vat снимаются с текущего work_order. На момент issue будут переписаны
  * актуальными значениями (см. transitionToIssued).
  */
+/**
+ * Статус заявки, к которой относится наряд. `null` — наряда или заявки нет.
+ *
+ * Нужен createDraftCmd: по отменённой заявке счёт выставлять нельзя, а статус на
+ * этом пути не проверялся вовсе.
+ */
+export async function ticketStatusForWorkOrder(
+  db: Db,
+  tenantId: string,
+  workOrderId: string,
+): Promise<string | null> {
+  return withTenantTx(db, tenantId, async (tx) => {
+    const rows = (await tx.execute(sql`
+      SELECT t.status
+        FROM work_orders wo
+        JOIN tickets t ON t.id = wo.ticket_id
+       WHERE wo.id = ${workOrderId}::uuid
+       LIMIT 1
+    `)) as unknown as Array<{ status: string }>;
+    return rows[0]?.status ?? null;
+  });
+}
+
 export async function createDraft(
   db: Db,
   tenantId: string,
