@@ -1,5 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { formatRub } from '../../lib/money';
+import { formatDateRu } from '../../lib/format-date';
 import { QueryError } from '../../components/QueryError';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -18,16 +20,6 @@ const STATUS_CLS: Record<string, string> = {
   overdue: 'bg-destructive/15 text-destructive',
   cancelled: 'bg-muted text-muted-foreground',
 };
-
-function formatRubFromKopecks(kopStr: string): string {
-  const k = BigInt(kopStr);
-  const rub = Number(k) / 100;
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    maximumFractionDigits: 2,
-  }).format(rub);
-}
 
 export function ClientInvoicesPage() {
   const list = trpc.clientCabinet.listInvoices.useQuery();
@@ -81,13 +73,13 @@ export function ClientInvoicesPage() {
             {list.data.map((i) => (
               <tr key={i.id} className="hover:bg-muted/30">
                 <td className="px-3 py-2 font-medium">{i.invoiceNumber}</td>
-                <td className="text-muted-foreground px-3 py-2">{i.issueDate}</td>
-                <td className="text-muted-foreground px-3 py-2">{i.dueDate}</td>
+                <td className="text-muted-foreground px-3 py-2">{formatDateRu(i.issueDate)}</td>
+                <td className="text-muted-foreground px-3 py-2">{formatDateRu(i.dueDate)}</td>
                 <td className="px-3 py-2 text-right font-medium">
-                  {formatRubFromKopecks(i.totalAmountKopecks)}
+                  {formatRub(i.totalAmountKopecks)}
                 </td>
                 <td className="text-muted-foreground px-3 py-2 text-right">
-                  {formatRubFromKopecks(i.paidAmountKopecks)}
+                  {formatRub(i.paidAmountKopecks)}
                 </td>
                 <td className="px-3 py-2">
                   <span
