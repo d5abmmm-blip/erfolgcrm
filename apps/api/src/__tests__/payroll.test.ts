@@ -407,3 +407,87 @@ describe('payroll персональные правила', () => {
     expect(row!.baseSalaryKopecks).toBe('0');
   });
 });
+
+/**
+ * Переоткрытие заявки и ЗП.
+ *
+ * ЗАЧЕМ. Ведомость выбирает строки работ по `tickets.closed_at` за месяц, и никакой
+ * отметки «эта работа уже оплачена» в базе нет. Пока переоткрытие обнуляло дату
+ * закрытия, повторное закрытие ставило СЕГОДНЯШНЮЮ — и те же самые строки работ
+ * во второй раз попадали в ведомость нового месяца. Заявку закрыли в августе,
+ * инженеру заплатили, в сентябре директор её переоткрыл и закрыл заново — и за ту
+ * же работу платят снова. Заметить это некому: ведомость не показывает, из каких
+ * заявок сложилась сумма.
+ *
+ * ПРАВИЛО. Дата закрытия — это дата ПЕРВОГО закрытия, она больше не переезжает.
+ */
+describe('payroll: переоткрытие заявки не удваивает выплату', () => {
+  beforeEach(clearTestData);
+
+  it('повторное закрытие оставляет работы в прежнем месяце', async () => {
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    const { ticketId } = await createClosedTicketWithWorks(
+      erfolgId,
+      erfolgClientId,
+      erfolgEngineerId,
+      [100_000n],
+      CLOSED_AT,
+    );
+
+    // Август 2032: работа посчитана, в жизни — уже выплачена.
+    const before = await computePayouts(getDb(), erfolgId, WINDOW);
+    expect(
+      before.rows.find((r) => r.engineerId === erfolgEngineerId)!.worksAmountKopecks,
+    ).toBe('100000');
+
+    // Директор переоткрыл заявку и закрыл её заново — сегодня, то есть в другом месяце.
+    await changeStatus(getDb(), erfolgId, null, ticketId, 'received');
+    await changeStatus(getDb(), erfolgId, null, ticketId, 'closed');
+
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({ closedAt: tickets.closedAt, firstClosedAt: tickets.firstClosedAt })
+        .from(tickets)
+        .where(eq(tickets.id, ticketId)),
+    );
+    // Повторное закрытие ставит сегодняшнюю дату — так требует проверка БД, —
+    // но первое закрытие запомнено, и месяц ЗП считается по нему.
+    expect(row!.firstClosedAt).toEqual(CLOSED_AT);
+    expect(row!.closedAt).not.toEqual(CLOSED_AT);
+
+    // Работа осталась в своём месяце — второй ведомости не будет.
+    const after = await computePayouts(getDb(), erfolgId, WINDOW);
+    expect(after.rows.find((r) => r.engineerId === erfolgEngineerId)!.worksAmountKopecks).toBe(
+      '100000',
+    );
+  });
+
+  it('отмена и возврат в работу тоже не сдвигают дату закрытия', async () => {
+    await setRule(getDb(), erfolgId, { mode: 'piecework', pieceworkPercent: 30 });
+    const { ticketId } = await createClosedTicketWithWorks(
+      erfolgId,
+      erfolgClientId,
+      erfolgEngineerId,
+      [50_000n],
+      CLOSED_AT,
+    );
+
+    await changeStatus(getDb(), erfolgId, null, ticketId, 'cancelled', 'передумали');
+    await changeStatus(getDb(), erfolgId, null, ticketId, 'closed');
+
+    const [row] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({ firstClosedAt: tickets.firstClosedAt, cancelledAt: tickets.cancelledAt })
+        .from(tickets)
+        .where(eq(tickets.id, ticketId)),
+    );
+    expect(row!.firstClosedAt).toEqual(CLOSED_AT);
+    expect(row!.cancelledAt).toBeNull();
+
+    // И сама ведомость августа не изменилась.
+    const after = await computePayouts(getDb(), erfolgId, WINDOW);
+    expect(after.rows.find((r) => r.engineerId === erfolgEngineerId)!.worksAmountKopecks).toBe(
+      '50000',
+    );
+  });
+});

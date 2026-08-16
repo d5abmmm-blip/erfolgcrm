@@ -168,6 +168,20 @@ export const tickets = pgTable(
     estimatedMinutes: integer('estimated_minutes'),
 
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    /**
+     * Дата ПЕРВОГО закрытия — заполняется, только если заявку потом переоткрыли.
+     * NULL у подавляющего большинства заявок: раз не переоткрывали, первое закрытие
+     * и есть `closed_at`.
+     *
+     * ЗАЧЕМ ОТДЕЛЬНАЯ КОЛОНКА. `closed_at` связан проверкой
+     * `(status = 'closed') = (closed_at IS NOT NULL)`, поэтому при переоткрытии он
+     * обязан обнуляться, а повторное закрытие ставит сегодняшнюю дату. Ведомость ЗП
+     * же набирает работы по месяцу закрытия и не помнит, что за них уже платили, —
+     * и та же работа попадала во вторую ведомость. Расчёт ЗП берёт
+     * `COALESCE(first_closed_at, closed_at)`, поэтому переоткрытие больше не
+     * переносит работу в новый месяц.
+     */
+    firstClosedAt: timestamp('first_closed_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelReason: text('cancel_reason'),
 
