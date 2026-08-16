@@ -436,9 +436,9 @@ describe('payroll: переоткрытие заявки не удваивает
 
     // Август 2032: работа посчитана, в жизни — уже выплачена.
     const before = await computePayouts(getDb(), erfolgId, WINDOW);
-    expect(
-      before.rows.find((r) => r.engineerId === erfolgEngineerId)!.worksAmountKopecks,
-    ).toBe('100000');
+    expect(before.rows.find((r) => r.engineerId === erfolgEngineerId)!.worksAmountKopecks).toBe(
+      '100000',
+    );
 
     // Директор переоткрыл заявку и закрыл её заново — сегодня, то есть в другом месяце.
     await changeStatus(getDb(), erfolgId, null, ticketId, 'received');
