@@ -8,6 +8,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { Link, useLocation, useRoute } from 'wouter';
 import { ChevronLeft } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { parseRubToKopecks } from '../lib/money';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
 import { QueryError } from '../components/QueryError';
@@ -117,6 +118,12 @@ export function TradeInFormPage() {
       setServerError('Укажите название позиции');
       return;
     }
+    const purchasePriceKopecks = rubToKopecks(v.purchaseRub);
+    const assessedPriceKopecks = rubToKopecks(v.assessedRub);
+    if (purchasePriceKopecks === null || assessedPriceKopecks === null) {
+      setServerError('Сумму не понял. Введите число, например: 120 000');
+      return;
+    }
     const base = {
       name: v.name.trim(),
       manufacturer: v.manufacturer.trim() || null,
@@ -136,15 +143,15 @@ export function TradeInFormPage() {
           ...base,
           status: v.status,
           buyerClientId,
-          purchasePriceKopecks: rubToKopecks(v.purchaseRub),
-          assessedPriceKopecks: rubToKopecks(v.assessedRub),
+          purchasePriceKopecks,
+          assessedPriceKopecks,
         },
       });
     } else {
       create.mutate({
         ...base,
-        purchasePriceKopecks: rubToKopecks(v.purchaseRub),
-        assessedPriceKopecks: rubToKopecks(v.assessedRub),
+        purchasePriceKopecks,
+        assessedPriceKopecks,
       });
     }
   };
@@ -391,10 +398,15 @@ function Label({ children, required = false }: { children: React.ReactNode; requ
   );
 }
 
-function rubToKopecks(v: string): number {
-  const n = Number.parseFloat(v.trim().replace(',', '.'));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.round(n * 100);
+/**
+ * Пусто — это ноль (цену не назвали), непонятный ввод — null, и тогда форма не
+ * отправляется. Раньше здесь стоял parseFloat, и «120 000» молча становилось 120 ₽.
+ */
+function rubToKopecks(v: string): number | null {
+  if (!v.trim()) return 0;
+  const kopecks = parseRubToKopecks(v);
+  if (kopecks === null || kopecks < 0) return null;
+  return kopecks;
 }
 
 function kopecksToRubStr(kopecks: string): string {

@@ -9,6 +9,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { Link, useLocation, useRoute } from 'wouter';
 import { ChevronLeft } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { parseRubInput } from '../lib/money';
 import { QueryError } from '../components/QueryError';
 import { LEAD_SOURCE_LABEL, type LeadSource } from './leads.shared';
 
@@ -94,6 +95,11 @@ export function LeadFormPage() {
       setServerError('Укажите название лида');
       return;
     }
+    const estimatedValue = parseMoney(v.estimatedValue);
+    if (estimatedValue === null) {
+      setServerError('Сумму сделки не понял. Введите число, например: 120 000');
+      return;
+    }
     const body = {
       name: v.name.trim(),
       contactPerson: v.contactPerson.trim() || null,
@@ -101,7 +107,7 @@ export function LeadFormPage() {
       email: v.email.trim() || null,
       region: v.region.trim() || null,
       source: v.source,
-      estimatedValue: parseMoney(v.estimatedValue),
+      estimatedValue,
       nextAction: v.nextAction.trim() || null,
       nextActionDate: v.nextActionDate || null,
       notes: v.notes.trim() || null,
@@ -311,7 +317,13 @@ function Label({ children, required = false }: { children: React.ReactNode; requ
   );
 }
 
-function parseMoney(v: string): number {
-  const n = Number.parseFloat(v.trim());
-  return Number.isFinite(n) && n > 0 ? n : 0;
+/**
+ * Пусто — ноль (сумму не назвали), непонятный ввод — null, и форма не отправляется.
+ * Раньше здесь стоял parseFloat, и «120 000» молча становилось 120 ₽.
+ */
+function parseMoney(v: string): number | null {
+  if (!v.trim()) return 0;
+  const rub = parseRubInput(v);
+  if (rub === null || rub < 0) return null;
+  return rub;
 }

@@ -8,7 +8,8 @@ import { Link } from 'wouter';
 import { BadgeCheck, Plus, Recycle, Search, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { useDebounce } from '../lib/hooks/useDebounce';
-import { formatRub } from '../lib/money';
+import { formatRub, parseRubToKopecks } from '../lib/money';
+import { showToast } from '../lib/toast';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
 import { Pagination } from '../components/ui/Pagination';
@@ -335,16 +336,25 @@ export function TradeInListPage() {
         title="Завершить сделку?"
         description="Позиция станет «Продана». Если к ней привязана техника из парка — владелец будет перенесён на покупателя."
         label="Цена продажи, ₽ (можно пусто)"
-        placeholder="например: 120000"
+        placeholder="например: 120 000"
         confirmText="Продано"
         loading={complete.isPending}
         onConfirm={(v) => {
           if (!completeId) return;
-          const rub = Number.parseFloat(v.trim().replace(',', '.'));
-          complete.mutate({
-            id: completeId,
-            salePriceKopecks: Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : undefined,
-          });
+          const raw = v.trim();
+          // Пусто — сделка закрывается без цены, так и задумано.
+          if (!raw) {
+            complete.mutate({ id: completeId, salePriceKopecks: undefined });
+            return;
+          }
+          const kopecks = parseRubToKopecks(raw);
+          // Раньше здесь стоял parseFloat, и «120 000» молча превращалось в 120 ₽.
+          // Непонятную цену теперь не сохраняем вовсе — человек поправит ввод.
+          if (kopecks === null || kopecks <= 0) {
+            showToast('error', 'Цену продажи не понял. Введите число, например: 120 000');
+            return;
+          }
+          complete.mutate({ id: completeId, salePriceKopecks: kopecks });
         }}
         onCancel={() => setCompleteId(null)}
       />
