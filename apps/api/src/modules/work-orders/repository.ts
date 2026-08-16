@@ -11,15 +11,7 @@
 import { TRPCError } from '@trpc/server';
 import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
-import {
-  inventoryBatches,
-  tickets,
-  users,
-  workOrders,
-  workOrderLines,
-  withTenantTx,
-  type Db,
-} from '@erfolg/db';
+import { tickets, users, workOrders, workOrderLines, withTenantTx, type Db } from '@erfolg/db';
 import type { VatRate, WorkOrderLineType } from '@erfolg/shared';
 import { getEngineerWorkPercentTx, laborCostPerUnitKopecks } from '../payroll/repository';
 
@@ -405,10 +397,10 @@ async function workOrderEngineerId(tx: Tx, workOrderId: string): Promise<string 
  *   - 'work':    ПРОЦЕНТ инженера от цены работы (его личный, иначе общее правило ЗП).
  *     Инженер берётся как в зарплате: строка → иначе ответственный по наряду.
  *     Инженера нет вовсе → 0.
- *   - 'part' c inventory_item_id: средневзвешенная цена закупки активных партий (quantity_remaining > 0).
- *     Если активных партий нет — берём cost из последней (по received_at) batch для item.
- *     Если партий вообще нет — 0.
- *   - 'part' БЕЗ item_id: 0 (свободная строка).
+ *   - 'part':    0. Себестоимость запчасти проставляет ТОЛЬКО выдача со склада
+ *     (inventory-movements/repository.ts — средневзвешенная по фактически списанным
+ *     партиям), и она же кладёт её в строку. Считать «по нынешним партиям» здесь
+ *     нельзя: это подставило бы сегодняшние цены в наряд двухлетней давности.
  *   - 'expense': unit_price (внутренний расход = его же цена; маржа таких строк = 0).
  *
  * ⚠️ Себестоимость работы БОЛЬШЕ НЕ ЗАВИСИТ от `users.hourly_cost_rate_kopecks`.
@@ -421,7 +413,6 @@ async function resolveLineCost(
   input: {
     lineType: WorkOrderLineType;
     workOrderId: string;
-    inventoryItemId?: string | null;
     engineerId?: string | null;
     unitPriceKopecks: bigint;
   },
@@ -437,34 +428,8 @@ async function resolveLineCost(
     return laborCostPerUnitKopecks(input.unitPriceKopecks, percent);
   }
 
-  // part
-  if (!input.inventoryItemId) return 0n;
-  // Средневзвешенная по активным партиям: SUM(unit_cost × remaining) / SUM(remaining).
-  const wavg = await tx.execute(sql`
-    SELECT
-      CASE
-        WHEN COALESCE(SUM(${inventoryBatches.quantityRemaining}), 0) > 0
-        THEN ROUND(
-          SUM(${inventoryBatches.unitCostKopecks} * ${inventoryBatches.quantityRemaining})
-          / SUM(${inventoryBatches.quantityRemaining})
-        )::text
-        ELSE NULL
-      END AS wavg
-    FROM ${inventoryBatches}
-    WHERE ${inventoryBatches.itemId} = ${input.inventoryItemId}::uuid
-      AND ${inventoryBatches.quantityRemaining} > 0
-  `);
-  const wavgRows = wavg as unknown as Array<{ wavg: string | null }>;
-  if (wavgRows[0]?.wavg) return BigInt(wavgRows[0].wavg);
-
-  // Fallback: последняя partia
-  const last = await tx
-    .select({ cost: inventoryBatches.unitCostKopecks })
-    .from(inventoryBatches)
-    .where(eq(inventoryBatches.itemId, input.inventoryItemId))
-    .orderBy(asc(inventoryBatches.receivedAt))
-    .limit(1);
-  return last[0]?.cost ?? 0n;
+  // part — себестоимость появится при выдаче со склада, здесь считать нечего.
+  return 0n;
 }
 
 /**
@@ -507,7 +472,6 @@ async function resolveCostForUpdate(
     return resolveLineCost(tx, {
       lineType: input.lineType,
       workOrderId,
-      inventoryItemId: undefined,
       engineerId: input.engineerId ?? null,
       unitPriceKopecks: input.unitPriceKopecks,
     });
@@ -523,7 +487,6 @@ async function resolveCostForUpdate(
     return resolveLineCost(tx, {
       lineType: input.lineType,
       workOrderId,
-      inventoryItemId: undefined,
       // Поле не прислали → инженер строки НЕ меняется, берём прежнего.
       // Иначе правка одной только цены сбросила бы исполнителя на ответственного по наряду.
       engineerId: input.engineerId !== undefined ? input.engineerId : existing.engineerId,
@@ -585,7 +548,6 @@ export async function upsertLine(
       const costPerUnit = await resolveLineCost(tx, {
         lineType: input.lineType,
         workOrderId,
-        inventoryItemId: undefined,
         engineerId: input.engineerId ?? null,
         unitPriceKopecks: input.unitPriceKopecks,
       });
