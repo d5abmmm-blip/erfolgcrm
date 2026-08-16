@@ -31,7 +31,14 @@ export async function readDisabledModules(db: Db, tenantId: string): Promise<str
 
 /**
  * Фича B — читает опт-ин tenant'а на письмо «техника готова к выдаче».
- * По умолчанию true (DB DEFAULT true — прод уже шлёт это письмо; директор может отключить).
+ * По умолчанию true (DB DEFAULT true).
+ *
+ * ⚠️ СЕЙЧАС ЭТОТ ФЛАГ НИ НА ЧТО НЕ ВЛИЯЕТ. Автоотправка писем клиентам выключена
+ * решением владельца (#83): продюсер вырезан из changeStatusCmd, воркер не
+ * регистрируется (см. index.ts, «⛔ registerTicketStatusNotifyWorker() НЕ
+ * вызывается»). Экран настроек с переключателем убран — он обещал письма,
+ * которых не будет, — а флаг, процедуры и воркер оставлены НАМЕРЕННО: владелец
+ * сказал «пока не нужны», и вернуть рассылку должно быть дёшево.
  */
 export async function readNotifyClientWhenReady(db: Db, tenantId: string): Promise<boolean> {
   const rows = await db

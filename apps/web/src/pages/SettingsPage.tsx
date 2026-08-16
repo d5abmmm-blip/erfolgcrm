@@ -12,7 +12,6 @@ import {
   FileStack,
   History,
   LayoutGrid,
-  Mail,
   Shield,
   Sparkles,
   Users,
@@ -112,24 +111,6 @@ export function SettingsPage() {
               <div className="font-medium">ИИ-ассистент</div>
               <div className="text-muted-foreground text-xs">
                 Ключ и модель для встроенного помощника (z.ai, OpenRouter)
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="text-muted-foreground h-5 w-5" />
-        </Link>
-
-        <Link
-          href="/settings/notifications"
-          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"
-        >
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/10 text-primary grid h-10 w-10 place-items-center rounded-md">
-              <Mail className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="font-medium">Уведомления клиентам</div>
-              <div className="text-muted-foreground text-xs">
-                Письмо клиенту, когда техника готова к выдаче (по умолчанию включено)
               </div>
             </div>
           </div>
