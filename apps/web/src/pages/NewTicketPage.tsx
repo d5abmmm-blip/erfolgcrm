@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, ChevronLeft, Loader2, Mail, Sparkles, X } 
 import type { IntakeMethod, RepairType, TicketPriority, TicketSource } from '@erfolg/shared';
 import { SLA_HOURS_BY_PRIORITY, computeSlaTargetAt } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
+import { deadlineInputToDate } from '../lib/deadline';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
 import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
@@ -266,7 +267,9 @@ export function NewTicketPage() {
       symptom: v.symptom.trim(),
       notes: v.notes.trim() || null,
       assignedEngineerId: v.assignedEngineerId || null,
-      deadlineAt: v.deadlineAt ? new Date(v.deadlineAt) : null,
+      // Конец выбранного дня по местному времени: new Date('2026-08-20') дало бы
+      // полночь UTC, и срок «сегодня» истекал бы в три часа ночи.
+      deadlineAt: deadlineInputToDate(v.deadlineAt),
     });
   };
 
