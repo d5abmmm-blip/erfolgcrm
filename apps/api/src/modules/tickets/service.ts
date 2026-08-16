@@ -6,6 +6,7 @@
  * after — только метаданные изменения (ключи, статусы).
  */
 import { TRPCError } from '@trpc/server';
+import { ALLOWED_TICKET_TRANSITIONS } from '@erfolg/shared';
 import type { TicketStatus, TicketBlockedReason } from '@erfolg/shared';
 import { withTenantTx, type Db } from '@erfolg/db';
 import { writeAudit, writeAuditInTx } from '../../lib/audit';
@@ -303,33 +304,12 @@ const REOPEN_STATUSES: ReadonlySet<TicketStatus> = new Set([
 ]);
 
 /**
- * Разрешённые переходы между статусами заявки.
- *   received    → diagnostics | cancelled
- *   diagnostics → in_progress | cancelled
- *   in_progress → act_pending | cancelled
- *   act_pending → closed | in_progress | cancelled    (отозвать на доделку / отказ клиента)
- *   closed      → ∅                                   (только директор через reopen)
- *   cancelled   → ∅                                   (только директор через reopen)
- *
- * Стадии «Смета» (estimate) и «Согласование» (approval) убраны из потока. Значения
- * enum сохранены (устаревшие) ради истории и типобезопасности; если легаси-заявка
- * вдруг окажется в них — разрешаем только выход в работу/отмену, чтобы не застряла.
- *
- * Идемпотентность: from === to — это no-op, не ошибка.
+ * Таблица переходов теперь ОДНА на сервер и на экран — @erfolg/shared/ticket-transitions.
+ * Здесь она была только у сервера, и интерфейс предлагал переходы наугад: мобильная
+ * кнопка «Готов к акту» из «Диагностики», перетаскивание на канбане в любую колонку,
+ * кнопки «Закрыть наряд» при любом статусе. Сервер остаётся последним словом.
  */
-const ALLOWED_TRANSITIONS: Record<TicketStatus, ReadonlyArray<TicketStatus>> = {
-  received: ['diagnostics', 'cancelled'],
-  diagnostics: ['in_progress', 'cancelled'],
-  estimate: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
-  approval: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
-  in_progress: ['act_pending', 'cancelled'],
-  // Отмена из «Ожидает акта» разрешена: техника готова, но клиент может от неё
-  // отказаться или забрать без ремонта. Кнопка «Отменить заявку» на карточке
-  // показывалась при любом незакрытом статусе, и в этом одном упиралась в отказ.
-  act_pending: ['closed', 'in_progress', 'cancelled'],
-  closed: [],
-  cancelled: [],
-};
+const ALLOWED_TRANSITIONS = ALLOWED_TICKET_TRANSITIONS;
 
 export class InvalidStatusTransitionError extends Error {
   constructor(

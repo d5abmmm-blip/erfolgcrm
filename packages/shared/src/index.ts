@@ -6,6 +6,12 @@ import { z } from 'zod';
 
 export { generatePassword, GENERATED_PASSWORD_LENGTH } from './generate-password';
 export {
+  ALLOWED_TICKET_TRANSITIONS,
+  ENGINEER_ALLOWED_STATUSES,
+  allowedNextStatuses,
+  canTransitionTicket,
+} from './ticket-transitions';
+export {
   isLegacyId,
   isLegacyNumber,
   LEGACY_HINT,

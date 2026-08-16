@@ -29,6 +29,7 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
+import { canTransitionTicket } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import {
@@ -38,6 +39,7 @@ import {
   isTicketStale,
 } from '../lib/dictionaries';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { PromptDialog } from '../components/ui/PromptDialog';
 
 const ENGINEER_ALL = '__all__';
 const ENGINEER_NONE = '__none__';
@@ -84,6 +86,8 @@ export function TicketsKanbanPage() {
   const [showClosed, setShowClosed] = useState(false);
   const [engineerFilter, setEngineerFilter] = useState<string>(ENGINEER_ALL);
   const [toast, setToast] = useState<string | null>(null);
+  /** Заявка, которую тащат в «Отменена»: сначала спрашиваем причину. */
+  const [cancelId, setCancelId] = useState<string | null>(null);
   /** Текущая страница каждой колонки (по статусу). Сбрасывается при смене фильтров. */
   const [pages, setPages] = useState<Partial<Record<TicketStatus, number>>>({});
 
@@ -173,13 +177,54 @@ export function TicketsKanbanPage() {
         </label>
       </div>
 
+      <PromptDialog
+        open={!!cancelId}
+        title="Отменить заявку?"
+        description="Заявка перейдёт в статус «Отменена». Вернуть её в работу сможет директор кнопкой «Переоткрыть»."
+        label="Причина отмены (необязательно)"
+        placeholder="Например: клиент отказался от ремонта"
+        multiline
+        variant="danger"
+        confirmText="Отменить заявку"
+        loading={changeStatus.isPending}
+        onConfirm={(reason) => {
+          if (!cancelId) return;
+          changeStatus.mutate({
+            id: cancelId,
+            status: 'cancelled',
+            cancelReason: reason || undefined,
+          });
+          setCancelId(null);
+        }}
+        onCancel={() => setCancelId(null)}
+      />
+
       <KanbanBoard
         columns={columns}
         engineerId={engineerId}
         unassigned={unassigned}
         pages={pages}
         onPageChange={(status, page) => setPages((prev) => ({ ...prev, [status]: page }))}
-        onMove={(id, status) => changeStatus.mutate({ id, status })}
+        onMove={(id, status, from) => {
+          // Канбан обещал перетаскивание между ЛЮБЫМИ колонками, а сервер принимает
+          // четыре перехода из двенадцати: карточка возвращалась на место без слова
+          // объяснения. Теперь невозможный переход даже не уходит на сервер, а
+          // человек читает, почему так нельзя.
+          if (from && !canTransitionTicket(from, status)) {
+            setToast(
+              `Из «${TICKET_STATUS_META[from].label}» нельзя сразу в «${TICKET_STATUS_META[status].label}»`,
+            );
+            setTimeout(() => setToast(null), 4000);
+            return;
+          }
+          // Отмена — необратимое действие, и на карточке заявки для неё стоит диалог
+          // с полем причины. Перетаскиванием заявка отменялась молча и без причины.
+          if (status === 'cancelled') {
+            setCancelId(id);
+            return;
+          }
+          changeStatus.mutate({ id, status });
+        }}
       />
 
       {toast && (
@@ -204,7 +249,7 @@ function KanbanBoard({
   unassigned: boolean | undefined;
   pages: Partial<Record<TicketStatus, number>>;
   onPageChange: (status: TicketStatus, page: number) => void;
-  onMove: (id: string, status: TicketStatus) => void;
+  onMove: (id: string, status: TicketStatus, from?: TicketStatus) => void;
 }) {
   const [dragged, setDragged] = useState<DragState | null>(null);
   const [overCol, setOverCol] = useState<TicketStatus | null>(null);
@@ -262,7 +307,7 @@ function KanbanColumn({
   setDragged: (d: DragState | null) => void;
   isOver: boolean;
   setOverCol: (s: TicketStatus | null) => void;
-  onMove: (id: string, status: TicketStatus) => void;
+  onMove: (id: string, status: TicketStatus, from?: TicketStatus) => void;
 }) {
   const q = trpc.tickets.list.useQuery(
     {
@@ -304,7 +349,7 @@ function KanbanColumn({
         // Статус тащим вместе с карточкой: у колонки больше нет общего списка заявок.
         const from = dragged?.status;
         if (from === status) return;
-        onMove(id, status);
+        onMove(id, status, from);
       }}
       className={cn(
         'bg-card flex min-h-[120px] flex-col gap-2 rounded-lg border p-2 transition',

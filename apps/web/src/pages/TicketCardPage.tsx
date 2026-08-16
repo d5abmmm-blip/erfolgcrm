@@ -57,6 +57,7 @@ import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 import { eventPriorityLabel, eventStatusLabel } from '../lib/ticket-events';
 import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { toPdfLines } from '../lib/pdf/lines';
+import { allowedNextStatuses } from '@erfolg/shared';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -1242,7 +1243,13 @@ function ActionsPanel({
   const isClosed = t.status === 'closed' || t.status === 'cancelled';
   // Отменяют директор и диспетчер — ровно как разрешает сервер (tickets.cancel).
   const canCancel = (role === 'director' || role === 'dispatcher') && !isClosed;
-  const allowedStatuses = role === 'engineer' ? ENGINEER_STATUSES : STAFF_STATUSES;
+  // Список статусов и обе быстрые кнопки — строго по таблице переходов
+  // (@erfolg/shared). Раньше в выпадающем списке лежали ВСЕ статусы роли, а кнопки
+  // «Перевести в „Ожидает акта“» и «Закрыть наряд» показывались при любом статусе:
+  // из «Диагностики» закрыть наряд предлагалось, а сервер отвечал отказом.
+  const nextStatuses = allowedNextStatuses(t.status, role);
+  const baseStatuses = role === 'engineer' ? ENGINEER_STATUSES : STAFF_STATUSES;
+  const allowedStatuses = baseStatuses.filter((s) => s === t.status || nextStatuses.includes(s));
 
   return (
     <section className="bg-card space-y-4 rounded-lg border p-4">
@@ -1275,7 +1282,7 @@ function ActionsPanel({
               Применить
             </button>
           </div>
-          {t.status !== 'act_pending' && (
+          {nextStatuses.includes('act_pending') && (
             <button
               type="button"
               onClick={() => onChangeStatus('act_pending')}
@@ -1285,7 +1292,7 @@ function ActionsPanel({
               Перевести в «Ожидает акта»
             </button>
           )}
-          {t.status !== 'closed' && (
+          {nextStatuses.includes('closed') && (
             <button
               type="button"
               onClick={() => onChangeStatus('closed')}

@@ -18,6 +18,7 @@ import {
   TicketStatus,
 } from '@erfolg/shared';
 import { router, directorProcedure, engineerProcedure, staffProcedure } from '../../trpc/trpc';
+import { ENGINEER_ALLOWED_STATUSES } from '@erfolg/shared';
 import { buildCmdCtx } from '../../trpc/helpers';
 import {
   addTicketNoteCmd,
@@ -47,12 +48,6 @@ import {
   updateTicketCmd,
   weeklyScheduleQuery,
 } from './service';
-
-const ENGINEER_ALLOWED_STATUSES: ReadonlyArray<z.infer<typeof TicketStatus>> = [
-  'diagnostics',
-  'in_progress',
-  'act_pending',
-];
 
 const createTicketSchema = z.object({
   clientId: z.string().uuid(),
