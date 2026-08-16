@@ -5,7 +5,7 @@
  * - list / create / update / addNote / recordPrint — staffProcedure (директор + диспетчер).
  * - get / search / listEvents / changeStatus — engineerProcedure (включая инженера).
  *   Инженер может менять status только в рабочие статусы (diagnostics/in_progress/act_pending).
- * - cancel / reopen — directorProcedure.
+ * - cancel — staffProcedure (директор + диспетчер), reopen — directorProcedure.
  */
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -295,7 +295,14 @@ export const ticketsRouter = router({
     return changeStatusCmd(buildCmdCtx(ctx), input.id, input.status, input.cancelReason ?? null);
   }),
 
-  cancel: directorProcedure
+  /**
+   * Отмена заявки — директор И диспетчер (решение владельца: диспетчер работает
+   * вживую и отменяет сам). Раньше здесь стоял directorProcedure, но запрет ничего
+   * не значил: changeStatus — engineerProcedure и ограничивает по роли только
+   * инженера, так что диспетчер отменял заявку в обход, одним статусом. Теперь
+   * оба пути говорят одно и то же.
+   */
+  cancel: staffProcedure
     .input(
       z.object({
         id: z.string().uuid(),
