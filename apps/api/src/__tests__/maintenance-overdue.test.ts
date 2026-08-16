@@ -6,6 +6,7 @@ import { eq, like } from 'drizzle-orm';
 import { assets, getDb, maintenanceLog, maintenanceSchedules, withTenantTx } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createSchedule, listSchedules, recordPerformed } from '../modules/maintenance/repository';
+import { listMaintenanceForToday } from '../modules/dashboard/repository';
 
 let erfolgId = '';
 let assetId = '';
@@ -135,5 +136,52 @@ describe('maintenance schedule filters', () => {
     );
     const expectedNext = startAt.getTime() + 30 * day;
     expect(row?.nextDueAt.getTime()).toBe(expectedNext);
+  });
+});
+
+/**
+ * «Просрочено» у ТО — одно определение на все экраны.
+ *
+ * Было четыре разных: раздел ТО считал по метке времени (next_due_at <= now()),
+ * дашборд давал сутки форы (next_due_at < now() - interval '1 day') в двух местах,
+ * а список «ТО на сегодня» сравнивал по дате (next_due_at::date < CURRENT_DATE).
+ * График, просроченный сегодня утром, был просрочен на одном экране и не просрочен
+ * на другом — директор видел два разных числа и не знал, какому верить.
+ *
+ * Правило теперь одно: просрочено, если плановый ДЕНЬ уже прошёл.
+ */
+describe('просрочка ТО считается одинаково везде', () => {
+  beforeEach(async () => {
+    await clearTestSchedules();
+  });
+
+  /** Считает ли раздел ТО этот график просроченным. */
+  async function overdueOnScreen(id: string): Promise<boolean> {
+    const rows = await listSchedules(getDb(), erfolgId, { filter: 'overdue' });
+    return rows.some((s) => s.id === id);
+  }
+
+  /** Считает ли его просроченным дашборд (список «ТО на сегодня»). */
+  async function overdueOnDashboard(id: string): Promise<boolean> {
+    const rows = await listMaintenanceForToday(getDb(), erfolgId, true, 500);
+    return rows.some((r) => r.scheduleId === id && r.isOverdue);
+  }
+
+  it('график вчерашнего дня просрочен и в разделе ТО, и на дашборде', async () => {
+    const id = await createWithDue('вчера', -1);
+    expect(await overdueOnScreen(id)).toBe(true);
+    expect(await overdueOnDashboard(id)).toBe(true);
+  });
+
+  it('график на сегодня не просрочен нигде — день ещё не кончился', async () => {
+    const id = await createWithDue('сегодня', 0);
+    expect(await overdueOnScreen(id)).toBe(false);
+    expect(await overdueOnDashboard(id)).toBe(false);
+  });
+
+  it('график будущего дня не просрочен нигде', async () => {
+    const id = await createWithDue('через три дня', 3);
+    expect(await overdueOnScreen(id)).toBe(false);
+    expect(await overdueOnDashboard(id)).toBe(false);
   });
 });

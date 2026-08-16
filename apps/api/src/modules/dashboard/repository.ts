@@ -10,6 +10,11 @@
 import { sql } from 'drizzle-orm';
 import { withTenantTx, type Db } from '@erfolg/db';
 import { exclInternalCond, internalCategoryIds } from '../cash/repository';
+import {
+  maintenanceDueByTodaySql,
+  maintenanceDueTodaySql,
+  maintenanceOverdueSql,
+} from '../../lib/maintenance-due';
 
 export interface PeriodInput {
   /** Включительно (UTC). */
@@ -71,7 +76,6 @@ export async function getMetrics(
   return withTenantTx(db, tenantId, async (tx) => {
     const startIso = period.start.toISOString();
     const endIso = period.end.toISOString();
-    const todayIso = new Date().toISOString().slice(0, 10);
 
     // 1) Выручка за период — ПРИХОД ПО КАССЕ, ровно как «Собрано» в разделе «Финансы».
     //
@@ -174,8 +178,8 @@ export async function getMetrics(
     // 7) Сегодняшние ТО + просроченные ТО
     const maintRows = (await tx.execute(sql`
       SELECT
-        SUM(CASE WHEN next_due_at::date = ${todayIso}::date AND is_active THEN 1 ELSE 0 END)::int AS today_cnt,
-        SUM(CASE WHEN next_due_at < (now() - interval '1 day') AND is_active THEN 1 ELSE 0 END)::int AS overdue_cnt
+        SUM(CASE WHEN ${maintenanceDueTodaySql(sql`next_due_at`)} AND is_active THEN 1 ELSE 0 END)::int AS today_cnt,
+        SUM(CASE WHEN ${maintenanceOverdueSql(sql`next_due_at`)} AND is_active THEN 1 ELSE 0 END)::int AS overdue_cnt
         FROM maintenance_schedules
        WHERE deleted_at IS NULL
     `)) as unknown as Array<{ today_cnt: number | null; overdue_cnt: number | null }>;
@@ -282,7 +286,7 @@ export async function getNavBadgeCounts(
     const maintRows = (await tx.execute(sql`
       SELECT COUNT(*)::int AS cnt FROM maintenance_schedules
        WHERE deleted_at IS NULL AND is_active
-         AND next_due_at < (now() - interval '1 day')
+         AND ${maintenanceOverdueSql(sql`next_due_at`)}
     `)) as unknown as CountRow[];
     const maintenanceOverdue = maintRows[0]?.cnt ?? 0;
 
@@ -502,8 +506,8 @@ export async function listMaintenanceForToday(
 ): Promise<MaintenanceTodayRow[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const todayCondition = includeOverdue
-      ? sql`s.next_due_at::date <= CURRENT_DATE`
-      : sql`s.next_due_at::date = CURRENT_DATE`;
+      ? maintenanceDueByTodaySql(sql`s.next_due_at`)
+      : maintenanceDueTodaySql(sql`s.next_due_at`);
     const rows = (await tx.execute(sql`
       SELECT
         s.id            AS schedule_id,
@@ -512,7 +516,7 @@ export async function listMaintenanceForToday(
         s.next_due_at,
         s.interval_days,
         u.full_name     AS responsible_name,
-        (s.next_due_at::date < CURRENT_DATE) AS is_overdue
+        (${maintenanceOverdueSql(sql`s.next_due_at`)}) AS is_overdue
         FROM maintenance_schedules s
         JOIN assets a ON a.id = s.asset_id
         LEFT JOIN users u ON u.id = s.responsible_user_id
