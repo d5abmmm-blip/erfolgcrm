@@ -18,6 +18,7 @@ import { PromptDialog } from '../components/ui/PromptDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { INVOICE_STATUS_META } from '../lib/dictionaries';
 import { invoiceNotesSchema, type InvoiceNotesValues } from './InvoiceCardPage.schemas';
+import { toPdfLines } from '../lib/pdf/lines';
 
 const VAT_LABEL: Record<string, string> = {
   '0': '0%',
@@ -188,14 +189,7 @@ export function InvoiceCardPage() {
             partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
             expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
             totalAmountKopecks: Number(inv.data.totalAmountKopecks),
-            lines: workOrderQuery.lines.map((l) => ({
-              lineType: l.lineType,
-              name: l.name,
-              unit: l.unit,
-              quantity: Number(l.quantity),
-              unitPriceKopecks: Number(l.unitPriceKopecks),
-              amountKopecks: Number(l.amountKopecks),
-            })),
+            lines: toPdfLines(workOrderQuery.lines),
           },
           invoiceNumber: inv.data.invoiceNumber,
           issueDate: inv.data.issueDate,

@@ -56,6 +56,7 @@ import { ComposeEmailModal, type AttachmentOption } from '../components/ComposeE
 import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 import { eventPriorityLabel, eventStatusLabel } from '../lib/ticket-events';
 import { LegacyBadge } from '../components/ui/LegacyBadge';
+import { toPdfLines } from '../lib/pdf/lines';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -258,15 +259,7 @@ export function TicketCardPage() {
           diagnosis: woData.diagnosis ?? null,
           repairDescription: woData.repairDescription ?? null,
           recommendation: woData.recommendation ?? null,
-          lines: woData.lines.map((l) => ({
-            lineType: l.lineType,
-            name: l.name,
-            unit: l.unit,
-            quantity: Number(l.quantity),
-            unitPriceKopecks: Number(l.unitPriceKopecks),
-            amountKopecks: Number(l.amountKopecks),
-            engineerName: l.engineerName ?? null,
-          })),
+          lines: toPdfLines(woData.lines),
         }
       : null;
     return { tenantData, clientData, assetData, ticketData, workOrderData };
