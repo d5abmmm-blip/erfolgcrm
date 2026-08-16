@@ -27,6 +27,22 @@ const STATUS_OPTIONS: Array<{ value: InvoiceStatus | ''; label: string }> = [
 
 type StatusOption = InvoiceStatus | '';
 
+/**
+ * Статус-фильтр из адресной строки.
+ *
+ * Плитки «Дебиторка» и «Просрочено» на главной ведут на /invoices?status=overdue,
+ * а страница адрес не читала вовсе и открывала полный список — директор жал
+ * «Просрочено» и видел все счета подряд.
+ *
+ * Незнакомое значение молча превращается во «все»: подставлять его в запрос нельзя,
+ * а падать из-за кривой ссылки в письме — тем более.
+ */
+export function invoiceStatusFromQuery(search: string): StatusOption {
+  const raw = new URLSearchParams(search).get('status');
+  if (!raw) return '';
+  return STATUS_OPTIONS.some((o) => o.value === raw) ? (raw as StatusOption) : '';
+}
+
 interface InvoiceRow {
   id: string;
   invoiceNumber: string;
@@ -47,7 +63,10 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 export function InvoicesPage() {
-  const [status, setStatus] = useState<StatusOption>('');
+  // Начальное значение — из адреса: сюда приходят с плиток дашборда.
+  const [status, setStatus] = useState<StatusOption>(() =>
+    invoiceStatusFromQuery(window.location.search),
+  );
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search.trim().toLowerCase(), 300);
   const [page, setPage] = useState(1);
