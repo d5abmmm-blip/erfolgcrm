@@ -6,7 +6,7 @@
  * after — только метаданные изменения (ключи, статусы).
  */
 import { TRPCError } from '@trpc/server';
-import { ALLOWED_TICKET_TRANSITIONS } from '@erfolg/shared';
+import { ALLOWED_TICKET_TRANSITIONS, ticketBelongsToEngineer } from '@erfolg/shared';
 import type { TicketStatus, TicketBlockedReason } from '@erfolg/shared';
 import { withTenantTx, type Db } from '@erfolg/db';
 import { writeAudit, writeAuditInTx } from '../../lib/audit';
@@ -913,8 +913,9 @@ export interface TicketOwnership {
  */
 export function engineerMayEditTicket(session: ActorSession, ticket: TicketOwnership): boolean {
   if (session.role !== 'engineer') return true;
-  if (ticket.assignedEngineerId === session.userId) return true;
-  return (ticket.helperEngineerIds ?? []).includes(session.userId);
+  // Определение «своей заявки» одно на сервер и на экран (@erfolg/shared): экран
+  // заявки сверял только назначенного, и помощник не видел кнопок актов.
+  return ticketBelongsToEngineer(session.userId, ticket);
 }
 
 /**

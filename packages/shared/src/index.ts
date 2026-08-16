@@ -5,6 +5,7 @@
 import { z } from 'zod';
 
 export { generatePassword, GENERATED_PASSWORD_LENGTH } from './generate-password';
+export { ticketBelongsToEngineer, type TicketEngineers } from './ticket-ownership';
 export {
   ALLOWED_TICKET_TRANSITIONS,
   ENGINEER_ALLOWED_STATUSES,
