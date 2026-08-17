@@ -112,7 +112,9 @@ export function MaintenancePage() {
               </thead>
               <tbody className="divide-y">
                 {schedules.data.map((s) => {
-                  const overdue = s.nextDueAt.getTime() < Date.now();
+                  // Просрочку решает сервер по общему правилу — раньше страница
+                  // считала её сама по часам браузера, и это было пятым определением.
+                  const overdue = s.isOverdue;
                   return (
                     <tr key={s.id} className="hover:bg-muted/20 transition">
                       <td className="px-3 py-2">

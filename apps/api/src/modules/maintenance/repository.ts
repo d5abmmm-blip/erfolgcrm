@@ -5,6 +5,7 @@
  * (= performed_at + interval_days * 86400000 ms). Если scheduleId не передан — только лог.
  */
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { maintenanceOverdueSql } from '../../lib/maintenance-due';
 import {
   assets,
   clients,
@@ -31,6 +32,12 @@ export interface MaintenanceScheduleDto {
   responsibleUserId: string | null;
   notes: string | null;
   isActive: boolean;
+  /**
+   * Просрочен ли график — решает СЕРВЕР, по общему правилу (lib/maintenance-due.ts).
+   * Раньше страница считала это сама, по часам браузера и по метке времени, и была
+   * пятым определением просрочки в системе.
+   */
+  isOverdue: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,7 +60,14 @@ const DUE_SOON_DAYS = 7;
 
 function buildScheduleFilter(filter: ScheduleFilter | undefined, now: Date) {
   if (filter === 'overdue') {
-    return and(eq(maintenanceSchedules.isActive, true), lte(maintenanceSchedules.nextDueAt, now));
+    // Одно определение на всю систему (lib/maintenance-due.ts): просрочено, если
+    // плановый ДЕНЬ прошёл. По метке времени график «на сегодня» становился
+    // просроченным через секунду после наступления срока — и раздел ТО расходился
+    // с дашбордом, который сравнивал по дате.
+    return and(
+      eq(maintenanceSchedules.isActive, true),
+      maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`),
+    );
   }
   if (filter === 'due_soon') {
     const horizon = new Date(now.getTime() + DUE_SOON_DAYS * 24 * 60 * 60 * 1000);
@@ -91,6 +105,7 @@ export async function listSchedules(
         responsibleUserId: maintenanceSchedules.responsibleUserId,
         notes: maintenanceSchedules.notes,
         isActive: maintenanceSchedules.isActive,
+        isOverdue: sql<boolean>`(${maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`)})`,
         createdAt: maintenanceSchedules.createdAt,
         updatedAt: maintenanceSchedules.updatedAt,
       })
