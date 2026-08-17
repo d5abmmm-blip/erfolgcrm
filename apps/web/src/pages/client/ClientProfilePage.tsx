@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Loader2, Save, KeyRound } from 'lucide-react';
+import { useLocation } from 'wouter';
+import { Loader2, Save, KeyRound, FileDown, ShieldAlert } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { assertOnlineForFile } from '../../lib/offline/require-online';
 
 export function ClientProfilePage() {
   const me = trpc.clientAuth.me.useQuery();
@@ -70,6 +72,50 @@ export function ClientProfilePage() {
     }
     changePwd.mutate({ oldPassword: oldPwd, newPassword: newPwd });
   }
+
+  /* ── Мои данные (152-ФЗ): выгрузка и запрос на удаление ── */
+  const [, navigate] = useLocation();
+  const [exporting, setExporting] = useState(false);
+  const [dataMsg, setDataMsg] = useState<string | null>(null);
+  const [dataErr, setDataErr] = useState<string | null>(null);
+  // Удаление — двумя шагами: первый клик раскрывает объяснение последствий.
+  const [confirmDeletion, setConfirmDeletion] = useState(false);
+
+  const onExportMyData = async () => {
+    setExporting(true);
+    setDataErr(null);
+    setDataMsg(null);
+    try {
+      // Без связи в сеть не идём: на паузе запрос не завершится никогда,
+      // и кнопка навсегда осталась бы «Собираю…» (lib/offline/require-online).
+      assertOnlineForFile('выгрузка ваших данных');
+      const data = await utils.clientCabinet.exportMyData.fetch();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `мои-данные-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setDataMsg('Файл со всеми вашими данными сохранён на устройство');
+    } catch (e) {
+      setDataErr(e instanceof Error ? e.message : 'Не удалось собрать файл');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const requestDeletion = trpc.clientCabinet.requestAccountDeletion.useMutation({
+    onSuccess: () => {
+      // Сервер уже отозвал согласия и сессии и снял куку — уводим на вход.
+      navigate('/client/login');
+    },
+    onError: (e) => setDataErr(e.message),
+  });
 
   if (me.isLoading || !me.data) {
     return (
@@ -171,6 +217,71 @@ export function ClientProfilePage() {
           Сменить пароль
         </button>
       </form>
+
+      <section className="bg-card space-y-4 rounded-md border p-4 md:p-6">
+        <h3 className="text-sm font-semibold">Мои данные</h3>
+        <p className="text-muted-foreground text-sm">
+          По закону о персональных данных (152-ФЗ) вы можете получить копию всех данных о себе
+          или попросить удалить учётную запись.
+        </p>
+
+        {dataMsg && <Note kind="ok" text={dataMsg} />}
+        {dataErr && <Note kind="err" text={dataErr} />}
+
+        <button
+          type="button"
+          onClick={() => void onExportMyData()}
+          disabled={exporting}
+          className="border-input bg-background hover:bg-muted/40 inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-medium disabled:opacity-50"
+        >
+          {exporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4" />
+          )}
+          {exporting ? 'Собираю файл…' : 'Скачать мои данные (файл)'}
+        </button>
+
+        {!confirmDeletion ? (
+          <div>
+            <button
+              type="button"
+              onClick={() => setConfirmDeletion(true)}
+              className="text-destructive hover:bg-destructive/10 inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-medium"
+            >
+              <ShieldAlert className="h-4 w-4" />
+              Удалить мой аккаунт
+            </button>
+          </div>
+        ) : (
+          <div className="border-destructive/30 bg-destructive/5 space-y-3 rounded-md border p-4">
+            <p className="text-sm">
+              Вход в кабинет закроется сразу, согласия на обработку данных будут отозваны.
+              Документы по вашим заявкам и счетам закон о бухгалтерском учёте обязывает
+              хранить 5 лет — они будут удалены по окончании этого срока. Если позже
+              захотите вернуться, доступ сможет восстановить сервисный центр.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => requestDeletion.mutate()}
+                disabled={requestDeletion.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-medium disabled:opacity-50"
+              >
+                {requestDeletion.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Да, закрыть доступ и удалить данные
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDeletion(false)}
+                className="border-input bg-background hover:bg-muted/40 inline-flex h-10 items-center rounded-md border px-4 text-sm font-medium"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
