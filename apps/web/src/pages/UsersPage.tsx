@@ -16,6 +16,7 @@ import { EngineerProfileSection } from '../components/EngineerProfileSection';
 import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { isLegacyId } from '@erfolg/shared';
 import { QueryErrorRow } from '../components/QueryError';
+import { ACTIVE_TICKET_STATUSES } from '../lib/dictionaries';
 
 type Role = 'director' | 'dispatcher' | 'engineer';
 const ROLE_LABEL: Record<Role, string> = {
@@ -241,7 +242,13 @@ function IconButton({
   );
 }
 
-function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) {
+/**
+ * Кнопка «Заблокировать / Разблокировать» с диалогом.
+ *
+ * Экспортируется ради теста: диалог предупреждает о двух последствиях, которые
+ * человек иначе обнаруживает поодиночке и поздно (см. block-user-warns.test.tsx).
+ */
+export function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) {
   const utils = trpc.useUtils();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -259,6 +266,16 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
     },
   });
   const isBlocking = user.isActive;
+
+  // Сколько незакрытых заявок останется висеть на человеке. Спрашиваем только
+  // когда диалог открыт: список пользователей на 21 строку иначе тянул бы 21
+  // лишний запрос при каждом заходе.
+  const openTicketsQ = trpc.tickets.list.useQuery(
+    { engineerId: user.id, statuses: [...ACTIVE_TICKET_STATUSES], pageSize: 1 },
+    { enabled: open && isBlocking },
+  );
+  const openTickets = openTicketsQ.data?.total ?? 0;
+
   return (
     <>
       <button
@@ -294,7 +311,19 @@ function BlockToggle({ user, disabled }: { user: UserRow; disabled?: boolean }) 
         title={isBlocking ? 'Заблокировать сотрудника?' : 'Разблокировать сотрудника?'}
         description={
           isBlocking
-            ? `${user.fullName}: вход будет закрыт, активные сессии отозваны.`
+            ? [
+                `${user.fullName}: вход будет закрыт, активные сессии отозваны.`,
+                // Заявки не всплывают у других и не возвращаются «без назначения» —
+                // они просто висят за человеком, которого больше нет в системе.
+                openTickets > 0
+                  ? `На нём ${openTickets} ${ticketsWord(openTickets)} — они останутся за ним и ни к кому не перейдут. Переназначьте их до блокировки.`
+                  : null,
+                // Денежное: ведомость отбирает работы по «сотрудник действующий»,
+                // поэтому пропадёт и то, что человек уже заработал в этом месяце.
+                'В ведомости зарплаты он больше не появится: расчёт идёт только по действующим сотрудникам, и уже заработанное за текущий месяц из неё выпадет. Если ещё не рассчитывались — сначала посчитайте и сохраните ведомость.',
+              ]
+                .filter(Boolean)
+                .join('\n\n')
             : isLegacyId(user.id)
               ? `${user.fullName} — учётная запись перенесена из старой программы, живого человека за ней нет. Разблокировав её, вы выдадите полный доступ к финансам и персональным данным аккаунту-призраку, и его прежние работы начнут попадать в расчёты. Если это не задумано — не разблокируйте.`
               : `${user.fullName} снова сможет входить в систему. Если этим аккаунтом ещё ни разу не входили, система выдаст новый пароль — старый работать не будет.`
@@ -774,4 +803,13 @@ function ResetPasswordModal({
       </form>
     </ModalShell>
   );
+}
+
+/** «1 незакрытая заявка» / «3 незакрытые заявки» / «5 незакрытых заявок». */
+function ticketsWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'незакрытая заявка';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'незакрытые заявки';
+  return 'незакрытых заявок';
 }
