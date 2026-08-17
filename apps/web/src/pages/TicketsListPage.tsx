@@ -9,6 +9,7 @@ import {
   Ticket as TicketIcon,
   LayoutGrid,
   List,
+  User,
 } from 'lucide-react';
 import type { TicketStatus, TicketPriority } from '@erfolg/shared';
 import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
@@ -51,19 +52,48 @@ interface TicketRow {
 
 const PAGE_SIZE = 25;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Инженер из адресной строки: `/tickets?engineerId=…`.
+ *
+ * Сюда приходят с карточки сотрудника по ссылке «Все заявки →» — раньше она
+ * вела на список ВСЕЙ КОМПАНИИ, потому что фильтра по инженеру в списке заявок
+ * не было вовсе, хотя `tickets.list` принимает `engineerId` с самого начала.
+ *
+ * Мусор отбрасываем: сервер ждёт uuid и на «кто-то» ответит сырой ошибкой
+ * валидации вместо списка. Тот же приём, что у статуса счёта в #161.
+ */
+export function engineerIdFromQuery(search: string): string | null {
+  const raw = new URLSearchParams(search).get('engineerId');
+  return raw && UUID_RE.test(raw) ? raw : null;
+}
+
 export function TicketsListPage() {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search.trim(), 300);
   const [statuses, setStatuses] = useState<TicketStatus[]>([]);
   const [onlyWaitingPart, setOnlyWaitingPart] = useState(false);
   const [onlyUrgent, setOnlyUrgent] = useState(false);
+  const [engineerId, setEngineerId] = useState<string | null>(() =>
+    engineerIdFromQuery(window.location.search),
+  );
   const [page, setPage] = useState(1);
+
+  // Список нужен только чтобы назвать инженера словами: «показаны заявки
+  // такого-то» вместо идентификатора в адресе. Кэшируем — он почти не меняется.
+  const engineersQ = trpc.users.list.useQuery(
+    { onlyEngineers: true, includeBlocked: true },
+    { staleTime: 5 * 60 * 1000, enabled: engineerId !== null },
+  );
+  const engineerName = (engineersQ.data ?? []).find((u) => u.id === engineerId)?.fullName ?? null;
 
   const list = trpc.tickets.list.useQuery({
     search: debounced || undefined,
     statuses: statuses.length > 0 ? statuses : undefined,
     priorities: onlyUrgent ? ['urgent'] : undefined,
     waitingForPart: onlyWaitingPart ? true : undefined,
+    engineerId: engineerId ?? undefined,
     // Рабочая очередь: срочные наверх, внутри срочности — свежие первыми.
     sort: 'priority',
     page,
@@ -177,7 +207,9 @@ export function TicketsListPage() {
             <TicketIcon className="h-3.5 w-3.5" />
             Заявки
           </div>
-          <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Все заявки</h1>
+          <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">
+            {engineerId ? 'Заявки инженера' : 'Все заявки'}
+          </h1>
           <p className="text-muted-foreground text-sm">
             Поток заявок от клиентов: приём, диагностика, ремонт, акт
           </p>
@@ -193,6 +225,29 @@ export function TicketsListPage() {
           </Link>
         </div>
       </div>
+
+      {/* Пришли с карточки сотрудника — говорим, чьи заявки показаны, и даём
+          выход ко всем. Без этой строки отфильтрованный список выглядит как
+          «в компании всего 40 заявок». */}
+      {engineerId && (
+        <div className="bg-primary/10 border-primary/30 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <User className="text-primary h-4 w-4" />
+          <span>
+            Показаны заявки: <b>{engineerName ?? 'выбранный инженер'}</b>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setEngineerId(null);
+              setPage(1);
+              window.history.replaceState({}, '', '/tickets');
+            }}
+            className="text-muted-foreground hover:text-foreground ml-auto rounded-md border px-2 py-0.5 text-xs"
+          >
+            Показать все заявки
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
