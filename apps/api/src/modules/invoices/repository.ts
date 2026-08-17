@@ -307,6 +307,8 @@ export async function listByClient(
 
 export interface ListForTenantOpts {
   status?: InvoiceStatus;
+  /** Часть номера счёта; регистр и пробелы по краям не важны. */
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -324,6 +326,14 @@ export async function listForTenant(
   return withTenantTx(db, tenantId, async (tx) => {
     const filters: SQL[] = [isNull(invoices.deletedAt)];
     if (opts.status) filters.push(eq(invoices.status, opts.status));
+    // Поиск по номеру счёта — на СЕРВЕРЕ, по всей базе. Экран раньше фильтровал
+    // уже полученные 25 строк страницы, а итог под таблицей показывал общий:
+    // счёт с третьей страницы «не находился», и человек решал, что его нет.
+    // Регистр и пробелы по краям не мешают — номер переписывают из бумаги.
+    const search = opts.search?.trim();
+    if (search) {
+      filters.push(sql`${invoices.invoiceNumber} ILIKE ${'%' + search + '%'}`);
+    }
 
     const countResult = await tx
       .select({ count: sql<number>`cast(count(*) as integer)` })
