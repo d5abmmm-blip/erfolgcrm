@@ -4,6 +4,7 @@ import { AlertCircle, Package, Plus, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { useDebounce } from '../lib/hooks/useDebounce';
+import { listEmptyText } from '../lib/empty-text';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { InventoryItemForm } from '../components/InventoryItemForm';
@@ -137,7 +138,7 @@ export function InventoryListPage() {
         columns={columns}
         loading={list.isLoading}
         error={list.error ? { message: list.error.message } : null}
-        emptyText="Позиций пока нет — добавьте первую"
+        emptyText={listEmptyText(!!debounced, 'Позиций пока нет — добавьте первую')}
         rowKey={(it) => it.id}
       />
 

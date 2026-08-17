@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { BookMarked, ChevronLeft, Plus, Search } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { useDebounce } from '../lib/hooks/useDebounce';
+import { listEmptyText } from '../lib/empty-text';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { mergeDeviceTypeSuggestions } from '../lib/device-types';
@@ -121,7 +122,7 @@ export function AssetModelsPage() {
         columns={columns}
         loading={list.isLoading}
         error={list.error ? { message: list.error.message } : null}
-        emptyText="Моделей пока нет — добавьте первую"
+        emptyText={listEmptyText(!!debounced, 'Моделей пока нет — добавьте первую')}
         rowKey={(m) => m.id}
         onRowClick={(m) => setEditing(m)}
       />
