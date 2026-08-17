@@ -35,6 +35,7 @@ import { QueryError } from '../../components/QueryError';
 import { PhotoUploader } from '../../components/PhotoUploader';
 import { RepairArchiveBlock } from '../../components/RepairArchiveBlock';
 import { assetIdentifierLine } from '../../lib/asset-identifiers';
+import { toPdfLines } from '../../lib/pdf/lines';
 
 interface ActionDef {
   /** Кнопка-цель (ставит этот status). */
@@ -170,14 +171,9 @@ export function MobileTicketPage() {
             diagnosis: woData.diagnosis ?? null,
             repairDescription: woData.repairDescription ?? null,
             recommendation: woData.recommendation ?? null,
-            lines: woData.lines.map((l) => ({
-              lineType: l.lineType,
-              name: l.name,
-              unit: l.unit,
-              quantity: Number(l.quantity),
-              unitPriceKopecks: Number(l.unitPriceKopecks),
-              amountKopecks: Number(l.amountKopecks),
-            })),
+            // Общий сборщик: раньше здесь была своя копия без engineerName, и акт
+            // с телефона терял блок «Работы выполнил».
+            lines: toPdfLines(woData.lines),
           }
         : null;
       const payloadBase = {
