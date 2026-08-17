@@ -52,6 +52,28 @@ function rubToKopecksString(rubStr: string): string {
   return Math.round(num * 100).toString();
 }
 
+/**
+ * Какой процент от работ подставить в поле ведомости по умолчанию.
+ *
+ * Зеркало серверного resolveWorkPercent в части ОБЩЕГО правила: режим решает, какой
+ * процент общий. Раньше здесь всегда стоял pieceworkPercent — процент сделки, — хотя
+ * при режиме «оклад + бонус» платят bonusPercent. На боевой настройке (сделка 30 %,
+ * бонус 15 %) кнопка «Посчитать» давала вдвое больше того, что система считает
+ * зарплатой в плитке «ЗП к выплате» и в себестоимости строк наряда. Ведомость потом
+ * проводится в кассу.
+ *
+ * Личные проценты сотрудников одним полем не выражаются — они у каждого свои, и
+ * поправить строку руками ведомость позволяет намеренно.
+ */
+export function defaultWorkPercent(
+  rule:
+    | { mode: string; pieceworkPercent?: number | null; bonusPercent?: number | null }
+    | undefined,
+): number {
+  if (!rule) return 0;
+  return (rule.mode === 'piecework' ? rule.pieceworkPercent : rule.bonusPercent) ?? 0;
+}
+
 export function PayrollPage() {
   const me = trpc.auth.me.useQuery();
   const role = me.data?.user.role;
@@ -640,10 +662,10 @@ function PayrollVedomost() {
   const [rows, setRows] = useState<VedRow[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
-  // % от работ — по умолчанию из глобального правила (процент сделки).
+  // % от работ — по умолчанию из общего правила расчёта, по его РЕЖИМУ.
   const [percent, setPercent] = useState('');
   useEffect(() => {
-    if (percent === '' && ruleQ.data) setPercent(String(ruleQ.data.pieceworkPercent ?? 0));
+    if (percent === '' && ruleQ.data) setPercent(String(defaultWorkPercent(ruleQ.data)));
   }, [ruleQ.data, percent]);
 
   // Гидрируем строки из сохранённой ведомости при смене месяца / первой загрузке.
@@ -946,6 +968,13 @@ function PayrollVedomost() {
                 Посчитать
               </button>
             </div>
+            {/* Честная подпись: кнопка считает ОДНИМ процентом на всех, а у 16 из 17
+                сотрудников заданы личные проценты — их система применяет сама в
+                плитке «ЗП к выплате» и в себестоимости строк наряда. */}
+            <span className="text-muted-foreground text-xs">
+              «Посчитать» применяет один процент ко всем. Личные проценты сотрудников он не
+              учитывает — строку можно поправить руками.
+            </span>
             {savedSheet && (
               <span className="text-muted-foreground text-xs">
                 Сохранено: {new Date(savedSheet.savedAt).toLocaleString('ru-RU')}
