@@ -55,6 +55,10 @@ export function CalendarTasksPanel() {
   const utils = trpc.useUtils();
   const [showDone, setShowDone] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
+  // Двухшаговое удаление: первый клик по корзинке только взводит «Точно?» у
+  // этой строки, удаляет второй. Одним кликом задача терялась насовсем — без
+  // вопросов и без корзины восстановления, а рядом стоит карандаш правки.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const tasksQ = trpc.tasks.list.useQuery({ includeDone: showDone });
   const tasks = (tasksQ.data ?? []) as Task[];
@@ -63,7 +67,10 @@ export function CalendarTasksPanel() {
     onSuccess: () => utils.tasks.list.invalidate(),
   });
   const remove = trpc.tasks.delete.useMutation({
-    onSuccess: () => utils.tasks.list.invalidate(),
+    onSuccess: () => {
+      setConfirmDeleteId(null);
+      void utils.tasks.list.invalidate();
+    },
   });
 
   const openCount = tasks.filter((t) => !t.isDone).length;
@@ -190,13 +197,28 @@ export function CalendarTasksPanel() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => remove.mutate({ id: t.id })}
+                    onClick={() => {
+                      if (confirmDeleteId !== t.id) {
+                        setConfirmDeleteId(t.id);
+                        return;
+                      }
+                      remove.mutate({ id: t.id });
+                    }}
                     disabled={remove.isPending}
-                    aria-label="Удалить задачу"
-                    title="Удалить"
-                    className="text-muted-foreground hover:text-destructive grid h-7 w-7 place-items-center rounded transition"
+                    aria-label={
+                      confirmDeleteId === t.id ? 'Точно удалить задачу?' : 'Удалить задачу'
+                    }
+                    title={
+                      confirmDeleteId === t.id ? 'Нажмите ещё раз — удалить насовсем' : 'Удалить'
+                    }
+                    className={cn(
+                      'grid h-7 place-items-center rounded transition',
+                      confirmDeleteId === t.id
+                        ? 'text-destructive px-1.5 text-xs font-semibold'
+                        : 'text-muted-foreground hover:text-destructive w-7',
+                    )}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    {confirmDeleteId === t.id ? 'Точно?' : <Trash2 className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               </li>
