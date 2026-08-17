@@ -21,6 +21,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { ASSET_STATUS_META } from '../lib/dictionaries';
 import { ComposeEmailModal } from '../components/ComposeEmailModal';
 import { ClientContacts } from '../components/ClientContacts';
+import { ClientInvoices } from '../components/ClientInvoices';
 
 export function ClientCardPage() {
   const [, params] = useRoute<{ id: string }>('/clients/:id');
@@ -201,6 +202,8 @@ export function ClientCardPage() {
 
         <ClientContacts clientId={c.id} contacts={c.contacts} canDelete={isDirector} />
       </div>
+
+      {isStaff && <ClientInvoices clientId={c.id} />}
 
       <section className="bg-card rounded-lg border">
         <div className="flex items-center justify-between p-4 md:p-6">
