@@ -1,27 +1,9 @@
 import { Link } from 'wouter';
 import { Loader2, Ticket, Receipt, Wrench, Plus } from 'lucide-react';
+import { clientTicketStatusLabel, type TicketStatus } from '@erfolg/shared';
 import { trpc } from '../../lib/trpc';
-
-function formatRubFromKopecks(kopStr: string): string {
-  const k = BigInt(kopStr);
-  const rub = Number(k) / 100;
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    maximumFractionDigits: 0,
-  }).format(rub);
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  received: 'Принята',
-  diagnostics: 'Диагностика',
-  estimate: 'Смета',
-  approval: 'Согласование',
-  in_progress: 'В работе',
-  act_pending: 'Ожидает акта',
-  closed: 'Закрыта',
-  cancelled: 'Отменена',
-};
+import { formatRub } from '../../lib/money';
+import { formatDateRu } from '../../lib/format-date';
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
   draft: 'Черновик',
@@ -104,7 +86,7 @@ export function ClientDashboardPage() {
                   </div>
                 </div>
                 <span className="bg-primary/10 text-primary rounded px-2 py-0.5 text-xs">
-                  {STATUS_LABEL[t.status] ?? t.status}
+                  {clientTicketStatusLabel(t.status as TicketStatus)}
                 </span>
               </Link>
             ))}
@@ -121,10 +103,12 @@ export function ClientDashboardPage() {
               <div key={i.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{i.invoiceNumber}</div>
-                  <div className="text-muted-foreground text-xs">Срок оплаты: {i.dueDate}</div>
+                  <div className="text-muted-foreground text-xs">
+                    Срок оплаты: {formatDateRu(i.dueDate)}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">{formatRubFromKopecks(i.totalAmountKopecks)}</div>
+                  <div className="font-medium">{formatRub(i.totalAmountKopecks)}</div>
                   <div className="text-muted-foreground text-xs">
                     {INVOICE_STATUS_LABEL[i.status] ?? i.status}
                   </div>

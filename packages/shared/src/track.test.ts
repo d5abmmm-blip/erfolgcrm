@@ -4,6 +4,7 @@ import {
   buildTrackTimeline,
   ticketStatusToTrackIndex,
   type TrackTimelineEventInput,
+  clientTicketStatusLabel,
 } from './index';
 
 describe('ticketStatusToTrackIndex', () => {
@@ -188,5 +189,38 @@ describe('buildTrackTimeline', () => {
     const tl = buildTrackTimeline({ status: 'received', receivedAt: received, events });
     expect(tl.stages[1]!.at).toBeNull(); // диагностика не проставилась (дата битая)
     expect(tl.currentIndex).toBe(0);
+  });
+});
+
+/**
+ * Подписи статуса для клиента: список и карточка в кабинете обязаны говорить одно.
+ * Раньше список печатал внутренние названия («Ожидает акта»), а карточка —
+ * клиентские («Готово к выдаче»), и человек не понимал, одна ли это заявка.
+ */
+describe('clientTicketStatusLabel', () => {
+  it('«Ожидает акта» для клиента — это «Готово к выдаче»', () => {
+    expect(clientTicketStatusLabel('act_pending')).toBe('Готово к выдаче');
+  });
+
+  it('совпадает с подписью текущей стадии трека — источник один', () => {
+    for (const status of [
+      'received',
+      'diagnostics',
+      'in_progress',
+      'act_pending',
+      'closed',
+    ] as const) {
+      const index = ticketStatusToTrackIndex(status);
+      expect(clientTicketStatusLabel(status)).toBe(TRACK_STAGES[index!]!.label);
+    }
+  });
+
+  it('устаревшие стадии не пугают клиента внутренними словами', () => {
+    expect(clientTicketStatusLabel('estimate')).toBe('Диагностика');
+    expect(clientTicketStatusLabel('approval')).toBe('Диагностика');
+  });
+
+  it('отменённая названа прямо', () => {
+    expect(clientTicketStatusLabel('cancelled')).toBe('Заявка отменена');
   });
 });

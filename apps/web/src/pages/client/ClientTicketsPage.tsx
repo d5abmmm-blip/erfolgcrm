@@ -1,22 +1,20 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { Loader2, Plus } from 'lucide-react';
+import { clientTicketStatusLabel, type TicketStatus } from '@erfolg/shared';
 import { trpc } from '../../lib/trpc';
 import { QueryError } from '../../components/QueryError';
 
-const STATUS_LABEL: Record<string, string> = {
-  received: 'Принята',
-  diagnostics: 'Диагностика',
-  estimate: 'Смета',
-  approval: 'Согласование',
-  in_progress: 'В работе',
-  act_pending: 'Ожидает акта',
-  closed: 'Закрыта',
-  cancelled: 'Отменена',
-};
+/**
+ * Клиенту показываем клиентские слова — те же, что на карточке заявки и в полосе
+ * «как посылка» (@erfolg/shared). Раньше список печатал внутренние названия:
+ * человек видел «Ожидает акта», открывал заявку и читал «Готово к выдаче».
+ */
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Все' },
-  ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+  ...(
+    ['received', 'diagnostics', 'in_progress', 'act_pending', 'closed', 'cancelled'] as const
+  ).map((value) => ({ value, label: clientTicketStatusLabel(value) })),
 ];
 
 export function ClientTicketsPage() {
@@ -89,7 +87,7 @@ export function ClientTicketsPage() {
                   </td>
                   <td className="px-3 py-2">
                     <span className="bg-primary/10 text-primary rounded px-2 py-0.5 text-xs">
-                      {STATUS_LABEL[t.status] ?? t.status}
+                      {clientTicketStatusLabel(t.status as TicketStatus)}
                     </span>
                   </td>
                 </tr>

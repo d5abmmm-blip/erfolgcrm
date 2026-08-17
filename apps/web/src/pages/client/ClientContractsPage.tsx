@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { formatDateRu } from '../../lib/format-date';
 import { QueryError } from '../../components/QueryError';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -62,7 +63,7 @@ export function ClientContractsPage() {
             {list.data.map((c) => (
               <tr key={c.id} className="hover:bg-muted/30">
                 <td className="px-3 py-2 font-medium">{c.contractNumber}</td>
-                <td className="text-muted-foreground px-3 py-2">{c.contractDate}</td>
+                <td className="text-muted-foreground px-3 py-2">{formatDateRu(c.contractDate)}</td>
                 <td className="px-3 py-2">{TYPE_LABEL[c.type] ?? c.type}</td>
                 <td className="text-muted-foreground px-3 py-2">
                   {c.validFrom ?? '—'} … {c.validUntil ?? '—'}
