@@ -20,6 +20,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import type { TicketStatus } from '@erfolg/shared';
+import { allowedNextStatuses } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { QUEUED_MUTATION } from '../../lib/query-defaults';
 import { openPrintWindow } from '../../lib/open-print-window';
@@ -278,7 +279,15 @@ export function MobileTicketPage() {
   // мёртвый: в ACTIONS других целей и нет, он ничего не отсеивал.
   const isEngineer = me.data?.user.role === 'engineer';
   const canEdit = !isEngineer || canPrintActs;
-  const allowedActions = canEdit ? ACTIONS.filter((a) => a.from.includes(t.status)) : [];
+  // Своё поле `from` больше не решает: кнопка показывается, только если такой переход
+  // примет сервер (одна таблица — @erfolg/shared). Раньше «Готов к акту» висела и в
+  // «Диагностике», а туда можно лишь через «В работе»: на связи это ошибка, а БЕЗ
+  // связи хуже — правка ложится в офлайн-очередь и всплывает позже как «не принято»,
+  // когда инженер уже уехал с объекта.
+  const nextStatuses = allowedNextStatuses(t.status, 'engineer');
+  const allowedActions = canEdit
+    ? ACTIONS.filter((a) => a.from.includes(t.status) && nextStatuses.includes(a.target))
+    : [];
 
   return (
     <div className="space-y-3 p-3">
