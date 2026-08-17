@@ -12,6 +12,7 @@ import {
   FileStack,
   History,
   LayoutGrid,
+  Mail,
   Shield,
   Sparkles,
   Users,
@@ -111,6 +112,24 @@ export function SettingsPage() {
               <div className="font-medium">Telegram-бот</div>
               <div className="text-muted-foreground text-xs">
                 Приём заявок от клиентов через Telegram
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="text-muted-foreground h-5 w-5" />
+        </Link>
+
+        <Link
+          href="/settings/email"
+          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 text-primary grid h-10 w-10 place-items-center rounded-md">
+              <Mail className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-medium">Почта</div>
+              <div className="text-muted-foreground text-xs">
+                Ящик компании: от чьего имени уходят письма и откуда читаются входящие
               </div>
             </div>
           </div>
