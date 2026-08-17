@@ -68,22 +68,21 @@ export function InvoicesPage() {
     invoiceStatusFromQuery(window.location.search),
   );
   const [search, setSearch] = useState('');
-  const debounced = useDebounce(search.trim().toLowerCase(), 300);
+  const debounced = useDebounce(search.trim(), 300);
   const [page, setPage] = useState(1);
 
+  // Поиск ушёл НА СЕРВЕР. Раньше он фильтровал уже полученные 25 строк текущей
+  // страницы, а итог под таблицей приходил общий: счёт с третьей страницы «не
+  // находился», и человек делал вывод, что счёта в программе нет.
   const list = trpc.invoices.listForTenant.useQuery({
     status: status || undefined,
+    search: debounced || undefined,
     limit: PAGE_SIZE,
     page,
   });
 
   const items = (list.data?.items ?? []) as InvoiceRow[];
   const total = list.data?.total ?? 0;
-
-  // Client-side search by invoice number (lightweight — server doesn't have full-text search).
-  const filtered = debounced
-    ? items.filter((inv) => inv.invoiceNumber.toLowerCase().includes(debounced))
-    : items;
 
   const columns: Column<InvoiceRow>[] = [
     {
@@ -164,7 +163,12 @@ export function InvoicesPage() {
           <input
             type="search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              // Нашёлся счёт на третьей странице — показывать надо первую
+              // страницу найденного, а не третью, где теперь пусто.
+              setPage(1);
+            }}
             placeholder="Поиск по номеру счёта"
             className="bg-background focus:ring-primary/40 w-full rounded-md border py-2 pl-8 pr-3 text-sm outline-none focus:ring-2"
           />
@@ -186,7 +190,7 @@ export function InvoicesPage() {
       </div>
 
       <DataTable
-        data={filtered}
+        data={items}
         columns={columns}
         loading={list.isLoading}
         error={list.error ? { message: list.error.message } : null}
