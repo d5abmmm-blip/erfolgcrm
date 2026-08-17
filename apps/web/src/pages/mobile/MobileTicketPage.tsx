@@ -24,6 +24,7 @@ import { allowedNextStatuses } from '@erfolg/shared';
 import { trpc, getTenantSubdomain } from '../../lib/trpc';
 import { QUEUED_MUTATION } from '../../lib/query-defaults';
 import { openPrintWindow } from '../../lib/open-print-window';
+import { useTenantRequisites } from '../../lib/organization';
 import { executeOrQueue } from '../../lib/offline/executor';
 import { cn } from '../../lib/utils';
 import { TICKET_STATUS_META, TICKET_STATUS_PILL } from '../../lib/dictionaries/tickets';
@@ -73,6 +74,9 @@ const ACTIONS: ActionDef[] = [
 ];
 
 export function MobileTicketPage() {
+  // Шапка актов — из настроек организации; при потере связи возьмутся
+  // встроенные значения, и акт всё равно напечатается (lib/organization.ts).
+  const tenantRequisites = useTenantRequisites();
   const [, params] = useRoute<{ id: string }>('/m/tickets/:id');
   const id = params?.id ?? '';
 
@@ -158,8 +162,7 @@ export function MobileTicketPage() {
     }
     const win = openPrintWindow();
     try {
-      const [{ printWorkAct, printDefectAct, printTechConditionAct }, { ERFOLG_FALLBACK }] =
-        await Promise.all([import('../../lib/pdf'), import('../../lib/pdf/branding')]);
+      const { printWorkAct, printDefectAct, printTechConditionAct } = await import('../../lib/pdf');
       const doc = clientDoc.data;
       const ass = assetFull.data;
       const workOrder = woData
@@ -178,7 +181,7 @@ export function MobileTicketPage() {
           }
         : null;
       const payloadBase = {
-        tenant: { ...ERFOLG_FALLBACK },
+        tenant: tenantRequisites,
         client: {
           displayName: doc?.displayName ?? t.clientDisplayName,
           inn: doc?.inn ?? null,
@@ -404,10 +407,7 @@ export function MobileTicketPage() {
                 // при сбое инженер получал пустое открытое окно и ни слова.
                 const win = openPrintWindow();
                 try {
-                  const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                    import('../../lib/pdf'),
-                    import('../../lib/pdf/branding'),
-                  ]);
+                  const [{ printAssetLabel }] = await Promise.all([import('../../lib/pdf')]);
                   await printAssetLabel(
                     {
                       asset: {
@@ -428,7 +428,7 @@ export function MobileTicketPage() {
                           }
                         : null,
                       fallbackBarcode: t.assetId ?? t.id,
-                      tenantDisplayName: ERFOLG_FALLBACK.displayName,
+                      tenantDisplayName: tenantRequisites.displayName,
                     },
                     win,
                   );

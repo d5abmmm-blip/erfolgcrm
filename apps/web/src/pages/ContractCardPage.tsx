@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Link, useRoute } from 'wouter';
 import { Archive, ChevronLeft, FileSignature, Pencil, Printer } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { useTenantRequisites } from '../lib/organization';
 import { openPrintWindow } from '../lib/open-print-window';
 import { PhotoUploader } from '../components/PhotoUploader';
 import { ConfirmDialog } from '../components/ui';
@@ -57,16 +58,16 @@ export function ContractCardPage() {
 
   const [printing, setPrinting] = useState(false);
 
+  // Шапка договора — из настроек организации (lib/organization.ts).
+  const tenantRequisites = useTenantRequisites();
+
   const handlePrint = async () => {
     if (!detail.data) return;
     setPrinting(true);
     const win = openPrintWindow();
     try {
-      const [{ printContract }, { ERFOLG_FALLBACK }] = await Promise.all([
-        import('../lib/pdf'),
-        import('../lib/pdf/branding'),
-      ]);
-      const tenantData = { ...ERFOLG_FALLBACK };
+      const { printContract } = await import('../lib/pdf');
+      const tenantData = tenantRequisites;
       const c = detail.data;
       const clientData = {
         displayName: c.clientDisplayName,

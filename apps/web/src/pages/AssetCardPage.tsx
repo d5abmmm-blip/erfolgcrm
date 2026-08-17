@@ -22,6 +22,7 @@ import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
 import { PromptDialog } from '../components/ui';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
+import { useTenantRequisites } from '../lib/organization';
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   in_service: { label: 'В работе', cls: 'bg-success/10 text-success' },
@@ -36,6 +37,8 @@ export function AssetCardPage() {
   const id = params?.id ?? '';
   const me = trpc.auth.me.useQuery();
   const isDirector = me.data?.user.role === 'director';
+  // Короткое имя компании на ярлыке — из настроек организации, а не из кода.
+  const tenantRequisites = useTenantRequisites();
 
   const utils = trpc.useUtils();
   const asset = trpc.assets.get.useQuery({ id }, { enabled: !!id });
@@ -119,10 +122,7 @@ export function AssetCardPage() {
             onClick={() =>
               void (async () => {
                 const win = openPrintWindow();
-                const [{ printAssetLabel }, { ERFOLG_FALLBACK }] = await Promise.all([
-                  import('../lib/pdf'),
-                  import('../lib/pdf/branding'),
-                ]);
+                const { printAssetLabel } = await import('../lib/pdf');
                 await printAssetLabel(
                   {
                     asset: {
@@ -134,7 +134,7 @@ export function AssetCardPage() {
                     },
                     ticket: null,
                     fallbackBarcode: a.id,
-                    tenantDisplayName: ERFOLG_FALLBACK.displayName,
+                    tenantDisplayName: tenantRequisites.displayName,
                   },
                   win,
                 );

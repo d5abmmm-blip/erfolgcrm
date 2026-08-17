@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react';
 import { CalendarRange, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { useTenantRequisites } from '../lib/organization';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
 import { QueryError } from '../components/QueryError';
@@ -65,19 +66,19 @@ export function AttendancePage() {
     setMonth(d.getUTCMonth() + 1);
   };
 
+  // Шапка табеля — из настроек организации (lib/organization.ts).
+  const tenantRequisites = useTenantRequisites();
+
   const handlePrint = async () => {
     if (!monthQ.data) return;
     setPrinting(true);
     const win = openPrintWindow();
     try {
-      const [{ printAttendanceSheet }, { ERFOLG_FALLBACK }] = await Promise.all([
-        import('../lib/pdf'),
-        import('../lib/pdf/branding'),
-      ]);
+      const { printAttendanceSheet } = await import('../lib/pdf');
       const rows = buildAttendanceRows(employees, records, days);
       await printAttendanceSheet(
         {
-          tenant: { ...ERFOLG_FALLBACK },
+          tenant: tenantRequisites,
           monthTitle: monthTitle(year, month),
           days: days.map((d) => ({ day: d.day, isWeekend: d.isWeekend })),
           rows: rows.map((r) => ({

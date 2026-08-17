@@ -37,6 +37,7 @@ import {
 import type { TicketEventType, TicketPriority, TicketStatus } from '@erfolg/shared';
 import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
+import { useTenantRequisites } from '../lib/organization';
 import { cn } from '../lib/utils';
 import { openPrintWindow } from '../lib/open-print-window';
 import { SILENT_ERROR } from '../lib/error-message';
@@ -198,6 +199,9 @@ export function TicketCardPage() {
     },
   });
   const recordPrint = trpc.tickets.recordPrint.useMutation({ onSuccess: invalidateAll });
+  // Реквизиты шапки документов — из настроек организации, с падением на
+  // встроенные значения по каждому полю (см. lib/organization.ts).
+  const tenantRequisites = useTenantRequisites();
 
   if (ticket.isLoading) {
     return <div className="text-muted-foreground p-8 text-sm">Загрузка…</div>;
@@ -223,14 +227,10 @@ export function TicketCardPage() {
     : undefined;
 
   // Сборка данных для PDF (акты/счёт). Используется и печатью, и вложениями писем.
-  const assemblePdfInputs = async () => {
-    const { ERFOLG_FALLBACK } = await import('../lib/pdf/branding');
+  const assemblePdfInputs = () => {
     const ass = assetFull.data;
     const woData = wo.data;
-    const tenantData = {
-      ...ERFOLG_FALLBACK,
-      // TODO: брать из tenant settings когда появится trpc endpoint
-    };
+    const tenantData = tenantRequisites;
     // Реквизиты берём из tickets.documentClient — он доступен и инженеру (по своей
     // заявке), поэтому акт печатается полным для любой роли.
     const doc = clientDoc.data;
@@ -288,8 +288,7 @@ export function TicketCardPage() {
     try {
       const { printIntakeAct, printInvoice, printWorkAct, printDefectAct, printAssetLabel } =
         await import('../lib/pdf');
-      const { tenantData, clientData, assetData, ticketData, workOrderData } =
-        await assemblePdfInputs();
+      const { tenantData, clientData, assetData, ticketData, workOrderData } = assemblePdfInputs();
 
       if (kind === 'intake_act') {
         await printIntakeAct(
@@ -376,8 +375,7 @@ export function TicketCardPage() {
     const win = openPrintWindow();
     try {
       const { printDocumentPackage } = await import('../lib/pdf');
-      const { tenantData, clientData, assetData, ticketData, workOrderData } =
-        await assemblePdfInputs();
+      const { tenantData, clientData, assetData, ticketData, workOrderData } = assemblePdfInputs();
       const { included } = await printDocumentPackage(
         {
           tenant: tenantData,
@@ -409,7 +407,7 @@ export function TicketCardPage() {
       kind: 'intake_act',
       build: async () => {
         const { getIntakeActAsBase64 } = await import('../lib/pdf');
-        const { tenantData, clientData, assetData, ticketData } = await assemblePdfInputs();
+        const { tenantData, clientData, assetData, ticketData } = assemblePdfInputs();
         return {
           filename: `Акт приёма ${t.ticketNumber}.pdf`,
           base64: await getIntakeActAsBase64({
@@ -430,7 +428,7 @@ export function TicketCardPage() {
         kind: 'invoice',
         build: async () => {
           const { getInvoiceAsBase64 } = await import('../lib/pdf');
-          const { tenantData, clientData, ticketData, workOrderData } = await assemblePdfInputs();
+          const { tenantData, clientData, ticketData, workOrderData } = assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Счёт ${t.ticketNumber}.pdf`,
@@ -450,7 +448,7 @@ export function TicketCardPage() {
         build: async () => {
           const { getWorkActAsBase64 } = await import('../lib/pdf');
           const { tenantData, clientData, assetData, ticketData, workOrderData } =
-            await assemblePdfInputs();
+            assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Акт работ ${t.ticketNumber}.pdf`,
@@ -471,7 +469,7 @@ export function TicketCardPage() {
         build: async () => {
           const { getDefectActAsBase64 } = await import('../lib/pdf');
           const { tenantData, clientData, assetData, ticketData, workOrderData } =
-            await assemblePdfInputs();
+            assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Дефектный акт ${t.ticketNumber}.pdf`,
