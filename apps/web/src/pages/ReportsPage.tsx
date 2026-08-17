@@ -18,6 +18,7 @@ import {
   Users as UsersIcon,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { assertOnlineForFile } from '../lib/offline/require-online';
 import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -84,6 +85,9 @@ export function ReportsPage() {
     setExporting(true);
     setExportError(null);
     try {
+      // Без связи не идём в сеть: шесть запросов на паузе не завершатся никогда,
+      // и кнопка осталась бы «Собираю…» навсегда (lib/offline/require-online).
+      assertOnlineForFile('отчёт');
       const grab = async <T,>(p: Promise<T>): Promise<T | undefined> => {
         try {
           return await p;

@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
+import { assertOnlineForFile } from '../lib/offline/require-online';
 import { formatRub } from '../lib/money';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge, type StatusBadgeVariant } from '../components/ui/StatusBadge';
@@ -106,6 +107,9 @@ export function CashJournalPage() {
     setExporting(true);
     setExportError(null);
     try {
+      // Без связи в сеть не идём вовсе: на паузе запрос не завершится никогда,
+      // и кнопка навсегда осталась бы «Собираю…» (см. lib/offline/require-online).
+      assertOnlineForFile('журнал кассы');
       const EXPORT_LIMIT = 200;
       const all: Row[] = [];
       for (let p = 1; p <= 200; p++) {
