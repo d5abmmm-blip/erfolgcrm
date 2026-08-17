@@ -181,15 +181,21 @@ export function InvoiceCardPage() {
           client: clientData,
           ticket: ticketData,
           workOrder: {
-            // Итог и ставка НДС берутся из «замороженного» снимка счёта (зафиксированы при
-            // выставлении), а НЕ из живого наряда — иначе после правки наряда суммы в PDF
-            // разойдутся с уже выставленным счётом. Детализация строк — из наряда (best available).
+            // ВЕСЬ счёт печатается из ОДНОГО снимка: и итог со ставкой НДС, и
+            // строки. Раньше итог был замороженным, а детализация бралась из
+            // живого наряда — правка наряда после выставления ломала уже
+            // отданный клиенту документ: строки складывались в одну сумму, а
+            // «Всего к оплате» показывало другую.
+            //
+            // `lines === null` — счёт выставлен до появления снимка. Что в нём
+            // было, в базе не сохранялось, поэтому печатаем строки наряда, как
+            // раньше: придумывать состав задним числом мы не имеем права.
             vatRate: inv.data.vatRate,
             worksAmountKopecks: Number(workOrderQuery.worksAmountKopecks),
             partsAmountKopecks: Number(workOrderQuery.partsAmountKopecks),
             expensesAmountKopecks: Number(workOrderQuery.expensesAmountKopecks),
             totalAmountKopecks: Number(inv.data.totalAmountKopecks),
-            lines: toPdfLines(workOrderQuery.lines),
+            lines: toPdfLines(inv.data.lines ?? workOrderQuery.lines),
           },
           invoiceNumber: inv.data.invoiceNumber,
           issueDate: inv.data.issueDate,

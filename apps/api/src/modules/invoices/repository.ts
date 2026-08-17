@@ -15,7 +15,7 @@
  * apps/web/src/lib/pdf/invoice.ts: vat = round(total * rate / (100 + rate)).
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
-import { invoices, withTenantTx, workOrders, type Db } from '@erfolg/db';
+import { invoices, withTenantTx, workOrders, type Db, type InvoiceLineSnapshot } from '@erfolg/db';
 import {
   RECEIVABLE_INVOICE_STATUSES as RECEIVABLE_STATUS_LIST,
   type InvoiceStatus,
@@ -88,6 +88,11 @@ export interface InvoiceDto {
   reminderCount: number;
   onecSyncedAt: Date | null;
   onecExternalId: string | null;
+  /**
+   * Строки счёта на момент фиксации сумм. `null` — счёт выставлен до появления
+   * снимка: печать берёт строки наряда, как раньше.
+   */
+  lines: InvoiceLineSnapshot[] | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -115,9 +120,54 @@ function toDto(row: typeof invoices.$inferSelect): InvoiceDto {
     reminderCount: row.reminderCount,
     onecSyncedAt: row.onecSyncedAt,
     onecExternalId: row.onecExternalId,
+    lines: row.linesSnapshot ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/**
+ * Снимок строк наряда — то, что напечатается в счёте.
+ *
+ * Снимаем РОВНО там, где фиксируются суммы (createDraft и transitionToIssued).
+ * Иначе появилось бы третье состояние — «итог от одного момента, строки от
+ * другого», то есть та же болезнь под другим именем.
+ *
+ * Числа кладём строками: в базе это bigint/numeric, а jsonb с числами свыше
+ * 2^53 молча терял бы точность.
+ */
+async function snapshotWorkOrderLines(
+  tx: Parameters<Parameters<typeof withTenantTx>[2]>[0],
+  workOrderId: string,
+): Promise<InvoiceLineSnapshot[]> {
+  const rows = await tx.execute(sql`
+    SELECT wol.line_type, wol.name, wol.unit, wol.quantity,
+           wol.unit_price_kopecks, wol.amount_kopecks,
+           u.full_name AS engineer_name
+      FROM work_order_lines wol
+      LEFT JOIN users u ON u.id = wol.engineer_id
+     WHERE wol.work_order_id = ${workOrderId}::uuid
+     ORDER BY wol.created_at ASC, wol.id ASC
+  `);
+  return (
+    rows as unknown as Array<{
+      line_type: string;
+      name: string;
+      unit: string;
+      quantity: string;
+      unit_price_kopecks: string;
+      amount_kopecks: string;
+      engineer_name: string | null;
+    }>
+  ).map((r) => ({
+    lineType: r.line_type,
+    name: r.name,
+    unit: r.unit,
+    quantity: String(r.quantity),
+    unitPriceKopecks: String(r.unit_price_kopecks),
+    amountKopecks: String(r.amount_kopecks),
+    engineerName: r.engineer_name,
+  }));
 }
 
 /** Атомарный INC сквозного счётчика. Формат "INV-2026-000017". */
@@ -254,6 +304,7 @@ export async function createDraft(
         issueDate: isoDate(now),
         dueDate: isoDate(addDays(now, dueDays)),
         notes: input.notes ?? null,
+        linesSnapshot: await snapshotWorkOrderLines(tx, wo.id),
       })
       .returning();
     const row = inserted[0];
@@ -458,6 +509,9 @@ export async function transitionToIssued(
         issueDate: isoDate(now),
         dueDate: opts.dueDate ?? row.dueDate,
         issuedAt: now,
+        // Строки замораживаем вместе с суммой: иначе документ перестаёт
+        // сходиться сам с собой, если наряд правят после выставления.
+        linesSnapshot: await snapshotWorkOrderLines(tx, row.workOrderId),
       })
       .where(eq(invoices.id, invoiceId))
       .returning();

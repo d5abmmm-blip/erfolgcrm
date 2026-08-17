@@ -554,6 +554,13 @@
       "when": 1779200000000,
       "tag": "0087_tenant_director_name",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0088_invoice_lines_snapshot",
+      "breakpoints": true
     }
   ]
 }
