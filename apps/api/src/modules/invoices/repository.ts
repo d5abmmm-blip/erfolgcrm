@@ -16,7 +16,11 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { invoices, withTenantTx, workOrders, type Db } from '@erfolg/db';
-import type { InvoiceStatus, VatRate } from '@erfolg/shared';
+import {
+  RECEIVABLE_INVOICE_STATUSES as RECEIVABLE_STATUS_LIST,
+  type InvoiceStatus,
+  type VatRate,
+} from '@erfolg/shared';
 import { WorkOrderNotFoundError } from '../../lib/errors';
 
 const INVOICE_COUNTER_KIND = 'invoice';
@@ -27,8 +31,15 @@ const DEFAULT_DUE_DAYS = 14;
  * Единый источник для listClientOverdueInvoices и receivablesReport — чтобы экран
  * «Дебиторка» и кнопка «Напомнить» всегда опирались на один набор статусов.
  * Тот же набор используется на дашборде («Вам должны») и в частичном индексе invoices.
+ *
+ * СПИСОК ЖИВЁТ В `@erfolg/shared` (`RECEIVABLE_INVOICE_STATUSES`) — это же
+ * определение читает карточка клиента, когда показывает долг. Здесь только
+ * SQL-зеркало, собранное из того самого массива: разъехаться им теперь нечем.
  */
-const RECEIVABLE_INVOICE_STATUSES = sql`('issued', 'partially_paid', 'overdue')`;
+const RECEIVABLE_INVOICE_STATUSES = sql`(${sql.join(
+  RECEIVABLE_STATUS_LIST.map((s) => sql`${s}`),
+  sql`, `,
+)})`;
 
 /** Vat-percent по справочнику ставок. */
 const VAT_PERCENT: Record<VatRate, number> = {

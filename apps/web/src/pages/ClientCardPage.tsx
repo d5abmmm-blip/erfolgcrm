@@ -24,6 +24,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ASSET_STATUS_META } from '../lib/dictionaries';
 import { ComposeEmailModal } from '../components/ComposeEmailModal';
+import { ClientInvoices } from '../components/ClientInvoices';
 import { addContactSchema, type AddContactValues } from './ClientCardPage.schemas';
 
 export function ClientCardPage() {
@@ -249,6 +250,8 @@ export function ClientCardPage() {
           <AddContactInline clientId={c.id} />
         </section>
       </div>
+
+      {isStaff && <ClientInvoices clientId={c.id} />}
 
       <section className="bg-card rounded-lg border">
         <div className="flex items-center justify-between p-4 md:p-6">
