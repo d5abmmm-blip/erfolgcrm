@@ -22,6 +22,7 @@ import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
 import { PromptDialog } from '../components/ui';
 import { SimilarCasesBlock } from '../components/SimilarCasesBlock';
+import { AssetWarranties } from '../components/AssetWarranties';
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   in_service: { label: 'В работе', cls: 'bg-success/10 text-success' },
@@ -36,6 +37,8 @@ export function AssetCardPage() {
   const id = params?.id ?? '';
   const me = trpc.auth.me.useQuery();
   const isDirector = me.data?.user.role === 'director';
+  // Гарантии заводит staff (create/update — staffProcedure), инженеру кнопки нет.
+  const isStaff = isDirector || me.data?.user.role === 'dispatcher';
 
   const utils = trpc.useUtils();
   const asset = trpc.assets.get.useQuery({ id }, { enabled: !!id });
@@ -235,6 +238,8 @@ export function AssetCardPage() {
       </header>
 
       <SimilarCasesBlock assetId={a.id} />
+
+      <AssetWarranties assetId={a.id} canEdit={isStaff} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section className="bg-card rounded-lg border p-4 md:p-6 lg:col-span-2">
