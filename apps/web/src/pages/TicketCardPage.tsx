@@ -57,7 +57,7 @@ import { EngineerAssignmentHints } from '../components/EngineerAssignmentHints';
 import { eventPriorityLabel, eventStatusLabel } from '../lib/ticket-events';
 import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { toPdfLines } from '../lib/pdf/lines';
-import { allowedNextStatuses } from '@erfolg/shared';
+import { allowedNextStatuses, ticketBelongsToEngineer } from '@erfolg/shared';
 
 const STAGES: ReadonlyArray<{ value: TicketStatus; label: string }> = [
   { value: 'received', label: 'Приём' },
@@ -133,9 +133,20 @@ export function TicketCardPage() {
     { id: ticket.data?.assetId ?? '' },
     { enabled: !!ticket.data?.assetId },
   );
-  /** Инженер печатает документы только по своим заявкам; staff — по любым. */
+  /**
+   * Инженер печатает документы только по своим заявкам; staff — по любым.
+   * «Своя» — назначенный ИЛИ второй инженер, ровно как считает сервер
+   * (@erfolg/shared). Раньше экран сверял только назначенного, и помощник, который
+   * выезжал на технику вместе с первым, не видел ни кнопок актов, ни реквизитов
+   * клиента — хотя сервер их ему отдаёт.
+   */
   const canPrintDocs =
-    isStaff || (!!ticket.data && ticket.data.assignedEngineerId === me.data?.user.id);
+    isStaff ||
+    (!!ticket.data &&
+      ticketBelongsToEngineer(me.data?.user.id, {
+        assignedEngineerId: ticket.data.assignedEngineerId,
+        helperEngineerIds: ticket.data.helperEngineers.map((h) => h.userId),
+      }));
   // Реквизиты клиента для акта (минимум полей) — доступны и инженеру по своей заявке.
   const clientDoc = trpc.tickets.documentClient.useQuery(
     { ticketId: id },
