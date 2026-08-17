@@ -129,7 +129,8 @@ export function ReportsPage() {
           </div>
           <h1 className="mt-0.5 text-xl font-semibold md:text-2xl">Аналитика за период</h1>
           <p className="text-muted-foreground text-sm">
-            Выручка, нагрузка, SLA и воронка — агрегаты считаются на сервере
+            Выручка, нагрузка, SLA и воронка. Период везде — по дате закрытия заявки: отчёт
+            отвечает, что сделано, а не что завели.
           </p>
         </div>
         <button
@@ -459,14 +460,10 @@ function RevenueReport({ period }: { period: { from?: string; to?: string } }) {
         ),
     },
     {
-      key: 'tickets',
-      label: 'Заявок',
-      className: 'tabular-nums text-xs',
-      render: (r) => r.ticketsCount,
-    },
-    {
+      // Период во всех отчётах — по дате ЗАКРЫТИЯ, поэтому «Заявок» и «Закрыто»
+      // стали одним и тем же числом: колонка одна и названа честно.
       key: 'closed',
-      label: 'Закрыто',
+      label: 'Закрыто заявок',
       className: 'tabular-nums text-xs',
       render: (r) => r.closedCount,
     },
@@ -515,14 +512,10 @@ function EngineersReport({ period }: { period: { from?: string; to?: string } })
       render: (r) => <span className="font-medium">{r.engineerName}</span>,
     },
     {
-      key: 'tickets',
-      label: 'Заявок',
-      className: 'tabular-nums text-xs',
-      render: (r) => r.ticketsCount,
-    },
-    {
+      // Период во всех отчётах — по дате ЗАКРЫТИЯ, поэтому «Заявок» и «Закрыто»
+      // стали одним и тем же числом: колонка одна и названа честно.
       key: 'closed',
-      label: 'Закрыто',
+      label: 'Закрыто заявок',
       className: 'tabular-nums text-xs',
       render: (r) => r.closedCount,
     },
