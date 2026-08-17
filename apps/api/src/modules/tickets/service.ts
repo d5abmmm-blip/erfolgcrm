@@ -307,7 +307,7 @@ const REOPEN_STATUSES: ReadonlySet<TicketStatus> = new Set([
  *   received    → diagnostics | cancelled
  *   diagnostics → in_progress | cancelled
  *   in_progress → act_pending | cancelled
- *   act_pending → closed | in_progress                (отозвать на доделку)
+ *   act_pending → closed | in_progress | cancelled    (отозвать на доделку / отказ клиента)
  *   closed      → ∅                                   (только директор через reopen)
  *   cancelled   → ∅                                   (только директор через reopen)
  *
@@ -323,7 +323,10 @@ const ALLOWED_TRANSITIONS: Record<TicketStatus, ReadonlyArray<TicketStatus>> = {
   estimate: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
   approval: ['in_progress', 'cancelled'], // устаревший статус (вне потока)
   in_progress: ['act_pending', 'cancelled'],
-  act_pending: ['closed', 'in_progress'],
+  // Отмена из «Ожидает акта» разрешена: техника готова, но клиент может от неё
+  // отказаться или забрать без ремонта. Кнопка «Отменить заявку» на карточке
+  // показывалась при любом незакрытом статусе, и в этом одном упиралась в отказ.
+  act_pending: ['closed', 'in_progress', 'cancelled'],
   closed: [],
   cancelled: [],
 };

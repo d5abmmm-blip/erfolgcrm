@@ -460,3 +460,55 @@ describe('правка наряда после закрытия заявки', (
     expect(r.id).toBeTruthy();
   });
 });
+
+/**
+ * Отмена заявки — одно правило вместо трёх.
+ *
+ * Было три разных ответа на вопрос «кто и когда отменяет заявку»:
+ *   1. таблица переходов не пускала отмену из «Ожидает акта» вовсе, хотя кнопка
+ *      «Отменить заявку» на карточке директору показывалась при любом незакрытом
+ *      статусе — нажатие упиралось в BAD_REQUEST;
+ *   2. процедура cancel была directorProcedure, а changeStatus (engineerProcedure)
+ *      принимала статус 'cancelled' от диспетчера — запрет обходился в один шаг;
+ *   3. на карточке кнопку видел только директор.
+ *
+ * Решение владельца: диспетчеру отмену оставляем — он и так работает вживую.
+ * Значит правило одно: отменяют директор и диспетчер, из любого незавершённого
+ * статуса; переоткрытие остаётся только у директора.
+ */
+describe('отмена заявки — одно правило', () => {
+  beforeEach(clearTestTickets);
+
+  it('директор отменяет заявку из «Ожидает акта» — кнопка не ведёт в тупик', async () => {
+    const id = await createBaseTicket();
+    await changeStatus(getDb(), erfolgId, null, id, 'act_pending');
+    const caller = appRouter.createCaller(makeCtx('director'));
+    await expect(
+      caller.tickets.cancel({ id, reason: 'клиент забрал технику' }),
+    ).resolves.toMatchObject({ to: 'cancelled' });
+  });
+
+  it('диспетчер отменяет той же кнопкой, а не в обход через changeStatus', async () => {
+    const id = await createBaseTicket();
+    const caller = appRouter.createCaller(makeCtx('dispatcher'));
+    await expect(caller.tickets.cancel({ id, reason: 'дубль заявки' })).resolves.toMatchObject({
+      to: 'cancelled',
+    });
+  });
+
+  it('инженеру отмена недоступна ни одним из двух путей', async () => {
+    const id = await createBaseTicket(engineerId);
+    const caller = appRouter.createCaller(makeCtx('engineer'));
+    await expect(caller.tickets.cancel({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.tickets.changeStatus({ id, status: 'cancelled' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('переоткрытие осталось только у директора', async () => {
+    const id = await createBaseTicket();
+    await changeStatus(getDb(), erfolgId, null, id, 'closed');
+    const disp = appRouter.createCaller(makeCtx('dispatcher'));
+    await expect(disp.tickets.reopen({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});

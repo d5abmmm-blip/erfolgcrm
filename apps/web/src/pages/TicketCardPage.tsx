@@ -1246,6 +1246,8 @@ function ActionsPanel({
   );
 
   const isClosed = t.status === 'closed' || t.status === 'cancelled';
+  // Отменяют директор и диспетчер — ровно как разрешает сервер (tickets.cancel).
+  const canCancel = (role === 'director' || role === 'dispatcher') && !isClosed;
   const allowedStatuses = role === 'engineer' ? ENGINEER_STATUSES : STAFF_STATUSES;
 
   return (
@@ -1401,9 +1403,13 @@ function ActionsPanel({
         </button>
       </div>
 
-      {isDirector && (
+      {/* Отменять может и диспетчер — так же, как на сервере (tickets.cancel —
+          staffProcedure). Раньше кнопку видел только директор, хотя диспетчер и
+          так отменял заявку сменой статуса. Переоткрытие и удаление — по-прежнему
+          только директор. */}
+      {(canCancel || isDirector) && (
         <div className="border-t pt-3">
-          {!isClosed ? (
+          {canCancel && (
             <button
               type="button"
               onClick={() => setCancelOpen(true)}
@@ -1413,7 +1419,8 @@ function ActionsPanel({
               <XCircle className="h-3.5 w-3.5" />
               Отменить заявку
             </button>
-          ) : (
+          )}
+          {isDirector && isClosed && (
             <button
               type="button"
               onClick={onReopen}
@@ -1424,15 +1431,17 @@ function ActionsPanel({
               Переоткрыть
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(true)}
-            disabled={pending || deletePending}
-            className="text-destructive/80 hover:bg-destructive/10 mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Удалить заявку
-          </button>
+          {isDirector && (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              disabled={pending || deletePending}
+              className="text-destructive/80 hover:bg-destructive/10 mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Удалить заявку
+            </button>
+          )}
         </div>
       )}
 
