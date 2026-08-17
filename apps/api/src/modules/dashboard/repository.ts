@@ -9,6 +9,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { withTenantTx, type Db } from '@erfolg/db';
+import { exclInternalCond, internalCategoryIds } from '../cash/repository';
 
 export interface PeriodInput {
   /** Включительно (UTC). */
@@ -72,12 +73,25 @@ export async function getMetrics(
     const endIso = period.end.toISOString();
     const todayIso = new Date().toISOString().slice(0, 10);
 
-    // 1) Revenue (оплаты в периоде)
+    // 1) Выручка за период — ПРИХОД ПО КАССЕ, ровно как «Собрано» в разделе «Финансы».
+    //
+    // Раньше здесь суммировались `payments`, то есть только оплаты, заведённые кнопкой
+    // «Внести платёж» в заявке. В кассу же доход попадает четырьмя путями: ручная
+    // операция, оплата продажи, внутреннее внесение и автосинк из payments — касса
+    // всегда ШИРЕ, и плитка систематически занижала. На боевой базе оплату ведут
+    // кассой, а payments пуст: директор видел 0 ₽ выручки при полной кассе.
+    //
+    // Переводы между счетами и внутренние статьи исключаются тем же правилом, что и
+    // на /finance: это перекладывание из кармана в карман, а не выручка.
+    const internalIds = await internalCategoryIds(tx, tenantId);
     const revenueRows = (await tx.execute(sql`
       SELECT COALESCE(SUM(amount_kopecks)::text, '0') AS sumv
-        FROM payments
-       WHERE paid_at >= ${startIso}::timestamptz
-         AND paid_at <  ${endIso}::timestamptz
+        FROM cash_transactions
+       WHERE deleted_at IS NULL
+         AND kind = 'income'
+         AND occurred_on >= ${startIso}::timestamptz::date
+         AND occurred_on <  ${endIso}::timestamptz::date
+         ${exclInternalCond(internalIds, 'category_id')}
     `)) as unknown as SumRow[];
     const revenue = bigIntFromSum(revenueRows[0]?.sumv ?? '0');
 
