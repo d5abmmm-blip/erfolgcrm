@@ -63,7 +63,9 @@ async function dropTenantBySubdomain(sub: string): Promise<void> {
   if (!id) return;
   await withTenantTx(db, id, async (tx) => {
     await tx.delete(calendarEvents).where(like(calendarEvents.title, `${TEST_PREFIX}%`));
-    await tx.delete(maintenanceSchedules).where(like(maintenanceSchedules.notes, `${TEST_PREFIX}%`));
+    await tx
+      .delete(maintenanceSchedules)
+      .where(like(maintenanceSchedules.notes, `${TEST_PREFIX}%`));
     await tx.delete(warranties).where(like(warranties.provider, `${TEST_PREFIX}%`));
     await tx.delete(assets).where(like(assets.model, `${TEST_PREFIX}%`));
     await tx.delete(clients).where(like(clients.displayName, `${TEST_PREFIX}%`));
