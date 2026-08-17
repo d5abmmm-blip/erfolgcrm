@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { BadgeCheck, FileText, Plus, Send, Trash2, Undo2, X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
-import { formatRub } from '../lib/money';
+import { formatRub, parseRubToKopecks } from '../lib/money';
 import { StatusBadge, type StatusBadgeVariant } from './ui/StatusBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
@@ -92,10 +92,16 @@ export function TicketKpBlock({ ticketId, canManage }: Props) {
       setError('Опишите предложение');
       return;
     }
+    const works = rubToKopecks(worksRub);
+    const parts = rubToKopecks(partsRub);
+    if (works === null || parts === null) {
+      setError('Сумму не понял. Введите число, например: 120 000');
+      return;
+    }
     create.mutate({
       ticketId,
-      worksAmountKopecks: rubToKopecks(worksRub),
-      partsAmountKopecks: rubToKopecks(partsRub),
+      worksAmountKopecks: works,
+      partsAmountKopecks: parts,
       description: description.trim(),
     });
   };
@@ -360,10 +366,16 @@ function ActionBtn({
   );
 }
 
-function rubToKopecks(v: string): number {
-  const n = Number.parseFloat(v.trim().replace(',', '.'));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.round(n * 100);
+/**
+ * Пусто — ноль (строку не заполнили), непонятный ввод — null, и предложение не
+ * отправляется. Раньше здесь стоял parseFloat, и «120 000» молча становилось 120 ₽ —
+ * в цифре, которую видит клиент.
+ */
+function rubToKopecks(v: string): number | null {
+  if (!v.trim()) return 0;
+  const kopecks = parseRubToKopecks(v);
+  if (kopecks === null || kopecks < 0) return null;
+  return kopecks;
 }
 
 function formatDateTime(d: Date | string): string {
