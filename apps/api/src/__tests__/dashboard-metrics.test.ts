@@ -28,6 +28,7 @@ import {
   assets,
 } from '@erfolg/db';
 import { ensureSeed } from './setup';
+import { todayInTimezone } from '../lib/org-day';
 import { createTicket, changeStatus } from '../modules/tickets/repository';
 import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import {
@@ -345,7 +346,9 @@ describe('dashboard.getMetrics', () => {
 
 describe('dashboard.getNavBadgeCounts (бейджи навигации)', () => {
   beforeEach(clearTestData);
-  const todayStr = () => new Date().toISOString().slice(0, 10);
+  // «Событий сегодня» бейдж считает по дню ОРГАНИЗАЦИИ (Europe/Moscow у seed-тенанта),
+  // поэтому и сеять надо московским днём: UTC-день в 21:00–24:00 UTC уже вчерашний.
+  const todayStr = () => todayInTimezone('Europe/Moscow');
 
   it('staff: новый лид и событие на сегодня увеличивают счётчики (дельта)', async () => {
     const before = await getNavBadgeCounts(getDb(), erfolgId, 'dispatcher', 'u1');

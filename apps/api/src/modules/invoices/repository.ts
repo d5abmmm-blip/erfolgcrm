@@ -22,6 +22,7 @@ import {
   type VatRate,
 } from '@erfolg/shared';
 import { WorkOrderNotFoundError } from '../../lib/errors';
+import { orgTodaySql, orgTodayValue } from '../../lib/org-day';
 
 const INVOICE_COUNTER_KIND = 'invoice';
 const DEFAULT_DUE_DAYS = 14;
@@ -196,10 +197,11 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function addDays(d: Date, days: number): Date {
-  const r = new Date(d);
-  r.setUTCDate(r.getUTCDate() + days);
-  return r;
+/** Дата-строка + дни, без часовых поясов (полночь UTC как нейтральная точка). */
+function addDaysIsoDate(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 export interface CreateDraftInput {
@@ -283,8 +285,10 @@ export async function createDraft(
     if (!ticketRow) throw new Error('createDraft: ticket not found');
 
     // 4. Номер + расчёт VAT snapshot (на момент draft, на issue будет refreshed).
-    const now = new Date();
-    const number = await nextInvoiceNumber(tx, tenantId, now.getUTCFullYear());
+    // Дата выставления и год в номере — день ОРГАНИЗАЦИИ: по UTC счёт, выставленный
+    // ночью, получал вчерашнюю дату, а первого января — прошлогодний номер.
+    const issueDate = await orgTodayValue(tx, tenantId);
+    const number = await nextInvoiceNumber(tx, tenantId, Number(issueDate.slice(0, 4)));
     const vat = calcVatInclusive(wo.total, wo.vatRate);
     const dueDays = input.dueDays ?? DEFAULT_DUE_DAYS;
 
@@ -301,8 +305,8 @@ export async function createDraft(
         totalAmountKopecks: wo.total,
         vatAmountKopecks: vat,
         paidAmountKopecks: 0n,
-        issueDate: isoDate(now),
-        dueDate: isoDate(addDays(now, dueDays)),
+        issueDate,
+        dueDate: addDaysIsoDate(issueDate, dueDays),
         notes: input.notes ?? null,
         linesSnapshot: await snapshotWorkOrderLines(tx, wo.id),
       })
@@ -506,7 +510,7 @@ export async function transitionToIssued(
         totalAmountKopecks: wo.total,
         vatRate: wo.vatRate,
         vatAmountKopecks: vat,
-        issueDate: isoDate(now),
+        issueDate: await orgTodayValue(tx, tenantId),
         dueDate: opts.dueDate ?? row.dueDate,
         issuedAt: now,
         // Строки замораживаем вместе с суммой: иначе документ перестаёт
@@ -815,7 +819,7 @@ export async function listClientOverdueInvoices(
           isNull(invoices.deletedAt),
           eq(invoices.clientId, clientId),
           sql`${invoices.status} IN ${RECEIVABLE_INVOICE_STATUSES}`,
-          sql`${invoices.dueDate}::date < CURRENT_DATE`,
+          sql`${invoices.dueDate}::date < ${orgTodaySql(tenantId)}`,
           sql`${invoices.totalAmountKopecks} > ${invoices.paidAmountKopecks}`,
         ),
       )
@@ -898,8 +902,8 @@ function sumBig(values: string[]): string {
 /**
  * Отчёт «Дебиторка»: кто и сколько должен, разбивка по срокам (aging) и сводка.
  * База: живые счета в статусах issued/partially_paid/overdue с остатком > 0.
- * «Просрочено» и корзины aging считаются по due_date относительно CURRENT_DATE
- * (не по статусу-флагу — так цифры не «мигают» между тиками ночного cron).
+ * «Просрочено» и корзины aging считаются по due_date относительно дня организации
+ * (lib/org-day.ts; не по статусу-флагу — так цифры не «мигают» между тиками ночного cron).
  */
 export async function receivablesReport(
   db: Db,
@@ -919,12 +923,12 @@ export async function receivablesReport(
         -- фильтр здесь ещё и развалил бы сходимость «итого» с таблицей).
         (c.status = 'archived' OR c.deleted_at IS NOT NULL) AS client_archived,
         SUM(i.total_amount_kopecks - i.paid_amount_kopecks)::text AS total_owed,
-        SUM(CASE WHEN i.due_date::date < CURRENT_DATE
+        SUM(CASE WHEN i.due_date::date < ${orgTodaySql(tenantId)}
                  THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END)::text AS overdue_owed,
-        COALESCE(MAX(CASE WHEN i.due_date::date < CURRENT_DATE
-                          THEN CURRENT_DATE - i.due_date::date ELSE 0 END), 0)::int AS max_days_overdue,
+        COALESCE(MAX(CASE WHEN i.due_date::date < ${orgTodaySql(tenantId)}
+                          THEN ${orgTodaySql(tenantId)} - i.due_date::date ELSE 0 END), 0)::int AS max_days_overdue,
         COUNT(*)::int AS invoice_count,
-        COUNT(*) FILTER (WHERE i.due_date::date < CURRENT_DATE)::int AS overdue_invoice_count,
+        COUNT(*) FILTER (WHERE i.due_date::date < ${orgTodaySql(tenantId)})::int AS overdue_invoice_count,
         MAX(i.last_reminder_sent_at)::text AS last_reminder_sent_at,
         COALESCE(MAX(i.reminder_count), 0)::int AS reminder_count
       FROM invoices i
@@ -934,7 +938,7 @@ export async function receivablesReport(
         AND i.total_amount_kopecks > i.paid_amount_kopecks
       GROUP BY i.client_id, c.display_name, c.email, c.status, c.deleted_at
       ORDER BY
-        SUM(CASE WHEN i.due_date::date < CURRENT_DATE
+        SUM(CASE WHEN i.due_date::date < ${orgTodaySql(tenantId)}
                  THEN i.total_amount_kopecks - i.paid_amount_kopecks ELSE 0 END) DESC,
         SUM(i.total_amount_kopecks - i.paid_amount_kopecks) DESC
       LIMIT ${limit}
@@ -943,9 +947,9 @@ export async function receivablesReport(
     const agingRows = (await tx.execute(sql`
       SELECT
         CASE
-          WHEN i.due_date::date >= CURRENT_DATE THEN 'not_due'
-          WHEN CURRENT_DATE - i.due_date::date <= 30 THEN 'd1_30'
-          WHEN CURRENT_DATE - i.due_date::date <= 60 THEN 'd31_60'
+          WHEN i.due_date::date >= ${orgTodaySql(tenantId)} THEN 'not_due'
+          WHEN ${orgTodaySql(tenantId)} - i.due_date::date <= 30 THEN 'd1_30'
+          WHEN ${orgTodaySql(tenantId)} - i.due_date::date <= 60 THEN 'd31_60'
           ELSE 'd60plus'
         END AS bucket,
         SUM(i.total_amount_kopecks - i.paid_amount_kopecks)::text AS sum_kopecks,

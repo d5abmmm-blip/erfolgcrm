@@ -15,6 +15,7 @@ import {
   maintenanceDueTodaySql,
   maintenanceOverdueSql,
 } from '../../lib/maintenance-due';
+import { orgTodaySql } from '../../lib/org-day';
 
 export interface PeriodInput {
   /** Включительно (UTC). */
@@ -178,8 +179,8 @@ export async function getMetrics(
     // 7) Сегодняшние ТО + просроченные ТО
     const maintRows = (await tx.execute(sql`
       SELECT
-        SUM(CASE WHEN ${maintenanceDueTodaySql(sql`next_due_at`)} AND is_active THEN 1 ELSE 0 END)::int AS today_cnt,
-        SUM(CASE WHEN ${maintenanceOverdueSql(sql`next_due_at`)} AND is_active THEN 1 ELSE 0 END)::int AS overdue_cnt
+        SUM(CASE WHEN ${maintenanceDueTodaySql(sql`next_due_at`, tenantId)} AND is_active THEN 1 ELSE 0 END)::int AS today_cnt,
+        SUM(CASE WHEN ${maintenanceOverdueSql(sql`next_due_at`, tenantId)} AND is_active THEN 1 ELSE 0 END)::int AS overdue_cnt
         FROM maintenance_schedules
        WHERE deleted_at IS NULL
     `)) as unknown as Array<{ today_cnt: number | null; overdue_cnt: number | null }>;
@@ -229,8 +230,8 @@ export interface NavBadgeCounts {
  * только свои заявки на акт + операционные склад/ТО (разделы лиды/календарь/счета
  * ему в меню не видны, поэтому считаем их только для staff). Через RLS (withTenantTx).
  *
- * «Сегодня/просрочка» считаются на сервере (CURRENT_DATE / now()), как в getMetrics —
- * единый источник правды по времени, без рассинхрона с клиентом.
+ * «Сегодня/просрочка» считаются на сервере (день организации из lib/org-day.ts / now()),
+ * как в getMetrics — единый источник правды по времени, без рассинхрона с клиентом.
  */
 export async function getNavBadgeCounts(
   db: Db,
@@ -271,7 +272,7 @@ export async function getNavBadgeCounts(
 
       const calRows = (await tx.execute(sql`
         SELECT COUNT(*)::int AS cnt FROM calendar_events
-         WHERE deleted_at IS NULL AND event_date = CURRENT_DATE
+         WHERE deleted_at IS NULL AND event_date = ${orgTodaySql(tenantId)}
       `)) as unknown as CountRow[];
       calendarToday = calRows[0]?.cnt ?? 0;
 
@@ -286,7 +287,7 @@ export async function getNavBadgeCounts(
     const maintRows = (await tx.execute(sql`
       SELECT COUNT(*)::int AS cnt FROM maintenance_schedules
        WHERE deleted_at IS NULL AND is_active
-         AND ${maintenanceOverdueSql(sql`next_due_at`)}
+         AND ${maintenanceOverdueSql(sql`next_due_at`, tenantId)}
     `)) as unknown as CountRow[];
     const maintenanceOverdue = maintRows[0]?.cnt ?? 0;
 
@@ -341,7 +342,7 @@ export async function listOverdueInvoices(
         i.paid_amount_kopecks::text  AS paid,
         (i.total_amount_kopecks - i.paid_amount_kopecks)::text AS remaining,
         i.due_date::text AS due_date,
-        GREATEST(0, (CURRENT_DATE - i.due_date::date))::int AS days_overdue
+        GREATEST(0, (${orgTodaySql(tenantId)} - i.due_date::date))::int AS days_overdue
         FROM invoices i
         LEFT JOIN clients c ON c.id = i.client_id
        WHERE i.deleted_at IS NULL
@@ -506,8 +507,8 @@ export async function listMaintenanceForToday(
 ): Promise<MaintenanceTodayRow[]> {
   return withTenantTx(db, tenantId, async (tx) => {
     const todayCondition = includeOverdue
-      ? maintenanceDueByTodaySql(sql`s.next_due_at`)
-      : maintenanceDueTodaySql(sql`s.next_due_at`);
+      ? maintenanceDueByTodaySql(sql`s.next_due_at`, tenantId)
+      : maintenanceDueTodaySql(sql`s.next_due_at`, tenantId);
     const rows = (await tx.execute(sql`
       SELECT
         s.id            AS schedule_id,
@@ -516,7 +517,7 @@ export async function listMaintenanceForToday(
         s.next_due_at,
         s.interval_days,
         u.full_name     AS responsible_name,
-        (${maintenanceOverdueSql(sql`s.next_due_at`)}) AS is_overdue
+        (${maintenanceOverdueSql(sql`s.next_due_at`, tenantId)}) AS is_overdue
         FROM maintenance_schedules s
         JOIN assets a ON a.id = s.asset_id
         LEFT JOIN users u ON u.id = s.responsible_user_id

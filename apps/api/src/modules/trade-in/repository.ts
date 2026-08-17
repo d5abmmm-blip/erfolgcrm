@@ -10,6 +10,7 @@
  */
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
+import { orgTodayValue } from '../../lib/org-day';
 import { alias } from 'drizzle-orm/pg-core';
 import { assetEvents, assets, clients, tradeInItems, withTenantTx, type Db } from '@erfolg/db';
 import type { TradeInCondition, TradeInStatus } from '@erfolg/shared';
@@ -304,7 +305,7 @@ export async function completeTradeIn(
     const item = rows[0];
     if (!item) return null;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await orgTodayValue(tx, tenantId);
 
     await tx
       .update(tradeInItems)

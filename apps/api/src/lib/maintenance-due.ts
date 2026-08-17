@@ -10,25 +10,25 @@
  * ПРАВИЛО: просрочено, если плановый ДЕНЬ уже прошёл. Пока день идёт — ТО можно
  * успеть сделать, и красным оно не считается.
  *
- * ⚠️ «Сегодня» здесь — `CURRENT_DATE`, то есть день в таймзоне базы, а не
- * организации. Это осознанно оставлено как есть: тем же `CURRENT_DATE` живут
- * соседние разделы, и переезд «сегодня» на таймзону организации — отдельная
- * задача по всей системе, а не по одному ТО. Здесь цель скромнее и проверяема:
- * чтобы все экраны считали ОДИНАКОВО.
+ * «Сегодня» — день в таймзоне ОРГАНИЗАЦИИ (lib/org-day.ts), а не базы данных:
+ * раньше `CURRENT_DATE` жил по UTC и новый день для Москвы наступал в 03:00.
+ * `next_due_at` — timestamptz, поэтому и его календарный день берётся через
+ * orgDaySql: голый `::date` зависел бы от таймзоны сессии.
  */
 import { sql, type SQL } from 'drizzle-orm';
+import { orgDaySql, orgTodaySql } from './org-day';
 
 /** Просрочено: плановый день уже прошёл. */
-export function maintenanceOverdueSql(nextDueAt: SQL): SQL {
-  return sql`${nextDueAt}::date < CURRENT_DATE`;
+export function maintenanceOverdueSql(nextDueAt: SQL, tenantId: string): SQL {
+  return sql`${orgDaySql(tenantId, nextDueAt)} < ${orgTodaySql(tenantId)}`;
 }
 
 /** Срок наступает сегодня. */
-export function maintenanceDueTodaySql(nextDueAt: SQL): SQL {
-  return sql`${nextDueAt}::date = CURRENT_DATE`;
+export function maintenanceDueTodaySql(nextDueAt: SQL, tenantId: string): SQL {
+  return sql`${orgDaySql(tenantId, nextDueAt)} = ${orgTodaySql(tenantId)}`;
 }
 
 /** Просрочено ИЛИ на сегодня — то, чем занимаются прямо сейчас. */
-export function maintenanceDueByTodaySql(nextDueAt: SQL): SQL {
-  return sql`${nextDueAt}::date <= CURRENT_DATE`;
+export function maintenanceDueByTodaySql(nextDueAt: SQL, tenantId: string): SQL {
+  return sql`${orgDaySql(tenantId, nextDueAt)} <= ${orgTodaySql(tenantId)}`;
 }

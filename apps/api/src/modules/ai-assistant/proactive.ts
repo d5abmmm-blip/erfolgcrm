@@ -12,6 +12,7 @@
 import { and, eq } from 'drizzle-orm';
 import { aiDailySummaries, withTenantTx, type Db } from '@erfolg/db';
 import type { ResolvedTenant } from '../../lib/tenant';
+import { todayInTimezone } from '../../lib/org-day';
 import { logger } from '../../lib/logger';
 import { callLlm, type LlmCallOpts } from './llm';
 import { loadLlmRuntimeConfig } from './config';
@@ -184,16 +185,6 @@ function renderSummaryPrompt(d: DailySummaryData): string {
   return lines.join('\n');
 }
 
-/** Дата «сегодня» в таймзоне организации (YYYY-MM-DD). */
-function todayInTz(tz: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 /**
  * Утренняя сводка: данные считаем всегда; текст LLM берём из кэша (одна строка на день),
  * иначе собираем и кэшируем. Кэш экономит вызовы LLM и не зависит от аптайма провайдера.
@@ -202,7 +193,7 @@ export async function getOrBuildDailySummary(
   db: Db,
   tenant: ResolvedTenant,
 ): Promise<DailySummaryResult> {
-  const date = todayInTz(tenant.timezone);
+  const date = todayInTimezone(tenant.timezone);
   const data = await buildDailySummaryData(db, tenant);
 
   const cached = await withTenantTx(db, tenant.id, (tx) =>

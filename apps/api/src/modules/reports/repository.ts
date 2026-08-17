@@ -12,6 +12,7 @@
  * leads.estimated_value — РУБЛИ numeric(14,2) (см. schema/leads.ts) → number в DTO.
  * Все запросы под withTenantTx (RLS).
  */
+import { orgTodaySql } from '../../lib/org-day';
 import { and, desc, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import {
   clients,
@@ -418,7 +419,7 @@ export async function receivables(db: Db, tenantId: string): Promise<Receivables
         totalAmountKopecks: sql<string>`${invoices.totalAmountKopecks}::text`,
         paidAmountKopecks: sql<string>`${invoices.paidAmountKopecks}::text`,
         remainingKopecks: sql<string>`(${invoices.totalAmountKopecks} - ${invoices.paidAmountKopecks})::text`,
-        overdueDays: sql<number>`GREATEST(0, (CURRENT_DATE - ${invoices.dueDate}))::int`,
+        overdueDays: sql<number>`GREATEST(0, (${orgTodaySql(tenantId)} - ${invoices.dueDate}))::int`,
       })
       .from(invoices)
       .leftJoin(clients, eq(clients.id, invoices.clientId))

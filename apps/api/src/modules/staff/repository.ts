@@ -11,6 +11,7 @@
  * (решение принято при вводе нескольких инженеров на заявку). Считаем ответственного.
  */
 import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
+import { todayInTimezone } from '../../lib/org-day';
 import {
   assets,
   clients,
@@ -79,20 +80,6 @@ export interface StaffCard extends StaffListRow {
   upcomingAway: StaffAway[];
 }
 
-/** Сегодня в таймзоне организации как YYYY-MM-DD (колонки дат — без времени). */
-function todayIso(timezone: string, now: Date = new Date()): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now);
-  } catch {
-    return now.toISOString().slice(0, 10);
-  }
-}
-
 /** Заявка «в работе» и заведена уже в CRM. */
 function openInCrm() {
   return and(
@@ -117,7 +104,7 @@ export async function listStaff(
   timezone: string,
   opts: { includeBlocked?: boolean } = {},
 ): Promise<StaffListRow[]> {
-  const today = todayIso(timezone);
+  const today = todayInTimezone(timezone);
 
   return withTenantTx(db, tenantId, async (tx) => {
     const people = await tx
@@ -436,7 +423,7 @@ export async function getStaffCard(
   timezone: string,
   userId: string,
 ): Promise<StaffCard | null> {
-  const today = todayIso(timezone);
+  const today = todayInTimezone(timezone);
   const now = new Date();
 
   return withTenantTx(db, tenantId, async (tx) => {

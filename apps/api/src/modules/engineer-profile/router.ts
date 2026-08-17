@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { router, staffProcedure } from '../../trpc/trpc';
 import { writeAudit } from '../../lib/audit';
+import { todayInTimezone } from '../../lib/org-day';
 import {
   deleteAvailability,
   listAvailability,
@@ -21,16 +22,6 @@ import { assignmentHints } from './hints';
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате ГГГГ-ММ-ДД');
 const kindSchema = z.enum(['day_off', 'vacation', 'onsite']);
-
-/** Дата «сегодня» в таймзоне организации (YYYY-MM-DD). */
-function todayInTz(tz: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
 
 export const engineerProfileRouter = router({
   listSkills: staffProcedure.query(({ ctx }) => listSkills(ctx.db, ctx.tenant.id)),
@@ -62,7 +53,7 @@ export const engineerProfileRouter = router({
 
   /** Занятость, актуальная сегодня (для бейджей на доске). */
   availabilityToday: staffProcedure.query(({ ctx }) =>
-    listActiveAvailability(ctx.db, ctx.tenant.id, todayInTz(ctx.tenant.timezone)),
+    listActiveAvailability(ctx.db, ctx.tenant.id, todayInTimezone(ctx.tenant.timezone)),
   ),
 
   /**

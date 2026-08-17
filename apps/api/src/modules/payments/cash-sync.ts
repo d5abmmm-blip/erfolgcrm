@@ -15,6 +15,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { cashAccounts, cashCategories, cashTransactions } from '@erfolg/db';
 import type { withTenantTx } from '@erfolg/db';
 import { recalcAccountBalanceInTx } from '../cash/repository';
+import { orgDayValue } from '../../lib/org-day';
 import { logger } from '../../lib/logger';
 
 type Tx = Parameters<Parameters<typeof withTenantTx>[2]>[0];
@@ -110,7 +111,9 @@ export async function syncCashFromPaymentInTx(
     return;
   }
   const categoryId = await findTicketPaymentCategory(tx, tenantId);
-  const occurredOn = payment.paidAt.toISOString().slice(0, 10);
+  // День платежа — в поясе организации: ночной платёж (00:00–03:00 МСК) по UTC
+  // датировался вчерашним днём и не попадал в «сегодня» кассового журнала.
+  const occurredOn = await orgDayValue(tx, tenantId, payment.paidAt);
 
   await tx
     .insert(cashTransactions)

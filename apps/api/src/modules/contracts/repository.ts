@@ -5,6 +5,7 @@
  *   create → update (status, valid_until, terms_json) → archive (soft delete).
  *   contract_number уникален среди живых записей (UNIQUE INDEX WHERE deleted_at IS NULL).
  */
+import { orgTodaySql } from '../../lib/org-day';
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
 import { clients, contracts, withTenantTx, type ContractTerms, type Db } from '@erfolg/db';
@@ -233,7 +234,7 @@ export async function listActiveByClient(
           eq(contracts.clientId, clientId),
           eq(contracts.status, 'active'),
           isNull(contracts.deletedAt),
-          sql`(${contracts.validUntil} IS NULL OR ${contracts.validUntil} >= CURRENT_DATE)`,
+          sql`(${contracts.validUntil} IS NULL OR ${contracts.validUntil} >= ${orgTodaySql(tenantId)})`,
         ),
       )
       .orderBy(desc(contracts.contractDate));
