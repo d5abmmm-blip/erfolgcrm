@@ -10,7 +10,7 @@ import {
   deletePayment as repoDelete,
   getPaidTotal as repoGetTotal,
   listByTicket as repoList,
-  ticketBelongsToTenant,
+  ticketStatusInTenant,
   type AddPaymentInput,
   type PaymentDto,
 } from './repository';
@@ -33,8 +33,18 @@ export async function addPaymentCmd(
   ctx: CmdCtx,
   input: Omit<AddPaymentInput, 'userId'>,
 ): Promise<{ id: string; paidTotalKopecks: string; invoicePaidKopecks: string | null }> {
-  if (!(await ticketBelongsToTenant(ctx.db, ctx.tenant.id, input.ticketId))) {
+  const ticketStatus = await ticketStatusInTenant(ctx.db, ctx.tenant.id, input.ticketId);
+  if (ticketStatus === null) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Заявка не найдена в этом тенанте' });
+  }
+  // Отмена — это «работы не будет». Принятый по такой заявке платёж встаёт в кассу и
+  // в дебиторку, и потом его ищут руками. Отменённый СЧЁТ был закрыт от оплаты и
+  // раньше (addPayment смотрит его статус) — здесь закрывается сама заявка.
+  if (ticketStatus === 'cancelled') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Заявка отменена — платёж по ней принять нельзя. Сначала переоткройте заявку.',
+    });
   }
   let result;
   try {

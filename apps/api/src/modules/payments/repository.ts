@@ -178,13 +178,28 @@ export async function ticketBelongsToTenant(
   tenantId: string,
   ticketId: string,
 ): Promise<boolean> {
+  return (await ticketStatusInTenant(db, tenantId, ticketId)) !== null;
+}
+
+/**
+ * Статус заявки в этом тенанте, `null` — заявки нет.
+ *
+ * Нужен денежному пути: платёж принимался по заявке В ЛЮБОМ статусе, проверялась
+ * только принадлежность тенанту. По отменённой заявке деньги брать нельзя — они
+ * встают в кассу и в дебиторку и потом ищутся руками.
+ */
+export async function ticketStatusInTenant(
+  db: Db,
+  tenantId: string,
+  ticketId: string,
+): Promise<string | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select({ id: tickets.id })
+      .select({ status: tickets.status })
       .from(tickets)
       .where(eq(tickets.id, ticketId))
       .limit(1);
-    return rows.length > 0;
+    return rows[0]?.status ?? null;
   });
 }
 
