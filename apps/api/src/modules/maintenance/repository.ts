@@ -65,7 +65,7 @@ export type ScheduleFilter = 'overdue' | 'due_soon' | 'all_active' | 'inactive';
 
 const DUE_SOON_DAYS = 7;
 
-function buildScheduleFilter(filter: ScheduleFilter | undefined, now: Date) {
+function buildScheduleFilter(filter: ScheduleFilter | undefined, now: Date, tenantId: string) {
   if (filter === 'overdue') {
     // Одно определение на всю систему (lib/maintenance-due.ts): просрочено, если
     // плановый ДЕНЬ прошёл. По метке времени график «на сегодня» становился
@@ -73,7 +73,7 @@ function buildScheduleFilter(filter: ScheduleFilter | undefined, now: Date) {
     // с дашбордом, который сравнивал по дате.
     return and(
       eq(maintenanceSchedules.isActive, true),
-      maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`),
+      maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`, tenantId),
     );
   }
   if (filter === 'due_soon') {
@@ -93,7 +93,7 @@ export async function listSchedules(
   opts: { filter?: ScheduleFilter; assetId?: string } = {},
 ): Promise<MaintenanceScheduleDto[]> {
   return withTenantTx(db, tenantId, async (tx) => {
-    const conds = [buildScheduleFilter(opts.filter, new Date())];
+    const conds = [buildScheduleFilter(opts.filter, new Date(), tenantId)];
     if (opts.assetId) conds.push(eq(maintenanceSchedules.assetId, opts.assetId));
     const rows = await tx
       .select({
@@ -112,7 +112,7 @@ export async function listSchedules(
         responsibleUserId: maintenanceSchedules.responsibleUserId,
         notes: maintenanceSchedules.notes,
         isActive: maintenanceSchedules.isActive,
-        isOverdue: sql<boolean>`(${maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`)})`,
+        isOverdue: sql<boolean>`(${maintenanceOverdueSql(sql`${maintenanceSchedules.nextDueAt}`, tenantId)})`,
         createdAt: maintenanceSchedules.createdAt,
         updatedAt: maintenanceSchedules.updatedAt,
       })

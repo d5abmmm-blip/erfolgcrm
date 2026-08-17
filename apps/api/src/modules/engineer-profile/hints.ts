@@ -15,6 +15,7 @@
  * ПДн клиента наружу не отдаём — только по инженерам.
  */
 import type { Db } from '@erfolg/db';
+import { todayInTimezone } from '../../lib/org-day';
 import { listUsers } from '../users/repository';
 import { boardTickets, getAssetRequiredAttestation } from '../tickets/repository';
 import { getActiveCategoriesForEngineer } from '../attestations/repository';
@@ -43,16 +44,6 @@ export interface AssignmentHintsInput {
   assetId?: string | null;
 }
 
-/** Дата «сегодня» в таймзоне организации (YYYY-MM-DD). */
-function todayInTz(tz: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 /**
  * Подсказки по всем активным инженерам под конкретную заявку.
  *
@@ -73,7 +64,7 @@ export async function assignmentHints(
   const [engineers, skills, availability, board, requiredCategory] = await Promise.all([
     listUsers(db, tenantId, { onlyEngineers: true }),
     listSkills(db, tenantId),
-    listActiveAvailability(db, tenantId, todayInTz(timezone)),
+    listActiveAvailability(db, tenantId, todayInTimezone(timezone)),
     boardTickets(db, tenantId),
     assetId ? getAssetRequiredAttestation(db, tenantId, assetId) : Promise.resolve(null),
   ]);

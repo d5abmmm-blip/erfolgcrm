@@ -13,6 +13,7 @@
  */
 import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { engineerAttestations, users, withTenantTx, type Db } from '@erfolg/db';
+import { orgTodayValue } from '../../lib/org-day';
 
 export type AttestationStatus = 'active' | 'expiring_soon' | 'expired';
 
@@ -44,19 +45,14 @@ export interface AttestationInput {
 
 const SOON_DAYS = 30;
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function daysBetween(fromIso: string, toIso: string): number {
   const from = Date.parse(`${fromIso}T00:00:00Z`);
   const to = Date.parse(`${toIso}T00:00:00Z`);
   return Math.round((to - from) / 86_400_000);
 }
 
-function computeStatus(validUntilIso: string | null): AttestationStatus {
+function computeStatus(validUntilIso: string | null, today: string): AttestationStatus {
   if (!validUntilIso) return 'active'; // бессрочно
-  const today = todayIso();
   if (validUntilIso < today) return 'expired';
   if (daysBetween(today, validUntilIso) <= SOON_DAYS) return 'expiring_soon';
   return 'active';
@@ -96,6 +92,7 @@ export async function listAttestations(
       .where(and(...filters))
       .orderBy(asc(users.fullName), asc(engineerAttestations.category));
 
+    const today = await orgTodayValue(tx, tenantId);
     return rows
       .map<AttestationRow>((r) => ({
         id: r.id,
@@ -108,7 +105,7 @@ export async function listAttestations(
         validUntil: r.validUntil,
         documentAttachmentId: r.documentAttachmentId,
         notes: r.notes,
-        status: computeStatus(r.validUntil),
+        status: computeStatus(r.validUntil, today),
         createdAt: r.createdAt,
       }))
       .filter((r) => (opts.includeExpired === false ? r.status !== 'expired' : true));
@@ -232,7 +229,7 @@ export async function getActiveCategoriesForEngineer(
   engineerId: string,
 ): Promise<string[]> {
   return withTenantTx(db, tenantId, async (tx) => {
-    const today = todayIso();
+    const today = await orgTodayValue(tx, tenantId);
     const rows = await tx
       .select({ category: engineerAttestations.category })
       .from(engineerAttestations)

@@ -9,6 +9,7 @@
 import { TRPCError } from '@trpc/server';
 import type { Db } from '@erfolg/db';
 import { writeAudit } from '../../lib/audit';
+import { todayInTimezone } from '../../lib/org-day';
 import type { ResolvedTenant } from '../../lib/tenant';
 import type { CmdCtx } from '../../trpc/helpers';
 import {
@@ -38,23 +39,10 @@ export function monthRange(year: number, month: number): MonthRange {
   return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
 }
 
-/**
- * Сегодня в таймзоне организации. Табель ведут по местному времени, и «завтра»
- * должно наступать вместе с ним, а не по UTC.
- */
-export function todayInTimezone(timezone: string, now: Date = new Date()): string {
-  try {
-    // en-CA даёт ровно YYYY-MM-DD.
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now);
-  } catch {
-    return now.toISOString().slice(0, 10);
-  }
-}
+// «Сегодня» организации переехало в общее место (lib/org-day.ts) — здесь жила
+// первая из пяти одинаковых копий. Реэкспорт сохранён: табель и его тесты
+// исторически берут функцию отсюда.
+export { todayInTimezone };
 
 export interface AttendanceMonthDto {
   from: string;

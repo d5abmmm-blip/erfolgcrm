@@ -11,6 +11,7 @@
  *
  * Все суммы — копейки (bigint, в DTO → string). occurred_on — date 'YYYY-MM-DD'.
  */
+import { orgTodaySql } from '../../lib/org-day';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { cashAccounts, cashCategories, cashTransactions, withTenantTx, type Db } from '@erfolg/db';
 import { withDbRetry } from '../../lib/db-retry';
@@ -763,7 +764,7 @@ export async function getMonthlyFlow(
       FROM cash_transactions
       WHERE deleted_at IS NULL
         AND kind <> 'transfer'
-        AND occurred_on >= (date_trunc('month', CURRENT_DATE) - make_interval(months => ${monthsBack - 1}::int))
+        AND occurred_on >= (date_trunc('month', ${orgTodaySql(tenantId)}) - make_interval(months => ${monthsBack - 1}::int))
         ${exclInternalCond(internal, 'category_id')}
       GROUP BY date_trunc('month', occurred_on)
       ORDER BY date_trunc('month', occurred_on) ASC

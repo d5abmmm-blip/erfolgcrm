@@ -7,6 +7,7 @@
  */
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { ruIlike } from '../../lib/ru-search';
+import { orgTodaySql } from '../../lib/org-day';
 import { assets, clients, warranties, withTenantTx, type Db } from '@erfolg/db';
 import type { WarrantyStatus, WarrantyType } from '@erfolg/shared';
 
@@ -71,30 +72,31 @@ export interface WarrantyStats {
 const PAGE_SIZE = 25;
 
 /** SQL-выражение действующего статуса. Единая точка истины для select/filter/stats. */
-const statusSql = sql<WarrantyStatus>`CASE
+function statusSql(tenantId: string): SQL<WarrantyStatus> {
+  const today = orgTodaySql(tenantId);
+  return sql<WarrantyStatus>`CASE
   WHEN ${warranties.voided} THEN 'voided'
-  WHEN ${warranties.endDate} < CURRENT_DATE THEN 'expired'
-  WHEN ${warranties.endDate} <= CURRENT_DATE + 30 THEN 'expiring'
+  WHEN ${warranties.endDate} < ${today} THEN 'expired'
+  WHEN ${warranties.endDate} <= ${today} + 30 THEN 'expiring'
   ELSE 'active'
 END`;
+}
 
 /** Фильтр по вычисляемому статусу. */
-function statusFilter(status: WarrantyStatus): SQL {
+function statusFilter(status: WarrantyStatus, tenantId: string): SQL {
+  const today = orgTodaySql(tenantId);
   switch (status) {
     case 'voided':
       return eq(warranties.voided, true);
     case 'expired':
-      return and(eq(warranties.voided, false), sql`${warranties.endDate} < CURRENT_DATE`) as SQL;
+      return and(eq(warranties.voided, false), sql`${warranties.endDate} < ${today}`) as SQL;
     case 'expiring':
       return and(
         eq(warranties.voided, false),
-        sql`${warranties.endDate} >= CURRENT_DATE AND ${warranties.endDate} <= CURRENT_DATE + 30`,
+        sql`${warranties.endDate} >= ${today} AND ${warranties.endDate} <= ${today} + 30`,
       ) as SQL;
     case 'active':
-      return and(
-        eq(warranties.voided, false),
-        sql`${warranties.endDate} > CURRENT_DATE + 30`,
-      ) as SQL;
+      return and(eq(warranties.voided, false), sql`${warranties.endDate} > ${today} + 30`) as SQL;
   }
 }
 
@@ -130,14 +132,14 @@ function rowToDto(r: JoinedRow): WarrantyDto {
   };
 }
 
-const joinedSelect = {
+const joinedSelect = (tenantId: string) => ({
   warranty: warranties,
-  status: statusSql,
+  status: statusSql(tenantId),
   assetModel: assets.model,
   assetSerialNumber: assets.serialNumber,
   clientId: clients.id,
   clientDisplayName: clients.displayName,
-};
+});
 
 export async function listWarranties(
   db: Db,
@@ -146,7 +148,7 @@ export async function listWarranties(
 ): Promise<{ items: WarrantyDto[]; total: number }> {
   return withTenantTx(db, tenantId, async (tx) => {
     const filters: SQL[] = [isNull(warranties.deletedAt)];
-    if (opts.status) filters.push(statusFilter(opts.status));
+    if (opts.status) filters.push(statusFilter(opts.status, tenantId));
     if (opts.type) filters.push(eq(warranties.type, opts.type));
     if (opts.assetId) filters.push(eq(warranties.assetId, opts.assetId));
     if (opts.search) {
@@ -166,7 +168,7 @@ export async function listWarranties(
     const offset = (page - 1) * PAGE_SIZE;
 
     const rows = await tx
-      .select(joinedSelect)
+      .select(joinedSelect(tenantId))
       .from(warranties)
       .leftJoin(assets, eq(assets.id, warranties.assetId))
       .leftJoin(clients, eq(clients.id, assets.ownerClientId))
@@ -196,7 +198,7 @@ export async function getWarrantyById(
 ): Promise<WarrantyDto | null> {
   return withTenantTx(db, tenantId, async (tx) => {
     const rows = await tx
-      .select(joinedSelect)
+      .select(joinedSelect(tenantId))
       .from(warranties)
       .leftJoin(assets, eq(assets.id, warranties.assetId))
       .leftJoin(clients, eq(clients.id, assets.ownerClientId))
@@ -289,9 +291,9 @@ export async function warrantyStats(db: Db, tenantId: string): Promise<WarrantyS
     const rows = await tx
       .select({
         total: sql<number>`count(*)::int`,
-        active: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} > CURRENT_DATE + 30)::int`,
-        expiring: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} >= CURRENT_DATE AND ${warranties.endDate} <= CURRENT_DATE + 30)::int`,
-        expired: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} < CURRENT_DATE)::int`,
+        active: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} > ${orgTodaySql(tenantId)} + 30)::int`,
+        expiring: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} >= ${orgTodaySql(tenantId)} AND ${warranties.endDate} <= ${orgTodaySql(tenantId)} + 30)::int`,
+        expired: sql<number>`count(*) FILTER (WHERE NOT ${warranties.voided} AND ${warranties.endDate} < ${orgTodaySql(tenantId)})::int`,
         voided: sql<number>`count(*) FILTER (WHERE ${warranties.voided})::int`,
       })
       .from(warranties)
