@@ -1,11 +1,11 @@
 /**
- * /settings — индекс разделов настроек. Сейчас доступен только Telegram (другие появятся
- * по мере роста — реквизиты, шаблоны документов, биллинг и т.д.).
+ * /settings — индекс разделов настроек.
  */
 import { Link } from 'wouter';
 import {
   Award,
   Bot,
+  Building2,
   ChevronRight,
   Database,
   DatabaseBackup,
@@ -27,6 +27,24 @@ export function SettingsPage() {
       </p>
 
       <div className="mt-6 space-y-2">
+        <Link
+          href="/settings/organization"
+          className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 text-primary grid h-10 w-10 place-items-center rounded-md">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-medium">Организация</div>
+              <div className="text-muted-foreground text-xs">
+                Реквизиты, банк, лицензия и директор — то, что печатается в документах
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="text-muted-foreground h-5 w-5" />
+        </Link>
+
         <Link
           href="/settings/modules"
           className="bg-card hover:bg-muted/40 flex items-center justify-between gap-2 rounded-lg border p-4 transition"

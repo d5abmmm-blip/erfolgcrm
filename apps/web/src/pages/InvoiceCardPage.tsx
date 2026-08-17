@@ -19,6 +19,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { INVOICE_STATUS_META } from '../lib/dictionaries';
 import { invoiceNotesSchema, type InvoiceNotesValues } from './InvoiceCardPage.schemas';
 import { toPdfLines } from '../lib/pdf/lines';
+import { useTenantRequisites } from '../lib/organization';
 
 const VAT_LABEL: Record<string, string> = {
   '0': '0%',
@@ -58,6 +59,8 @@ type DialogState =
 export function InvoiceCardPage() {
   const [, params] = useRoute('/invoices/:id');
   const id = params?.id ?? '';
+  // Шапка счёта — из настроек организации, а не из зашитой в код константы.
+  const tenantRequisites = useTenantRequisites();
 
   const me = trpc.auth.me.useQuery();
   const role = me.data?.user.role;
@@ -136,10 +139,7 @@ export function InvoiceCardPage() {
     // Вкладку открываем синхронно (в жесте клика), иначе popup заблокируется после await.
     const win = openPrintWindow();
     try {
-      const [{ printInvoice }, { ERFOLG_FALLBACK }] = await Promise.all([
-        import('../lib/pdf'),
-        import('../lib/pdf/branding'),
-      ]);
+      const { printInvoice } = await import('../lib/pdf');
       // We need client + work order data for the PDF.
       // workOrder is fetched lazily inside the print routine.
       const workOrderQuery = await utils.workOrders.getByTicket.fetch({
@@ -177,7 +177,7 @@ export function InvoiceCardPage() {
       };
       await printInvoice(
         {
-          tenant: { ...ERFOLG_FALLBACK },
+          tenant: tenantRequisites,
           client: clientData,
           ticket: ticketData,
           workOrder: {

@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { tenants, type Db } from '@erfolg/db';
 import { authedProcedure, directorProcedure, router } from '../../trpc/trpc';
+import { organizationPatchSchema, readOrganization, updateOrganization } from './organization';
 import { writeAudit } from '../../lib/audit';
 
 /** Читает отключённые модули tenant'а. tenants — control-plane без RLS, читаем напрямую. */
@@ -111,5 +112,37 @@ export const settingsRouter = router({
       });
 
       return { enabled: input.enabled };
+    }),
+
+  /**
+   * Реквизиты организации — то, что печатается в документах.
+   *
+   *   getOrganization    — ЛЮБОЙ сотрудник. Не только менеджер: акт выполненных
+   *     работ, дефектный акт и акт технического состояния инженер печатает с
+   *     телефона, и шапка с наименованием, ИНН и фамилией директора нужна ему
+   *     ровно так же. Секрета здесь нет — эти реквизиты стоят на каждом счёте,
+   *     который уходит клиенту.
+   *   updateOrganization — только директор: это реквизиты компании целиком.
+   */
+  getOrganization: authedProcedure.query(({ ctx }) => readOrganization(ctx.db, ctx.tenant.id)),
+
+  updateOrganization: directorProcedure
+    .input(organizationPatchSchema)
+    .mutation(async ({ ctx, input }) => {
+      await updateOrganization(ctx.db, ctx.tenant.id, input);
+
+      // 152-ФЗ: фиксируем изменение конфигурации директором. Пишем ИМЕНА
+      // изменённых полей, а не значения: банковский счёт в журнале не нужен.
+      await writeAudit(ctx.db, ctx.tenant.id, {
+        userId: ctx.session.userId,
+        action: 'update',
+        entityType: 'tenant_settings',
+        entityId: ctx.tenant.id,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        context: { organizationFields: Object.keys(input).sort() },
+      });
+
+      return readOrganization(ctx.db, ctx.tenant.id);
     }),
 });
