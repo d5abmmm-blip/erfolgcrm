@@ -44,7 +44,7 @@ interface TicketRow {
   assetInventoryNumber: string | null;
   assignedEngineerId: string | null;
   assignedEngineerName: string | null;
-  slaTargetAt: Date | null;
+  deadlineAt: Date | null;
   receivedAt: Date;
   waitingForPart: boolean;
   idleDays: number;
@@ -193,9 +193,9 @@ export function TicketsListPage() {
       render: (t) => formatDate(t.receivedAt),
     },
     {
-      key: 'sla',
-      label: 'SLA',
-      render: (t) => <SlaBadge target={t.slaTargetAt} status={t.status} />,
+      key: 'deadline',
+      label: 'Срок',
+      render: (t) => <DeadlineBadge deadline={t.deadlineAt} status={t.status} />,
     },
   ];
 
@@ -372,7 +372,17 @@ function ViewToggle({ current }: { current: 'table' | 'kanban' }) {
   );
 }
 
-function SlaBadge({ target, status }: { target: Date | null; status: TicketStatus }) {
+/**
+ * Срок по заявке — ТОТ, КОТОРЫЙ ПОСТАВИЛ ЧЕЛОВЕК (`deadline_at`).
+ *
+ * Раньше здесь показывался автоматический норматив от приоритета
+ * (`sla_target_at`), и по одной заявке человек видел два разных «срока»:
+ * один тут, другой в календаре и в карточке сотрудника. Решение владельца
+ * 2026-08-17: на рабочих экранах остаётся ручной, норматив живёт только в
+ * отчёте SLA как мера качества работы.
+ */
+function DeadlineBadge({ deadline, status }: { deadline: Date | null; status: TicketStatus }) {
+  const target = deadline;
   if (status === 'closed' || status === 'cancelled') return null;
   if (!target) return <span className="text-muted-foreground text-xs">—</span>;
   const diffMs = new Date(target).getTime() - Date.now();
