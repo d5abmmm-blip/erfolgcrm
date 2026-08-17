@@ -324,7 +324,7 @@ export function TradeInListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Позиций трейд-ина нет"
         rowKey={(t) => t.id}
       />

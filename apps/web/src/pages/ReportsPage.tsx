@@ -489,7 +489,7 @@ function RevenueReport({ period }: { period: { from?: string; to?: string } }) {
       data={items}
       columns={columns}
       loading={q.isLoading}
-      error={q.error ? { message: q.error.message } : null}
+      error={q.error}
       emptyText="Нет данных за период"
       rowKey={(r) => r.clientId ?? '—'}
     />
@@ -546,7 +546,7 @@ function EngineersReport({ period }: { period: { from?: string; to?: string } })
       data={items}
       columns={columns}
       loading={q.isLoading}
-      error={q.error ? { message: q.error.message } : null}
+      error={q.error}
       emptyText="Нет данных по инженерам за период"
       rowKey={(r) => r.engineerId ?? 'unassigned'}
     />
@@ -882,7 +882,7 @@ function ReceivablesReport() {
         data={items}
         columns={columns}
         loading={q.isLoading}
-        error={q.error ? { message: q.error.message } : null}
+        error={q.error}
         emptyText="Все счета оплачены"
         rowKey={(r) => r.invoiceId}
       />

@@ -283,7 +283,7 @@ export function WarrantiesListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Гарантий не найдено"
         rowKey={(w) => w.id}
       />

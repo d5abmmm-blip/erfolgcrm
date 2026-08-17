@@ -209,7 +209,7 @@ export function LeadsListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Лидов не найдено"
         rowKey={(l) => l.id}
       />

@@ -121,7 +121,7 @@ export function AssetModelsPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText={listEmptyText(!!debounced, 'Моделей пока нет — добавьте первую')}
         rowKey={(m) => m.id}
         onRowClick={(m) => setEditing(m)}

@@ -177,7 +177,7 @@ export function AssetsListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Техника не найдена"
         rowKey={(a) => a.id}
       />

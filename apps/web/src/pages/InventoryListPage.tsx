@@ -137,7 +137,7 @@ export function InventoryListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText={listEmptyText(!!debounced, 'Позиций пока нет — добавьте первую')}
         rowKey={(it) => it.id}
       />
