@@ -6,6 +6,7 @@ import type { IntakeMethod, RepairType, TicketPriority, TicketSource } from '@er
 import { SLA_HOURS_BY_PRIORITY, computeSlaTargetAt } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { deadlineInputToDate } from '../lib/deadline';
+import { ensureAssetOnce } from '../lib/ensure-asset-once';
 import { ClientPicker } from '../components/ClientPicker';
 import { AssetPicker } from '../components/AssetPicker';
 import { AssetModelPicker, type AssetModelLite } from '../components/AssetModelPicker';
@@ -85,6 +86,13 @@ export function NewTicketPage() {
   const [naSerial, setNaSerial] = useState('');
   const [naInventory, setNaInventory] = useState('');
   const createAsset = trpc.assets.create.useMutation();
+  const updateAsset = trpc.assets.update.useMutation();
+  /**
+   * Аппарат, который эта форма уже завела. Живёт до ухода со страницы: пока заявка
+   * не создалась, повторная отправка обязана править ту же единицу техники, а не
+   * плодить копии в парке (на бою их и так 5079).
+   */
+  const createdAssetIdRef = useRef<string | null>(null);
 
   // «Заявка из письма»: если пришли из Почты (?fromEmail=<id>), сервер отдаёт ИИ-черновик
   // (клиент по адресу + техника/симптом из ИИ), которым мы разово префиллим форму.
@@ -237,18 +245,23 @@ export function NewTicketPage() {
         setServerError('Выберите модель аппарата из каталога или вернитесь к выбору существующего');
         return;
       }
+      const assetPayload = {
+        ownerClientId: v.clientId,
+        assetModelId: naModelId,
+        model: naModel.model,
+        manufacturer: naModel.manufacturer,
+        serialNumber: naSerial.trim() || null,
+        inventoryNumber: naInventory.trim() || null,
+        riskClass: naModel.riskClass,
+        requiredAttestationCategory: naModel.requiredAttestationCategory,
+      };
       try {
-        const created = await createAsset.mutateAsync({
-          ownerClientId: v.clientId,
-          assetModelId: naModelId,
-          model: naModel.model,
-          manufacturer: naModel.manufacturer,
-          serialNumber: naSerial.trim() || null,
-          inventoryNumber: naInventory.trim() || null,
-          riskClass: naModel.riskClass,
-          requiredAttestationCategory: naModel.requiredAttestationCategory,
+        // Правило «одна попытка — один аппарат» вынесено в ensureAssetOnce и покрыто
+        // тестом: повторная отправка обязана править ту же запись, а не плодить копии.
+        assetIdToUse = await ensureAssetOnce(createdAssetIdRef, assetPayload, {
+          create: (p) => createAsset.mutateAsync(p),
+          update: (a) => updateAsset.mutateAsync(a),
         });
-        assetIdToUse = created.id;
       } catch (e) {
         setServerError(`Не удалось завести аппарат: ${e instanceof Error ? e.message : String(e)}`);
         return;
@@ -273,7 +286,7 @@ export function NewTicketPage() {
     });
   };
 
-  const isPending = create.isPending || createAsset.isPending;
+  const isPending = create.isPending || createAsset.isPending || updateAsset.isPending;
 
   function toggleAddingAsset() {
     if (!addingAsset) {
