@@ -38,6 +38,7 @@ import type { TicketEventType, TicketPriority, TicketStatus } from '@erfolg/shar
 import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
+import { pickCoveringWarranty, warrantyTypeRu } from '../lib/warranty';
 import { openPrintWindow } from '../lib/open-print-window';
 import { SILENT_ERROR } from '../lib/error-message';
 import { PromptDialog } from '../components/ui/PromptDialog';
@@ -1177,8 +1178,34 @@ function AssetCard({
             <div>Класс риска: {asset.data?.riskClass ?? '—'}</div>
             <div>Гарантия до: {asset.data?.warrantyUntil ?? '—'}</div>
           </div>
+          <AssetWarrantyNote assetId={assetId} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Гарантия на этой технике — прямо в заявке.
+ *
+ * Она решает, платный ремонт или бесплатный, а видно её раньше было только в
+ * отдельном реестре, куда с заявки не вело ничего. Поле «Гарантия до» выше —
+ * это `assets.warranty_until` из карточки аппарата, к реестру отношения не
+ * имеющее и заполненное далеко не у всех.
+ *
+ * Молчим, пока не знаем: строка появляется только когда сервер ответил и
+ * гарантия действительно есть. «Гарантии нет» в заявке не пишем — при
+ * незаполненном реестре это читалось бы как утверждение, а не как «не заведено».
+ */
+function AssetWarrantyNote({ assetId }: { assetId: string }) {
+  const q = trpc.warranties.listByAsset.useQuery({ assetId }, { enabled: !!assetId });
+  const covering = pickCoveringWarranty(q.data ?? []);
+  if (!covering) return null;
+  const [y, m, d] = covering.endDate.split('-');
+  return (
+    <div className="border-success/40 bg-success/10 mt-2 rounded-md border px-2 py-1.5 text-xs">
+      <b>Техника на гарантии</b> до {d && m && y ? `${d}.${m}.${y}` : covering.endDate} —{' '}
+      {warrantyTypeRu(covering.type)}. Ремонт по ней для клиента бесплатный.
     </div>
   );
 }

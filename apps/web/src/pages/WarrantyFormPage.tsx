@@ -51,6 +51,14 @@ export function WarrantyFormPage() {
 
   const existing = trpc.warranties.get.useQuery({ id: editId ?? '' }, { enabled: !!editId });
 
+  // На /warranties/new?assetId=xxx — техника уже выбрана. Так сюда приходят
+  // с карточки аппарата: искать его повторно в списке из 5000 единиц незачем.
+  useEffect(() => {
+    if (editId) return;
+    const fromUrl = new URLSearchParams(window.location.search).get('assetId');
+    if (fromUrl) setAssetId(fromUrl);
+  }, [editId]);
+
   useEffect(() => {
     if (!existing.data) return;
     const w = existing.data;
