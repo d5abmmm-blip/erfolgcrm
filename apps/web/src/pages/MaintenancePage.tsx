@@ -1,24 +1,36 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { CalendarCheck, CheckCircle2, Clock, Plus } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Clock, PauseCircle, Pencil, Plus, Power } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
-import { MaintenanceScheduleForm } from '../components/MaintenanceScheduleForm';
+import {
+  MaintenanceScheduleForm,
+  type EditableSchedule,
+} from '../components/MaintenanceScheduleForm';
 import { MaintenanceRecordForm } from '../components/MaintenanceRecordForm';
 import { QueryError } from '../components/QueryError';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
-type Tab = 'overdue' | 'due_soon' | 'all_active' | 'log';
+type Tab = 'overdue' | 'due_soon' | 'all_active' | 'inactive' | 'log';
 
 const TABS: Array<{ key: Tab; label: string; icon: typeof Clock }> = [
   { key: 'overdue', label: 'Просрочено', icon: Clock },
   { key: 'due_soon', label: 'На неделю', icon: Clock },
   { key: 'all_active', label: 'Все активные', icon: CalendarCheck },
+  // Вкладка появилась вместе с кнопкой выключения: без неё выключенный график
+  // исчезал бы совсем, и включить его обратно было бы нечем.
+  { key: 'inactive', label: 'Выключенные', icon: PauseCircle },
   { key: 'log', label: 'Журнал', icon: CheckCircle2 },
 ];
 
 export function MaintenancePage() {
   const [tab, setTab] = useState<Tab>('overdue');
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<EditableSchedule | null>(null);
+  const [switching, setSwitching] = useState<{ id: string; to: boolean; label: string } | null>(
+    null,
+  );
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [recordFor, setRecordFor] = useState<{
     scheduleId?: string;
     assetId: string;
@@ -31,6 +43,15 @@ export function MaintenancePage() {
   const log = trpc.maintenance.listLog.useQuery({ limit: 100 }, { enabled: tab === 'log' });
 
   const utils = trpc.useUtils();
+
+  const toggleActive = trpc.maintenance.updateSchedule.useMutation({
+    onSuccess: async () => {
+      setSwitching(null);
+      setSwitchError(null);
+      await utils.maintenance.listSchedules.invalidate();
+    },
+    onError: (e) => setSwitchError(e.message),
+  });
   // Инженер отмечает ТО только по графику, где он ответственный (решение
   // владельца 2026-08-11); графики заводит staff. Кнопки с гарантированным
   // отказом сервера не показываем.
@@ -152,16 +173,64 @@ export function MaintenancePage() {
                       >
                         {s.nextDueAt.toLocaleDateString('ru-RU')}
                       </td>
-                      <td className="px-2 py-2 text-right">
-                        {(isStaff || s.responsibleUserId === meUser?.id) && (
-                          <button
-                            type="button"
-                            onClick={() => setRecordFor({ scheduleId: s.id, assetId: s.assetId })}
-                            className="hover:bg-muted rounded-md border px-2 py-1 text-xs transition"
-                          >
-                            Записать
-                          </button>
-                        )}
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          {tab !== 'inactive' &&
+                            (isStaff || s.responsibleUserId === meUser?.id) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRecordFor({ scheduleId: s.id, assetId: s.assetId })
+                                }
+                                className="hover:bg-muted rounded-md border px-2 py-1 text-xs transition"
+                              >
+                                Записать
+                              </button>
+                            )}
+                          {isStaff && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label={`Изменить график ${s.assetModel ?? ''}`.trim()}
+                                title="Изменить график"
+                                onClick={() =>
+                                  setEditing({
+                                    id: s.id,
+                                    assetModel: s.assetModel,
+                                    assetSerial: s.assetSerial,
+                                    kind: s.kind,
+                                    intervalDays: s.intervalDays,
+                                    notes: s.notes,
+                                  })
+                                }
+                                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1.5 transition"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`${s.isActive ? 'Выключить' : 'Включить'} график ${s.assetModel ?? ''}`.trim()}
+                                title={s.isActive ? 'Выключить график' : 'Включить график'}
+                                onClick={() => {
+                                  setSwitchError(null);
+                                  setSwitching({
+                                    id: s.id,
+                                    to: !s.isActive,
+                                    label: s.assetModel ?? 'без модели',
+                                  });
+                                }}
+                                className={cn(
+                                  'rounded p-1.5 transition',
+                                  s.isActive
+                                    ? 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+                                    : 'text-muted-foreground hover:bg-success/10 hover:text-success',
+                                )}
+                              >
+                                <Power className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -170,7 +239,11 @@ export function MaintenancePage() {
             </table>
           ) : (
             <div className="text-muted-foreground p-8 text-center text-sm">
-              {tab === 'overdue' ? 'Просроченных ТО нет' : 'Графики не найдены'}
+              {tab === 'overdue'
+                ? 'Просроченных ТО нет'
+                : tab === 'inactive'
+                  ? 'Выключенных графиков нет'
+                  : 'Графики не найдены'}
             </div>
           )}
         </section>
@@ -222,6 +295,40 @@ export function MaintenancePage() {
           }}
         />
       )}
+
+      {editing && (
+        <MaintenanceScheduleForm
+          schedule={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void utils.maintenance.listSchedules.invalidate();
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={switching !== null}
+        title={switching?.to ? 'Включить график ТО' : 'Выключить график ТО'}
+        description={
+          switching?.to
+            ? `График по «${switching.label}» вернётся в план: аппарат снова начнёт попадать в «Просрочено» и в счётчик меню.`
+            : switching
+              ? `График по «${switching.label}» перестанет напоминать о себе: он уйдёт из «Просрочено», из счётчика меню и из календаря. История выполненных ТО сохранится, а сам график останется во вкладке «Выключенные» — включить обратно можно в любой момент.`
+              : undefined
+        }
+        confirmText={switching?.to ? 'Включить' : 'Выключить'}
+        variant={switching?.to ? 'default' : 'danger'}
+        loading={toggleActive.isPending}
+        error={switchError}
+        onConfirm={() =>
+          switching && toggleActive.mutate({ id: switching.id, patch: { isActive: switching.to } })
+        }
+        onCancel={() => {
+          setSwitching(null);
+          setSwitchError(null);
+        }}
+      />
 
       {recordFor && (
         <MaintenanceRecordForm

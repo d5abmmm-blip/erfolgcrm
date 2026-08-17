@@ -16,7 +16,11 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { invoices, withTenantTx, workOrders, type Db, type InvoiceLineSnapshot } from '@erfolg/db';
-import type { InvoiceStatus, VatRate } from '@erfolg/shared';
+import {
+  RECEIVABLE_INVOICE_STATUSES as RECEIVABLE_STATUS_LIST,
+  type InvoiceStatus,
+  type VatRate,
+} from '@erfolg/shared';
 import { WorkOrderNotFoundError } from '../../lib/errors';
 
 const INVOICE_COUNTER_KIND = 'invoice';
@@ -27,8 +31,15 @@ const DEFAULT_DUE_DAYS = 14;
  * Единый источник для listClientOverdueInvoices и receivablesReport — чтобы экран
  * «Дебиторка» и кнопка «Напомнить» всегда опирались на один набор статусов.
  * Тот же набор используется на дашборде («Вам должны») и в частичном индексе invoices.
+ *
+ * СПИСОК ЖИВЁТ В `@erfolg/shared` (`RECEIVABLE_INVOICE_STATUSES`) — это же
+ * определение читает карточка клиента, когда показывает долг. Здесь только
+ * SQL-зеркало, собранное из того самого массива: разъехаться им теперь нечем.
  */
-const RECEIVABLE_INVOICE_STATUSES = sql`('issued', 'partially_paid', 'overdue')`;
+const RECEIVABLE_INVOICE_STATUSES = sql`(${sql.join(
+  RECEIVABLE_STATUS_LIST.map((s) => sql`${s}`),
+  sql`, `,
+)})`;
 
 /** Vat-percent по справочнику ставок. */
 const VAT_PERCENT: Record<VatRate, number> = {
@@ -358,6 +369,8 @@ export async function listByClient(
 
 export interface ListForTenantOpts {
   status?: InvoiceStatus;
+  /** Часть номера счёта; регистр и пробелы по краям не важны. */
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -375,6 +388,14 @@ export async function listForTenant(
   return withTenantTx(db, tenantId, async (tx) => {
     const filters: SQL[] = [isNull(invoices.deletedAt)];
     if (opts.status) filters.push(eq(invoices.status, opts.status));
+    // Поиск по номеру счёта — на СЕРВЕРЕ, по всей базе. Экран раньше фильтровал
+    // уже полученные 25 строк страницы, а итог под таблицей показывал общий:
+    // счёт с третьей страницы «не находился», и человек решал, что его нет.
+    // Регистр и пробелы по краям не мешают — номер переписывают из бумаги.
+    const search = opts.search?.trim();
+    if (search) {
+      filters.push(sql`${invoices.invoiceNumber} ILIKE ${'%' + search + '%'}`);
+    }
 
     const countResult = await tx
       .select({ count: sql<number>`cast(count(*) as integer)` })

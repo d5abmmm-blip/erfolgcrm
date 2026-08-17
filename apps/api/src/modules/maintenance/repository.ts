@@ -18,6 +18,13 @@ import {
 /** Потолок выдачи списка графиков — страховка от «отдать всё разом». */
 const LIST_LIMIT = 500;
 
+/**
+ * Сутки в миллисекундах. Интервал ТО задаётся в днях, и срок считается по
+ * одному правилу во всех трёх местах: завели график, отметили выполнение,
+ * поправили интервал — везде `next_due_at = база + интервал`.
+ */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export interface MaintenanceScheduleDto {
   id: string;
   assetId: string;
@@ -166,7 +173,7 @@ export async function createSchedule(
   input: CreateScheduleInput,
 ): Promise<{ id: string }> {
   const start = input.startAt ?? new Date();
-  const next = new Date(start.getTime() + input.intervalDays * 24 * 60 * 60 * 1000);
+  const next = new Date(start.getTime() + input.intervalDays * DAY_MS);
   return withTenantTx(db, tenantId, async (tx) => {
     const inserted = await tx
       .insert(maintenanceSchedules)
@@ -207,6 +214,31 @@ export async function updateSchedule(
   if (patch.isActive !== undefined) setObj.isActive = patch.isActive;
   if (Object.keys(setObj).length === 0) return;
   await withTenantTx(db, tenantId, async (tx) => {
+    // Смена интервала обязана двигать срок следующего ТО, иначе менеджер,
+    // поправивший «раз в год» на «раз в полгода», увидит прежнюю дату и решит,
+    // что программа его не послушала.
+    //
+    // Правило срока в модуле одно: next_due_at = база + интервал. База — дата
+    // последнего фактического ТО (её ставит recordPerformed), а если ТО ещё не
+    // было — точка отсчёта, от которой график завели. Своей колонки у неё нет,
+    // поэтому восстанавливаем вычитанием прежнего интервала из прежнего срока.
+    if (patch.intervalDays !== undefined) {
+      const [current] = await tx
+        .select({
+          intervalDays: maintenanceSchedules.intervalDays,
+          nextDueAt: maintenanceSchedules.nextDueAt,
+          lastDoneAt: maintenanceSchedules.lastDoneAt,
+        })
+        .from(maintenanceSchedules)
+        .where(eq(maintenanceSchedules.id, scheduleId))
+        .limit(1);
+      if (current) {
+        const base =
+          current.lastDoneAt ??
+          new Date(current.nextDueAt.getTime() - current.intervalDays * DAY_MS);
+        setObj.nextDueAt = new Date(base.getTime() + patch.intervalDays * DAY_MS);
+      }
+    }
     await tx
       .update(maintenanceSchedules)
       .set(setObj)
@@ -257,7 +289,7 @@ export async function recordPerformed(
         .limit(1);
       const interval = scheduleRows[0]?.intervalDays;
       if (interval && interval > 0) {
-        const next = new Date(input.performedAt.getTime() + interval * 24 * 60 * 60 * 1000);
+        const next = new Date(input.performedAt.getTime() + interval * DAY_MS);
         await tx
           .update(maintenanceSchedules)
           .set({ lastDoneAt: input.performedAt, nextDueAt: next })

@@ -195,6 +195,26 @@ export const InvoiceStatus = z.enum([
 export type InvoiceStatus = z.infer<typeof InvoiceStatus>;
 
 /**
+ * Статусы «счёт с остатком» — то, что клиент ещё должен.
+ *
+ * ОДНО ОПРЕДЕЛЕНИЕ НА ВСЮ СИСТЕМУ. По этому набору считают: отчёт «Дебиторка»,
+ * плитка «Вам должны» на дашборде, кнопка «Напомнить», частичный индекс в базе
+ * и долг на карточке клиента. Держим его здесь, а не в SQL репозитория, чтобы
+ * экран не заводил свой второй список — так уже расходилось «просрочено» у ТО
+ * в пяти местах (#165). SQL-зеркало — `RECEIVABLE_INVOICE_STATUSES` в
+ * apps/api/src/modules/invoices/repository.ts, оно строится из этого массива.
+ *
+ * Чего здесь СОЗНАТЕЛЬНО нет: `draft` (клиенту ещё не выставляли, требовать
+ * нечего), `paid` и `cancelled`.
+ */
+export const RECEIVABLE_INVOICE_STATUSES = ['issued', 'partially_paid', 'overdue'] as const;
+
+/** Есть ли по счёту с таким статусом непогашенный остаток. */
+export function isReceivableStatus(status: InvoiceStatus): boolean {
+  return (RECEIVABLE_INVOICE_STATUSES as readonly string[]).includes(status);
+}
+
+/**
  * Лиды — воронка продаж (перенос из v1 project_2).
  * Стадия лида: new → contacted → proposal → negotiation → won/lost.
  */
