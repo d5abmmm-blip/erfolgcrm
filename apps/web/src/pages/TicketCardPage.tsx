@@ -603,7 +603,7 @@ export function TicketCardPage() {
               >
                 {statusBadge.label}
               </span>
-              <SlaInline target={t.slaTargetAt} status={t.status} />
+              <DeadlineInline deadline={t.deadlineAt} status={t.status} />
               {isLegacy && <LegacyBadge />}
             </div>
             {t.cancelReason && (
@@ -1771,7 +1771,17 @@ function InfoBlock({
   );
 }
 
-function SlaInline({ target, status }: { target: Date | null; status: TicketStatus }) {
+/**
+ * Срок по заявке в карточке — ТОТ, КОТОРЫЙ ПОСТАВИЛ ЧЕЛОВЕК (`deadline_at`).
+ *
+ * Раньше здесь стоял автоматический норматив от приоритета (`sla_target_at`) и
+ * подписывался словом «SLA». По одной и той же заявке человек видел два разных
+ * срока: этот — в карточке, ручной — в календаре и в карточке сотрудника, и не
+ * знал, какой настоящий. Решение владельца 2026-08-17: на рабочих экранах
+ * остаётся ручной, норматив живёт только в отчёте SLA.
+ */
+function DeadlineInline({ deadline, status }: { deadline: Date | null; status: TicketStatus }) {
+  const target = deadline;
   if (status === 'closed' || status === 'cancelled') return null;
   if (!target) return null;
   const diffMs = new Date(target).getTime() - Date.now();
@@ -1780,12 +1790,12 @@ function SlaInline({ target, status }: { target: Date | null; status: TicketStat
   let label = '';
   if (diffMs < 0) {
     cls = 'bg-destructive/15 text-destructive';
-    label = `SLA просрочено на ${Math.ceil(-diffH)}ч`;
+    label = `Просрочено на ${Math.ceil(-diffH)}ч`;
   } else if (diffH < 4) {
     cls = 'bg-warning/15 text-warning';
-    label = `SLA через ${Math.max(1, Math.round(diffH))}ч`;
+    label = `Срок через ${Math.max(1, Math.round(diffH))}ч`;
   } else {
-    label = `SLA через ${diffH < 24 ? Math.round(diffH) + 'ч' : Math.round(diffH / 24) + 'д'}`;
+    label = `Срок через ${diffH < 24 ? Math.round(diffH) + 'ч' : Math.round(diffH / 24) + 'д'}`;
   }
   return (
     <span

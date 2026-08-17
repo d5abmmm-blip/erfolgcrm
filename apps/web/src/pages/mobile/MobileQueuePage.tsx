@@ -563,7 +563,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                       </span>
                     )}
                   </div>
-                  {(t.slaTargetAt || t.deadlineAt) && (
+                  {t.deadlineAt && (
                     <div
                       className={cn(
                         'mt-1.5 inline-flex items-center gap-1 text-xs',
@@ -575,7 +575,7 @@ export function MobileQueuePage({ engineerId }: Props) {
                       ) : (
                         <Clock className="h-3 w-3" />
                       )}
-                      {fmtDeadline(t.deadlineAt ?? t.slaTargetAt)}
+                      {fmtDeadline(t.deadlineAt)}
                     </div>
                   )}
                 </div>
