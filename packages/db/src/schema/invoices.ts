@@ -20,6 +20,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -40,6 +41,17 @@ export const invoiceStatusEnum = pgEnum('invoice_status', [
   'overdue',
   'cancelled',
 ]);
+
+/** Строка счёта в снимке. Форма совпадает со строкой наряда в печатных бланках. */
+export interface InvoiceLineSnapshot {
+  lineType: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  unitPriceKopecks: string;
+  amountKopecks: string;
+  engineerName: string | null;
+}
 
 export const invoices = pgTable(
   'invoices',
@@ -76,6 +88,20 @@ export const invoices = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelReason: text('cancel_reason'),
+
+    /**
+     * Снимок строк наряда на момент, когда суммы счёта фиксировались.
+     *
+     * Пишется ровно там, где освежаются totals: при createDraft и при
+     * transitionToIssued. Печатная форма берёт строки отсюда, поэтому счёт
+     * всегда сходится сам с собой: сумма строк равна итогу. Раньше итог был
+     * снимком, а строки — из ЖИВОГО наряда, и правка наряда после выставления
+     * ломала уже отданный клиенту документ.
+     *
+     * NULL — счёт выставлен до появления колонки: что в нём было, в базе не
+     * сохранялось, поэтому печать для него берёт строки наряда, как раньше.
+     */
+    linesSnapshot: jsonb('lines_snapshot').$type<InvoiceLineSnapshot[]>(),
 
     /** 8.E — последняя отправка email-напоминания. */
     lastReminderSentAt: timestamp('last_reminder_sent_at', { withTimezone: true }),
