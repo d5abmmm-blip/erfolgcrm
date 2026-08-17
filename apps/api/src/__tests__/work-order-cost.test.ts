@@ -275,3 +275,105 @@ describe('work-order cost & margin (8.C)', () => {
     expect(after?.margin).toBe(100_000n - workCost);
   });
 });
+
+/**
+ * Контроль к удалению недостижимой ветки: себестоимость запчасти берётся ТОЛЬКО из
+ * выдачи со склада и остаётся снимком.
+ *
+ * В resolveLineCost жила ветка «нет активных партий — взять цену последней», но во
+ * всех трёх вызовах inventoryItemId передавался как undefined, то есть ветка не
+ * выполнялась ни разу. Внутри неё вдобавок стояло ORDER BY received_at ASC — самая
+ * СТАРАЯ партия вместо последней, вопреки собственному комментарию. Тесты ниже
+ * закрепляют настоящее правило, чтобы ветка не вернулась.
+ */
+describe('себестоимость запчасти — только из выдачи со склада', () => {
+  it('строка-запчасть до выдачи стоит 0, даже когда партии на складе есть', async () => {
+    const { workOrderId } = await freshOrder();
+    const itemRows = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .insert(inventoryItems)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}склад`, unit: 'шт' })
+        .returning({ id: inventoryItems.id }),
+    );
+    const itemId = itemRows[0]?.id;
+    if (!itemId) throw new Error('item');
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.insert(inventoryBatches).values({
+        tenantId: erfolgId,
+        itemId,
+        quantityInitial: '5',
+        quantityRemaining: '5',
+        unitCostKopecks: 700n,
+        receivedAt: new Date('2026-01-01T00:00:00Z'),
+      }),
+    );
+
+    await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'part',
+      name: `${TEST_PREFIX}склад`,
+      unit: 'шт',
+      quantity: '2',
+      unitPriceKopecks: 5_000n,
+    });
+
+    const t = await selectTotals(workOrderId);
+    expect(t?.cost).toBe(0n);
+  });
+
+  it('после выдачи правка названия строки не пересчитывает себестоимость по нынешним партиям', async () => {
+    const { workOrderId } = await freshOrder();
+    const itemRows = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .insert(inventoryItems)
+        .values({ tenantId: erfolgId, name: `${TEST_PREFIX}снимок`, unit: 'шт' })
+        .returning({ id: inventoryItems.id }),
+    );
+    const itemId = itemRows[0]?.id;
+    if (!itemId) throw new Error('item');
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.insert(inventoryBatches).values({
+        tenantId: erfolgId,
+        itemId,
+        quantityInitial: '2',
+        quantityRemaining: '2',
+        unitCostKopecks: 400n,
+        receivedAt: new Date('2026-01-01T00:00:00Z'),
+      }),
+    );
+    const { id: lineId } = await upsertLine(getDb(), erfolgId, workOrderId, null, {
+      lineType: 'part',
+      name: `${TEST_PREFIX}снимок`,
+      unit: 'шт',
+      quantity: '2',
+      unitPriceKopecks: 5_000n,
+    });
+    await issueToWorkOrder(getDb(), erfolgId, {
+      workOrderLineId: lineId,
+      itemId,
+      quantity: '2',
+      userId: null,
+    });
+    expect((await selectTotals(workOrderId))?.cost).toBe(800n);
+
+    // Новая партия по другой цене — она не должна задним числом менять наряд.
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.insert(inventoryBatches).values({
+        tenantId: erfolgId,
+        itemId,
+        quantityInitial: '10',
+        quantityRemaining: '10',
+        unitCostKopecks: 9_000n,
+        receivedAt: new Date('2026-06-01T00:00:00Z'),
+      }),
+    );
+    await upsertLine(getDb(), erfolgId, workOrderId, lineId, {
+      lineType: 'part',
+      name: `${TEST_PREFIX}снимок переименован`,
+      unit: 'шт',
+      quantity: '2',
+      unitPriceKopecks: 5_000n,
+    });
+
+    expect((await selectTotals(workOrderId))?.cost).toBe(800n);
+  });
+});
