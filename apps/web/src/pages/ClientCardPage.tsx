@@ -8,14 +8,10 @@ import {
   Mail,
   MapPin,
   Pencil,
-  Phone,
   Plus,
-  Star,
   User,
   Wrench,
 } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { isLegacyId } from '@erfolg/shared';
 import { LegacyBadge } from '../components/ui/LegacyBadge';
 import { trpc } from '../lib/trpc';
@@ -24,7 +20,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ASSET_STATUS_META } from '../lib/dictionaries';
 import { ComposeEmailModal } from '../components/ComposeEmailModal';
-import { addContactSchema, type AddContactValues } from './ClientCardPage.schemas';
+import { ClientContacts } from '../components/ClientContacts';
 
 export function ClientCardPage() {
   const [, params] = useRoute<{ id: string }>('/clients/:id');
@@ -203,51 +199,7 @@ export function ClientCardPage() {
           </dl>
         </section>
 
-        <section className="bg-card rounded-lg border p-4 md:p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide">
-              Контактные лица ({c.contacts.length})
-            </h2>
-          </div>
-          <ul className="mt-3 space-y-3">
-            {c.contacts.length === 0 ? (
-              <li className="text-muted-foreground text-sm">Нет контактов</li>
-            ) : (
-              c.contacts.map((ct) => (
-                <li key={ct.id} className="border-border border-l-2 pl-3">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    {ct.fullName ?? '—'}
-                    {ct.isPrimary && <Star className="text-warning h-3.5 w-3.5 fill-current" />}
-                  </div>
-                  {ct.position && (
-                    <div className="text-muted-foreground text-xs">{ct.position}</div>
-                  )}
-                  <div className="mt-1 flex flex-col gap-0.5 text-xs">
-                    {ct.phone && (
-                      <a
-                        href={`tel:${ct.phone}`}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                      >
-                        <Phone className="h-3 w-3" />
-                        {ct.phone}
-                      </a>
-                    )}
-                    {ct.email && (
-                      <a
-                        href={`mailto:${ct.email}`}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                      >
-                        <Mail className="h-3 w-3" />
-                        {ct.email}
-                      </a>
-                    )}
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-          <AddContactInline clientId={c.id} />
-        </section>
+        <ClientContacts clientId={c.id} contacts={c.contacts} canDelete={isDirector} />
       </div>
 
       <section className="bg-card rounded-lg border">
@@ -340,124 +292,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dt className="text-muted-foreground text-xs uppercase">{label}</dt>
       <dd className="col-span-2">{children}</dd>
     </div>
-  );
-}
-
-function AddContactInline({ clientId }: { clientId: string }) {
-  const utils = trpc.useUtils();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const form = useForm<AddContactValues>({
-    resolver: zodResolver(addContactSchema),
-    defaultValues: {
-      fullName: '',
-      phone: '',
-      email: '',
-      position: '',
-      isPrimary: false,
-    },
-  });
-
-  const create = trpc.clients.addContact.useMutation({
-    onSuccess: async () => {
-      await utils.clients.get.invalidate({ id: clientId });
-      setOpen(false);
-      form.reset();
-      setError(null);
-    },
-    onError: (e) => setError(e.message),
-  });
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-muted-foreground hover:text-foreground mt-3 inline-flex items-center gap-1 text-xs"
-      >
-        <Plus className="h-3 w-3" />
-        Добавить контакт
-      </button>
-    );
-  }
-
-  const onSubmit = (values: AddContactValues) => {
-    setError(null);
-    create.mutate({
-      clientId,
-      fullName: values.fullName,
-      phone: values.phone,
-      email: values.email || null,
-      position: values.position || null,
-      isPrimary: values.isPrimary,
-    });
-  };
-
-  return (
-    <form
-      onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
-      className="mt-3 space-y-2 border-t pt-3"
-    >
-      <input
-        type="text"
-        placeholder="ФИО (зашифрованное)"
-        {...form.register('fullName')}
-        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
-      />
-      {form.formState.errors.fullName && (
-        <div className="text-destructive text-xs">{form.formState.errors.fullName.message}</div>
-      )}
-      <input
-        type="tel"
-        placeholder="Телефон (зашифрованный)"
-        {...form.register('phone')}
-        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
-      />
-      {form.formState.errors.phone && (
-        <div className="text-destructive text-xs">{form.formState.errors.phone.message}</div>
-      )}
-      <input
-        type="email"
-        placeholder="Email"
-        {...form.register('email')}
-        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
-      />
-      {form.formState.errors.email && (
-        <div className="text-destructive text-xs">{form.formState.errors.email.message}</div>
-      )}
-      <input
-        type="text"
-        placeholder="Должность"
-        {...form.register('position')}
-        className="bg-background focus:ring-primary/40 w-full rounded-md border px-2 py-1.5 text-sm outline-none focus:ring-2"
-      />
-      <label className="flex items-center gap-1 text-xs">
-        <input type="checkbox" {...form.register('isPrimary')} />
-        Главный контакт
-      </label>
-      {error && <div className="text-destructive text-xs">{error}</div>}
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            form.reset();
-            setError(null);
-          }}
-          className="hover:bg-muted rounded-md border px-2 py-1 text-xs"
-        >
-          Отмена
-        </button>
-        <button
-          type="submit"
-          disabled={create.isPending}
-          className="bg-primary text-primary-foreground rounded-md px-2 py-1 text-xs disabled:opacity-50"
-        >
-          {create.isPending ? 'Добавляю…' : 'Добавить'}
-        </button>
-      </div>
-    </form>
   );
 }
 
