@@ -43,6 +43,7 @@ import { RoadmapPage } from './pages/RoadmapPage';
 import { TelegramSettingsPage } from './pages/TelegramSettingsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ModulesSettingsPage } from './pages/ModulesSettingsPage';
+import { OrganizationSettingsPage } from './pages/OrganizationSettingsPage';
 import { BackupSettingsPage } from './pages/BackupSettingsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceCardPage } from './pages/InvoiceCardPage';
@@ -282,6 +283,7 @@ function StaffApp() {
       <Route path="/mail" component={MailListPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/settings/modules" component={ModulesSettingsPage} />
+      <Route path="/settings/organization" component={OrganizationSettingsPage} />
       <Route path="/settings/backup" component={BackupSettingsPage} />
       <Route path="/settings/telegram" component={TelegramSettingsPage} />
       <Route path="/settings/onec" component={OnecSettingsPage} />

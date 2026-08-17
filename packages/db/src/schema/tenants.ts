@@ -60,6 +60,13 @@ export const tenants = pgTable(
     correspondentAccount: varchar('correspondent_account', { length: 20 }),
     bik: varchar('bik', { length: 9 }),
 
+    /**
+     * Кто подписывает документы («Хаджиев Тимур Рамзанович»). Печатается в шести
+     * бланках: счёт, договор, акт приёмки, акт выполненных работ, дефектный акт,
+     * табель. Пусто — бланк берёт встроенное значение из lib/pdf/branding.ts.
+     */
+    directorName: varchar('director_name', { length: 200 }),
+
     /** Лицензия на ремонт медтехники (Росздравнадзор) — обязательна для оказания услуг */
     licenseSeries: varchar('license_series', { length: 20 }),
     licenseNumber: varchar('license_number', { length: 50 }),

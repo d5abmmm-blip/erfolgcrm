@@ -171,7 +171,7 @@ export function StaffWorkTab({ userId }: { userId: string }) {
             <header className="flex items-center justify-between border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Последние закрытые</h2>
               <Link
-                href={`/tickets?engineer=${userId}`}
+                href={`/tickets?engineerId=${userId}`}
                 className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
               >
                 Все заявки →

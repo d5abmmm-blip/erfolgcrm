@@ -37,7 +37,9 @@ import {
 import type { TicketEventType, TicketPriority, TicketStatus } from '@erfolg/shared';
 import { isLegacyId, isLegacyNumber } from '@erfolg/shared';
 import { trpc } from '../lib/trpc';
+import { useTenantRequisites } from '../lib/organization';
 import { cn } from '../lib/utils';
+import { pickCoveringWarranty, warrantyTypeRu } from '../lib/warranty';
 import { openPrintWindow } from '../lib/open-print-window';
 import { SILENT_ERROR } from '../lib/error-message';
 import { PromptDialog } from '../components/ui/PromptDialog';
@@ -198,6 +200,9 @@ export function TicketCardPage() {
     },
   });
   const recordPrint = trpc.tickets.recordPrint.useMutation({ onSuccess: invalidateAll });
+  // Реквизиты шапки документов — из настроек организации, с падением на
+  // встроенные значения по каждому полю (см. lib/organization.ts).
+  const tenantRequisites = useTenantRequisites();
 
   if (ticket.isLoading) {
     return <div className="text-muted-foreground p-8 text-sm">Загрузка…</div>;
@@ -223,14 +228,10 @@ export function TicketCardPage() {
     : undefined;
 
   // Сборка данных для PDF (акты/счёт). Используется и печатью, и вложениями писем.
-  const assemblePdfInputs = async () => {
-    const { ERFOLG_FALLBACK } = await import('../lib/pdf/branding');
+  const assemblePdfInputs = () => {
     const ass = assetFull.data;
     const woData = wo.data;
-    const tenantData = {
-      ...ERFOLG_FALLBACK,
-      // TODO: брать из tenant settings когда появится trpc endpoint
-    };
+    const tenantData = tenantRequisites;
     // Реквизиты берём из tickets.documentClient — он доступен и инженеру (по своей
     // заявке), поэтому акт печатается полным для любой роли.
     const doc = clientDoc.data;
@@ -288,8 +289,7 @@ export function TicketCardPage() {
     try {
       const { printIntakeAct, printInvoice, printWorkAct, printDefectAct, printAssetLabel } =
         await import('../lib/pdf');
-      const { tenantData, clientData, assetData, ticketData, workOrderData } =
-        await assemblePdfInputs();
+      const { tenantData, clientData, assetData, ticketData, workOrderData } = assemblePdfInputs();
 
       if (kind === 'intake_act') {
         await printIntakeAct(
@@ -376,8 +376,7 @@ export function TicketCardPage() {
     const win = openPrintWindow();
     try {
       const { printDocumentPackage } = await import('../lib/pdf');
-      const { tenantData, clientData, assetData, ticketData, workOrderData } =
-        await assemblePdfInputs();
+      const { tenantData, clientData, assetData, ticketData, workOrderData } = assemblePdfInputs();
       const { included } = await printDocumentPackage(
         {
           tenant: tenantData,
@@ -409,7 +408,7 @@ export function TicketCardPage() {
       kind: 'intake_act',
       build: async () => {
         const { getIntakeActAsBase64 } = await import('../lib/pdf');
-        const { tenantData, clientData, assetData, ticketData } = await assemblePdfInputs();
+        const { tenantData, clientData, assetData, ticketData } = assemblePdfInputs();
         return {
           filename: `Акт приёма ${t.ticketNumber}.pdf`,
           base64: await getIntakeActAsBase64({
@@ -430,7 +429,7 @@ export function TicketCardPage() {
         kind: 'invoice',
         build: async () => {
           const { getInvoiceAsBase64 } = await import('../lib/pdf');
-          const { tenantData, clientData, ticketData, workOrderData } = await assemblePdfInputs();
+          const { tenantData, clientData, ticketData, workOrderData } = assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Счёт ${t.ticketNumber}.pdf`,
@@ -450,7 +449,7 @@ export function TicketCardPage() {
         build: async () => {
           const { getWorkActAsBase64 } = await import('../lib/pdf');
           const { tenantData, clientData, assetData, ticketData, workOrderData } =
-            await assemblePdfInputs();
+            assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Акт работ ${t.ticketNumber}.pdf`,
@@ -471,7 +470,7 @@ export function TicketCardPage() {
         build: async () => {
           const { getDefectActAsBase64 } = await import('../lib/pdf');
           const { tenantData, clientData, assetData, ticketData, workOrderData } =
-            await assemblePdfInputs();
+            assemblePdfInputs();
           if (!workOrderData) throw new Error('Наряд не создан');
           return {
             filename: `Дефектный акт ${t.ticketNumber}.pdf`,
@@ -1177,8 +1176,34 @@ function AssetCard({
             <div>Класс риска: {asset.data?.riskClass ?? '—'}</div>
             <div>Гарантия до: {asset.data?.warrantyUntil ?? '—'}</div>
           </div>
+          <AssetWarrantyNote assetId={assetId} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Гарантия на этой технике — прямо в заявке.
+ *
+ * Она решает, платный ремонт или бесплатный, а видно её раньше было только в
+ * отдельном реестре, куда с заявки не вело ничего. Поле «Гарантия до» выше —
+ * это `assets.warranty_until` из карточки аппарата, к реестру отношения не
+ * имеющее и заполненное далеко не у всех.
+ *
+ * Молчим, пока не знаем: строка появляется только когда сервер ответил и
+ * гарантия действительно есть. «Гарантии нет» в заявке не пишем — при
+ * незаполненном реестре это читалось бы как утверждение, а не как «не заведено».
+ */
+function AssetWarrantyNote({ assetId }: { assetId: string }) {
+  const q = trpc.warranties.listByAsset.useQuery({ assetId }, { enabled: !!assetId });
+  const covering = pickCoveringWarranty(q.data ?? []);
+  if (!covering) return null;
+  const [y, m, d] = covering.endDate.split('-');
+  return (
+    <div className="border-success/40 bg-success/10 mt-2 rounded-md border px-2 py-1.5 text-xs">
+      <b>Техника на гарантии</b> до {d && m && y ? `${d}.${m}.${y}` : covering.endDate} —{' '}
+      {warrantyTypeRu(covering.type)}. Ремонт по ней для клиента бесплатный.
     </div>
   );
 }

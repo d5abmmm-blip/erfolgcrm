@@ -63,6 +63,8 @@ export const invoicesRouter = router({
       z
         .object({
           status: invoiceStatusEnum.optional(),
+          /** Часть номера счёта. Ищет по всей базе, а не по открытой странице. */
+          search: z.string().trim().max(100).optional(),
           limit: z.number().int().min(1).max(200).optional(),
           page: z.number().int().min(1).optional(),
         })
@@ -74,6 +76,7 @@ export const invoicesRouter = router({
       const offset = (page - 1) * limit;
       return listForTenantQuery(ctx.db, ctx.tenant, {
         status: input?.status,
+        search: input?.search,
         limit,
         offset,
       });

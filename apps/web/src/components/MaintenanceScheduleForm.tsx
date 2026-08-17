@@ -3,33 +3,68 @@ import { X } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { AssetPicker } from './AssetPicker';
 
+/** Что нужно знать форме, чтобы открыться на правку существующего графика. */
+export interface EditableSchedule {
+  id: string;
+  assetModel: string | null;
+  assetSerial: string | null;
+  kind: 'planned' | 'urgent';
+  intervalDays: number;
+  notes: string | null;
+}
+
 interface Props {
   onClose: () => void;
   onSaved: () => void;
+  /**
+   * Правим существующий график. Не передан — заводим новый.
+   *
+   * Форма одна на оба случая сознательно: разъехавшиеся «создать» и
+   * «изменить» — это разные границы полей и разные подписи у одного и того же,
+   * чем уже поплатились три копии сборки акта (#166).
+   */
+  schedule?: EditableSchedule | null;
 }
 
-export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
+export function MaintenanceScheduleForm({ onClose, onSaved, schedule }: Props) {
+  const editing = schedule != null;
   const [assetId, setAssetId] = useState<string | null>(null);
-  const [kind, setKind] = useState<'planned' | 'urgent'>('planned');
-  const [intervalDays, setIntervalDays] = useState('180');
+  const [kind, setKind] = useState<'planned' | 'urgent'>(schedule?.kind ?? 'planned');
+  const [intervalDays, setIntervalDays] = useState(String(schedule?.intervalDays ?? 180));
   // Дата последнего фактического ТО. Пусто — считаем от сегодня.
   const [lastDone, setLastDone] = useState('');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(schedule?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
 
   const create = trpc.maintenance.createSchedule.useMutation({
     onSuccess: () => onSaved(),
     onError: (e) => setError(e.message),
   });
+  const update = trpc.maintenance.updateSchedule.useMutation({
+    onSuccess: () => onSaved(),
+    onError: (e) => setError(e.message),
+  });
+  const pending = create.isPending || update.isPending;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const days = Math.max(1, Math.round(Number(intervalDays) || 0));
+
+    if (editing && schedule) {
+      // Аппарат в правке не меняется: сервер такого поля не принимает, а
+      // «перевесить» график на другую технику — это завести новый.
+      update.mutate({
+        id: schedule.id,
+        patch: { kind, intervalDays: days, notes: notes.trim() || null },
+      });
+      return;
+    }
+
     if (!assetId) {
       setError('Выберите технику');
       return;
     }
-    const days = Math.max(1, Math.round(Number(intervalDays) || 0));
     // Сервер считает срок следующего ТО как startAt + интервал. Раньше форма
     // это поле не слала вовсе, поэтому график всегда начинался «от сегодня»:
     // завести его на аппарат, который обслуживали в марте, было невозможно.
@@ -51,7 +86,9 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
     <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-card max-h-[90vh] w-full max-w-md overflow-auto rounded-lg border shadow-lg">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-base font-semibold">Создать график ТО</h2>
+          <h2 className="text-base font-semibold">
+            {editing ? 'Изменить график ТО' : 'Создать график ТО'}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -62,8 +99,22 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
           </button>
         </div>
         <form onSubmit={submit} className="space-y-3 p-4">
-          <Field label="Техника" required>
-            <AssetPicker value={assetId} onChange={(id) => setAssetId(id || null)} />
+          <Field label="Техника" required={!editing}>
+            {editing ? (
+              <div className="bg-muted/40 rounded-md border px-3 py-2 text-sm">
+                <div className="font-medium">{schedule?.assetModel ?? '—'}</div>
+                {schedule?.assetSerial && (
+                  <div className="text-muted-foreground font-mono text-xs">
+                    {schedule.assetSerial}
+                  </div>
+                )}
+                <div className="text-muted-foreground mt-1 text-xs">
+                  Техника у графика не меняется — на другой аппарат заводят новый график
+                </div>
+              </div>
+            ) : (
+              <AssetPicker value={assetId} onChange={(id) => setAssetId(id || null)} />
+            )}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Тип">
@@ -88,20 +139,27 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
               />
             </Field>
           </div>
-          <Field label="Дата последнего ТО">
-            <input
-              type="date"
-              value={lastDone}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setLastDone(e.target.value)}
-              className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
-            />
-            <span className="text-muted-foreground mt-1 block text-xs">
-              {lastDone
-                ? `Следующее ТО: ${formatNextDue(lastDone, intervalDays)}`
-                : 'Не знаете — оставьте пусто, отсчёт пойдёт от сегодня'}
-            </span>
-          </Field>
+          {editing ? (
+            <p className="text-muted-foreground text-xs">
+              Срок следующего ТО пересчитается от последнего выполненного, а если ТО ещё не было —
+              от той же точки, с которой график завели.
+            </p>
+          ) : (
+            <Field label="Дата последнего ТО">
+              <input
+                type="date"
+                value={lastDone}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setLastDone(e.target.value)}
+                className="bg-background focus:ring-primary/40 w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2"
+              />
+              <span className="text-muted-foreground mt-1 block text-xs">
+                {lastDone
+                  ? `Следующее ТО: ${formatNextDue(lastDone, intervalDays)}`
+                  : 'Не знаете — оставьте пусто, отсчёт пойдёт от сегодня'}
+              </span>
+            </Field>
+          )}
           <Field label="Примечания">
             <textarea
               value={notes}
@@ -121,10 +179,10 @@ export function MaintenanceScheduleForm({ onClose, onSaved }: Props) {
             </button>
             <button
               type="submit"
-              disabled={create.isPending}
+              disabled={pending}
               className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
             >
-              {create.isPending ? 'Сохраняем…' : 'Создать'}
+              {pending ? 'Сохраняем…' : editing ? 'Сохранить' : 'Создать'}
             </button>
           </div>
         </form>

@@ -8,16 +8,20 @@
  *   • начисление — из payroll.computePayouts, та же цифра, что на странице
  *     «Зарплата»; своего расчёта у вкладки нет;
  *   • уволенному расчёт не показывается вовсе: computePayouts не видит неактивных,
- *     и «0 ₽» у бывшего читалось бы как «ничего не заработал». Словами честнее.
+ *     и «0 ₽» у бывшего читалось бы как «ничего не заработал». Словами честнее;
+ *   • про кассу говорим ОДИН раз — блоком «В ведомостях» с отметкой «проведена».
+ *     Отдельный блок «Выплаты через кассу» читал `payroll_payouts` — механизм,
+ *     в который не пишет ни один экран, поэтому он был пуст всегда и советовал
+ *     нажать несуществующую кнопку. Убран по решению владельца 2026-08-17;
+ *     серверные процедуры оставлены (как флаг уведомлений в #164).
  */
 import { useMemo, useState } from 'react';
-import { Banknote, FileSpreadsheet, Percent, Wallet } from 'lucide-react';
+import { Banknote, FileSpreadsheet, Percent } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import { cn } from '../lib/utils';
 import { QueryError } from './QueryError';
 import { formatRub } from '../lib/money';
-import { formatDateRu } from '../lib/staff-hr';
-import { monthOptions, monthTitleRu, payoutKindRu } from '../lib/staff-money';
+import { monthOptions, monthTitleRu } from '../lib/staff-money';
 
 export function StaffMoneyTab({ userId }: { userId: string }) {
   // Отсечка «с какого месяца считаем» приходит с сервера вместе с карточкой.
@@ -79,8 +83,7 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
             <div className="bg-muted/40 text-muted-foreground rounded-lg border p-4 text-sm">
               Сотрудник не работает, начисление по нему не считается: расчёт зарплаты ведётся только
               по действующим людям. Чтобы рассчитать бывшего сотрудника, его нужно временно вернуть
-              в активные в настройках пользователей. История выплат и ведомостей — ниже, она
-              сохраняется.
+              в активные в настройках пользователей. История по ведомостям — ниже, она сохраняется.
             </div>
           )}
 
@@ -231,36 +234,6 @@ export function StaffMoneyTab({ userId }: { userId: string }) {
                   </tbody>
                 </table>
               </div>
-            )}
-          </section>
-
-          <section className="bg-card rounded-lg border">
-            <header className="flex items-center gap-2 border-b px-4 py-3">
-              <Wallet className="text-muted-foreground h-3.5 w-3.5" />
-              <h2 className="text-sm font-semibold">Выплаты через кассу</h2>
-            </header>
-            {money.payouts.length === 0 ? (
-              <p className="text-muted-foreground p-4 text-sm">
-                Выплат через кассу не записано. Они появляются, когда на странице «Зарплата»
-                проводят аванс, расчёт или премию.
-              </p>
-            ) : (
-              <ul className="divide-y">
-                {money.payouts.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <span className="text-muted-foreground w-24 shrink-0 text-xs">
-                      {formatDateRu(p.paidOn)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">
-                      {payoutKindRu(p.kind)}
-                      {p.comment && <span className="text-muted-foreground"> · {p.comment}</span>}
-                    </span>
-                    <span className="shrink-0 font-medium tabular-nums">
-                      {formatRub(p.amountKopecks)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             )}
           </section>
         </>
