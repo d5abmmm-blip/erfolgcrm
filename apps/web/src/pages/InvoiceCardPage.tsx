@@ -11,6 +11,7 @@ import { ChevronLeft, FileText, Printer, Trash2, XCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { trpc } from '../lib/trpc';
+import { OfflineFileError, assertOnlineForFile } from '../lib/offline/require-online';
 import { openPrintWindow } from '../lib/open-print-window';
 import { formatRub } from '../lib/money';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -139,6 +140,10 @@ export function InvoiceCardPage() {
     // Вкладку открываем синхронно (в жесте клика), иначе popup заблокируется после await.
     const win = openPrintWindow();
     try {
+      // Без связи в сеть не идём: наряд и клиент дотягиваются императивно, а на
+      // паузе такое обещание не завершается никогда — кнопка осталась бы
+      // «Печатаю…» навсегда (см. lib/offline/require-online).
+      assertOnlineForFile('счёт');
       const { printInvoice } = await import('../lib/pdf');
       // We need client + work order data for the PDF.
       // workOrder is fetched lazily inside the print routine.
@@ -207,7 +212,10 @@ export function InvoiceCardPage() {
       win?.close();
       setDialog({
         kind: 'pdf-error',
-        message: `Ошибка PDF: ${err instanceof Error ? err.message : String(err)}`,
+        message:
+          err instanceof OfflineFileError
+            ? err.message
+            : `Ошибка PDF: ${err instanceof Error ? err.message : String(err)}`,
       });
     } finally {
       setPrinting(false);

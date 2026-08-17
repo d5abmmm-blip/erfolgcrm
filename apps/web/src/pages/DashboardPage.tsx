@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { trpc } from '../lib/trpc';
+import { assertOnlineForFile } from '../lib/offline/require-online';
 import { openPrintWindow } from '../lib/open-print-window';
 import { cn } from '../lib/utils';
 import { AiDailySummaryCard } from '../components/AiDailySummaryCard';
@@ -68,6 +69,7 @@ function DirectorDashboard() {
   const me = trpc.auth.me.useQuery();
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const fetchSummaryInput = async () => {
     const today = new Date().toISOString();
@@ -90,16 +92,21 @@ function DirectorDashboard() {
 
   const handleDailySummaryPdf = async () => {
     if (pdfBusy) return;
+    setSummaryError(null);
     setPdfBusy(true);
     const win = openPrintWindow();
     try {
+      // Без связи в сеть не идём: на паузе обещание не завершится никогда, и
+      // кнопка осталась бы «Собираю…» навсегда (lib/offline/require-online).
+      assertOnlineForFile('итог дня');
       const [{ printDailySummary }, summaryInput] = await Promise.all([
         import('../lib/pdf'),
         fetchSummaryInput(),
       ]);
       await printDailySummary(summaryInput, win);
-    } catch {
+    } catch (e) {
       win?.close();
+      setSummaryError(e instanceof Error ? e.message : 'Не удалось собрать итог дня');
     } finally {
       setPdfBusy(false);
     }
@@ -108,12 +115,18 @@ function DirectorDashboard() {
   const handleDailySummaryXlsx = async () => {
     if (xlsxBusy) return;
     setXlsxBusy(true);
+    setSummaryError(null);
     try {
+      assertOnlineForFile('итог дня');
       const [{ downloadDailySummaryXlsx }, summaryInput] = await Promise.all([
         import('../lib/excel/daily-summary'),
         fetchSummaryInput(),
       ]);
       await downloadDailySummaryXlsx(summaryInput);
+    } catch (e) {
+      // Раньше здесь не было даже catch — только finally, который при потере
+      // связи тоже не срабатывал, и кнопка висела «Собираю…» до перезагрузки.
+      setSummaryError(e instanceof Error ? e.message : 'Не удалось собрать файл');
     } finally {
       setXlsxBusy(false);
     }
@@ -165,6 +178,12 @@ function DirectorDashboard() {
           </button>
         </div>
       </div>
+
+      {summaryError && (
+        <div className="bg-destructive/10 text-destructive border-destructive/30 rounded-lg border p-3 text-sm">
+          {summaryError}
+        </div>
+      )}
 
       <AiDailySummaryCard />
 
