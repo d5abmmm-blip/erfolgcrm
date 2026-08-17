@@ -194,8 +194,12 @@ async function loadAggregates(
       LEFT JOIN users u   ON u.id = COALESCE(wol.engineer_id, wo.engineer_id)
      WHERE t.status = 'closed'
        AND t.deleted_at IS NULL
-       AND t.closed_at >= ${startIso}::timestamptz
-       AND t.closed_at <  ${endIso}::timestamptz
+       -- Месяц работы — по ПЕРВОМУ закрытию заявки. У переоткрытой заявки closed_at
+       -- показывает повторное закрытие, и те же строки работ попали бы в ведомость
+       -- второй раз (отметки «уже оплачено» в базе нет). first_closed_at заполнен
+       -- только у переоткрытых, у остальных заявок ничего не меняется.
+       AND COALESCE(t.first_closed_at, t.closed_at) >= ${startIso}::timestamptz
+       AND COALESCE(t.first_closed_at, t.closed_at) <  ${endIso}::timestamptz
        AND wol.line_type = 'work'
        -- Работы, перенесённые из старой программы, в ведомость НЕ идут: они там уже
        -- оплачены, платить второй раз нельзя. Признак — версия идентификатора строки
@@ -230,8 +234,9 @@ async function loadAggregates(
       LEFT JOIN users u ON u.id = wo.engineer_id
      WHERE t.status = 'closed'
        AND t.deleted_at IS NULL
-       AND t.closed_at >= ${startIso}::timestamptz
-       AND t.closed_at <  ${endIso}::timestamptz
+       -- Тот же месяц, что и у работ выше: справочные числа обязаны сходиться с суммой.
+       AND COALESCE(t.first_closed_at, t.closed_at) >= ${startIso}::timestamptz
+       AND COALESCE(t.first_closed_at, t.closed_at) <  ${endIso}::timestamptz
        AND wo.engineer_id IS NOT NULL
        -- Наряды старой программы — тоже мимо, иначе справочные числа рядом с суммой
        -- к выплате рассказывали бы про работу, которой в CRM не было.

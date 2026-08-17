@@ -882,6 +882,19 @@ export async function changeStatus(
 
     const now = new Date();
     const setObj: Record<string, unknown> = { status: newStatus };
+    // Уходя из «Закрыта», запоминаем дату ПЕРВОГО закрытия в отдельной колонке.
+    //
+    // ЗАЧЕМ. Ведомость ЗП набирает строки работ по дате закрытия заявки за месяц
+    // (payroll/repository.ts), а отметки «эта работа уже оплачена» в базе нет.
+    // `closed_at` живёт под проверкой БД `(status = 'closed') = (closed_at IS NOT NULL)`,
+    // поэтому при переоткрытии он обязан обнулиться — и повторное закрытие ставило
+    // СЕГОДНЯШНЮЮ дату. Те же самые строки работ второй раз попадали в ведомость
+    // нового месяца: закрыли в августе, заплатили; в сентябре директор переоткрыл и
+    // закрыл заново — платим ещё раз, и заметить это некому.
+    //
+    // `first_closed_at` заполняется ТОЛЬКО у переоткрытых заявок; у обычных он NULL,
+    // и месяц берётся из `closed_at` как раньше.
+    const keepFirstClosedAt = before.firstClosedAt ?? before.closedAt;
     if (newStatus === 'closed') {
       setObj.closedAt = now;
       setObj.cancelledAt = null;
@@ -889,10 +902,12 @@ export async function changeStatus(
     } else if (newStatus === 'cancelled') {
       setObj.cancelledAt = now;
       setObj.closedAt = null;
+      setObj.firstClosedAt = keepFirstClosedAt;
       setObj.cancelReason = cancelReason ?? null;
     } else {
       // reopen / переход в активный статус
       setObj.closedAt = null;
+      setObj.firstClosedAt = keepFirstClosedAt;
       setObj.cancelledAt = null;
       setObj.cancelReason = null;
     }
