@@ -19,7 +19,7 @@ import { eq, like, sql } from 'drizzle-orm';
 import { clients, getDb, tickets, users, withTenantTx, workOrders } from '@erfolg/db';
 import { ensureSeed } from './setup';
 import { createTicket, changeStatus } from '../modules/tickets/repository';
-import { getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
+import { deleteLine, getOrCreateWorkOrder, upsertLine } from '../modules/work-orders/repository';
 import { computePayouts } from '../modules/payroll/repository';
 import { addPayment, deletePayment, listByTicket } from '../modules/payments/repository';
 
@@ -218,5 +218,100 @@ describe('оплата, перенесённая из старой систем�
         .where(eq(workOrders.id, woId)),
     );
     expect(wo!.paid).toBe(30_000n);
+  });
+});
+
+/**
+ * 3. ИТОГ НАРЯДА. Третий случай той же болезни: импорт кладёт в шапку суммы из старой
+ *    программы (ORDERSUM/WORKSUM/DETAILSUM), а строки грузит отдельными таблицами — и
+ *    сойтись они не обязаны. recalcTotals же безусловно ставил
+ *    total = works + parts + expenses по строкам, поэтому ПЕРВАЯ ЖЕ правка строки
+ *    стирала историческую сумму наряда. У себестоимости защита есть (resolveHeaderCost),
+ *    у оплаты появилась выше, у итога не было.
+ */
+describe('итог перенесённого наряда не затирается суммой строк', () => {
+  /** Наряд, каким его оставляет импорт: суммы в шапке есть, строк нет. */
+  async function makeImportedWorkOrder(): Promise<string> {
+    const { woId } = await makeClosedTicket(new Date('2019-03-14T10:00:00Z'));
+    await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx.execute(sql`
+        UPDATE work_orders
+           SET works_amount_kopecks    = 4000000,
+               parts_amount_kopecks    = 1000000,
+               expenses_amount_kopecks = 0,
+               total_amount_kopecks    = 5000000
+         WHERE id = ${woId}::uuid
+      `),
+    );
+    return woId;
+  }
+
+  async function readAmounts(woId: string) {
+    const [wo] = await withTenantTx(getDb(), erfolgId, (tx) =>
+      tx
+        .select({
+          works: workOrders.worksAmountKopecks,
+          parts: workOrders.partsAmountKopecks,
+          total: workOrders.totalAmountKopecks,
+        })
+        .from(workOrders)
+        .where(eq(workOrders.id, woId)),
+    );
+    return wo!;
+  }
+
+  it('первая своя строка прибавляется к исторической сумме, а не заменяет её', async () => {
+    const woId = await makeImportedWorkOrder();
+
+    await upsertLine(getDb(), erfolgId, woId, null, {
+      lineType: 'work',
+      name: `${PREFIX}новая работа`,
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 100_000n,
+      engineerId,
+    });
+
+    const wo = await readAmounts(woId);
+    // 40 000 ₽ из старой программы + 1 000 ₽ своей работы.
+    expect(wo.works).toBe(4_100_000n);
+    // Запчастей своих не добавляли — историческая сумма на месте.
+    expect(wo.parts).toBe(1_000_000n);
+    expect(wo.total).toBe(5_100_000n);
+  });
+
+  it('удаление своей строки возвращает наряд к исторической сумме, а не к нулю', async () => {
+    const woId = await makeImportedWorkOrder();
+    const { id: lineId } = await upsertLine(getDb(), erfolgId, woId, null, {
+      lineType: 'work',
+      name: `${PREFIX}временная`,
+      unit: 'шт',
+      quantity: '1',
+      unitPriceKopecks: 100_000n,
+      engineerId,
+    });
+
+    await deleteLine(getDb(), erfolgId, woId, lineId);
+
+    const wo = await readAmounts(woId);
+    expect(wo.works).toBe(4_000_000n);
+    expect(wo.total).toBe(5_000_000n);
+  });
+
+  it('у обычного наряда поведение прежнее: итог ровно по строкам', async () => {
+    const { woId } = await makeClosedTicket(new Date('2019-03-14T10:00:00Z'));
+    await upsertLine(getDb(), erfolgId, woId, null, {
+      lineType: 'work',
+      name: `${PREFIX}обычная`,
+      unit: 'шт',
+      quantity: '2',
+      unitPriceKopecks: 150_000n,
+      engineerId,
+    });
+
+    const wo = await readAmounts(woId);
+    expect(wo.works).toBe(300_000n);
+    expect(wo.parts).toBe(0n);
+    expect(wo.total).toBe(300_000n);
   });
 });

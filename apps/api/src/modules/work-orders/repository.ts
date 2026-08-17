@@ -279,6 +279,60 @@ export async function sumLineCostKopecks(tx: Tx, workOrderId: string): Promise<b
   return BigInt(Math.round(Number(row?.sumCost ?? 0)));
 }
 
+/** Суммы строк наряда по видам, в целых копейках. */
+export interface LineAmounts {
+  works: bigint;
+  parts: bigint;
+  expenses: bigint;
+  /** Сумма works + parts + expenses — то, что строки дают в итог. */
+  all: bigint;
+}
+
+/**
+ * Суммы строк наряда по видам. Снимается ДО правки строки: по разнице между шапкой и
+ * этим снимком видно, сколько в шапке пришло НЕ из строк (см. resolveLegacyRemainder).
+ */
+async function sumLineAmounts(tx: Tx, workOrderId: string): Promise<LineAmounts> {
+  const rows = await tx
+    .select({
+      lineType: workOrderLines.lineType,
+      sumAmount: sql<string>`COALESCE(SUM(${workOrderLines.amountKopecks}), 0)`,
+    })
+    .from(workOrderLines)
+    .where(eq(workOrderLines.workOrderId, workOrderId))
+    .groupBy(workOrderLines.lineType);
+
+  let works = 0n;
+  let parts = 0n;
+  let expenses = 0n;
+  for (const row of rows) {
+    const amount = BigInt(row.sumAmount);
+    if (row.lineType === 'work') works = amount;
+    else if (row.lineType === 'part') parts = amount;
+    else if (row.lineType === 'expense') expenses = amount;
+  }
+  return { works, parts, expenses, all: works + parts + expenses };
+}
+
+/**
+ * «Сколько в шапке сверх строк» — сумма, пришедшая из старой программы.
+ *
+ * ЗАЩИТА ИМПОРТИРОВАННЫХ НАРЯДОВ, третий случай той же болезни (после себестоимости и
+ * оплаты). Импорт кладёт в шапку суммы старой программы — ORDERSUM в итог, WORKSUM и
+ * DETAILSUM в работы и запчасти (`import-winservice.ts`), — а строки грузит отдельными
+ * таблицами, и сойтись они не обязаны: в старой системе итог заказа мог быть выставлен
+ * помимо позиций, а часть нарядов пришла вовсе без строк. Пересчёт же безусловно ставил
+ * «сумма по строкам», то есть ПЕРВАЯ ЖЕ правка строки стирала историческую сумму
+ * наряда, а удаление строки обнуляло её совсем.
+ *
+ * Разница считается ДО операции: после вставки или удаления строки она уже другая.
+ * У обычного наряда шапка всегда равна сумме строк (её же и поддерживает пересчёт),
+ * разница выходит нулевой, и поведение не меняется.
+ */
+function resolveLegacyRemainder(header: bigint, linesBefore: bigint): bigint {
+  return header > linesBefore ? header - linesBefore : 0n;
+}
+
 /**
  * Себестоимость, которую записываем в шапку наряда.
  *
@@ -349,6 +403,7 @@ async function recalcTotals(
   tenantId: string,
   workOrderId: string,
   lineCostBefore: bigint,
+  lineAmountsBefore: LineAmounts,
 ): Promise<void> {
   const sums = await tx
     .select({
@@ -375,14 +430,36 @@ async function recalcTotals(
     else if (row.lineType === 'expense') expenses = amount;
     cost += costPart;
   }
-  const total = works + parts + expenses;
+  // Суммы старой программы, которые в шапке лежат помимо строк. Читаем шапку ДО
+  // записи — она ещё хранит прежние значения (обновляет её только этот запрос ниже).
+  const [header] = await tx
+    .select({
+      works: workOrders.worksAmountKopecks,
+      parts: workOrders.partsAmountKopecks,
+      expenses: workOrders.expensesAmountKopecks,
+      total: workOrders.totalAmountKopecks,
+    })
+    .from(workOrders)
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+
+  const legacyWorks = resolveLegacyRemainder(header?.works ?? 0n, lineAmountsBefore.works);
+  const legacyParts = resolveLegacyRemainder(header?.parts ?? 0n, lineAmountsBefore.parts);
+  const legacyExpenses = resolveLegacyRemainder(header?.expenses ?? 0n, lineAmountsBefore.expenses);
+  // Итог держит СВОЮ разницу, а не сумму трёх: в старой программе ORDERSUM мог не
+  // совпадать с WORKSUM + DETAILSUM, и исторический итог надо сохранить как есть.
+  const legacyTotal = resolveLegacyRemainder(header?.total ?? 0n, lineAmountsBefore.all);
+
+  const worksTotal = works + legacyWorks;
+  const partsTotal = parts + legacyParts;
+  const expensesTotal = expenses + legacyExpenses;
+  const total = works + parts + expenses + legacyTotal;
   const headerCost = await resolveHeaderCost(tx, tenantId, workOrderId, cost, lineCostBefore);
   await tx
     .update(workOrders)
     .set({
-      worksAmountKopecks: works,
-      partsAmountKopecks: parts,
-      expensesAmountKopecks: expenses,
+      worksAmountKopecks: worksTotal,
+      partsAmountKopecks: partsTotal,
+      expensesAmountKopecks: expensesTotal,
       totalAmountKopecks: total,
       costAmountKopecks: headerCost,
       marginAmountKopecks: total - headerCost,
@@ -545,6 +622,9 @@ export async function upsertLine(
     // Снимок «несли ли строки себестоимость» ДО правки — по нему recalcTotals отличает
     // историческую себестоимость из шапки от посчитанной по строкам.
     const lineCostBefore = await sumLineCostKopecks(tx, workOrderId);
+    // Тем же снимком по суммам строк отличается историческая сумма наряда из старой
+    // программы: без него первая же правка строки стирала её.
+    const lineAmountsBefore = await sumLineAmounts(tx, workOrderId);
     let resultId: string;
     if (lineId) {
       // Правка строки — ЧАСТИЧНАЯ. Веб шлёт только name/unit/quantity/unitPrice
@@ -639,7 +719,7 @@ export async function upsertLine(
       }
       resultId = newId;
     }
-    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);
+    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore, lineAmountsBefore);
     return { id: resultId };
   });
 }
@@ -652,10 +732,11 @@ export async function deleteLine(
 ): Promise<void> {
   await withTenantTx(db, tenantId, async (tx) => {
     const lineCostBefore = await sumLineCostKopecks(tx, workOrderId);
+    const lineAmountsBefore = await sumLineAmounts(tx, workOrderId);
     await tx
       .delete(workOrderLines)
       .where(and(eq(workOrderLines.id, lineId), eq(workOrderLines.workOrderId, workOrderId)));
-    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore);
+    await recalcTotals(tx, tenantId, workOrderId, lineCostBefore, lineAmountsBefore);
   });
 }
 
