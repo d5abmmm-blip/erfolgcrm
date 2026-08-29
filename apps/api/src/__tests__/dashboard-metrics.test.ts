@@ -269,8 +269,11 @@ describe('dashboard.getMetrics', () => {
   });
 
   it('todayMaintenance + overdueMaintenance', async () => {
+    // «Сегодня» метрика считает по дню ОРГАНИЗАЦИИ (Москва), а не по UTC.
+    // Выравнивание на 10:00 UTC в окно 00:00–03:00 МСК давало вчерашний
+    // московский день, и счётчик честно показывал 0. Момент «сейчас»
+    // принадлежит текущему дню организации в любой час суток.
     const today = new Date();
-    today.setUTCHours(10, 0, 0, 0);
     const yesterday = new Date(today);
     yesterday.setUTCDate(yesterday.getUTCDate() - 5);
 
