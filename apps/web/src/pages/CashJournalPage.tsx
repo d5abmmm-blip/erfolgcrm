@@ -321,7 +321,7 @@ export function CashJournalPage() {
         data={items}
         columns={columns}
         loading={listQ.isLoading}
-        error={listQ.error ? { message: listQ.error.message } : null}
+        error={listQ.error}
         emptyText="Операций не найдено"
         rowKey={(r) => r.id}
       />

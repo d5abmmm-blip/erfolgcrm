@@ -203,7 +203,7 @@ export function TemplatesPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Шаблонов пока нет — создайте первый по кнопке выше."
         rowKey={(r) => r.id}
         onRowClick={(r) => setEditingId(r.id)}

@@ -176,7 +176,7 @@ export function ContractsListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Договоров не найдено"
         rowKey={(c) => c.id}
       />

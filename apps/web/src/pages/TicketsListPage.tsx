@@ -335,7 +335,7 @@ export function TicketsListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Заявок нет"
         rowKey={(t) => t.id}
       />

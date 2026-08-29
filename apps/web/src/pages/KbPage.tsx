@@ -199,7 +199,7 @@ export function KbPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText={
           search
             ? 'Ничего не нашлось — попробуйте другие слова или короче запрос.'

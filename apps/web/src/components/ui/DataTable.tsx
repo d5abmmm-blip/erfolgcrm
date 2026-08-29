@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
+import { humanizeLoadError } from '../../lib/error-message';
 
 export interface Column<T> {
   /** Уникальный ключ колонки (для key в React и для логики). */
@@ -18,7 +19,11 @@ export interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
   loading?: boolean;
-  error?: { message: string } | null;
+  /**
+   * Сырая ошибка запроса (list.error как есть). Перевод на человеческий —
+   * внутри таблицы (humanizeLoadError): SQL и JSON от Zod наружу не выходят.
+   */
+  error?: unknown;
   emptyText?: string;
   onRowClick?: (row: T) => void;
   rowKey: (row: T) => string;
@@ -30,7 +35,7 @@ export interface DataTableProps<T> {
  * Универсальная табличка для list-страниц (клиенты, техника, контракты и т.п.).
  * Стилистика — единая (bg-card, hover:bg-muted/20). Уровни:
  *   loading → "Загрузка…"
- *   error   → "Ошибка: …"
+ *   error   → человеческая фраза из humanizeLoadError, не сырой message
  *   empty   → emptyText или "Записей нет"
  */
 export function DataTable<T>({
@@ -53,7 +58,7 @@ export function DataTable<T>({
   if (error) {
     return (
       <section className="bg-card overflow-hidden rounded-lg border">
-        <div className="text-destructive p-6 text-sm">Ошибка: {error.message}</div>
+        <div className="text-destructive p-6 text-sm">{humanizeLoadError(error)}</div>
       </section>
     );
   }

@@ -250,7 +250,7 @@ export function TendersListPage() {
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Тендеров за этот период нет"
         rowKey={(t) => t.id}
         onRowClick={(t) => navigate(`/tenders/${t.id}`)}

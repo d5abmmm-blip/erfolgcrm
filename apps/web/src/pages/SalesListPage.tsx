@@ -197,7 +197,7 @@ export function SalesList({ period }: { period: { from?: string; to?: string } }
         data={items}
         columns={columns}
         loading={list.isLoading}
-        error={list.error ? { message: list.error.message } : null}
+        error={list.error}
         emptyText="Продаж за этот период нет"
         rowKey={(s) => s.id}
         onRowClick={(s) => navigate(`/sales/${s.id}`)}
