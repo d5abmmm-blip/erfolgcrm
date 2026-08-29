@@ -1440,7 +1440,7 @@ function LineTable({
     .filter((u) => u.isActive || usedEngineerIds.has(u.id))
     .map((u) => ({
       id: u.id,
-      fullName: u.isActive ? u.fullName : `${u.fullName} (уволен)`,
+      fullName: u.isActive ? u.fullName : `${u.fullName} (заблокирован)`,
     }));
   // Ошибку и «легло в очередь» показываем сами — глобальный тост молчит (main.tsx).
   const upsert = trpc.workOrders.upsertLine.useMutation({ meta: SILENT_ERROR });
